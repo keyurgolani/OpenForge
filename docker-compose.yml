@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   openforge:
     build:
@@ -17,6 +15,7 @@ services:
     volumes:
       - ${WORKSPACE_HOST_PATH:-./data/workspace}:/workspace
       - ${UPLOADS_HOST_PATH:-./data/uploads}:/uploads
+      - ${MODELS_HOST_PATH:-./data/models}:/models
     depends_on:
       postgres:
         condition: service_healthy

@@ -28,12 +28,16 @@ COPY backend/ ./backend/
 # Vite outDir is '../static' relative to frontend/, so the build outputs to /app/static/
 COPY --from=frontend-build /app/static ./static/
 
-# Create workspace and uploads directories
-RUN mkdir -p /workspace /uploads
+# Create workspace, uploads, and model cache directories
+RUN mkdir -p /workspace /uploads /models
 
 # Set Python path
 ENV PYTHONPATH=/app/backend
 ENV PYTHONUNBUFFERED=1
+# HuggingFace / sentence-transformers model cache — mount this as a volume
+# so models survive container rebuilds (avoids re-downloading the ~130MB bge model)
+ENV HF_HOME=/models
+ENV SENTENCE_TRANSFORMERS_HOME=/models
 
 EXPOSE 3000
 
