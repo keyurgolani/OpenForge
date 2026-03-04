@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  openforge:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://openforge:${DB_PASSWORD:-changeme}@postgres:5432/openforge
+      - QDRANT_URL=http://qdrant:6333
+      - WORKSPACE_ROOT=${WORKSPACE_ROOT:-/workspace}
+      - UPLOADS_ROOT=/uploads
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
+    volumes:
+      - ${WORKSPACE_HOST_PATH:-./data/workspace}:/workspace
+      - ${UPLOADS_HOST_PATH:-./data/uploads}:/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: openforge
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: openforge
+    volumes:
+      - ${POSTGRES_DATA_PATH:-./data/postgres}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openforge"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.2
+    volumes:
+      - ${QDRANT_DATA_PATH:-./data/qdrant}:/qdrant/storage
+    restart: unless-stopped

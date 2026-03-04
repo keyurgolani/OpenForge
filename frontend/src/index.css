@@ -1,0 +1,200 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design System Tokens ── */
+@layer base {
+  :root {
+    /* Colors - Dark slate-based */
+    --background: 222 20% 8%;
+    --foreground: 210 20% 94%;
+    --muted: 220 15% 16%;
+    --muted-foreground: 215 15% 55%;
+    --border: 220 15% 18%;
+    --card: 222 18% 11%;
+    --card-foreground: 210 20% 90%;
+
+    /* Accent - Teal/Cyan */
+    --accent: 175 70% 55%;
+    --accent-foreground: 220 20% 5%;
+
+    /* Destructive */
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 98%;
+
+    /* Radius */
+    --radius: 0.75rem;
+
+    /* Glassmorphism */
+    --glass-bg: rgba(255, 255, 255, 0.04);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-blur: 20px;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    background-image:
+      radial-gradient(ellipse at 20% 20%, hsla(175, 70%, 30%, 0.08) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 80%, hsla(250, 70%, 30%, 0.06) 0%, transparent 50%);
+    min-height: 100vh;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground));
+  }
+}
+
+/* ── Utility Classes ── */
+@layer components {
+  /* Glassmorphic card */
+  .glass-card {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border-radius: var(--radius);
+  }
+
+  .glass-card-hover {
+    @apply glass-card transition-all duration-200;
+    &:hover {
+      background: rgba(255, 255, 255, 0.07);
+      border-color: rgba(255, 255, 255, 0.12);
+      transform: translateY(-1px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+  }
+
+  /* Sidebar */
+  .sidebar-item {
+    @apply flex items-center gap-3 px-3 py-2 text-sm rounded-lg text-muted-foreground
+           hover:text-foreground hover:bg-muted/50 transition-all duration-150 cursor-pointer;
+  }
+  .sidebar-item.active {
+    @apply text-foreground bg-muted/70;
+  }
+
+  /* Buttons */
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
+           bg-accent text-accent-foreground hover:opacity-90 active:scale-95
+           transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium
+           text-muted-foreground hover:text-foreground hover:bg-muted/50
+           transition-all duration-150 disabled:opacity-50;
+  }
+  .btn-destructive {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
+           bg-destructive text-destructive-foreground hover:opacity-90
+           transition-all duration-150;
+  }
+
+  /* Input */
+  .input {
+    @apply w-full px-3 py-2 rounded-lg text-sm border border-border bg-muted/30
+           text-foreground placeholder-muted-foreground
+           focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent/50
+           transition-all duration-150;
+  }
+
+  /* Badge/Chip */
+  .chip {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+  .chip-accent {
+    @apply chip bg-accent/20 text-accent border border-accent/30;
+  }
+  .chip-muted {
+    @apply chip bg-muted/60 text-muted-foreground border border-border;
+  }
+
+  /* Note type badge colors */
+  .type-standard  { @apply chip bg-blue-500/20 text-blue-300 border border-blue-500/30; }
+  .type-fleeting  { @apply chip bg-amber-500/20 text-amber-300 border border-amber-500/30; }
+  .type-bookmark  { @apply chip bg-emerald-500/20 text-emerald-300 border border-emerald-500/30; }
+  .type-gist      { @apply chip bg-purple-500/20 text-purple-300 border border-purple-500/30; }
+
+  /* Loading skeleton */
+  .skeleton {
+    @apply animate-pulse rounded bg-muted/50;
+  }
+
+  /* Focus ring for keyboard navigation */
+  .focus-ring {
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-1 focus-visible:ring-offset-background;
+  }
+
+  /* Streaming cursor */
+  .streaming-cursor::after {
+    content: '▋';
+    @apply animate-blink text-accent ml-0.5;
+  }
+
+  /* Markdown content */
+  .markdown-content {
+    @apply text-sm text-foreground leading-relaxed;
+
+    h1, h2, h3, h4, h5, h6 { @apply font-semibold text-foreground mt-4 mb-2; }
+    h1 { @apply text-2xl; }
+    h2 { @apply text-xl; }
+    h3 { @apply text-lg; }
+    p { @apply mb-3; }
+    ul, ol { @apply pl-5 mb-3 space-y-1; }
+    ul { @apply list-disc; }
+    ol { @apply list-decimal; }
+    li { @apply text-foreground; }
+    code { @apply font-mono text-xs bg-muted/60 px-1.5 py-0.5 rounded text-accent; }
+    pre { @apply bg-muted/40 rounded-lg p-4 overflow-x-auto mb-3 border border-border; }
+    pre code { @apply bg-transparent px-0 py-0; }
+    blockquote { @apply border-l-2 border-accent/50 pl-4 text-muted-foreground italic mb-3; }
+    a { @apply text-accent underline decoration-accent/50 hover:decoration-accent; }
+    strong { @apply font-semibold text-foreground; }
+    em { @apply italic; }
+    hr { @apply border-border my-4; }
+    table { @apply w-full border-collapse mb-3 text-sm; }
+    th, td { @apply border border-border px-3 py-2 text-left; }
+    th { @apply bg-muted/40 font-medium; }
+    mark { @apply bg-accent/30 text-foreground rounded px-0.5; }
+  }
+
+  /* Code block in editor */
+  .cm-editor {
+    @apply h-full;
+  }
+  .cm-scroller {
+    @apply font-mono text-sm;
+  }
+}
+
+/* ── Animation preferences ── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}

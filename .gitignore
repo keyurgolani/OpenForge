@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.env
+node_modules/
+dist/
+.vite/
+data/
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# SDLC scratch space (planning docs, temp scripts, summaries, reports)
+sdlc/
+static/

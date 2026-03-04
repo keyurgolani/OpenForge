@@ -1,0 +1,146 @@
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, delete
+from uuid import UUID
+import os
+import shutil
+import logging
+
+from openforge.db.models import Workspace, Note, Conversation
+from openforge.db.qdrant_client import get_qdrant
+from openforge.schemas.workspace import WorkspaceCreate, WorkspaceUpdate, WorkspaceResponse
+from openforge.config import get_settings
+from fastapi import HTTPException
+from qdrant_client.models import Filter, FieldCondition, MatchValue
+
+logger = logging.getLogger("openforge.workspace")
+
+
+def _to_response(workspace: Workspace, note_count: int = 0, conv_count: int = 0) -> WorkspaceResponse:
+    return WorkspaceResponse(
+        id=workspace.id,
+        name=workspace.name,
+        description=workspace.description,
+        icon=workspace.icon,
+        color=workspace.color,
+        llm_provider_id=workspace.llm_provider_id,
+        llm_model=workspace.llm_model,
+        sort_order=workspace.sort_order,
+        note_count=note_count,
+        conversation_count=conv_count,
+        created_at=workspace.created_at,
+        updated_at=workspace.updated_at,
+    )
+
+
+class WorkspaceService:
+    async def create_workspace(self, db: AsyncSession, data: WorkspaceCreate) -> WorkspaceResponse:
+        settings = get_settings()
+
+        # Get current max sort_order
+        result = await db.execute(select(func.max(Workspace.sort_order)))
+        max_order = result.scalar() or 0
+
+        workspace = Workspace(
+            name=data.name,
+            description=data.description,
+            icon=data.icon,
+            color=data.color,
+            llm_provider_id=data.llm_provider_id,
+            llm_model=data.llm_model,
+            sort_order=max_order + 1,
+        )
+        db.add(workspace)
+        await db.commit()
+        await db.refresh(workspace)
+
+        # Create workspace directory
+        ws_dir = os.path.join(settings.workspace_root, str(workspace.id))
+        os.makedirs(ws_dir, exist_ok=True)
+        uploads_dir = os.path.join(ws_dir, "uploads")
+        os.makedirs(uploads_dir, exist_ok=True)
+
+        return _to_response(workspace)
+
+    async def list_workspaces(self, db: AsyncSession) -> list[WorkspaceResponse]:
+        result = await db.execute(select(Workspace).order_by(Workspace.sort_order))
+        workspaces = result.scalars().all()
+
+        responses = []
+        for ws in workspaces:
+            note_count_r = await db.execute(
+                select(func.count(Note.id)).where(Note.workspace_id == ws.id)
+            )
+            conv_count_r = await db.execute(
+                select(func.count(Conversation.id)).where(Conversation.workspace_id == ws.id)
+            )
+            responses.append(_to_response(
+                ws,
+                note_count=note_count_r.scalar() or 0,
+                conv_count=conv_count_r.scalar() or 0,
+            ))
+        return responses
+
+    async def get_workspace(self, db: AsyncSession, workspace_id: UUID) -> WorkspaceResponse:
+        result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+        ws = result.scalar_one_or_none()
+        if not ws:
+            raise HTTPException(status_code=404, detail="Workspace not found")
+
+        note_count_r = await db.execute(select(func.count(Note.id)).where(Note.workspace_id == ws.id))
+        conv_count_r = await db.execute(select(func.count(Conversation.id)).where(Conversation.workspace_id == ws.id))
+        return _to_response(ws, note_count_r.scalar() or 0, conv_count_r.scalar() or 0)
+
+    async def update_workspace(self, db: AsyncSession, workspace_id: UUID, data: WorkspaceUpdate) -> WorkspaceResponse:
+        result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+        ws = result.scalar_one_or_none()
+        if not ws:
+            raise HTTPException(status_code=404, detail="Workspace not found")
+
+        if data.name is not None:
+            ws.name = data.name
+        if data.description is not None:
+            ws.description = data.description
+        if data.icon is not None:
+            ws.icon = data.icon
+        if data.color is not None:
+            ws.color = data.color
+        if data.llm_provider_id is not None:
+            ws.llm_provider_id = data.llm_provider_id
+        if data.llm_model is not None:
+            ws.llm_model = data.llm_model
+        if data.sort_order is not None:
+            ws.sort_order = data.sort_order
+
+        await db.commit()
+        await db.refresh(ws)
+        return _to_response(ws)
+
+    async def delete_workspace(self, db: AsyncSession, workspace_id: UUID):
+        settings = get_settings()
+        result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+        ws = result.scalar_one_or_none()
+        if not ws:
+            raise HTTPException(status_code=404, detail="Workspace not found")
+
+        await db.delete(ws)
+        await db.commit()
+
+        # Remove Qdrant vectors
+        try:
+            client = get_qdrant()
+            client.delete(
+                collection_name=settings.qdrant_collection,
+                points_selector=Filter(
+                    must=[FieldCondition(key="workspace_id", match=MatchValue(value=str(workspace_id)))]
+                ),
+            )
+        except Exception as e:
+            logger.warning(f"Failed to delete Qdrant vectors for workspace {workspace_id}: {e}")
+
+        # Remove workspace directory
+        ws_dir = os.path.join(settings.workspace_root, str(workspace_id))
+        if os.path.exists(ws_dir):
+            shutil.rmtree(ws_dir, ignore_errors=True)
+
+
+workspace_service = WorkspaceService()
