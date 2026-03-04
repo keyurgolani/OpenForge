@@ -29,13 +29,8 @@ FALLBACK_MODELS = {
         {"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash"},
         {"id": "gemini-1.0-pro", "name": "Gemini 1.0 Pro"},
     ],
-    "ollama": [
-        {"id": "llama3.2", "name": "Llama 3.2"},
-        {"id": "llama3.1", "name": "Llama 3.1"},
-        {"id": "mistral", "name": "Mistral"},
-        {"id": "codellama", "name": "Code Llama"},
-        {"id": "phi3", "name": "Phi-3"},
-    ],
+    # Note: Ollama is intentionally absent — models are user-installed and vary per instance.
+    # Ollama models are fetched live from /api/tags; errors surface as real error messages.
     "groq": [
         {"id": "llama-3.3-70b-versatile", "name": "Llama 3.3 70B Versatile"},
         {"id": "llama-3.1-70b-versatile", "name": "Llama 3.1 70B Versatile"},
@@ -174,6 +169,14 @@ class LLMGateway:
                     ]
 
         except Exception as e:
+            # For Ollama: re-raise so the user sees the real error (bad URL, not running, etc.)
+            # A fallback list of generic model names would be misleading since Ollama models
+            # are user-installed and the hardcoded list would never match their local install.
+            if provider_name == "ollama":
+                raise RuntimeError(
+                    f"Could not reach Ollama at {base_url or 'http://localhost:11434'}/api/tags. "
+                    f"Make sure Ollama is running and the base URL is correct. Error: {e}"
+                )
             logger.warning(f"Failed to fetch models for {provider_name}: {e}. Using fallback list.")
 
         return FALLBACK_MODELS.get(provider_name, [])
