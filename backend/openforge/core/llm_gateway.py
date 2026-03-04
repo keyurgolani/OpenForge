@@ -47,10 +47,15 @@ FALLBACK_MODELS = {
         {"id": "mistral-small-latest", "name": "Mistral Small"},
         {"id": "open-mistral-7b", "name": "Open Mistral 7B"},
     ],
-    "openrouter": [
-        {"id": "openai/gpt-4o", "name": "GPT-4o (via OpenRouter)"},
-        {"id": "anthropic/claude-3.5-sonnet", "name": "Claude 3.5 (via OpenRouter)"},
-        {"id": "meta-llama/llama-3.1-405b-instruct", "name": "Llama 3.1 405B (via OpenRouter)"},
+    "xai": [
+        {"id": "grok-2-1212", "name": "Grok 2"},
+        {"id": "grok-2-vision-1212", "name": "Grok 2 Vision"},
+        {"id": "grok-beta", "name": "Grok Beta"},
+    ],
+    "cohere": [
+        {"id": "command-r-plus-08-2024", "name": "Command R+"},
+        {"id": "command-r-08-2024", "name": "Command R"},
+        {"id": "command-light", "name": "Command Light"},
     ],
 }
 
@@ -168,6 +173,29 @@ class LLMGateway:
                         for m in data.get("data", [])
                     ]
 
+            elif provider_name == "xai":
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    headers = {"Authorization": f"Bearer {api_key}"}
+                    resp = await client.get("https://api.x.ai/v1/models", headers=headers)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    return [
+                        {"id": m["id"], "name": m.get("id", m["id"])}
+                        for m in data.get("data", [])
+                    ]
+
+            elif provider_name == "cohere":
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    headers = {"Authorization": f"Bearer {api_key}"}
+                    resp = await client.get("https://api.cohere.com/v1/models", headers=headers)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    return [
+                        {"id": m["name"], "name": m.get("name", m["name"])}
+                        for m in data.get("models", [])
+                        if "chat" in m.get("endpoints", [])
+                    ]
+
         except Exception as e:
             # For Ollama: re-raise so the user sees the real error (bad URL, not running, etc.)
             # A fallback list of generic model names would be misleading since Ollama models
@@ -217,6 +245,8 @@ class LLMGateway:
             "groq": "groq/",
             "mistral": "mistral/",
             "openrouter": "openrouter/",
+            "xai": "xai/",
+            "cohere": "cohere/",
         }
         prefix = prefix_map.get(provider_name, "")
         if not prefix or model.startswith(prefix):
