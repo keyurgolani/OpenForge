@@ -3,10 +3,12 @@ import { Outlet, useNavigate, useParams, Link, useLocation } from 'react-router-
 import { useQuery } from '@tanstack/react-query'
 import { listWorkspaces, listNotes, listConversations } from '@/lib/api'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
+import { useUIStore } from '@/stores/uiStore'
+import CommandPalette from '@/components/shared/CommandPalette'
 import {
     Home, MessageSquare, Search, Settings, Plus, ChevronDown, ChevronRight,
     FileText, Pin, Archive, Bookmark, Code2, Zap, Wifi, WifiOff,
-    PanelLeft
+    PanelLeft, Command
 } from 'lucide-react'
 
 export default function AppShell() {
@@ -15,6 +17,7 @@ export default function AppShell() {
     const location = useLocation()
     const [sidebarOpen, setSidebarOpen] = useState(true)
     const { isConnected } = useWorkspaceWebSocket(workspaceId)
+    const { setCommandPaletteOpen } = useUIStore()
 
     const { data: workspaces = [] } = useQuery({ queryKey: ['workspaces'], queryFn: listWorkspaces })
     const { data: notesData } = useQuery({
@@ -36,7 +39,8 @@ export default function AppShell() {
     const isActive = (path: string) => location.pathname.includes(path)
 
     return (
-        <div className="flex h-screen overflow-hidden">
+        <div className="flex h-screen overflow-hidden relative">
+            <CommandPalette />
             {/* Sidebar */}
             <aside className={`${sidebarOpen ? 'w-64' : 'w-0'} flex-shrink-0 transition-all duration-200 overflow-hidden flex flex-col border-r border-border/50 bg-card/30 backdrop-blur-sm`}>
                 <div className="flex-shrink-0 p-4">
@@ -132,6 +136,16 @@ export default function AppShell() {
                             <WifiOff className="w-3 h-3" /> Reconnecting…
                         </div>
                     )}
+
+                    <button
+                        className="btn-ghost p-2 text-xs gap-1.5 hidden sm:flex items-center"
+                        onClick={() => setCommandPaletteOpen(true)}
+                        title="Command palette (Cmd+K)"
+                        aria-label="Open command palette"
+                    >
+                        <Command className="w-3.5 h-3.5" />
+                        <span className="text-muted-foreground">K</span>
+                    </button>
 
                     <button
                         className="btn-primary py-1.5 px-3 text-xs"

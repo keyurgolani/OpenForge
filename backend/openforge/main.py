@@ -80,6 +80,36 @@ async def health_check():
     return {"status": "ok", "version": "0.1.0"}
 
 
+# ── Global exception handlers ──
+from fastapi import HTTPException
+from fastapi.exceptions import RequestValidationError
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": "Validation error",
+            "type": "validation_error",
+            "errors": exc.errors(),
+        }
+    )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    import traceback
+    if settings.log_level.lower() == "debug":
+        logger.exception(f"Unhandled exception on {request.method} {request.url.path}")
+        detail = traceback.format_exc()
+    else:
+        logger.error(f"Unhandled {type(exc).__name__} on {request.method} {request.url.path}: {exc}")
+        detail = str(exc) if str(exc) else "An unexpected error occurred"
+    return JSONResponse(
+        status_code=500,
+        content={"detail": detail, "type": "internal_error"},
+    )
+
+
 # Register API router
 from openforge.api.router import api_router
 app.include_router(api_router)
