@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile
     ports:
-      - "${PORT:-3000}:3000"
+      - "${PORT:-3100}:3000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://openforge:${DB_PASSWORD:-changeme}@postgres:5432/openforge
       - QDRANT_URL=http://qdrant:6333

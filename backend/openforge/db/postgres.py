@@ -40,11 +40,29 @@ async def run_migrations():
     from alembic.config import Config
     from alembic import command
 
-    backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # __file__ = .../backend/openforge/db/postgres.py
+    # We need to walk up THREE levels to reach .../backend/
+    this_file   = os.path.abspath(__file__)           # .../openforge/db/postgres.py
+    db_dir      = os.path.dirname(this_file)           # .../openforge/db
+    openforge_dir = os.path.dirname(db_dir)            # .../openforge
+    backend_dir = os.path.dirname(openforge_dir)       # .../backend  ← alembic.ini lives here
+
     alembic_ini = os.path.join(backend_dir, "alembic.ini")
+
+    if not os.path.exists(alembic_ini):
+        raise FileNotFoundError(
+            f"alembic.ini not found at {alembic_ini}. "
+            f"backend_dir resolved to: {backend_dir}"
+        )
+
     alembic_cfg = Config(alembic_ini)
 
-    # Override the database URL with the async-compatible sync version
+    # Ensure script_location is absolute (alembic.ini has a relative path, but
+    # the container CWD is /app while migrations live in /app/backend/openforge/db/migrations)
+    migrations_dir = os.path.join(backend_dir, "openforge", "db", "migrations")
+    alembic_cfg.set_main_option("script_location", migrations_dir)
+
+    # Override the database URL with the sync (psycopg2) version for Alembic
     settings = get_settings()
     sync_url = settings.database_url.replace("+asyncpg", "+psycopg2")
     alembic_cfg.set_main_option("sqlalchemy.url", sync_url)

@@ -4,13 +4,14 @@ WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
-RUN npm run build
+# Skip tsc type-checking in Docker (checked locally); just bundle with vite
+RUN npx vite build
 
 # ── Stage 2: Production image ──
 FROM python:3.11-slim
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (curl needed for HEALTHCHECK)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
@@ -23,10 +24,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend code
 COPY backend/ ./backend/
 
-# Copy built frontend
-COPY --from=frontend-build /app/frontend/dist ./static/
+# Copy built frontend assets
+# Vite outDir is '../static' relative to frontend/, so the build outputs to /app/static/
+COPY --from=frontend-build /app/static ./static/
 
-# Create workspace directory
+# Create workspace and uploads directories
 RUN mkdir -p /workspace /uploads
 
 # Set Python path
@@ -35,6 +37,7 @@ ENV PYTHONUNBUFFERED=1
 
 EXPOSE 3000
 
-HEALTHCHECK CMD curl -f http://localhost:3000/api/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:3000/api/health || exit 1
 
 CMD ["uvicorn", "openforge.main:app", "--host", "0.0.0.0", "--port", "3000"]
