@@ -10,6 +10,22 @@ from openforge.schemas.note import (
 
 router = APIRouter()
 
+async def _get_prompt(db: AsyncSession, prompt_id: str, **kwargs) -> str:
+    from openforge.db.models import Config
+    from openforge.api.prompts import PROMPT_CATALOGUE
+    from sqlalchemy import select
+
+    entry = next((p for p in PROMPT_CATALOGUE if p["id"] == prompt_id), None)
+    default_text = entry["default"] if entry else ""
+
+    result = await db.execute(select(Config).where(Config.key == f"prompt.{prompt_id}"))
+    row = result.scalar_one_or_none()
+    text = row.value.get("text") if row and row.value and "text" in row.value else default_text
+
+    for k, v in kwargs.items():
+        text = text.replace(f"{{{k}}}", str(v))
+    return text
+
 
 @router.get("/{workspace_id}/notes", response_model=dict)
 async def list_notes(
@@ -112,10 +128,17 @@ async def summarize_note(
         raise HTTPException(status_code=404, detail="Note not found")
 
     provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
+    tags_str = ", ".join([t.tag for t in note.tags])
+    prompt = await _get_prompt(
+        db, "summarize_note",
+        note_content=note.content[:8000],
+        note_title=note.title or "Untitled",
+        note_type=note.type,
+        tags=tags_str
+    )
     summary = await llm_gateway.chat(
         messages=[
-            {"role": "system", "content": "Summarize the following note concisely. Provide a clear, well-structured summary."},
-            {"role": "user", "content": note.content[:8000]},
+            {"role": "system", "content": prompt},
         ],
         provider_name=provider_name, api_key=api_key, model=model, base_url=base_url,
     )
@@ -144,20 +167,17 @@ async def extract_insights(
         raise HTTPException(status_code=404, detail="Note not found")
 
     provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
-    prompt = """Extract structured insights from this note. Return ONLY valid JSON with this structure:
-{
-  "todos": ["action item 1", "action item 2"],
-  "reminders": ["reminder 1"],
-  "deadlines": [{"text": "deadline description", "date": "YYYY-MM-DD or null"}],
-  "highlights": ["important point 1", "key insight 2"],
-  "tags": ["tag1", "tag2", "tag3"]
-}
-Return empty arrays if none found. Tags should be lowercase single words or hyphenated phrases."""
+    tags_str = ", ".join([t.tag for t in note.tags])
+    prompt = await _get_prompt(
+        db, "extract_insights",
+        note_content=note.content[:8000],
+        note_title=note.title or "Untitled",
+        tags=tags_str
+    )
 
     response = await llm_gateway.chat(
         messages=[
             {"role": "system", "content": prompt},
-            {"role": "user", "content": note.content[:8000]},
         ],
         provider_name=provider_name, api_key=api_key, model=model, base_url=base_url,
     )
@@ -201,14 +221,34 @@ async def generate_title(
         raise HTTPException(status_code=404, detail="Note not found")
 
     provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
-    title = await llm_gateway.chat(
+    prompt = await _get_prompt(db, "generate_title", note_content=note.content[:2000])
+
+    title_response = await llm_gateway.chat(
         messages=[
-            {"role": "system", "content": "Generate a concise, descriptive title (max 50 chars). Return ONLY the title, no quotes or explanation."},
-            {"role": "user", "content": note.content[:2000]},
+            {"role": "system", "content": prompt},
         ],
         provider_name=provider_name, api_key=api_key, model=model, base_url=base_url, max_tokens=30,
     )
-    note.ai_title = title.strip()[:500]
+
+    raw_title = title_response.strip()
+    import re
+    # Remove surrounding quotes if present
+    raw_title = re.sub(r'^["\']|["\']$', '', raw_title)
+    
+    # Check if it returned JSON accidentally
+    try:
+        import json
+        json_match = re.search(r"\{[\s\S]*\}", raw_title)
+        if json_match:
+            data = json.loads(json_match.group())
+            if "title" in data:
+                raw_title = data["title"]
+            elif data:
+                raw_title = list(data.values())[0]  # Fallback to first value
+    except Exception:
+        pass
+
+    note.ai_title = raw_title[:500]
     await db.commit()
     await ws_manager.send_to_workspace(str(workspace_id), {"type": "note_updated", "note_id": str(note_id), "fields": ["ai_title"]})
     return {"title": note.ai_title}

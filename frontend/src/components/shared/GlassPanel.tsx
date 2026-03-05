@@ -1,13 +1,12 @@
 import { cn } from '@/lib/utils'
-import type { ReactNode, CSSProperties } from 'react'
+import { motion, HTMLMotionProps } from 'framer-motion'
+import type { ReactNode } from 'react'
 
-interface GlassPanelProps {
+interface GlassPanelProps extends HTMLMotionProps<"div"> {
     children: ReactNode
     className?: string
-    style?: CSSProperties
     hover?: boolean
     padding?: 'none' | 'sm' | 'md' | 'lg'
-    onClick?: () => void
 }
 
 const paddings = {
@@ -20,23 +19,32 @@ const paddings = {
 export default function GlassPanel({
     children,
     className,
-    style,
     hover = false,
     padding = 'md',
-    onClick,
+    ...props
 }: GlassPanelProps) {
     return (
-        <div
+        <motion.div
             className={cn(
-                'glass-card',
+                'glass-card relative overflow-hidden',
                 hover && 'glass-card-hover cursor-pointer',
                 paddings[padding],
                 className,
             )}
-            style={style}
-            onClick={onClick}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{
+                type: 'spring',
+                stiffness: 400,
+                damping: 30,
+            }}
+            whileHover={hover ? { scale: 1.01, y: -2 } : {}}
+            whileTap={hover ? { scale: 0.98 } : {}}
+            {...props}
         >
+            {/* Inner ambient glow line for thickness simulation */}
+            <div className="absolute inset-0 pointer-events-none rounded-[inherit] border border-white/5 mix-blend-overlay" />
             {children}
-        </div>
+        </motion.div>
     )
 }

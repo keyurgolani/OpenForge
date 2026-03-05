@@ -2,12 +2,17 @@ import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { listNotes, createNote, deleteNote, togglePin, toggleArchive } from '@/lib/api'
+import { NoteModal } from '@/components/shared/NoteModal'
 import {
     Search, FileText, Bookmark, Code2, Zap, Pin, Archive,
     MoreHorizontal, Trash2, PinOff, ArchiveX, Loader2, Sparkles,
     Inbox, CheckSquare, Square, Clock, ExternalLink, Copy, SortAsc,
     ChevronDown, Tag
 } from 'lucide-react'
+import {
+    ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem,
+    ContextMenuSeparator, ContextMenuShortcut
+} from '@/components/ui/context-menu'
 
 interface NoteListItem {
     id: string
@@ -62,6 +67,7 @@ export default function WorkspaceHome() {
     const [showSortMenu, setShowSortMenu] = useState(false)
     const [openMenu, setOpenMenu] = useState<string | null>(null)
     const [creating, setCreating] = useState(false) // eslint-disable-line @typescript-eslint/no-unused-vars
+    const [modalNoteId, setModalNoteId] = useState<string | null>(null)
 
     // Multi-select
     const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -294,7 +300,7 @@ export default function WorkspaceHome() {
                             isSelected={selected.has(note.id)}
                             anySelected={hasSelection}
                             onSelect={toggleSelect}
-                            onClick={() => navigate(`/w/${workspaceId}/notes/${note.id}`)}
+                            onClick={() => setModalNoteId(note.id)}
                             onPin={() => handlePin(note.id)}
                             onArchive={() => handleArchive(note.id)}
                             onDelete={() => handleDelete(note.id)}
@@ -323,6 +329,15 @@ export default function WorkspaceHome() {
                         Clear
                     </button>
                 </div>
+            )}
+
+            {/* Note modal */}
+            {modalNoteId && (
+                <NoteModal
+                    noteId={modalNoteId}
+                    workspaceId={workspaceId}
+                    onClose={() => setModalNoteId(null)}
+                />
             )}
         </div>
     )
@@ -360,162 +375,195 @@ function NoteCard({
     }
 
     return (
-        <div
-            className={`glass-card-hover p-4 cursor-pointer group relative animate-fade-in flex flex-col gap-2 transition-all ${isSelected ? 'ring-2 ring-accent border-accent/60' : ''}`}
-            style={{ animationDelay: `${Math.min(index * 25, 200)}ms` }}
-            onClick={onClick}
-        >
-
-
-            {/* Card header row: type badge only on left */}
-            <div className="flex items-center gap-2 min-w-0 pr-7">
-                {/* Left: type badge */}
-                <span className={`flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide ${meta.color} flex-shrink-0`}>
-                    <TypeIcon className="w-3 h-3" />
-                    {note.type === 'fleeting' && <Clock className="w-3 h-3" />}
-                    {meta.label}
-                    {note.is_pinned && <Pin className="w-3 h-3 text-amber-400 ml-0.5" />}
-                    {note.embedding_status === 'done' && (
-                        <Sparkles className="w-3 h-3 text-accent/60 ml-0.5" />
-                    )}
-                </span>
-            </div>
-
-            {/* === TOP-RIGHT CONTROLS === */}
-            {isSelected ? (
-                /* SELECTED: filled accent circle, clicking deselects */
-                <button
-                    className="absolute top-2.5 right-2.5 z-20 w-6 h-6 rounded-full bg-accent border-2 border-accent shadow-md shadow-accent/30 flex items-center justify-center transition-all duration-150"
-                    style={{ transform: 'scale(1.1)' }}
-                    onClick={e => { e.stopPropagation(); onSelect(note.id, e) }}
-                    aria-label="Deselect note"
+        <ContextMenu>
+            <ContextMenuTrigger asChild>
+                <div
+                    className={`glass-card-hover p-4 cursor-pointer group relative animate-fade-in flex flex-col gap-2 transition-all ${isSelected ? 'ring-2 ring-accent border-accent/60' : ''}`}
+                    style={{ animationDelay: `${Math.min(index * 25, 200)}ms` }}
+                    onClick={onClick}
                 >
-                    <svg className="w-3.5 h-3.5 text-white" viewBox="0 0 14 14" fill="none">
-                        <path d="M2.5 7L5.5 10L11.5 4" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                </button>
-            ) : anySelected ? (
-                /* SELECTION MODE (others selected, this one not): show empty circle, no 3-dots */
-                <button
-                    className="absolute top-2.5 right-2.5 z-20 w-6 h-6 rounded-full border-2 border-muted-foreground/30 bg-background/60 flex items-center justify-center transition-all duration-150 hover:border-accent hover:bg-accent/15"
-                    onClick={e => { e.stopPropagation(); onSelect(note.id, e) }}
-                    aria-label="Select note"
-                />
-            ) : (
-                /* NORMAL: circle for select on hover at top-right; 3-dots for context menu just below */
-                <>
-                    {/* Select circle — appears on group hover, transparent until hovered itself */}
-                    <button
-                        className="absolute top-2.5 right-2.5 z-20 w-6 h-6 rounded-full border-2 border-transparent flex items-center justify-center transition-all duration-150 opacity-0 group-hover:opacity-100 group-hover:border-border/60 group-hover:bg-background/50 hover:!border-accent hover:!bg-accent/15"
-                        onClick={e => { e.stopPropagation(); onSelect(note.id, e) }}
-                        aria-label="Select note"
-                    />
-                    {/* 3-dots context menu — hidden behind circle; appears on button-level hover */}
-                    <button
-                        className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 btn-ghost p-1 rounded-md transition-opacity"
-                        onClick={e => { e.stopPropagation(); onMenuToggle() }}
-                        title="More options"
-                    >
-                        <MoreHorizontal className="w-4 h-4" />
-                    </button>
-                </>
-            )}
 
-            {/* URL bar for bookmarks */}
-            {note.type === 'bookmark' && note.url && (
-                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground bg-muted/30 rounded px-2 py-1 truncate">
-                    <ExternalLink className="w-3 h-3 flex-shrink-0" />
-                    <span className="truncate">{(() => { try { return new URL(note.url).hostname } catch { return note.url } })()}</span>
-                </div>
-            )}
 
-            {/* Language badge for gists */}
-            {note.type === 'gist' && note.gist_language && (
-                <span className="self-start text-[10px] font-mono px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 border border-green-500/20">
-                    {note.gist_language}
-                </span>
-            )}
-
-            {/* Title */}
-            <h3 className={`font-semibold text-sm leading-snug ${displayTitle ? 'text-foreground' : 'text-muted-foreground/50 italic'}`}>
-                {displayTitle ?? 'Untitled'}
-            </h3>
-
-            {/* Preview */}
-            <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed flex-1">
-                {note.content_preview || (note.url_title ?? '')}
-            </p>
-
-            {/* Tags */}
-            {note.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                    {note.tags.slice(0, 3).map(t => (
-                        <span key={t} className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/10 text-accent/80">
-                            {t}
+                    {/* Card header row: type badge only on left */}
+                    <div className="flex items-center gap-2 min-w-0 pr-7">
+                        {/* Left: type badge */}
+                        <span className={`flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide ${meta.color} flex-shrink-0`}>
+                            <TypeIcon className="w-3 h-3" />
+                            {note.type === 'fleeting' && <Clock className="w-3 h-3" />}
+                            {meta.label}
+                            {note.is_pinned && <Pin className="w-3 h-3 text-amber-400 ml-0.5" />}
+                            {note.embedding_status === 'done' && (
+                                <Sparkles className="w-3 h-3 text-accent/60 ml-0.5" />
+                            )}
                         </span>
-                    ))}
-                    {note.tags.length > 3 && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/50 text-muted-foreground">
-                            +{note.tags.length - 3}
+                    </div>
+
+                    {/* === TOP-RIGHT CONTROLS === */}
+                    {isSelected ? (
+                        /* SELECTED: filled accent circle, clicking deselects */
+                        <button
+                            className="absolute top-2.5 right-2.5 z-20 w-6 h-6 rounded-full bg-accent border-2 border-accent shadow-md shadow-accent/30 flex items-center justify-center transition-all duration-150"
+                            style={{ transform: 'scale(1.1)' }}
+                            onClick={e => { e.stopPropagation(); onSelect(note.id, e) }}
+                            aria-label="Deselect note"
+                        >
+                            <svg className="w-3.5 h-3.5 text-white" viewBox="0 0 14 14" fill="none">
+                                <path d="M2.5 7L5.5 10L11.5 4" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                        </button>
+                    ) : anySelected ? (
+                        /* SELECTION MODE (others selected, this one not): show empty circle, no 3-dots */
+                        <button
+                            className="absolute top-2.5 right-2.5 z-20 w-6 h-6 rounded-full border-2 border-muted-foreground/30 bg-background/60 flex items-center justify-center transition-all duration-150 hover:border-accent hover:bg-accent/15"
+                            onClick={e => { e.stopPropagation(); onSelect(note.id, e) }}
+                            aria-label="Select note"
+                        />
+                    ) : (
+                        /* NORMAL: circle for select on hover at top-right; 3-dots for context menu just below */
+                        <>
+                            {/* Select circle — appears on group hover, transparent until hovered itself */}
+                            <button
+                                className="absolute top-2.5 right-2.5 z-20 w-6 h-6 rounded-full border-2 border-transparent flex items-center justify-center transition-all duration-150 opacity-0 group-hover:opacity-100 group-hover:border-border/60 group-hover:bg-background/50 hover:!border-accent hover:!bg-accent/15"
+                                onClick={e => { e.stopPropagation(); onSelect(note.id, e) }}
+                                aria-label="Select note"
+                            />
+                            {/* 3-dots left-click menu — hidden behind circle; appears on button-level hover */}
+                            <button
+                                className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 btn-ghost p-1 rounded-md transition-opacity"
+                                onClick={e => { e.stopPropagation(); onMenuToggle() }}
+                                title="More options"
+                            >
+                                <MoreHorizontal className="w-4 h-4" />
+                            </button>
+                        </>
+                    )}
+
+                    {/* URL bar for bookmarks */}
+                    {note.type === 'bookmark' && note.url && (
+                        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground bg-muted/30 rounded px-2 py-1 truncate">
+                            <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                            <span className="truncate">{(() => { try { return new URL(note.url).hostname } catch { return note.url } })()}</span>
+                        </div>
+                    )}
+
+                    {/* Language badge for gists */}
+                    {note.type === 'gist' && note.gist_language && (
+                        <span className="self-start text-[10px] font-mono px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 border border-green-500/20">
+                            {note.gist_language}
                         </span>
                     )}
+
+                    {/* Title */}
+                    <h3 className={`font-semibold text-sm leading-snug ${displayTitle ? 'text-foreground' : 'text-muted-foreground/50 italic'}`}>
+                        {displayTitle ?? 'Untitled'}
+                    </h3>
+
+                    {/* Preview */}
+                    <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed flex-1">
+                        {note.content_preview || (note.url_title ?? '')}
+                    </p>
+
+                    {/* Tags */}
+                    {note.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                            {note.tags.slice(0, 3).map(t => (
+                                <span key={t} className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/10 text-accent/80">
+                                    {t}
+                                </span>
+                            ))}
+                            {note.tags.length > 3 && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/50 text-muted-foreground">
+                                    +{note.tags.length - 3}
+                                </span>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Footer */}
+                    <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-auto pt-1 border-t border-border/30">
+                        <span>{note.word_count} words</span>
+                        <span>{new Date(note.updated_at).toLocaleDateString()}</span>
+                    </div>
+
+                    {/* Per-type quick CTAs */}
+                    <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {note.type === 'bookmark' && note.url && (
+                            <button
+                                className="btn-ghost text-[10px] py-1 px-2 gap-1 flex-1 justify-center border border-border/50"
+                                onClick={handleOpenUrl}
+                            >
+                                <ExternalLink className="w-3 h-3" /> Open URL
+                            </button>
+                        )}
+                        {note.type === 'gist' && (
+                            <button
+                                className="btn-ghost text-[10px] py-1 px-2 gap-1 flex-1 justify-center border border-border/50"
+                                onClick={handleCopyGist}
+                            >
+                                <Copy className="w-3 h-3" /> Copy
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Context menu — solid background, always visible (mobile friendly 3-dots override) */}
+                    {menuOpen && (
+                        <div
+                            className="absolute top-9 right-3 z-20 bg-card border border-border shadow-2xl shadow-black/40 rounded-xl py-1 min-w-36 animate-scale-in"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <button
+                                className="flex items-center gap-2 px-3 py-2 text-xs w-full text-foreground hover:bg-muted/50 transition-colors"
+                                onClick={e => { e.stopPropagation(); onPin() }}
+                            >
+                                {note.is_pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+                                {note.is_pinned ? 'Unpin' : 'Pin'}
+                            </button>
+                            <button
+                                className="flex items-center gap-2 px-3 py-2 text-xs w-full text-foreground hover:bg-muted/50 transition-colors"
+                                onClick={e => { e.stopPropagation(); onArchive() }}
+                            >
+                                {note.is_archived ? <ArchiveX className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+                                {note.is_archived ? 'Unarchive' : 'Archive'}
+                            </button>
+                            <button
+                                className="flex items-center gap-2 px-3 py-2 text-xs w-full hover:bg-destructive/20 text-red-400 transition-colors"
+                                onClick={e => { e.stopPropagation(); onDelete() }}
+                            >
+                                <Trash2 className="w-3.5 h-3.5" /> Delete
+                            </button>
+                        </div>
+                    )}
                 </div>
-            )}
-
-            {/* Footer */}
-            <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-auto pt-1 border-t border-border/30">
-                <span>{note.word_count} words</span>
-                <span>{new Date(note.updated_at).toLocaleDateString()}</span>
-            </div>
-
-            {/* Per-type quick CTAs */}
-            <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            </ContextMenuTrigger>
+            <ContextMenuContent className="w-48">
+                <ContextMenuItem onClick={onPin} className="gap-2">
+                    {note.is_pinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
+                    <span>{note.is_pinned ? 'Unpin Note' : 'Pin Note'}</span>
+                </ContextMenuItem>
+                <ContextMenuItem onClick={onArchive} className="gap-2">
+                    {note.is_archived ? <ArchiveX className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
+                    <span>{note.is_archived ? 'Unarchive' : 'Archive'}</span>
+                    <ContextMenuShortcut>⌘⇧A</ContextMenuShortcut>
+                </ContextMenuItem>
                 {note.type === 'bookmark' && note.url && (
-                    <button
-                        className="btn-ghost text-[10px] py-1 px-2 gap-1 flex-1 justify-center border border-border/50"
-                        onClick={handleOpenUrl}
-                    >
-                        <ExternalLink className="w-3 h-3" /> Open URL
-                    </button>
+                    <ContextMenuItem onClick={() => window.open(note.url!, '_blank')} className="gap-2">
+                        <ExternalLink className="w-4 h-4" />
+                        <span>Open Link</span>
+                    </ContextMenuItem>
                 )}
                 {note.type === 'gist' && (
-                    <button
-                        className="btn-ghost text-[10px] py-1 px-2 gap-1 flex-1 justify-center border border-border/50"
-                        onClick={handleCopyGist}
-                    >
-                        <Copy className="w-3 h-3" /> Copy
-                    </button>
+                    <ContextMenuItem onClick={() => navigator.clipboard.writeText(note.content_preview)} className="gap-2">
+                        <Copy className="w-4 h-4" />
+                        <span>Copy Code</span>
+                    </ContextMenuItem>
                 )}
-            </div>
-
-            {/* Context menu — solid background, always visible */}
-            {menuOpen && (
-                <div
-                    className="absolute top-9 right-3 z-20 bg-card border border-border shadow-2xl shadow-black/40 rounded-xl py-1 min-w-36 animate-scale-in"
-                    onClick={e => e.stopPropagation()}
-                >
-                    <button
-                        className="flex items-center gap-2 px-3 py-2 text-xs w-full text-foreground hover:bg-muted/50 transition-colors"
-                        onClick={e => { e.stopPropagation(); onPin() }}
-                    >
-                        {note.is_pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
-                        {note.is_pinned ? 'Unpin' : 'Pin'}
-                    </button>
-                    <button
-                        className="flex items-center gap-2 px-3 py-2 text-xs w-full text-foreground hover:bg-muted/50 transition-colors"
-                        onClick={e => { e.stopPropagation(); onArchive() }}
-                    >
-                        {note.is_archived ? <ArchiveX className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
-                        {note.is_archived ? 'Unarchive' : 'Archive'}
-                    </button>
-                    <button
-                        className="flex items-center gap-2 px-3 py-2 text-xs w-full hover:bg-destructive/20 text-red-400 transition-colors"
-                        onClick={e => { e.stopPropagation(); onDelete() }}
-                    >
-                        <Trash2 className="w-3.5 h-3.5" /> Delete
-                    </button>
-                </div>
-            )}
-        </div>
+                <ContextMenuSeparator />
+                <ContextMenuItem onClick={onDelete} className="gap-2 text-red-500 focus:text-red-400 focus:bg-red-500/10">
+                    <Trash2 className="w-4 h-4" />
+                    <span>Delete Note</span>
+                    <ContextMenuShortcut>⌘⌫</ContextMenuShortcut>
+                </ContextMenuItem>
+            </ContextMenuContent>
+        </ContextMenu>
     )
 }

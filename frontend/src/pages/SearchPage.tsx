@@ -3,7 +3,10 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import type { ReactElement } from 'react'
 import { searchNotes } from '@/lib/api'
-import { Search, Loader2, FileText, Bookmark, Code2, Zap, ExternalLink, Filter } from 'lucide-react'
+import { Search, Loader2, FileText, Bookmark, Code2, Zap, ExternalLink, Filter, Copy } from 'lucide-react'
+import {
+    ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem
+} from '@/components/ui/context-menu'
 
 function useDebounce<T>(value: T, delay: number): T {
     const [debouncedValue, setDebouncedValue] = useState(value)
@@ -132,42 +135,53 @@ export default function SearchPage() {
                     {Object.entries(grouped).map(([noteId, chunks]) => {
                         const first = chunks[0]
                         return (
-                            <div
-                                key={noteId}
-                                className="glass-card-hover p-4 cursor-pointer animate-fade-in"
-                                onClick={() => navigate(`/w/${workspaceId}/notes/${noteId}`)}
-                            >
-                                <div className="flex items-start justify-between gap-2 mb-2">
-                                    <div className="flex items-center gap-2">
-                                        <span className={`type-${first.note_type}`}>{TYPE_ICONS[first.note_type]}{first.note_type}</span>
-                                        <h3 className="text-sm font-semibold">{first.title}</h3>
-                                    </div>
-                                    <ExternalLink className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                                </div>
-
-                                {chunks.map((chunk, i) => (
-                                    <div key={i} className={`${i > 0 ? 'mt-3 pt-3 border-t border-border/50' : ''}`}>
-                                        {chunk.header_path && (
-                                            <p className="text-xs text-muted-foreground mb-1">{chunk.header_path}</p>
-                                        )}
-                                        <p
-                                            className="text-xs text-muted-foreground leading-relaxed line-clamp-3"
-                                            dangerouslySetInnerHTML={highlight(chunk.highlighted_text || chunk.chunk_text)}
-                                        />
-                                        <div className="flex items-center gap-3 mt-2">
-                                            <div className="flex items-center gap-1.5">
-                                                <div className="w-16 h-1 bg-border rounded overflow-hidden">
-                                                    <div className="h-full bg-accent rounded" style={{ width: `${Math.round(chunk.score * 100)}%` }} />
-                                                </div>
-                                                <span className="text-xs text-muted-foreground">{Math.round(chunk.score * 100)}%</span>
+                            <ContextMenu key={noteId}>
+                                <ContextMenuTrigger asChild>
+                                    <div
+                                        className="glass-card-hover p-4 cursor-pointer animate-fade-in"
+                                        onClick={() => navigate(`/w/${workspaceId}/notes/${noteId}`)}
+                                    >
+                                        <div className="flex items-start justify-between gap-2 mb-2">
+                                            <div className="flex items-center gap-2">
+                                                <span className={`type-${first.note_type}`}>{TYPE_ICONS[first.note_type]}{first.note_type}</span>
+                                                <h3 className="text-sm font-semibold">{first.title}</h3>
                                             </div>
-                                            {chunk.tags.slice(0, 3).map(t => (
-                                                <span key={t} className="chip-muted text-xs">{t}</span>
-                                            ))}
+                                            <ExternalLink className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
                                         </div>
+
+                                        {chunks.map((chunk, i) => (
+                                            <div key={i} className={`${i > 0 ? 'mt-3 pt-3 border-t border-border/50' : ''}`}>
+                                                {chunk.header_path && (
+                                                    <p className="text-xs text-muted-foreground mb-1">{chunk.header_path}</p>
+                                                )}
+                                                <p
+                                                    className="text-xs text-muted-foreground leading-relaxed line-clamp-3"
+                                                    dangerouslySetInnerHTML={highlight(chunk.highlighted_text || chunk.chunk_text)}
+                                                />
+                                                <div className="flex items-center gap-3 mt-2">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <div className="w-16 h-1 bg-border rounded overflow-hidden">
+                                                            <div className="h-full bg-accent rounded" style={{ width: `${Math.round(chunk.score * 100)}%` }} />
+                                                        </div>
+                                                        <span className="text-xs text-muted-foreground">{Math.round(chunk.score * 100)}%</span>
+                                                    </div>
+                                                    {chunk.tags.slice(0, 3).map(t => (
+                                                        <span key={t} className="chip-muted text-xs">{t}</span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
-                                ))}
-                            </div>
+                                </ContextMenuTrigger>
+                                <ContextMenuContent className="w-48">
+                                    <ContextMenuItem onClick={() => navigate(`/w/${workspaceId}/notes/${noteId}`)} className="gap-2">
+                                        <ExternalLink className="w-4 h-4" /> Open Note
+                                    </ContextMenuItem>
+                                    <ContextMenuItem onClick={() => navigator.clipboard.writeText(first.title)} className="gap-2">
+                                        <Copy className="w-4 h-4" /> Copy Title
+                                    </ContextMenuItem>
+                                </ContextMenuContent>
+                            </ContextMenu>
                         )
                     })}
                 </div>

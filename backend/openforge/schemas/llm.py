@@ -11,6 +11,7 @@ class LLMProviderCreate(BaseModel):
     endpoint_id: str = "default"
     base_url: Optional[str] = None
     default_model: Optional[str] = None
+    enabled_models: list[dict] = []
 
 
 class LLMProviderUpdate(BaseModel):
@@ -19,6 +20,7 @@ class LLMProviderUpdate(BaseModel):
     endpoint_id: Optional[str] = None
     base_url: Optional[str] = None
     default_model: Optional[str] = None
+    enabled_models: Optional[list[dict]] = None
 
 
 class LLMProviderResponse(BaseModel):
@@ -28,6 +30,7 @@ class LLMProviderResponse(BaseModel):
     endpoint_id: str
     base_url: Optional[str] = None
     default_model: Optional[str] = None
+    enabled_models: list[dict] = []
     is_system_default: bool
     has_api_key: bool
     created_at: datetime

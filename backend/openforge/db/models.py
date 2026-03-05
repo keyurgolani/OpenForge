@@ -41,6 +41,7 @@ class LLMProvider(Base):
     endpoint_id: Mapped[str] = mapped_column(String(50), nullable=False, default="default")
     base_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     default_model: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    enabled_models: Mapped[List[Dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
     is_system_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=now_utc

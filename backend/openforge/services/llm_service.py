@@ -25,6 +25,7 @@ def _to_response(provider: LLMProvider) -> LLMProviderResponse:
         endpoint_id=provider.endpoint_id,
         base_url=provider.base_url,
         default_model=provider.default_model,
+        enabled_models=provider.enabled_models,
         is_system_default=provider.is_system_default,
         has_api_key=provider.api_key_enc is not None,
         created_at=provider.created_at,
@@ -44,6 +45,7 @@ class LLMService:
             endpoint_id=data.endpoint_id,
             base_url=data.base_url,
             default_model=data.default_model,
+            enabled_models=data.enabled_models,
             is_system_default=is_first,
         )
         if data.api_key:
@@ -79,6 +81,8 @@ class LLMService:
             provider.base_url = data.base_url
         if data.default_model is not None:
             provider.default_model = data.default_model
+        if data.enabled_models is not None:
+            provider.enabled_models = data.enabled_models
         if data.api_key is not None:
             provider.api_key_enc = encrypt_value(data.api_key)
 

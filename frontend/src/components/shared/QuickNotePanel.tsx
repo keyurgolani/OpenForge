@@ -5,6 +5,7 @@ import { createNote, updateNote, deleteNote } from '@/lib/api'
 import {
     X, Expand, Loader2, Tag, Save, FileText, Zap, Bookmark, Code2, Plus
 } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 
 type NoteType = 'standard' | 'fleeting' | 'bookmark' | 'gist'
 
@@ -168,16 +169,34 @@ export function QuickNotePanel({ open, defaultType = 'standard', onClose }: Prop
     const cfg = TYPE_CONFIG[type]
 
     return (
-        <>
+        <AnimatePresence>
             {/* Backdrop */}
-            <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={handleClose} />
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
+                className="fixed inset-0 z-40 bg-black/50 backdrop-blur-md"
+                onClick={handleClose}
+            />
 
             {/* Panel */}
-            <div
+            <motion.div
                 ref={panelRef}
-                className="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg glass-card border border-accent/20 shadow-2xl shadow-black/60 animate-scale-in"
+                initial={{ scale: 0.95, opacity: 0, x: '-50%', y: '-48%' }}
+                animate={{ scale: 1, opacity: 1, x: '-50%', y: '-50%' }}
+                exit={{ scale: 0.95, opacity: 0, x: '-50%', y: '-50%' }}
+                transition={{
+                    type: 'spring',
+                    damping: 25,
+                    stiffness: 300,
+                    mass: 0.8
+                }}
+                className="fixed z-50 top-1/2 left-1/2 w-full max-w-lg glass-card border border-white/10 shadow-glass-lg overflow-hidden"
                 onClick={e => e.stopPropagation()}
             >
+                {/* Inner Glow Line */}
+                <div className="absolute inset-0 border border-white/5 rounded-[inherit] pointer-events-none mix-blend-overlay" />
                 {/* Header */}
                 <div className="flex items-center gap-2 px-4 py-3 border-b border-border/50">
                     {/* Type selector */}
@@ -292,7 +311,7 @@ export function QuickNotePanel({ open, defaultType = 'standard', onClose }: Prop
                         </button>
                     </div>
                 </div>
-            </div>
-        </>
+            </motion.div>
+        </AnimatePresence>
     )
 }

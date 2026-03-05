@@ -6,8 +6,12 @@ import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import {
     Split, Eye, Edit3, Sparkles, Brain, Tag, Save, Loader2,
     ChevronRight, X, CheckSquare, Bell, Calendar, Star, Hash,
-    CornerRightDown
+    CornerRightDown, Copy
 } from 'lucide-react'
+import {
+    ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem,
+    ContextMenuSeparator, ContextMenuShortcut
+} from '@/components/ui/context-menu'
 import MarkdownIt from 'markdown-it'
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
@@ -157,11 +161,14 @@ export default function NotePage() {
 
             {/* AI Summary */}
             {note?.ai_summary && (
-                <div className="mx-4 mt-3 p-3 glass-card border-accent/20 bg-accent/5 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-2 font-medium text-accent text-xs mb-1">
+                <div className="mx-4 mt-3 p-3 glass-card border-accent/20 bg-accent/5">
+                    <div className="flex items-center gap-2 font-medium text-accent text-xs mb-2">
                         <Sparkles className="w-3.5 h-3.5" /> AI Summary
                     </div>
-                    {note.ai_summary}
+                    <div
+                        className="prose prose-sm prose-invert max-w-none text-sm leading-relaxed text-muted-foreground"
+                        dangerouslySetInnerHTML={{ __html: md.render(note.ai_summary) }}
+                    />
                 </div>
             )}
 
@@ -191,15 +198,34 @@ export default function NotePage() {
 
                 {/* Preview pane */}
                 {(mode === 'preview' || mode === 'split') && (
-                    <div className={`${mode === 'split' ? 'w-1/2' : 'w-full'} overflow-y-auto px-8 py-6`}>
-                        {title && (
-                            <h1 className="text-2xl font-bold mb-4 text-foreground">{title}</h1>
-                        )}
-                        <div
-                            className="markdown-content"
-                            dangerouslySetInnerHTML={{ __html: md.render(content || '_Start writing to see preview…_') }}
-                        />
-                    </div>
+                    <ContextMenu>
+                        <ContextMenuTrigger asChild>
+                            <div className={`${mode === 'split' ? 'w-1/2' : 'w-full'} overflow-y-auto px-8 py-6`}>
+                                {title && (
+                                    <h1 className="text-2xl font-bold mb-4 text-foreground">{title}</h1>
+                                )}
+                                <div
+                                    className="markdown-content"
+                                    dangerouslySetInnerHTML={{ __html: md.render(content || '_Start writing to see preview…_') }}
+                                />
+                            </div>
+                        </ContextMenuTrigger>
+                        <ContextMenuContent className="w-56">
+                            <ContextMenuItem onClick={() => handleAI('title')} className="gap-2">
+                                <Hash className="w-4 h-4" /> Generate Title
+                            </ContextMenuItem>
+                            <ContextMenuItem onClick={() => handleAI('summarize')} className="gap-2">
+                                <CornerRightDown className="w-4 h-4" /> Summarize
+                            </ContextMenuItem>
+                            <ContextMenuItem onClick={() => { setShowInsights(true); handleAI('insights'); }} className="gap-2">
+                                <Brain className="w-4 h-4" /> Extract Insights
+                            </ContextMenuItem>
+                            <ContextMenuSeparator />
+                            <ContextMenuItem onClick={() => navigator.clipboard.writeText(content)} className="gap-2">
+                                <Copy className="w-4 h-4" /> Copy Content
+                            </ContextMenuItem>
+                        </ContextMenuContent>
+                    </ContextMenu>
                 )}
 
                 {/* Insights panel */}
@@ -229,10 +255,10 @@ export default function NotePage() {
 
 function InsightsDisplay({ insights, tags }: { insights: Record<string, unknown[]>; tags: string[] }) {
     const sections = [
-        { key: 'todos', label: 'Todos', icon: <CheckSquare className="w-3.5 h-3.5" /> },
-        { key: 'reminders', label: 'Reminders', icon: <Bell className="w-3.5 h-3.5" /> },
-        { key: 'deadlines', label: 'Deadlines', icon: <Calendar className="w-3.5 h-3.5" /> },
-        { key: 'highlights', label: 'Highlights', icon: <Star className="w-3.5 h-3.5" /> },
+        { key: 'tasks', label: 'Tasks', icon: <CheckSquare className="w-3.5 h-3.5" /> },
+        { key: 'timelines', label: 'Timelines', icon: <Calendar className="w-3.5 h-3.5" /> },
+        { key: 'facts', label: 'Facts', icon: <FileText className="w-3.5 h-3.5" /> },
+        { key: 'crucial_things', label: 'Crucial Things', icon: <Star className="w-3.5 h-3.5" /> },
     ] as const
 
     return (
@@ -246,12 +272,18 @@ function InsightsDisplay({ insights, tags }: { insights: Record<string, unknown[
                             {icon} {label}
                         </div>
                         <ul className="space-y-1.5">
-                            {items.map((item: unknown, i: number) => (
-                                <li key={i} className="text-xs text-muted-foreground flex items-start gap-2">
-                                    <span className="text-accent mt-0.5">•</span>
-                                    <span>{typeof item === 'object' ? (item as { text: string }).text : String(item)}</span>
-                                </li>
-                            ))}
+                            {items.map((item: any, i: number) => {
+                                let text = typeof item === 'string' ? item : JSON.stringify(item);
+                                if (key === 'timelines' && typeof item === 'object' && item !== null) {
+                                    text = `${item.date || ''}: ${item.event || ''}`;
+                                }
+                                return (
+                                    <li key={i} className="text-xs text-muted-foreground flex items-start gap-2">
+                                        <div className="w-1 h-1 rounded-full bg-border mt-1.5 flex-shrink-0" />
+                                        <span className="leading-snug">{text}</span>
+                                    </li>
+                                );
+                            })}
                         </ul>
                     </div>
                 )

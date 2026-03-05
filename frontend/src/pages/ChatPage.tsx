@@ -6,8 +6,12 @@ import { useStreamingChat } from '@/hooks/useStreamingChat'
 import {
     Plus, Send, Loader2, MessageSquare, Trash2, Sparkles, Bot, User,
     ChevronDown, ChevronRight, ExternalLink, Check, Pencil, ChevronDown as ChevronDownIcon,
-    Paperclip, X
+    Paperclip, X, Copy
 } from 'lucide-react'
+import {
+    ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem,
+    ContextMenuSeparator
+} from '@/components/ui/context-menu'
 import MarkdownIt from 'markdown-it'
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
@@ -296,36 +300,49 @@ function ConversationRow({ conv, active, workspaceId, onSelect, onDelete, onRena
     }
 
     return (
-        <div
-            className={`group flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors ${active ? 'bg-muted/60' : 'hover:bg-muted/30'}`}
-            onClick={onSelect}
-        >
-            <MessageSquare className="w-3.5 h-3.5 flex-shrink-0 text-muted-foreground" />
-            <div className="flex-1 min-w-0">
-                {editing ? (
-                    <input
-                        ref={inputRef}
-                        className="w-full text-xs bg-background border border-accent/40 rounded px-1 py-0.5 outline-none"
-                        value={draft}
-                        onChange={e => setDraft(e.target.value)}
-                        onBlur={commitEdit}
-                        onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditing(false) }}
-                        onClick={e => e.stopPropagation()}
-                    />
-                ) : (
-                    <p className="text-xs font-medium truncate">{conv.title ?? 'New Chat'}</p>
-                )}
-                <p className="text-xs text-muted-foreground">{conv.message_count} messages</p>
-            </div>
-            <div className="opacity-0 group-hover:opacity-100 flex gap-0.5">
-                <button className="btn-ghost p-1" onClick={startEdit} title="Rename">
-                    <Pencil className="w-3 h-3" />
-                </button>
-                <button className="btn-ghost p-1" onClick={e => { e.stopPropagation(); onDelete() }}>
-                    <Trash2 className="w-3 h-3" />
-                </button>
-            </div>
-        </div>
+        <ContextMenu>
+            <ContextMenuTrigger asChild>
+                <div
+                    className={`group flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors ${active ? 'bg-muted/60' : 'hover:bg-muted/30'}`}
+                    onClick={onSelect}
+                >
+                    <MessageSquare className="w-3.5 h-3.5 flex-shrink-0 text-muted-foreground" />
+                    <div className="flex-1 min-w-0">
+                        {editing ? (
+                            <input
+                                ref={inputRef}
+                                className="w-full text-xs bg-background border border-accent/40 rounded px-1 py-0.5 outline-none"
+                                value={draft}
+                                onChange={e => setDraft(e.target.value)}
+                                onBlur={commitEdit}
+                                onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditing(false) }}
+                                onClick={e => e.stopPropagation()}
+                            />
+                        ) : (
+                            <p className="text-xs font-medium truncate">{conv.title ?? 'New Chat'}</p>
+                        )}
+                        <p className="text-xs text-muted-foreground">{conv.message_count} messages</p>
+                    </div>
+                    <div className="opacity-0 group-hover:opacity-100 flex gap-0.5">
+                        <button className="btn-ghost p-1" onClick={startEdit} title="Rename">
+                            <Pencil className="w-3 h-3" />
+                        </button>
+                        <button className="btn-ghost p-1" onClick={e => { e.stopPropagation(); onDelete() }}>
+                            <Trash2 className="w-3 h-3" />
+                        </button>
+                    </div>
+                </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent className="w-48">
+                <ContextMenuItem onClick={(e: any) => { e.stopPropagation(); startEdit(e) }} className="gap-2">
+                    <Pencil className="w-4 h-4" /> Rename Chat
+                </ContextMenuItem>
+                <ContextMenuSeparator />
+                <ContextMenuItem onClick={(e: any) => { e.stopPropagation(); onDelete() }} className="gap-2 text-red-500 focus:text-red-400 focus:bg-red-500/10">
+                    <Trash2 className="w-4 h-4" /> Delete Chat
+                </ContextMenuItem>
+            </ContextMenuContent>
+        </ContextMenu>
     )
 }
 
@@ -335,50 +352,59 @@ function ChatMessageCard({ message: msg, workspaceId }: { message: Message; work
     const navigate = useNavigate()
 
     return (
-        <div className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-            <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-1 ${msg.role === 'user' ? 'bg-accent/30' : 'bg-muted/60'}`}>
-                {msg.role === 'user' ? <User className="w-4 h-4 text-accent" /> : <Bot className="w-4 h-4 text-muted-foreground" />}
-            </div>
-            <div className={`flex flex-col gap-1 max-w-2xl ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                <div className={`px-4 py-3 rounded-2xl ${msg.role === 'user' ? 'bg-accent/20 border border-accent/30' : 'glass-card'}`}>
-                    {msg.role === 'user' ? (
-                        <p className="text-sm">{msg.content}</p>
-                    ) : (
-                        <div className="markdown-content text-sm" dangerouslySetInnerHTML={{ __html: md.render(msg.content) }} />
-                    )}
-                </div>
-                {msg.role === 'assistant' && msg.context_sources && msg.context_sources.length > 0 && (
-                    <button
-                        className="text-xs text-muted-foreground flex items-center gap-1 hover:text-foreground transition-colors"
-                        onClick={() => setSourcesOpen(p => !p)}
-                    >
-                        {sourcesOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                        {msg.context_sources.length} source{msg.context_sources.length !== 1 ? 's' : ''} used
-                    </button>
-                )}
-                {sourcesOpen && msg.context_sources && (
-                    <div className="space-y-2 w-full">
-                        {msg.context_sources.map(src => (
-                            <div key={src.note_id} className="glass-card p-3 text-xs group">
-                                <div className="flex items-center justify-between mb-1">
-                                    <span className="font-medium text-foreground">{src.title}</span>
-                                    <button className="opacity-0 group-hover:opacity-100 text-accent" onClick={() => navigate(`/w/${workspaceId}/notes/${src.note_id}`)}>
-                                        <ExternalLink className="w-3 h-3" />
-                                    </button>
-                                </div>
-                                <p className="text-muted-foreground line-clamp-2">{src.snippet}</p>
-                                <div className="mt-1.5 flex items-center gap-1">
-                                    <div className="flex-1 h-1 rounded bg-border overflow-hidden">
-                                        <div className="h-full bg-accent rounded" style={{ width: `${Math.round(src.score * 100)}%` }} />
-                                    </div>
-                                    <span className="text-muted-foreground">{Math.round(src.score * 100)}%</span>
-                                </div>
-                            </div>
-                        ))}
+        <ContextMenu>
+            <ContextMenuTrigger asChild>
+                <div className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-1 ${msg.role === 'user' ? 'bg-accent/30' : 'bg-muted/60'}`}>
+                        {msg.role === 'user' ? <User className="w-4 h-4 text-accent" /> : <Bot className="w-4 h-4 text-muted-foreground" />}
                     </div>
-                )}
-                <span className="text-xs text-muted-foreground">{new Date(msg.created_at).toLocaleTimeString()}</span>
-            </div>
-        </div>
+                    <div className={`flex flex-col gap-1 max-w-2xl ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                        <div className={`px-4 py-3 rounded-2xl ${msg.role === 'user' ? 'bg-accent/20 border border-accent/30' : 'glass-card'}`}>
+                            {msg.role === 'user' ? (
+                                <p className="text-sm">{msg.content}</p>
+                            ) : (
+                                <div className="markdown-content text-sm" dangerouslySetInnerHTML={{ __html: md.render(msg.content) }} />
+                            )}
+                        </div>
+                        {msg.role === 'assistant' && msg.context_sources && msg.context_sources.length > 0 && (
+                            <button
+                                className="text-xs text-muted-foreground flex items-center gap-1 hover:text-foreground transition-colors"
+                                onClick={() => setSourcesOpen(p => !p)}
+                            >
+                                {sourcesOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                {msg.context_sources.length} source{msg.context_sources.length !== 1 ? 's' : ''} used
+                            </button>
+                        )}
+                        {sourcesOpen && msg.context_sources && (
+                            <div className="space-y-2 w-full">
+                                {msg.context_sources.map(src => (
+                                    <div key={src.note_id} className="glass-card p-3 text-xs group">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <span className="font-medium text-foreground">{src.title}</span>
+                                            <button className="opacity-0 group-hover:opacity-100 text-accent" onClick={() => navigate(`/w/${workspaceId}/notes/${src.note_id}`)}>
+                                                <ExternalLink className="w-3 h-3" />
+                                            </button>
+                                        </div>
+                                        <p className="text-muted-foreground line-clamp-2">{src.snippet}</p>
+                                        <div className="mt-1.5 flex items-center gap-1">
+                                            <div className="flex-1 h-1 rounded bg-border overflow-hidden">
+                                                <div className="h-full bg-accent rounded" style={{ width: `${Math.round(src.score * 100)}%` }} />
+                                            </div>
+                                            <span className="text-muted-foreground">{Math.round(src.score * 100)}%</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        <span className="text-xs text-muted-foreground">{new Date(msg.created_at).toLocaleTimeString()}</span>
+                    </div>
+                </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent className="w-48">
+                <ContextMenuItem onClick={() => navigator.clipboard.writeText(msg.content)} className="gap-2">
+                    <Copy className="w-4 h-4" /> Copy Message
+                </ContextMenuItem>
+            </ContextMenuContent>
+        </ContextMenu>
     )
 }

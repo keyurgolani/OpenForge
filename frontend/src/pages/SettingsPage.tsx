@@ -59,14 +59,14 @@ export default function SettingsPage() {
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-1 mb-6 border-b border-border/50">
+            <div className="flex gap-2 mb-8 p-1.5 glass-card w-full sm:w-fit rounded-2xl overflow-x-auto">
                 {TABS.map(({ id, label, Icon }) => (
                     <button
                         key={id}
                         onClick={() => setActiveTab(id)}
-                        className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-all ${activeTab === id
-                            ? 'border-accent text-accent'
-                            : 'border-transparent text-muted-foreground hover:text-foreground'
+                        className={`flex items-center justify-center gap-2 px-5 py-2 text-sm font-medium rounded-xl transition-all duration-300 whitespace-nowrap ${activeTab === id
+                            ? 'bg-accent/20 text-accent shadow-glass-inset ring-1 ring-accent/30'
+                            : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
                             }`}
                     >
                         <Icon className="w-4 h-4" />
@@ -153,7 +153,7 @@ function WorkspacesSettings({ activeWorkspaceId }: { activeWorkspaceId: string }
     )
 }
 
-type ProviderRow = { id: string; display_name: string; provider_name: string; default_model: string | null; is_system_default: boolean; has_api_key: boolean; base_url: string | null }
+type ProviderRow = { id: string; display_name: string; provider_name: string; default_model: string | null; is_system_default: boolean; has_api_key: boolean; base_url: string | null; enabled_models: { id: string; name: string }[] }
 
 function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved }: {
     workspace: WorkspaceRow
@@ -196,7 +196,7 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
     }
 
     return (
-        <div className={`glass-card overflow-hidden ${isActive ? 'border-accent/40' : ''}`}>
+        <div className={`glass-card-hover overflow-hidden transition-all duration-300 ${isActive ? 'border-accent/50 shadow-glass-lg' : ''}`}>
             <div className="flex items-center gap-3 px-4 py-3">
                 <div className="w-9 h-9 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0 text-lg">
                     {ws.icon || <FolderOpen className="w-4 h-4 text-accent" />}
@@ -335,8 +335,9 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
     const [manualModel, setManualModel] = useState('')
 
     const [saving, setSaving] = useState(false)
-    const [savedCount, setSavedCount] = useState(0)
+    const [saved, setSaved] = useState(false)
     const [saveError, setSaveError] = useState<string | null>(null)
+    const [createdProviderId, setCreatedProviderId] = useState<string | null>(null)
 
     const meta = PROVIDER_META[providerName]
 
@@ -344,7 +345,8 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
         setProviderName(id); setDisplayName(''); setApiKey(''); setBaseUrl('')
         setShowKey(false); setModels(null); setModelError(null)
         setModelSearch(''); setSelectedModels(new Set()); setManualModel('')
-        setSavedCount(0); setSaveError(null)
+        setSaved(false); setSaveError(null)
+        setCreatedProviderId(null)
     }
 
     const filteredModels = useMemo(() => {
@@ -357,13 +359,24 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
         setLoadingModels(true); setModelError(null); setModels(null)
         setSelectedModels(new Set()); setModelSearch('')
         try {
-            const temp = await createProvider({
-                provider_name: providerName,
-                display_name: displayName || meta?.name || providerName,
-                api_key: apiKey || undefined,
-                base_url: baseUrl || undefined,
-            })
-            const list = await listModels(temp.id)
+            let pid = createdProviderId
+            if (!pid) {
+                const temp = await createProvider({
+                    provider_name: providerName,
+                    display_name: displayName || meta?.name || providerName,
+                    api_key: apiKey || undefined,
+                    base_url: baseUrl || undefined,
+                })
+                pid = temp.id
+                setCreatedProviderId(pid)
+            } else {
+                await updateProvider(pid, {
+                    display_name: displayName || meta?.name || providerName,
+                    api_key: apiKey || undefined,
+                    base_url: baseUrl || undefined,
+                })
+            }
+            const list = await listModels(pid!)
             setModels(list)
             if (list.length <= 10) setSelectedModels(new Set(list.map((m: { id: string }) => m.id)))
         } catch (e: unknown) {
@@ -379,21 +392,34 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
     const handleSave = async () => {
         const modelsToSave = models ? [...selectedModels] : manualModel.trim() ? [manualModel.trim()] : []
         if (!modelsToSave.length) { setSaveError('Select at least one model or type a model ID.'); return }
-        setSaving(true); setSaveError(null); let count = 0
+        setSaving(true); setSaveError(null)
         try {
-            for (const modelId of modelsToSave) {
+            const enabledList = modelsToSave.map(modelId => {
                 const label = models?.find(m => m.id === modelId)?.name ?? modelId
-                await createProvider({
-                    provider_name: providerName,
-                    display_name: displayName ? `${displayName} — ${label}` : `${meta?.name ?? providerName} — ${label}`,
+                return { id: modelId, name: label }
+            })
+            if (createdProviderId) {
+                await updateProvider(createdProviderId, {
+                    display_name: displayName || meta?.name || providerName,
                     api_key: apiKey || undefined,
                     base_url: baseUrl || undefined,
-                    default_model: modelId,
+                    default_model: modelsToSave[0],
+                    enabled_models: enabledList,
                 })
-                count++
+            } else {
+                await createProvider({
+                    provider_name: providerName,
+                    display_name: displayName || meta?.name || providerName,
+                    api_key: apiKey || undefined,
+                    base_url: baseUrl || undefined,
+                    default_model: modelsToSave[0],
+                    enabled_models: enabledList,
+                })
             }
-            setSavedCount(count); onAdded()
+            setSaved(true); onAdded()
             setModels(null); setSelectedModels(new Set()); setManualModel(''); setSaveError(null)
+            setCreatedProviderId(null)
+            setTimeout(() => setSaved(false), 3000)
         } catch (e: unknown) {
             const err = e as { response?: { data?: { detail?: string } }; message?: string }
             setSaveError(err?.response?.data?.detail ?? err?.message ?? 'Save failed')
@@ -404,12 +430,12 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
     const totalSelected = models ? selectedModels.size : (manualModel.trim() ? 1 : 0)
 
     return (
-        <div className="glass-card p-5 space-y-4 border border-accent/20 animate-fade-in">
+        <div className="glass-card shadow-glass-lg p-5 space-y-4 border border-accent/30 animate-fade-in">
             <div className="flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-accent">Add Provider + Models</h4>
-                {savedCount > 0 && (
+                <h4 className="text-sm font-semibold text-accent">Add Provider</h4>
+                {saved && (
                     <span className="text-xs text-emerald-400 flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> {savedCount} added
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Saved
                     </span>
                 )}
             </div>
@@ -422,13 +448,13 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
                         const m = PROVIDER_META[id]
                         return (
                             <button key={id} onClick={() => handleProviderChange(id)}
-                                className={`p-2 rounded-lg border text-center text-xs transition-all ${providerName === id ? `${m.color} border-2 scale-105` : 'border-border hover:bg-muted/30'
+                                className={`p-2 rounded-xl border text-center text-xs transition-all duration-300 ${providerName === id ? `${m.color} border-accent ring-2 ring-accent/30 scale-105 shadow-glass-md` : 'border-border/50 hover:bg-muted/30 hover:shadow-glass-sm'
                                     }`}
                             >
-                                <div className="flex justify-center mb-1">
+                                <div className="flex justify-center mb-1.5">
                                     <ProviderIcon providerId={id} className="w-4 h-4" />
                                 </div>
-                                <div className="text-[10px] leading-tight truncate">{m.name}</div>
+                                <div className="text-[10px] leading-tight font-medium truncate">{m.name}</div>
                             </button>
                         )
                     })}
@@ -518,7 +544,7 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
             {/* Step 4 — Save */}
             <button className="btn-primary w-full justify-center py-2.5" onClick={handleSave} disabled={saving || totalSelected === 0}>
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                {saving ? `Saving…` : totalSelected > 0 ? `Add ${totalSelected} provider${totalSelected > 1 ? 's' : ''}` : 'Select models above'}
+                {saving ? `Saving…` : totalSelected > 0 ? `Save Provider with ${totalSelected} model${totalSelected > 1 ? 's' : ''}` : 'Select models above'}
             </button>
             <p className="text-[10px] text-muted-foreground text-center">Panel stays open — add more providers after saving</p>
         </div>
@@ -533,36 +559,23 @@ function ProviderCard({ provider, expanded, onToggle, onDelete, onSetDefault }: 
     const qc = useQueryClient()
     const [testing, setTesting] = useState(false)
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
-    const [models, setModels] = useState<{ id: string; name: string }[] | null>(null)
-    const [loadingModels, setLoadingModels] = useState(false)
-    const [modelSearch, setModelSearch] = useState('')
     const [selectedModel, setSelectedModel] = useState(provider.default_model ?? '')
     const [savingModel, setSavingModel] = useState(false)
     const [modelSaved, setModelSaved] = useState(false)
+    const [modelSearch, setModelSearch] = useState('')
 
     const meta = PROVIDER_META[provider.provider_name]
     const filteredModels = useMemo(() => {
-        if (!models) return []
+        const list = provider.enabled_models || []
         const q = modelSearch.toLowerCase()
-        return q ? models.filter(m => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)) : models
-    }, [models, modelSearch])
+        return q ? list.filter(m => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)) : list
+    }, [provider.enabled_models, modelSearch])
 
     const handleTest = async () => {
         setTesting(true); setTestResult(null)
         try { setTestResult(await testConnection(provider.id)) }
         catch { setTestResult({ success: false, message: 'Request failed' }) }
         finally { setTesting(false) }
-    }
-
-    const handleLoadModels = async () => {
-        setLoadingModels(true)
-        try { setModels(await listModels(provider.id)) }
-        catch (e: unknown) {
-            const err = e as { response?: { data?: { detail?: string } }; message?: string }
-            setTestResult({ success: false, message: err?.response?.data?.detail ?? err?.message ?? 'Failed' })
-            setModels([])
-        }
-        finally { setLoadingModels(false) }
     }
 
     const handleSaveModel = async () => {
@@ -574,7 +587,7 @@ function ProviderCard({ provider, expanded, onToggle, onDelete, onSetDefault }: 
     }
 
     return (
-        <div className="glass-card overflow-hidden">
+        <div className="glass-card-hover overflow-hidden transition-all duration-300">
             <div className="flex items-center gap-3 px-4 py-3">
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${meta?.color ?? 'bg-muted border-border'}`}>
                     <ProviderIcon providerId={provider.provider_name} className="w-4 h-4" />
@@ -616,36 +629,36 @@ function ProviderCard({ provider, expanded, onToggle, onDelete, onSetDefault }: 
 
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                            <label className="text-xs font-medium text-muted-foreground">Model</label>
-                            <button className="text-xs text-accent flex items-center gap-1" onClick={handleLoadModels} disabled={loadingModels}>
-                                {loadingModels ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                                {models ? 'Refresh' : 'Load models'}
-                            </button>
+                            <label className="text-xs font-medium text-muted-foreground">Default Model</label>
+                            {modelSaved && <span className="text-[10px] text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Saved</span>}
                         </div>
-                        {models !== null && models.length > 0 && (
+                        {provider.enabled_models && provider.enabled_models.length > 0 ? (
                             <>
-                                <div className="relative">
-                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
-                                    <input className="input text-xs pl-7" placeholder="Filter models…" value={modelSearch} onChange={e => setModelSearch(e.target.value)} />
-                                </div>
                                 <div className="max-h-36 overflow-y-auto rounded-lg border border-border/50 bg-background/30 divide-y divide-border/20">
                                     {filteredModels.map(m => (
                                         <button key={m.id} onClick={() => setSelectedModel(m.id)}
                                             className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-muted/30 transition-colors ${selectedModel === m.id ? 'bg-accent/10 text-accent' : 'text-muted-foreground'}`}>
                                             {selectedModel === m.id ? <Zap className="w-3 h-3 flex-shrink-0" /> : <span className="w-3" />}
-                                            {m.name}
+                                            <span className="truncate">{m.name}</span>
                                         </button>
                                     ))}
                                 </div>
+                                <div className="flex gap-2">
+                                    <input className="input text-xs flex-1 py-1.5" placeholder="Model ID…" value={selectedModel} onChange={e => setSelectedModel(e.target.value)} />
+                                    <button className="btn-primary text-xs py-1.5 px-3 whitespace-nowrap" onClick={handleSaveModel} disabled={savingModel || !selectedModel}>
+                                        {savingModel ? 'Saving…' : 'Save Default Model'}
+                                    </button>
+                                </div>
                             </>
+                        ) : (
+                            <div className="flex gap-2 items-center">
+                                <input className="input text-xs flex-1 py-1.5" placeholder="Model ID…" value={selectedModel} onChange={e => setSelectedModel(e.target.value)} />
+                                <button className="btn-primary text-xs py-1.5 px-3" onClick={handleSaveModel} disabled={savingModel || !selectedModel}>
+                                    {modelSaved ? <CheckCircle2 className="w-3.5 h-3.5" /> : savingModel ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                                    {modelSaved ? 'Saved' : 'Set default'}
+                                </button>
+                            </div>
                         )}
-                        <div className="flex gap-2">
-                            <input className="input text-xs flex-1 py-1.5" placeholder="Model ID…" value={selectedModel} onChange={e => setSelectedModel(e.target.value)} />
-                            <button className="btn-primary text-xs py-1.5 px-3" onClick={handleSaveModel} disabled={savingModel || !selectedModel}>
-                                {modelSaved ? <CheckCircle2 className="w-3.5 h-3.5" /> : savingModel ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                                {modelSaved ? 'Saved' : 'Set'}
-                            </button>
-                        </div>
                     </div>
                 </div>
             )}

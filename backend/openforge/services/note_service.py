@@ -63,6 +63,7 @@ def _to_list_item(note: Note) -> NoteListItem:
         is_archived=note.is_archived,
         word_count=note.word_count,
         embedding_status=note.embedding_status,
+        insights=note.insights,
         insights_count=insights_count,
         ai_title=note.ai_title,
         url=note.url,

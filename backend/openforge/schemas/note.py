@@ -36,6 +36,7 @@ class NoteListItem(BaseModel):
     is_archived: bool = False
     word_count: int = 0
     embedding_status: str = "pending"
+    insights: Optional[Any] = None
     insights_count: Optional[int] = None
     ai_title: Optional[str] = None
     url: Optional[str] = None

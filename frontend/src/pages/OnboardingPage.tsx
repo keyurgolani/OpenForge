@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
-    getOnboarding, advanceOnboarding, createProvider,
+    getOnboarding, advanceOnboarding, createProvider, updateProvider,
     testConnection, listModels, createWorkspace, listProviders
 } from '@/lib/api'
 import { Sparkles, ArrowRight, CheckCircle2, Loader2, Globe2, Eye, EyeOff, Plus, Trash2, FileText, Search, MessageSquare, Lock } from 'lucide-react'
@@ -79,14 +79,14 @@ export default function OnboardingPage() {
                         const isActive = stepIdx === i
                         return (
                             <div key={s} className="flex items-center gap-2">
-                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ${isDone ? 'bg-accent/40 text-accent ring-2 ring-accent/30' :
-                                    isActive ? 'bg-accent text-accent-foreground scale-110 ring-2 ring-accent/50 shadow-lg shadow-accent/20' :
-                                        'bg-muted text-muted-foreground'
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500 ${isDone ? 'bg-accent/20 text-accent outline outline-2 outline-accent/30 shadow-glass-sm' :
+                                    isActive ? 'bg-accent text-accent-foreground scale-110 outline outline-2 outline-accent/50 shadow-glass-md' :
+                                        'glass-sm text-muted-foreground border border-border/50'
                                     }`}>
-                                    {isDone ? <CheckCircle2 className="w-4 h-4" /> : i + 1}
+                                    {isDone ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : i + 1}
                                 </div>
                                 {i < STEPS.length - 1 && (
-                                    <div className={`w-16 h-0.5 transition-all duration-500 ${isDone ? 'bg-accent/50' : 'bg-border'}`} />
+                                    <div className={`w-16 h-0.5 transition-all duration-500 rounded-full ${isDone ? 'bg-accent/50 shadow-[0_0_8px_rgba(var(--accent),0.5)]' : 'bg-border/50'}`} />
                                 )}
                             </div>
                         )
@@ -124,7 +124,7 @@ function WelcomeStep({ onNext, loading }: { onNext: () => void; loading: boolean
         { Icon: Lock, text: '100% private — runs on your hardware' },
     ]
     return (
-        <div className="glass-card p-8 text-center space-y-6 animate-fade-in">
+        <div className="glass-card shadow-glass-lg p-8 text-center space-y-6 animate-fade-in border border-accent/20">
             <div className="w-16 h-16 rounded-2xl bg-accent/20 border border-accent/30 flex items-center justify-center mx-auto shadow-lg shadow-accent/10">
                 <Sparkles className="w-8 h-8 text-accent" />
             </div>
@@ -160,6 +160,7 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
     const [showKey, setShowKey] = useState(false)
     const [baseUrl, setBaseUrl] = useState('')
     const [displayName, setDisplayName] = useState('')
+    const [createdProviderId, setCreatedProviderId] = useState<string | null>(null)
 
     // Model fetch state
     const [fetchingModels, setFetchingModels] = useState(false)
@@ -180,6 +181,7 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
         setSelected(null); setApiKey(''); setShowKey(false); setBaseUrl('')
         setDisplayName(''); setModels(null); setModelError(null); setModelSearch('')
         setSelectedModels(new Set()); setManualModel(''); setSaveError(null); setTestResult(null)
+        setCreatedProviderId(null)
     }
 
     const handleSelectProvider = (id: string) => {
@@ -187,6 +189,7 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
         setBaseUrl(id === 'ollama' ? 'http://localhost:11434' : '')
         setDisplayName(''); setModels(null); setModelError(null)
         setSelectedModels(new Set()); setManualModel(''); setSaveError(null); setTestResult(null)
+        setCreatedProviderId(null)
     }
 
     const canFetch = provider?.needsUrl ? !!baseUrl : !!apiKey
@@ -202,17 +205,28 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
         setFetchingModels(true); setModelError(null); setModels(null)
         setSelectedModels(new Set()); setTestResult(null)
         try {
-            const temp = await createProvider({
-                provider_name: selected,
-                display_name: displayName || provider?.name || selected,
-                api_key: apiKey || undefined,
-                base_url: baseUrl || undefined,
-            })
-            const result = await testConnection(temp.id)
+            let pid = createdProviderId
+            if (!pid) {
+                const temp = await createProvider({
+                    provider_name: selected,
+                    display_name: displayName || provider?.name || selected,
+                    api_key: apiKey || undefined,
+                    base_url: baseUrl || undefined,
+                })
+                pid = temp.id
+                setCreatedProviderId(pid)
+            } else {
+                await updateProvider(pid, {
+                    display_name: displayName || provider?.name || selected,
+                    api_key: apiKey || undefined,
+                    base_url: baseUrl || undefined,
+                })
+            }
+            const result = await testConnection(pid)
             setTestResult(result)
             if (result.success) {
                 try {
-                    const list = await listModels(temp.id)
+                    const list = await listModels(pid)
                     setModels(list)
                     if (list.length > 0 && list.length <= 20) {
                         setSelectedModels(new Set(list.map((m: { id: string }) => m.id)))
@@ -240,14 +254,28 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
         if (!modelsToAdd.length) { setSaveError('Select at least one model or enter a model ID.'); return }
         setSaving(true); setSaveError(null)
         try {
-            for (const modelId of modelsToAdd) {
+            const enabledList = modelsToAdd.map(modelId => {
                 const label = models?.find(m => m.id === modelId)?.name ?? modelId
-                const saved = await createProvider({
-                    provider_name: selected!,
-                    display_name: displayName ? `${displayName} — ${label}` : `${provider?.name ?? selected} — ${label}`,
+                return { id: modelId, name: label }
+            })
+
+            if (createdProviderId) {
+                await updateProvider(createdProviderId, {
+                    display_name: displayName || provider?.name || selected,
                     api_key: apiKey || undefined,
                     base_url: baseUrl || undefined,
-                    default_model: modelId,
+                    default_model: modelsToAdd[0],
+                    enabled_models: enabledList,
+                })
+                setConfigured(c => [...c, { id: createdProviderId, name: displayName || provider?.name || selected! }])
+            } else {
+                const saved = await createProvider({
+                    provider_name: selected!,
+                    display_name: displayName || provider?.name || selected,
+                    api_key: apiKey || undefined,
+                    base_url: baseUrl || undefined,
+                    default_model: modelsToAdd[0],
+                    enabled_models: enabledList,
                 })
                 setConfigured(c => [...c, { id: saved.id, name: saved.display_name }])
             }
@@ -263,7 +291,7 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
     const totalSelected = models ? selectedModels.size : (manualModel.trim() ? 1 : 0)
 
     return (
-        <div className="glass-card p-6 space-y-5 animate-slide-up">
+        <div className="glass-card shadow-glass-lg p-6 flex flex-col space-y-6 animate-slide-up border border-accent/20">
             <div>
                 <h2 className="text-xl font-bold mb-1">Connect AI Providers</h2>
                 <p className="text-muted-foreground text-sm">
@@ -292,9 +320,9 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
                     <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
                         {PROVIDERS.map(p => (
                             <button key={p.id} onClick={() => handleSelectProvider(p.id)}
-                                className={`p-2.5 rounded-xl border text-center transition-all ${selected === p.id
-                                    ? `border-accent ring-1 ring-accent/30 bg-gradient-to-br ${p.color} to-transparent`
-                                    : 'border-border hover:bg-muted/30'
+                                className={`p-2.5 rounded-xl border text-center transition-all duration-300 ${selected === p.id
+                                    ? `border-accent outline outline-2 outline-accent/30 shadow-glass-md bg-gradient-to-br ${p.color} to-transparent scale-105`
+                                    : 'border-border/50 hover:bg-muted/40 hover:shadow-glass-sm'
                                     }`}
                             >
                                 <div className="flex justify-center mb-1.5">
@@ -392,7 +420,7 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
 
                         <button className="btn-primary w-full justify-center py-2.5 text-sm" onClick={handleSave} disabled={saving || totalSelected === 0}>
                             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                            {saving ? 'Saving…' : totalSelected > 0 ? `Add ${totalSelected} model${totalSelected > 1 ? 's' : ''}` : 'Select models above'}
+                            {saving ? 'Saving…' : totalSelected > 0 ? `Save Provider with ${totalSelected} model${totalSelected > 1 ? 's' : ''}` : 'Select models above'}
                         </button>
                     </>
                 )}
@@ -448,7 +476,7 @@ function WorkspaceCreateStep({ onNext }: { onNext: () => void }) {
     }
 
     return (
-        <div className="glass-card p-8 space-y-5 animate-slide-up">
+        <div className="glass-card shadow-glass-lg border border-accent/20 p-8 space-y-5 animate-slide-up">
             <div>
                 <h2 className="text-xl font-bold mb-1">Create Your Workspaces</h2>
                 <p className="text-muted-foreground text-sm">

@@ -35,7 +35,8 @@ PROMPT_CATALOGUE = [
         "variables": ["{note_content}"],
         "default": (
             "Generate a concise, descriptive title (max 60 chars) for the following note content. "
-            "Return ONLY the title — no quotes, markdown, or extra explanation."
+            "Return ONLY the title — no quotes, markdown, or extra explanation.\n\n"
+            "Note Content:\n{note_content}"
         ),
     },
     {
@@ -48,7 +49,10 @@ PROMPT_CATALOGUE = [
         "default": (
             "Summarize the following note concisely and clearly. "
             "Preserve the key ideas, facts, and any action items. "
-            "Use structured markdown with short paragraphs or bullet points."
+            "Use structured markdown with short paragraphs or bullet points.\n\n"
+            "Title: {note_title}\n"
+            "Tags: {tags}\n\n"
+            "Note Content:\n{note_content}"
         ),
     },
     {
@@ -59,15 +63,17 @@ PROMPT_CATALOGUE = [
         "role": "system",
         "variables": ["{note_title}", "{note_content}", "{tags}"],
         "default": (
-            "Extract structured insights from this note. Return ONLY valid JSON with this structure:\n"
+            "Extract structured insights from this note. Return ONLY valid JSON with this exact structure:\n"
             "{\n"
-            '  "todos": ["action item 1"],\n'
-            '  "reminders": ["reminder 1"],\n'
-            '  "deadlines": [{"text": "description", "date": "YYYY-MM-DD or null"}],\n'
-            '  "highlights": ["important point 1"],\n'
+            '  "timelines": [{"date": "YYYY-MM-DD", "event": "description"}],\n'
+            '  "facts": ["key fact 1"],\n'
+            '  "crucial_things": ["critical point 1"],\n'
+            '  "tasks": ["action item 1"],\n'
             '  "tags": ["tag1", "tag2"]\n'
             "}\n"
-            "Return empty arrays if none found. Tags should be lowercase single words or hyphenated phrases."
+            "Return empty arrays if none found. Tags should be lowercase single words or hyphenated phrases.\n\n"
+            "Title: {note_title}\n\n"
+            "Note Content:\n{note_content}"
         ),
     },
     {
@@ -105,8 +111,8 @@ PROMPT_CATALOGUE = [
         "role": "system",
         "variables": ["{url}", "{note_content}"],
         "default": (
-            "Given the following web page content, generate a concise, descriptive title (max 80 chars). "
-            "Return ONLY the title."
+            "Given the following web page content from {url}, generate a concise, descriptive title (max 80 chars). "
+            "Return ONLY the title.\n\nContent:\n{note_content}"
         ),
     },
 ]

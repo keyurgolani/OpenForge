@@ -104,8 +104,9 @@ class LLMGateway:
             # ── Anthropic ─────────────────────────────────────────────────
             elif provider_name == "anthropic":
                 async with httpx.AsyncClient(timeout=10.0) as client:
+                    url = (base_url or "https://api.anthropic.com").rstrip("/") + "/v1/models"
                     resp = await client.get(
-                        "https://api.anthropic.com/v1/models",
+                        url,
                         headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"},
                     )
                     resp.raise_for_status()
@@ -115,9 +116,8 @@ class LLMGateway:
             # ── Gemini ────────────────────────────────────────────────────
             elif provider_name == "gemini":
                 async with httpx.AsyncClient(timeout=10.0) as client:
-                    resp = await client.get(
-                        f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
-                    )
+                    url = (base_url or "https://generativelanguage.googleapis.com").rstrip("/") + f"/v1beta/models?key={api_key}"
+                    resp = await client.get(url)
                     resp.raise_for_status()
                     return [
                         {"id": m["name"].replace("models/", ""), "name": m.get("displayName", m["name"])}
@@ -128,8 +128,9 @@ class LLMGateway:
             # ── Groq ──────────────────────────────────────────────────────
             elif provider_name == "groq":
                 async with httpx.AsyncClient(timeout=10.0) as client:
+                    url = (base_url or "https://api.groq.com").rstrip("/") + "/openai/v1/models"
                     resp = await client.get(
-                        "https://api.groq.com/openai/v1/models",
+                        url,
                         headers={"Authorization": f"Bearer {api_key}"},
                     )
                     resp.raise_for_status()
@@ -141,8 +142,9 @@ class LLMGateway:
             # ── DeepSeek ──────────────────────────────────────────────────
             elif provider_name == "deepseek":
                 async with httpx.AsyncClient(timeout=10.0) as client:
+                    url = (base_url or "https://api.deepseek.com").rstrip("/") + "/models"
                     resp = await client.get(
-                        "https://api.deepseek.com/models",
+                        url,
                         headers={"Authorization": f"Bearer {api_key}"},
                     )
                     resp.raise_for_status()
@@ -151,8 +153,9 @@ class LLMGateway:
             # ── Mistral ───────────────────────────────────────────────────
             elif provider_name == "mistral":
                 async with httpx.AsyncClient(timeout=10.0) as client:
+                    url = (base_url or "https://api.mistral.ai").rstrip("/") + "/v1/models"
                     resp = await client.get(
-                        "https://api.mistral.ai/v1/models",
+                        url,
                         headers={"Authorization": f"Bearer {api_key}"},
                     )
                     resp.raise_for_status()
@@ -165,8 +168,9 @@ class LLMGateway:
             # ── OpenRouter ────────────────────────────────────────────────
             elif provider_name == "openrouter":
                 async with httpx.AsyncClient(timeout=10.0) as client:
+                    url = (base_url or "https://openrouter.ai").rstrip("/") + "/api/v1/models"
                     resp = await client.get(
-                        "https://openrouter.ai/api/v1/models",
+                        url,
                         headers={"Authorization": f"Bearer {api_key}"},
                     )
                     resp.raise_for_status()
@@ -176,8 +180,9 @@ class LLMGateway:
             # ── xAI (Grok) ────────────────────────────────────────────────
             elif provider_name == "xai":
                 async with httpx.AsyncClient(timeout=10.0) as client:
+                    url = (base_url or "https://api.x.ai").rstrip("/") + "/v1/models"
                     resp = await client.get(
-                        "https://api.x.ai/v1/models",
+                        url,
                         headers={"Authorization": f"Bearer {api_key}"},
                     )
                     resp.raise_for_status()
@@ -186,8 +191,9 @@ class LLMGateway:
             # ── Cohere ────────────────────────────────────────────────────
             elif provider_name == "cohere":
                 async with httpx.AsyncClient(timeout=10.0) as client:
+                    url = (base_url or "https://api.cohere.com").rstrip("/") + "/v1/models"
                     resp = await client.get(
-                        "https://api.cohere.com/v1/models",
+                        url,
                         headers={"Authorization": f"Bearer {api_key}"},
                     )
                     resp.raise_for_status()
@@ -198,8 +204,9 @@ class LLMGateway:
             # ── ZhipuAI (Z.AI / GLM) ──────────────────────────────────────
             elif provider_name == "zhipuai":
                 async with httpx.AsyncClient(timeout=10.0) as client:
+                    url = (base_url or "https://open.bigmodel.cn").rstrip("/") + "/api/paas/v4/models"
                     resp = await client.get(
-                        "https://open.bigmodel.cn/api/paas/v4/models",
+                        url,
                         headers={"Authorization": f"Bearer {api_key}"},
                     )
                     resp.raise_for_status()
