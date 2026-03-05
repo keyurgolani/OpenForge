@@ -1,11 +1,14 @@
-import { useState, useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { listNotes, createNote, deleteNote, togglePin, toggleArchive } from '@/lib/api'
+import { listNotes, deleteNote, togglePin, toggleArchive } from '@/lib/api'
 import { NoteModal } from '@/components/shared/NoteModal'
+import { CopyButton } from '@/components/shared/CopyButton'
+import { openQuickNote, type QuickNoteType } from '@/lib/quick-note'
+import { getShortcutDisplay } from '@/lib/keyboard'
 import {
     Search, FileText, Bookmark, Code2, Zap, Pin, Archive,
-    MoreHorizontal, Trash2, PinOff, ArchiveX, Loader2, Sparkles,
+    Trash2, PinOff, ArchiveX, Loader2, Sparkles,
     Inbox, CheckSquare, Square, Clock, ExternalLink, Copy, SortAsc,
     ChevronDown, Tag
 } from 'lucide-react'
@@ -13,6 +16,15 @@ import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem,
     ContextMenuSeparator, ContextMenuShortcut
 } from '@/components/ui/context-menu'
+import MarkdownIt from 'markdown-it'
+
+const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
+
+/// Preview renderer: links are displayed but not clickable (prevents navigation when clicking note card)
+const mdPreview = new MarkdownIt({ html: false, linkify: false, typographer: true, breaks: true })
+// Disable link rendering - show as plain text instead
+mdPreview.renderer.rules.link_open = () => ''
+mdPreview.renderer.rules.link_close = () => ''
 
 interface NoteListItem {
     id: string
@@ -25,6 +37,7 @@ interface NoteListItem {
     is_pinned: boolean
     is_archived: boolean
     embedding_status: string
+    insights?: any
     insights_count: number | null
     updated_at: string
     created_at: string
@@ -54,9 +67,20 @@ const TYPE_META: Record<string, { icon: React.ComponentType<{ className?: string
     gist: { icon: Code2, label: 'Gist', color: 'text-green-400' },
 }
 
+const MASONRY_GAP_PX = 20
+const NOTE_CARD_BASE_MIN_WIDTH = 350
+const NOTE_CARD_MIN_WIDTH_MOBILE = 220
+const NOTE_CARD_MAX_HEIGHT_PX = 300
+
+function getResponsiveCardMinWidth(containerWidth: number): number {
+    // Desktop baseline uses 350px. On narrower viewports, relax min width to prevent overflow.
+    if (containerWidth < 520) return Math.max(NOTE_CARD_MIN_WIDTH_MOBILE, containerWidth - 24)
+    if (containerWidth < 900) return 300
+    return NOTE_CARD_BASE_MIN_WIDTH
+}
+
 export default function WorkspaceHome() {
     const { workspaceId = '' } = useParams<{ workspaceId: string }>()
-    const navigate = useNavigate()
     const qc = useQueryClient()
 
     const [filterText, setFilterText] = useState('')
@@ -65,9 +89,12 @@ export default function WorkspaceHome() {
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
     const [showTypeMenu, setShowTypeMenu] = useState(false)
     const [showSortMenu, setShowSortMenu] = useState(false)
-    const [openMenu, setOpenMenu] = useState<string | null>(null)
-    const [creating, setCreating] = useState(false) // eslint-disable-line @typescript-eslint/no-unused-vars
     const [modalNoteId, setModalNoteId] = useState<string | null>(null)
+    const notesLayoutRef = useRef<HTMLDivElement | null>(null)
+    const [noteCardMinWidth, setNoteCardMinWidth] = useState(() =>
+        typeof window !== 'undefined' ? getResponsiveCardMinWidth(window.innerWidth) : 350
+    )
+    const [masonryColumnCount, setMasonryColumnCount] = useState(1)
 
     // Multi-select
     const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -84,31 +111,24 @@ export default function WorkspaceHome() {
         enabled: !!workspaceId,
     })
 
-    const handleCreate = async (type: string = 'standard') => {
-        setCreating(true)
-        const note = await createNote(workspaceId, { type })
-        qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
-        navigate(`/w/${workspaceId}/notes/${note.id}`)
-        setCreating(false)
+    const handleCreate = (type: QuickNoteType = 'standard') => {
+        openQuickNote(type)
     }
 
     const handleDelete = async (noteId: string) => {
         await deleteNote(workspaceId, noteId)
         qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
-        setOpenMenu(null)
         setSelected(s => { const n = new Set(s); n.delete(noteId); return n })
     }
 
     const handlePin = async (noteId: string) => {
         await togglePin(workspaceId, noteId)
         qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
-        setOpenMenu(null)
     }
 
     const handleArchive = async (noteId: string) => {
         await toggleArchive(workspaceId, noteId)
         qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
-        setOpenMenu(null)
         setSelected(s => { const n = new Set(s); n.delete(noteId); return n })
     }
 
@@ -154,191 +174,257 @@ export default function WorkspaceHome() {
 
     const typeMeta = TYPE_OPTS.find(o => o.id === typeFilter)
     const sortMeta = SORT_OPTS.find(o => o.id === sortBy)
+    const allNotes = data?.notes ?? []
+    const pinnedCount = allNotes.filter((n: NoteListItem) => n.is_pinned).length
+    const archivedCount = allNotes.filter((n: NoteListItem) => n.is_archived).length
+
+    useEffect(() => {
+        const node = notesLayoutRef.current
+        if (!node) return
+
+        const recalculateMasonry = () => {
+            const containerWidth = node.clientWidth
+            if (!containerWidth) return
+            const minWidth = getResponsiveCardMinWidth(containerWidth)
+            const columns = Math.max(1, Math.floor((containerWidth + MASONRY_GAP_PX) / (minWidth + MASONRY_GAP_PX)))
+            setNoteCardMinWidth(minWidth)
+            setMasonryColumnCount(columns)
+        }
+
+        recalculateMasonry()
+        const observer = new ResizeObserver(recalculateMasonry)
+        observer.observe(node)
+        window.addEventListener('resize', recalculateMasonry)
+        return () => {
+            observer.disconnect()
+            window.removeEventListener('resize', recalculateMasonry)
+        }
+    }, [])
+
+    const notesByColumn = useMemo(() => {
+        const columns: Array<Array<{ note: NoteListItem; index: number }>> = Array.from(
+            { length: masonryColumnCount },
+            () => []
+        )
+        notes.forEach((note, index) => {
+            columns[index % masonryColumnCount].push({ note, index })
+        })
+        return columns
+    }, [notes, masonryColumnCount])
 
     return (
-        <div className="p-6 max-w-[1800px] mx-auto" onClick={closeAllMenus}>
-            {/* Toolbar */}
-            <div className="flex items-center gap-3 mb-5">
-                {/* Search */}
-                <div className="flex-1 relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                    <input
-                        className="input pl-9"
-                        placeholder="Search notes…"
-                        value={filterText}
-                        onChange={e => setFilterText(e.target.value)}
-                    />
-                </div>
-
-                {/* Type filter dropdown */}
-                <div className="relative" onClick={e => e.stopPropagation()}>
-                    <button
-                        className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm transition-colors ${typeFilter ? 'border-accent text-accent bg-accent/10' : 'border-border text-muted-foreground hover:text-foreground hover:border-border/80'}`}
-                        onClick={() => { setShowTypeMenu(p => !p); setShowSortMenu(false) }}
-                    >
-                        <Tag className="w-3.5 h-3.5" />
-                        <span>{typeMeta?.label ?? 'All types'}</span>
-                        <ChevronDown className="w-3.5 h-3.5" />
-                    </button>
-                    {showTypeMenu && (
-                        <div className="absolute top-full right-0 mt-1 z-30 bg-card border border-border rounded-xl shadow-2xl py-1 min-w-40 animate-scale-in">
-                            {TYPE_OPTS.map(opt => {
-                                const Icon = 'icon' in opt ? opt.icon : null
-                                return (
-                                    <button
-                                        key={opt.id}
-                                        className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-muted/50 transition-colors ${typeFilter === opt.id ? 'text-accent font-medium' : 'text-foreground'}`}
-                                        onClick={() => { setTypeFilter(opt.id); setShowTypeMenu(false) }}
-                                    >
-                                        {Icon && <Icon className="w-3.5 h-3.5" />}
-                                        {!Icon && <span className="w-3.5" />}
-                                        {opt.label}
-                                    </button>
-                                )
-                            })}
+        <div className="w-full p-6 lg:p-7" onClick={closeAllMenus}>
+            <div className="min-w-0 space-y-5">
+                <section className="relative z-30 px-1">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <p className="text-[11px] uppercase tracking-[0.16em] font-semibold text-muted-foreground/85">Workspace Notes</p>
+                            <h2 className="text-lg font-semibold tracking-tight mt-0.5">Notes Library</h2>
+                            <p className="text-xs text-muted-foreground/90 mt-1">Filter, scan, and act on notes without leaving the board.</p>
                         </div>
-                    )}
-                </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs text-foreground/90">
+                                <FileText className="w-3.5 h-3.5" />
+                                {allNotes.length} total
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs text-foreground/90">
+                                <Pin className="w-3.5 h-3.5 text-amber-300" />
+                                {pinnedCount} pinned
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs text-foreground/90">
+                                <Archive className="w-3.5 h-3.5 text-blue-300" />
+                                {archivedCount} archived
+                            </span>
+                        </div>
+                    </div>
 
-                {/* Sort dropdown */}
-                <div className="relative" onClick={e => e.stopPropagation()}>
-                    <button
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-border/80 text-sm transition-colors"
-                        onClick={() => { setShowSortMenu(p => !p); setShowTypeMenu(false) }}
-                    >
-                        <SortAsc className="w-3.5 h-3.5" />
-                        <span>{sortMeta?.label ?? 'Sort'}</span>
-                        <ChevronDown className="w-3.5 h-3.5" />
-                    </button>
-                    {showSortMenu && (
-                        <div className="absolute top-full right-0 mt-1 z-30 bg-card border border-border rounded-xl shadow-2xl py-1 min-w-44 animate-scale-in">
-                            {SORT_OPTS.map(opt => (
-                                <button
-                                    key={opt.id}
-                                    className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-muted/50 transition-colors ${sortBy === opt.id ? 'text-accent font-medium' : 'text-foreground'}`}
-                                    onClick={() => { setSortBy(opt.id); setShowSortMenu(false) }}
-                                >
-                                    {opt.label}
-                                </button>
+                    <div className="mt-4 flex flex-wrap items-center gap-2.5">
+                        <div className="min-w-[240px] flex-1 relative">
+                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                            <input
+                                className="input h-10 pl-10"
+                                placeholder="Search title, content, or tags..."
+                                value={filterText}
+                                onChange={e => setFilterText(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="relative" onClick={e => e.stopPropagation()}>
+                            <button
+                                className={`inline-flex h-10 items-center gap-1.5 px-3 rounded-lg border text-sm transition-colors ${typeFilter ? 'border-accent/50 text-accent bg-accent/10' : 'border-border/70 text-muted-foreground hover:text-foreground hover:border-border'}`}
+                                onClick={() => { setShowTypeMenu(p => !p); setShowSortMenu(false) }}
+                            >
+                                <Tag className="w-3.5 h-3.5" />
+                                <span>{typeMeta?.label ?? 'All types'}</span>
+                                <ChevronDown className="w-3.5 h-3.5" />
+                            </button>
+                            {showTypeMenu && (
+                                <div className="absolute top-full right-0 mt-1 z-[180] bg-card border border-border rounded-xl shadow-2xl py-1 min-w-40 animate-scale-in">
+                                    {TYPE_OPTS.map(opt => {
+                                        const Icon = 'icon' in opt ? opt.icon : null
+                                        return (
+                                            <button
+                                                key={opt.id}
+                                                className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-muted/50 transition-colors ${typeFilter === opt.id ? 'text-accent font-medium' : 'text-foreground'}`}
+                                                onClick={() => { setTypeFilter(opt.id); setShowTypeMenu(false) }}
+                                            >
+                                                {Icon && <Icon className="w-3.5 h-3.5" />}
+                                                {!Icon && <span className="w-3.5" />}
+                                                {opt.label}
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="relative" onClick={e => e.stopPropagation()}>
+                            <button
+                                className="inline-flex h-10 items-center gap-1.5 px-3 rounded-lg border border-border/70 text-muted-foreground hover:text-foreground hover:border-border text-sm transition-colors"
+                                onClick={() => { setShowSortMenu(p => !p); setShowTypeMenu(false) }}
+                            >
+                                <SortAsc className="w-3.5 h-3.5" />
+                                <span>{sortMeta?.label ?? 'Sort'}</span>
+                                <ChevronDown className="w-3.5 h-3.5" />
+                            </button>
+                            {showSortMenu && (
+                                <div className="absolute top-full right-0 mt-1 z-[180] bg-card border border-border rounded-xl shadow-2xl py-1 min-w-44 animate-scale-in">
+                                    {SORT_OPTS.map(opt => (
+                                        <button
+                                            key={opt.id}
+                                            className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-muted/50 transition-colors ${sortBy === opt.id ? 'text-accent font-medium' : 'text-foreground'}`}
+                                            onClick={() => { setSortBy(opt.id); setShowSortMenu(false) }}
+                                        >
+                                            {opt.label}
+                                        </button>
+                                    ))}
+                                    <div className="border-t border-border/50 mt-1 pt-1">
+                                        <button
+                                            className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-muted/50 text-foreground"
+                                            onClick={() => { setSortOrder(o => o === 'asc' ? 'desc' : 'asc'); setShowSortMenu(false) }}
+                                        >
+                                            {sortOrder === 'desc' ? '↓ Descending' : '↑ Ascending'}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {notes.length > 0 && (
+                            <button
+                                className="inline-flex h-10 items-center gap-1.5 px-3 rounded-lg border border-border/70 text-muted-foreground hover:text-foreground hover:border-border text-sm transition-colors"
+                                onClick={hasSelection ? clearSelection : selectAll}
+                            >
+                                {hasSelection ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
+                                {hasSelection ? `${selected.size} selected` : 'Select'}
+                            </button>
+                        )}
+                    </div>
+                </section>
+
+                <div ref={notesLayoutRef} className="w-full">
+                    {/* Loading skeletons */}
+                    {isLoading && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
+                            {[...Array(10)].map((_, i) => (
+                                <div key={i} className="glass-card rounded-2xl p-4 h-56 skeleton" />
                             ))}
-                            <div className="border-t border-border/50 mt-1 pt-1">
-                                <button
-                                    className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-muted/50 text-foreground"
-                                    onClick={() => { setSortOrder(o => o === 'asc' ? 'desc' : 'asc'); setShowSortMenu(false) }}
-                                >
-                                    {sortOrder === 'desc' ? '↓ Descending' : '↑ Ascending'}
-                                </button>
-                            </div>
+                        </div>
+                    )}
+
+                    {/* Empty state */}
+                    {!isLoading && notes.length === 0 && (
+                        <div className="text-center py-20">
+                            <Inbox className="w-14 h-14 mx-auto mb-4 text-muted-foreground/30" />
+                            <h3 className="text-lg font-semibold mb-2">
+                                {filterText ? 'No notes match your search' : 'No notes yet'}
+                            </h3>
+                            <p className="text-muted-foreground text-sm mb-6">
+                                {filterText ? 'Try a different search term.' : 'Use the + New Note button to get started.'}
+                            </p>
+                            {!filterText && (
+                                <div className="flex justify-center gap-3 flex-wrap">
+                                    {[
+                                        { type: 'standard', Icon: FileText, label: 'Note', desc: 'Freeform markdown' },
+                                        { type: 'fleeting', Icon: Zap, label: 'Fleeting', desc: 'Quick capture' },
+                                        { type: 'bookmark', Icon: Bookmark, label: 'Bookmark', desc: 'Save a URL' },
+                                        { type: 'gist', Icon: Code2, label: 'Gist', desc: 'Code snippet' },
+                                    ].map(t => (
+                                        <button
+                                            type="button"
+                                            key={t.type}
+                                            onClick={() => handleCreate(t.type as QuickNoteType)}
+                                            className="glass-card-hover px-4 py-3 text-left cursor-pointer flex items-start gap-3"
+                                        >
+                                            <t.Icon className="w-4 h-4 mt-0.5 text-accent flex-shrink-0" />
+                                            <div>
+                                                <div className="font-medium text-sm">{t.label}</div>
+                                                <div className="text-xs text-muted-foreground">{t.desc}</div>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Note grid */}
+                    {!isLoading && notes.length > 0 && (
+                        <div className="flex items-start gap-5">
+                            {notesByColumn.map((column, columnIndex) => (
+                                <div key={columnIndex} className="flex-1 min-w-0 space-y-5">
+                                    {column.map(({ note, index }) => (
+                                        <NoteCard
+                                            key={note.id}
+                                            note={note}
+                                            index={index}
+                                            minWidthPx={noteCardMinWidth}
+                                            maxHeightPx={NOTE_CARD_MAX_HEIGHT_PX}
+                                            isSelected={selected.has(note.id)}
+                                            anySelected={hasSelection}
+                                            onSelect={toggleSelect}
+                                            onClick={() => setModalNoteId(note.id)}
+                                            onPin={() => handlePin(note.id)}
+                                            onArchive={() => handleArchive(note.id)}
+                                            onDelete={() => handleDelete(note.id)}
+                                        />
+                                    ))}
+                                </div>
+                            ))}
                         </div>
                     )}
                 </div>
 
-                {/* Select all */}
-                {notes.length > 0 && (
-                    <button
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-border/80 text-sm transition-colors"
-                        onClick={hasSelection ? clearSelection : selectAll}
-                    >
-                        {hasSelection ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
-                        {hasSelection ? `${selected.size} selected` : 'Select'}
-                    </button>
+                {/* Bulk action floating toolbar */}
+                {hasSelection && (
+                    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-card border border-accent/30 rounded-2xl px-4 py-2.5 flex items-center gap-3 shadow-2xl shadow-black/40 animate-slide-up">
+                        <span className="text-sm font-medium text-accent">{selected.size} selected</span>
+                        <div className="w-px h-4 bg-border" />
+                        <button className="btn-ghost text-xs gap-1.5 py-1.5 px-2.5" onClick={handleBulkPin}>
+                            <Pin className="w-3.5 h-3.5" /> Pin
+                        </button>
+                        <button className="btn-ghost text-xs gap-1.5 py-1.5 px-2.5" onClick={handleBulkArchive}>
+                            <Archive className="w-3.5 h-3.5" /> Archive
+                        </button>
+                        <button className="btn-ghost text-xs gap-1.5 py-1.5 px-2.5 text-red-400 hover:bg-destructive/10" onClick={handleBulkDelete}>
+                            <Trash2 className="w-3.5 h-3.5" /> Delete
+                        </button>
+                        <button className="btn-ghost text-xs gap-1.5 py-1.5 px-2.5" onClick={clearSelection}>
+                            Clear
+                        </button>
+                    </div>
+                )}
+
+                {/* Note modal */}
+                {modalNoteId && (
+                    <NoteModal
+                        noteId={modalNoteId}
+                        workspaceId={workspaceId}
+                        onClose={() => setModalNoteId(null)}
+                    />
                 )}
             </div>
 
-            {/* Loading skeletons */}
-            {isLoading && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-                    {[...Array(10)].map((_, i) => (
-                        <div key={i} className="glass-card p-4 h-44 skeleton" />
-                    ))}
-                </div>
-            )}
-
-            {/* Empty state */}
-            {!isLoading && notes.length === 0 && (
-                <div className="text-center py-20">
-                    <Inbox className="w-14 h-14 mx-auto mb-4 text-muted-foreground/30" />
-                    <h3 className="text-lg font-semibold mb-2">
-                        {filterText ? 'No notes match your search' : 'No notes yet'}
-                    </h3>
-                    <p className="text-muted-foreground text-sm mb-6">
-                        {filterText ? 'Try a different search term.' : 'Use the + New Note button to get started.'}
-                    </p>
-                    {!filterText && (
-                        <div className="flex justify-center gap-3 flex-wrap">
-                            {[
-                                { type: 'standard', Icon: FileText, label: 'Note', desc: 'Freeform markdown' },
-                                { type: 'fleeting', Icon: Zap, label: 'Fleeting', desc: 'Quick capture' },
-                                { type: 'bookmark', Icon: Bookmark, label: 'Bookmark', desc: 'Save a URL' },
-                                { type: 'gist', Icon: Code2, label: 'Gist', desc: 'Code snippet' },
-                            ].map(t => (
-                                <button
-                                    key={t.type}
-                                    onClick={() => handleCreate(t.type)}
-                                    className="glass-card-hover px-4 py-3 text-left cursor-pointer flex items-start gap-3"
-                                >
-                                    <t.Icon className="w-4 h-4 mt-0.5 text-accent flex-shrink-0" />
-                                    <div>
-                                        <div className="font-medium text-sm">{t.label}</div>
-                                        <div className="text-xs text-muted-foreground">{t.desc}</div>
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* Note grid */}
-            {!isLoading && notes.length > 0 && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-                    {notes.map((note, i) => (
-                        <NoteCard
-                            key={note.id}
-                            note={note}
-                            index={i}
-                            isSelected={selected.has(note.id)}
-                            anySelected={hasSelection}
-                            onSelect={toggleSelect}
-                            onClick={() => setModalNoteId(note.id)}
-                            onPin={() => handlePin(note.id)}
-                            onArchive={() => handleArchive(note.id)}
-                            onDelete={() => handleDelete(note.id)}
-                            menuOpen={openMenu === note.id}
-                            onMenuToggle={() => setOpenMenu(openMenu === note.id ? null : note.id)}
-                        />
-                    ))}
-                </div>
-            )}
-
-            {/* Bulk action floating toolbar */}
-            {hasSelection && (
-                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-card border border-accent/30 rounded-2xl px-4 py-2.5 flex items-center gap-3 shadow-2xl shadow-black/40 animate-slide-up">
-                    <span className="text-sm font-medium text-accent">{selected.size} selected</span>
-                    <div className="w-px h-4 bg-border" />
-                    <button className="btn-ghost text-xs gap-1.5 py-1.5 px-2.5" onClick={handleBulkPin}>
-                        <Pin className="w-3.5 h-3.5" /> Pin
-                    </button>
-                    <button className="btn-ghost text-xs gap-1.5 py-1.5 px-2.5" onClick={handleBulkArchive}>
-                        <Archive className="w-3.5 h-3.5" /> Archive
-                    </button>
-                    <button className="btn-ghost text-xs gap-1.5 py-1.5 px-2.5 text-red-400 hover:bg-destructive/10" onClick={handleBulkDelete}>
-                        <Trash2 className="w-3.5 h-3.5" /> Delete
-                    </button>
-                    <button className="btn-ghost text-xs gap-1.5 py-1.5 px-2.5" onClick={clearSelection}>
-                        Clear
-                    </button>
-                </div>
-            )}
-
-            {/* Note modal */}
-            {modalNoteId && (
-                <NoteModal
-                    noteId={modalNoteId}
-                    workspaceId={workspaceId}
-                    onClose={() => setModalNoteId(null)}
-                />
-            )}
         </div>
     )
 }
@@ -346,10 +432,12 @@ export default function WorkspaceHome() {
 // ── NoteCard ────────────────────────────────────────────────────────────────
 function NoteCard({
     note, index, isSelected, anySelected, onSelect, onClick,
-    onPin, onArchive, onDelete, menuOpen, onMenuToggle,
+    onPin, onArchive, onDelete, minWidthPx, maxHeightPx,
 }: {
     note: NoteListItem
     index: number
+    minWidthPx: number
+    maxHeightPx: number
     isSelected: boolean
     anySelected: boolean
     onSelect: (id: string, e: React.MouseEvent) => void
@@ -357,182 +445,187 @@ function NoteCard({
     onPin: () => void
     onArchive: () => void
     onDelete: () => void
-    menuOpen: boolean
-    onMenuToggle: () => void
 }) {
     const meta = TYPE_META[note.type] ?? TYPE_META.standard
     const TypeIcon = meta.icon
-    const displayTitle = note.title ?? note.ai_title
-
-    const handleCopyGist = (e: React.MouseEvent) => {
-        e.stopPropagation()
-        navigator.clipboard.writeText(note.content_preview)
-    }
+    const displayTitle = note.title?.trim() || note.ai_title?.trim() || null
+    const bookmarkHost = (() => {
+        if (note.type !== 'bookmark' || !note.url) return null
+        try { return new URL(note.url).hostname } catch { return note.url }
+    })()
 
     const handleOpenUrl = (e: React.MouseEvent) => {
         e.stopPropagation()
         if (note.url) window.open(note.url, '_blank', 'noopener')
     }
+    const runAction = (e: React.MouseEvent, action: () => void) => {
+        e.stopPropagation()
+        action()
+    }
+    const actionBtnClass = 'inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/60 bg-muted/35 text-foreground/85 hover:bg-muted/55 hover:border-border transition-colors'
+    const selectClass = isSelected
+        ? 'border-accent bg-accent text-accent-foreground'
+        : anySelected
+            ? 'border-accent/50 bg-accent/10 text-accent'
+            : 'border-border/70 bg-background/70 text-muted-foreground hover:border-accent/50 hover:text-foreground'
 
     return (
         <ContextMenu>
             <ContextMenuTrigger asChild>
                 <div
-                    className={`glass-card-hover p-4 cursor-pointer group relative animate-fade-in flex flex-col gap-2 transition-all ${isSelected ? 'ring-2 ring-accent border-accent/60' : ''}`}
-                    style={{ animationDelay: `${Math.min(index * 25, 200)}ms` }}
+                    className={`relative glass-card-hover rounded-2xl p-4 cursor-pointer group animate-fade-in flex flex-col transition-all overflow-hidden ${isSelected ? 'ring-2 ring-accent/70 border-accent/60 shadow-lg shadow-accent/10' : 'border-border/70 hover:border-accent/30'}`}
+                    style={{
+                        animationDelay: `${Math.min(index * 25, 200)}ms`,
+                        minWidth: `${minWidthPx}px`,
+                        maxHeight: `${maxHeightPx}px`,
+                    }}
                     onClick={onClick}
                 >
+                    <button
+                        className={`absolute top-0 right-0 z-20 h-8 w-8 rounded-tr-2xl rounded-bl-xl border flex items-center justify-center transition-colors ${selectClass}`}
+                        onClick={e => onSelect(note.id, e)}
+                        aria-label={isSelected ? 'Deselect note' : 'Select note'}
+                    >
+                        {isSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                    </button>
 
-
-                    {/* Card header row: type badge only on left */}
-                    <div className="flex items-center gap-2 min-w-0 pr-7">
-                        {/* Left: type badge */}
-                        <span className={`flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide ${meta.color} flex-shrink-0`}>
-                            <TypeIcon className="w-3 h-3" />
-                            {note.type === 'fleeting' && <Clock className="w-3 h-3" />}
-                            {meta.label}
-                            {note.is_pinned && <Pin className="w-3 h-3 text-amber-400 ml-0.5" />}
-                            {note.embedding_status === 'done' && (
-                                <Sparkles className="w-3 h-3 text-accent/60 ml-0.5" />
+                    <div className="flex items-start justify-between gap-2 pr-8">
+                        <div className="min-w-0 flex items-center gap-1.5 flex-wrap">
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border border-border/60 bg-muted/40 ${meta.color}`}>
+                                <TypeIcon className="w-3 h-3" />
+                                {note.type === 'fleeting' && <Clock className="w-3 h-3" />}
+                                {meta.label}
+                            </span>
+                            {bookmarkHost && (
+                                <span className="text-[10px] text-muted-foreground/95 max-w-[150px] truncate rounded-full border border-border/60 bg-muted/35 px-2 py-0.5">
+                                    {bookmarkHost}
+                                </span>
                             )}
-                        </span>
+                            {note.type === 'gist' && note.gist_language && (
+                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-green-500/10 text-green-300 border border-green-500/30">
+                                    {note.gist_language}
+                                </span>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            {note.is_pinned && <Pin className="w-3.5 h-3.5 text-amber-300" />}
+                            {note.embedding_status === 'done' && <Sparkles className="w-3.5 h-3.5 text-accent" />}
+                        </div>
                     </div>
 
-                    {/* === TOP-RIGHT CONTROLS === */}
-                    {isSelected ? (
-                        /* SELECTED: filled accent circle, clicking deselects */
-                        <button
-                            className="absolute top-2.5 right-2.5 z-20 w-6 h-6 rounded-full bg-accent border-2 border-accent shadow-md shadow-accent/30 flex items-center justify-center transition-all duration-150"
-                            style={{ transform: 'scale(1.1)' }}
-                            onClick={e => { e.stopPropagation(); onSelect(note.id, e) }}
-                            aria-label="Deselect note"
-                        >
-                            <svg className="w-3.5 h-3.5 text-white" viewBox="0 0 14 14" fill="none">
-                                <path d="M2.5 7L5.5 10L11.5 4" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                        </button>
-                    ) : anySelected ? (
-                        /* SELECTION MODE (others selected, this one not): show empty circle, no 3-dots */
-                        <button
-                            className="absolute top-2.5 right-2.5 z-20 w-6 h-6 rounded-full border-2 border-muted-foreground/30 bg-background/60 flex items-center justify-center transition-all duration-150 hover:border-accent hover:bg-accent/15"
-                            onClick={e => { e.stopPropagation(); onSelect(note.id, e) }}
-                            aria-label="Select note"
-                        />
-                    ) : (
-                        /* NORMAL: circle for select on hover at top-right; 3-dots for context menu just below */
-                        <>
-                            {/* Select circle — appears on group hover, transparent until hovered itself */}
-                            <button
-                                className="absolute top-2.5 right-2.5 z-20 w-6 h-6 rounded-full border-2 border-transparent flex items-center justify-center transition-all duration-150 opacity-0 group-hover:opacity-100 group-hover:border-border/60 group-hover:bg-background/50 hover:!border-accent hover:!bg-accent/15"
-                                onClick={e => { e.stopPropagation(); onSelect(note.id, e) }}
-                                aria-label="Select note"
+                    <div className="mt-2">
+                        <h3 className={`font-semibold text-[15px] leading-snug line-clamp-2 ${displayTitle ? 'text-foreground' : 'text-muted-foreground/60 italic'}`}>
+                            {displayTitle ?? 'Untitled'}
+                        </h3>
+                    </div>
+
+                    <div className="mt-2 min-h-0 overflow-hidden">
+                        {note.type === 'gist' ? (
+                            <div className="text-[11px] font-mono whitespace-pre-wrap line-clamp-7 text-foreground/84">
+                                {note.content_preview || note.title || ''}
+                            </div>
+                        ) : (
+                            <div
+                                className="text-[13px] text-foreground/88 line-clamp-7 leading-[1.45] prose prose-invert prose-p:my-0 prose-headings:my-0 prose-li:my-0 prose-ul:my-0 focus:outline-none max-w-none"
+                                dangerouslySetInnerHTML={{ __html: mdPreview.render(note.content_preview || (note.url_title ?? '')) }}
                             />
-                            {/* 3-dots left-click menu — hidden behind circle; appears on button-level hover */}
-                            <button
-                                className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 btn-ghost p-1 rounded-md transition-opacity"
-                                onClick={e => { e.stopPropagation(); onMenuToggle() }}
-                                title="More options"
-                            >
-                                <MoreHorizontal className="w-4 h-4" />
-                            </button>
-                        </>
-                    )}
-
-                    {/* URL bar for bookmarks */}
-                    {note.type === 'bookmark' && note.url && (
-                        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground bg-muted/30 rounded px-2 py-1 truncate">
-                            <ExternalLink className="w-3 h-3 flex-shrink-0" />
-                            <span className="truncate">{(() => { try { return new URL(note.url).hostname } catch { return note.url } })()}</span>
-                        </div>
-                    )}
-
-                    {/* Language badge for gists */}
-                    {note.type === 'gist' && note.gist_language && (
-                        <span className="self-start text-[10px] font-mono px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 border border-green-500/20">
-                            {note.gist_language}
-                        </span>
-                    )}
-
-                    {/* Title */}
-                    <h3 className={`font-semibold text-sm leading-snug ${displayTitle ? 'text-foreground' : 'text-muted-foreground/50 italic'}`}>
-                        {displayTitle ?? 'Untitled'}
-                    </h3>
-
-                    {/* Preview */}
-                    <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed flex-1">
-                        {note.content_preview || (note.url_title ?? '')}
-                    </p>
-
-                    {/* Tags */}
-                    {note.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                            {note.tags.slice(0, 3).map(t => (
-                                <span key={t} className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/10 text-accent/80">
-                                    {t}
-                                </span>
-                            ))}
-                            {note.tags.length > 3 && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/50 text-muted-foreground">
-                                    +{note.tags.length - 3}
-                                </span>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Footer */}
-                    <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-auto pt-1 border-t border-border/30">
-                        <span>{note.word_count} words</span>
-                        <span>{new Date(note.updated_at).toLocaleDateString()}</span>
-                    </div>
-
-                    {/* Per-type quick CTAs */}
-                    <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {note.type === 'bookmark' && note.url && (
-                            <button
-                                className="btn-ghost text-[10px] py-1 px-2 gap-1 flex-1 justify-center border border-border/50"
-                                onClick={handleOpenUrl}
-                            >
-                                <ExternalLink className="w-3 h-3" /> Open URL
-                            </button>
-                        )}
-                        {note.type === 'gist' && (
-                            <button
-                                className="btn-ghost text-[10px] py-1 px-2 gap-1 flex-1 justify-center border border-border/50"
-                                onClick={handleCopyGist}
-                            >
-                                <Copy className="w-3 h-3" /> Copy
-                            </button>
                         )}
                     </div>
 
-                    {/* Context menu — solid background, always visible (mobile friendly 3-dots override) */}
-                    {menuOpen && (
-                        <div
-                            className="absolute top-9 right-3 z-20 bg-card border border-border shadow-2xl shadow-black/40 rounded-xl py-1 min-w-36 animate-scale-in"
-                            onClick={e => e.stopPropagation()}
+                    <div className="mt-3 pt-2 border-t border-border/45 space-y-1.5">
+                        {note.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                                {note.tags.slice(0, 2).map(t => (
+                                    <span key={t} className="chip-accent text-[10px] leading-none px-2 py-1">
+                                        {t}
+                                    </span>
+                                ))}
+                                {note.tags.length > 2 && (
+                                    <span className="text-[10px] px-2 py-1 rounded-full bg-muted/50 text-muted-foreground">
+                                        +{note.tags.length - 2}
+                                    </span>
+                                )}
+                            </div>
+                        )}
+
+                        <div className="flex items-end justify-between gap-2">
+                            <p className="min-w-0 flex-1 text-[10px] text-muted-foreground/90 truncate">
+                                Updated {new Date(note.updated_at).toLocaleDateString()} · {note.word_count} words · {note.insights_count ?? 0} insights
+                            </p>
+
+                            <div className="flex flex-shrink-0 items-center gap-1 self-end">
+                                {note.type === 'bookmark' && note.url && (
+                                    <button
+                                        className={actionBtnClass}
+                                        onClick={handleOpenUrl}
+                                        title="Open URL"
+                                        aria-label="Open bookmark URL"
+                                    >
+                                        <ExternalLink className="w-3.5 h-3.5" />
+                                    </button>
+                                )}
+                                {note.type === 'gist' && (
+                                    <CopyButton
+                                        content={note.content_preview}
+                                        label="Copy"
+                                        copiedLabel="Done"
+                                        iconOnly
+                                        stopPropagation
+                                        className={actionBtnClass}
+                                    />
+                                )}
+                                <button
+                                    className={actionBtnClass}
+                                    onClick={e => runAction(e, onPin)}
+                                    title={note.is_pinned ? 'Unpin note' : 'Pin note'}
+                                    aria-label={note.is_pinned ? 'Unpin note' : 'Pin note'}
+                                >
+                                    {note.is_pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+                                </button>
+                                <button
+                                    className={actionBtnClass}
+                                    onClick={e => runAction(e, onArchive)}
+                                    title={note.is_archived ? 'Restore note' : 'Archive note'}
+                                    aria-label={note.is_archived ? 'Restore note' : 'Archive note'}
+                                >
+                                    {note.is_archived ? <ArchiveX className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+                                </button>
+                                <button
+                                    className={`${actionBtnClass} text-red-300 border-red-400/25 hover:bg-red-500/10`}
+                                    onClick={e => runAction(e, onDelete)}
+                                    title="Delete note"
+                                    aria-label="Delete note"
+                                >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Keep text action buttons hidden for keyboard/screen-reader fallback */}
+                    <div className="sr-only">
+                        <button
+                            className="btn-ghost"
+                            onClick={e => runAction(e, onPin)}
                         >
-                            <button
-                                className="flex items-center gap-2 px-3 py-2 text-xs w-full text-foreground hover:bg-muted/50 transition-colors"
-                                onClick={e => { e.stopPropagation(); onPin() }}
-                            >
-                                {note.is_pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
-                                {note.is_pinned ? 'Unpin' : 'Pin'}
-                            </button>
-                            <button
-                                className="flex items-center gap-2 px-3 py-2 text-xs w-full text-foreground hover:bg-muted/50 transition-colors"
-                                onClick={e => { e.stopPropagation(); onArchive() }}
-                            >
-                                {note.is_archived ? <ArchiveX className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
-                                {note.is_archived ? 'Unarchive' : 'Archive'}
-                            </button>
-                            <button
-                                className="flex items-center gap-2 px-3 py-2 text-xs w-full hover:bg-destructive/20 text-red-400 transition-colors"
-                                onClick={e => { e.stopPropagation(); onDelete() }}
-                            >
-                                <Trash2 className="w-3.5 h-3.5" /> Delete
-                            </button>
-                        </div>
-                    )}
+                            {note.is_pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+                            {note.is_pinned ? 'Unpin' : 'Pin'}
+                        </button>
+                        <button
+                            className="btn-ghost"
+                            onClick={e => runAction(e, onArchive)}
+                        >
+                            {note.is_archived ? <ArchiveX className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+                            {note.is_archived ? 'Restore' : 'Archive'}
+                        </button>
+                        <button
+                            className="btn-ghost"
+                            onClick={e => runAction(e, onDelete)}
+                        >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Delete
+                        </button>
+                    </div>
                 </div>
             </ContextMenuTrigger>
             <ContextMenuContent className="w-48">
@@ -543,7 +636,7 @@ function NoteCard({
                 <ContextMenuItem onClick={onArchive} className="gap-2">
                     {note.is_archived ? <ArchiveX className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
                     <span>{note.is_archived ? 'Unarchive' : 'Archive'}</span>
-                    <ContextMenuShortcut>⌘⇧A</ContextMenuShortcut>
+                    <ContextMenuShortcut>{getShortcutDisplay('archiveNote')}</ContextMenuShortcut>
                 </ContextMenuItem>
                 {note.type === 'bookmark' && note.url && (
                     <ContextMenuItem onClick={() => window.open(note.url!, '_blank')} className="gap-2">
@@ -561,7 +654,7 @@ function NoteCard({
                 <ContextMenuItem onClick={onDelete} className="gap-2 text-red-500 focus:text-red-400 focus:bg-red-500/10">
                     <Trash2 className="w-4 h-4" />
                     <span>Delete Note</span>
-                    <ContextMenuShortcut>⌘⌫</ContextMenuShortcut>
+                    <ContextMenuShortcut>{getShortcutDisplay('deleteNote')}</ContextMenuShortcut>
                 </ContextMenuItem>
             </ContextMenuContent>
         </ContextMenu>

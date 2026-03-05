@@ -73,6 +73,9 @@ async def workspace_websocket(websocket: WebSocket, workspace_id: str):
             if msg_type == "chat_message":
                 conversation_id = data.get("conversation_id")
                 content = data.get("content", "").strip()
+                attachment_ids = data.get("attachment_ids", [])
+                provider_id = data.get("provider_id")
+                model_id = data.get("model_id")
                 if not conversation_id or not content:
                     await ws_manager.send_to_connection(websocket, {
                         "type": "chat_error",
@@ -91,10 +94,29 @@ async def workspace_websocket(websocket: WebSocket, workspace_id: str):
                         conversation_id=UUID(conversation_id),
                         user_content=content,
                         db=db,
+                        attachment_ids=attachment_ids,
+                        provider_id=provider_id,
+                        model_id=model_id,
                     )
 
             elif msg_type == "ping":
                 await ws_manager.send_to_connection(websocket, {"type": "pong"})
+            
+            elif msg_type == "stream_logs":
+                import asyncio
+                from openforge.services.docker_service import docker_service
+                
+                task = asyncio.create_task(docker_service.stream_logs(websocket, ws_manager))
+                if not hasattr(websocket, "log_tasks"):
+                    websocket.log_tasks = []
+                websocket.log_tasks.append(task)
+            
+            elif msg_type == "stop_logs":
+                if hasattr(websocket, "log_tasks"):
+                    for task in websocket.log_tasks:
+                        task.cancel()
+                    websocket.log_tasks = []
+
             else:
                 await ws_manager.send_to_connection(websocket, {
                     "type": "error",
@@ -102,7 +124,13 @@ async def workspace_websocket(websocket: WebSocket, workspace_id: str):
                 })
 
     except WebSocketDisconnect:
+        if hasattr(websocket, "log_tasks"):
+            for task in websocket.log_tasks:
+                task.cancel()
         ws_manager.disconnect(websocket, workspace_id)
     except Exception as e:
         logger.error(f"WebSocket error for workspace {workspace_id}: {e}")
+        if hasattr(websocket, "log_tasks"):
+            for task in websocket.log_tasks:
+                task.cancel()
         ws_manager.disconnect(websocket, workspace_id)

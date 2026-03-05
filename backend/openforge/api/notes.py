@@ -1,14 +1,23 @@
-from fastapi import APIRouter, Depends, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 from typing import Optional
+import json
+import re
 from openforge.db.postgres import get_db
 from openforge.services.note_service import note_service
 from openforge.schemas.note import (
     NoteCreate, NoteUpdate, NoteResponse, NoteListItem, NoteListParams, NoteTagsUpdate
 )
+from openforge.utils.insights import normalize_insights_payload
+from openforge.utils.title_generation import normalize_generated_title
+from openforge.utils.title import normalize_note_title
 
 router = APIRouter()
+
+def _normalize_generated_title(raw_response: object) -> str | None:
+    return normalize_generated_title(raw_response)
+
 
 async def _get_prompt(db: AsyncSession, prompt_id: str, **kwargs) -> str:
     from openforge.db.models import Config
@@ -114,14 +123,18 @@ async def toggle_archive(
 async def summarize_note(
     workspace_id: UUID, note_id: UUID, db: AsyncSession = Depends(get_db)
 ):
-    from openforge.services.note_service import NoteService
     from openforge.core.llm_gateway import llm_gateway
     from openforge.services.llm_service import llm_service
     from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
     from openforge.db.models import Note
     from openforge.api.websocket import ws_manager
 
-    result = await db.execute(select(Note).where(Note.id == note_id, Note.workspace_id == workspace_id))
+    result = await db.execute(
+        select(Note)
+        .options(selectinload(Note.tags))
+        .where(Note.id == note_id, Note.workspace_id == workspace_id)
+    )
     note = result.scalar_one_or_none()
     if not note:
         from fastapi import HTTPException
@@ -132,7 +145,7 @@ async def summarize_note(
     prompt = await _get_prompt(
         db, "summarize_note",
         note_content=note.content[:8000],
-        note_title=note.title or "Untitled",
+        note_title=normalize_note_title(note.title) or "Untitled",
         note_type=note.type,
         tags=tags_str
     )
@@ -155,12 +168,16 @@ async def extract_insights(
     from openforge.core.llm_gateway import llm_gateway
     from openforge.services.llm_service import llm_service
     from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
     from openforge.db.models import Note
     from openforge.api.websocket import ws_manager
     from openforge.services.note_service import note_service as ns
-    import json
 
-    result = await db.execute(select(Note).where(Note.id == note_id, Note.workspace_id == workspace_id))
+    result = await db.execute(
+        select(Note)
+        .options(selectinload(Note.tags))
+        .where(Note.id == note_id, Note.workspace_id == workspace_id)
+    )
     note = result.scalar_one_or_none()
     if not note:
         from fastapi import HTTPException
@@ -171,7 +188,7 @@ async def extract_insights(
     prompt = await _get_prompt(
         db, "extract_insights",
         note_content=note.content[:8000],
-        note_title=note.title or "Untitled",
+        note_title=normalize_note_title(note.title) or "Untitled",
         tags=tags_str
     )
 
@@ -184,14 +201,14 @@ async def extract_insights(
 
     try:
         # Extract JSON from response
-        import re
         json_match = re.search(r"\{[\s\S]*\}", response)
         if json_match:
-            insights = json.loads(json_match.group())
+            parsed = json.loads(json_match.group())
         else:
-            insights = {"todos": [], "reminders": [], "deadlines": [], "highlights": [], "tags": []}
+            parsed = {}
+        insights = normalize_insights_payload(parsed, note.content or "")
     except Exception:
-        insights = {"todos": [], "reminders": [], "deadlines": [], "highlights": [], "tags": []}
+        insights = normalize_insights_payload({}, note.content or "")
 
     note.insights = insights
     await db.commit()
@@ -230,25 +247,25 @@ async def generate_title(
         provider_name=provider_name, api_key=api_key, model=model, base_url=base_url, max_tokens=30,
     )
 
-    raw_title = title_response.strip()
-    import re
-    # Remove surrounding quotes if present
-    raw_title = re.sub(r'^["\']|["\']$', '', raw_title)
-    
-    # Check if it returned JSON accidentally
-    try:
-        import json
-        json_match = re.search(r"\{[\s\S]*\}", raw_title)
-        if json_match:
-            data = json.loads(json_match.group())
-            if "title" in data:
-                raw_title = data["title"]
-            elif data:
-                raw_title = list(data.values())[0]  # Fallback to first value
-    except Exception:
-        pass
+    normalized_title = _normalize_generated_title(title_response)
+    if normalized_title:
+        note.ai_title = normalized_title
+        title_was_empty = not normalize_note_title(note.title)
+        if title_was_empty:
+            note.title = normalized_title
+        await db.commit()
+        updated_fields = ["ai_title"]
+        if title_was_empty:
+            updated_fields.append("title")
+        await ws_manager.send_to_workspace(
+            str(workspace_id),
+            {"type": "note_updated", "note_id": str(note_id), "fields": updated_fields},
+        )
 
-    note.ai_title = raw_title[:500]
-    await db.commit()
-    await ws_manager.send_to_workspace(str(workspace_id), {"type": "note_updated", "note_id": str(note_id), "fields": ["ai_title"]})
-    return {"title": note.ai_title}
+    return {
+        "title": (
+            normalized_title
+            or normalize_note_title(note.title)
+            or normalize_note_title(note.ai_title)
+        )
+    }

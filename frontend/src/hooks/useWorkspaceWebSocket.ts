@@ -3,23 +3,23 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 type WsHandler = (msg: Record<string, unknown>) => void
 
 interface WsManager {
-    send: (msg: object) => void
+    send: (msg: object) => boolean
     on: (type: string, handler: WsHandler) => () => void
     isConnected: boolean
 }
 
-const managers = new Map<string, { ws: WebSocket; handlers: Map<string, Set<WsHandler>>; reconnectTimer: ReturnType<typeof setTimeout> | null }>()
+const managers = new Map<string, { ws: WebSocket; handlers: Map<string, Set<WsHandler>>; reconnectTimer: ReturnType<typeof setTimeout> | null; statusListeners: Set<(connected: boolean) => void>; isConnected: boolean }>()
 
 function getOrCreateManager(workspaceId: string) {
     if (!managers.has(workspaceId)) {
-        managers.set(workspaceId, { ws: null as unknown as WebSocket, handlers: new Map(), reconnectTimer: null })
+        managers.set(workspaceId, { ws: null as unknown as WebSocket, handlers: new Map(), reconnectTimer: null, statusListeners: new Set(), isConnected: false })
     }
     return managers.get(workspaceId)!
 }
 
 export function useWorkspaceWebSocket(workspaceId: string): WsManager {
-    const [isConnected, setIsConnected] = useState(false)
     const managerRef = useRef(getOrCreateManager(workspaceId))
+    const [isConnected, setIsConnected] = useState(managerRef.current.isConnected)
 
     const connect = useCallback(() => {
         const manager = managerRef.current
@@ -34,7 +34,8 @@ export function useWorkspaceWebSocket(workspaceId: string): WsManager {
         manager.ws = ws
 
         ws.onopen = () => {
-            setIsConnected(true)
+            manager.isConnected = true
+            manager.statusListeners.forEach(l => l(true))
             if (manager.reconnectTimer) {
                 clearTimeout(manager.reconnectTimer)
                 manager.reconnectTimer = null
@@ -49,7 +50,6 @@ export function useWorkspaceWebSocket(workspaceId: string): WsManager {
                 if (handlers) {
                     handlers.forEach((h: WsHandler) => h(msg))
                 }
-                // Also dispatch to '*' handlers
                 const wildcardHandlers = manager.handlers.get('*')
                 if (wildcardHandlers) {
                     wildcardHandlers.forEach((h: WsHandler) => h(msg))
@@ -58,8 +58,8 @@ export function useWorkspaceWebSocket(workspaceId: string): WsManager {
         }
 
         ws.onclose = () => {
-            setIsConnected(false)
-            // Auto-reconnect after 3s
+            manager.isConnected = false
+            manager.statusListeners.forEach(l => l(false))
             manager.reconnectTimer = setTimeout(connect, 3000)
         }
 
@@ -69,9 +69,15 @@ export function useWorkspaceWebSocket(workspaceId: string): WsManager {
     }, [workspaceId])
 
     useEffect(() => {
-        connect()
+        const manager = managerRef.current;
+        const listener = (status: boolean) => setIsConnected(status);
+        manager.statusListeners.add(listener);
+        setIsConnected(manager.isConnected);
+
+        connect();
+
         return () => {
-            // Don't disconnect on unmount — keep alive for other components
+            manager.statusListeners.delete(listener);
         }
     }, [connect])
 
@@ -79,7 +85,9 @@ export function useWorkspaceWebSocket(workspaceId: string): WsManager {
         const { ws } = managerRef.current
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify(msg))
+            return true
         }
+        return false
     }, [])
 
     const on = useCallback((type: string, handler: WsHandler) => {

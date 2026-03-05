@@ -5,8 +5,9 @@ import {
     getOnboarding, advanceOnboarding, createProvider, updateProvider,
     testConnection, listModels, createWorkspace, listProviders
 } from '@/lib/api'
-import { Sparkles, ArrowRight, CheckCircle2, Loader2, Globe2, Eye, EyeOff, Plus, Trash2, FileText, Search, MessageSquare, Lock } from 'lucide-react'
+import { Play, FileText, Bookmark, Code2, Globe2, Eye, EyeOff, Loader2, Link, Bot, Star, X, Check, Search, CheckCircle2, XCircle, Sliders, Sparkles, ArrowRight, Plus, Trash2, MessageSquare, Lock, Brain, Folder, Briefcase, Microscope, BookOpen, Target, Globe, Lightbulb, Wrench, Palette, BarChart3, Rocket, Shield, FlaskConical, Leaf, Key, Settings2, PenLine, Database, Sprout } from 'lucide-react'
 import { ProviderIcon } from '@/components/shared/ProviderIcon'
+import { ModelOverrideSelect } from '@/components/shared/ModelOverrideSelect'
 
 const PROVIDERS = [
     { id: 'openai', name: 'OpenAI', color: 'from-emerald-500/20 border-emerald-500/30', needsKey: true, needsUrl: false },
@@ -59,7 +60,7 @@ export default function OnboardingPage() {
 
     return (
         <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-            <div className="w-full max-w-xl">
+            <div className="w-full max-w-2xl">
                 {/* Logo */}
                 <div className="flex items-center gap-3 mb-10 justify-center">
                     <div className="w-12 h-12 rounded-2xl bg-accent/20 border border-accent/30 flex items-center justify-center shadow-lg shadow-accent/10">
@@ -181,7 +182,7 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
         setSelected(null); setApiKey(''); setShowKey(false); setBaseUrl('')
         setDisplayName(''); setModels(null); setModelError(null); setModelSearch('')
         setSelectedModels(new Set()); setManualModel(''); setSaveError(null); setTestResult(null)
-        setCreatedProviderId(null)
+        setCreatedProviderId(null); setShowAdvanced(false)
     }
 
     const handleSelectProvider = (id: string) => {
@@ -189,7 +190,7 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
         setBaseUrl(id === 'ollama' ? 'http://localhost:11434' : '')
         setDisplayName(''); setModels(null); setModelError(null)
         setSelectedModels(new Set()); setManualModel(''); setSaveError(null); setTestResult(null)
-        setCreatedProviderId(null)
+        setCreatedProviderId(null); setShowAdvanced(false)
     }
 
     const canFetch = provider?.needsUrl ? !!baseUrl : !!apiKey
@@ -248,6 +249,8 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
     const toggleModel = (id: string) => setSelectedModels(prev => {
         const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n
     })
+
+    const [showAdvanced, setShowAdvanced] = useState(false)
 
     const handleSave = async () => {
         const modelsToAdd = models ? [...selectedModels] : manualModel.trim() ? [manualModel.trim()] : []
@@ -315,7 +318,7 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
             {/* Add-provider form */}
             <div className="space-y-4 rounded-xl border border-border/60 p-4 bg-muted/10">
                 {/* Step 1: Provider selection */}
-                <div>
+                <div className="relative">
                     <p className="text-xs font-medium text-muted-foreground mb-2">1. Select provider</p>
                     <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
                         {PROVIDERS.map(p => (
@@ -336,29 +339,45 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
 
                 {selected && (
                     <>
-                        {/* Step 2: Credentials */}
+                        {/* Step 2 — Credentials */}
                         <div className="space-y-2">
-                            <p className="text-xs font-medium text-muted-foreground">2. Enter credentials</p>
+                            <label className="text-xs text-muted-foreground font-medium block">2. Enter credentials</label>
+                            <input className="input text-sm" placeholder={`Display name (default: ${provider?.name})`} value={displayName} onChange={e => setDisplayName(e.target.value)} />
+
                             {provider?.needsUrl ? (
                                 <>
-                                    <input className="input text-sm" placeholder={selected === 'ollama' ? 'http://localhost:11434' : 'https://your-endpoint.com'} value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
+                                    <input className="input text-sm" placeholder={(provider as any)?.urlPlaceholder ?? 'https://your-api.com'} value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
                                     <div className="relative">
-                                        <input type={showKey ? 'text' : 'password'} className="input text-sm pr-10" placeholder="Bearer token (optional)" value={apiKey} onChange={e => setApiKey(e.target.value)} autoComplete="off" />
-                                        <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowKey(v => !v)}>
-                                            {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                        <input type={showKey ? 'text' : 'password'} className="input text-sm pr-10" placeholder={(provider as any)?.placeholder ?? 'API Key or Token'} value={apiKey} onChange={e => setApiKey(e.target.value)} autoComplete="off" />
+                                        <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setShowKey(v => !v)}>
+                                            {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                         </button>
                                     </div>
                                 </>
                             ) : (
-                                <div className="relative">
-                                    <input type={showKey ? 'text' : 'password'} className="input text-sm pr-10" placeholder={`${provider?.name} API Key`} value={apiKey} onChange={e => setApiKey(e.target.value)} autoComplete="off" />
-                                    <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowKey(v => !v)}>
-                                        {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                <>
+                                    <div className="relative">
+                                        <input type={showKey ? 'text' : 'password'} className="input text-sm pr-10" placeholder={(provider as any)?.placeholder ?? 'API Key'} value={apiKey} onChange={e => setApiKey(e.target.value)} autoComplete="off" />
+                                        <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setShowKey(v => !v)}>
+                                            {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                        </button>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 mt-1 transition-colors"
+                                        onClick={() => setShowAdvanced(!showAdvanced)}
+                                    >
+                                        <Sliders className="w-3 h-3" /> {showAdvanced ? 'Hide advanced settings' : 'Show advanced settings (Custom Base URL)'}
                                     </button>
-                                </div>
+                                    {showAdvanced && (
+                                        <div className="animate-fade-in pt-1">
+                                            <label className="text-[10px] text-muted-foreground mb-1 block">Base URL Override (e.g. for API gateways)</label>
+                                            <input className="input text-sm" placeholder="https://api.openai.com/v1" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
+                                        </div>
+                                    )}
+                                </>
                             )}
                         </div>
-
                         {/* Step 3: Test + fetch models */}
                         <div className="space-y-2">
                             <div className="flex items-center justify-between">
@@ -371,7 +390,7 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
 
                             {testResult && (
                                 <div className={`flex items-center gap-2 text-xs p-2.5 rounded-lg ${testResult.success ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' : 'bg-destructive/10 text-red-300 border border-destructive/20'}`}>
-                                    {testResult.success ? <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" /> : <span className="text-red-400">✗</span>}
+                                    {testResult.success ? <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" /> : <XCircle className="w-3.5 h-3.5 flex-shrink-0" />}
                                     {testResult.message}
                                 </div>
                             )}
@@ -443,19 +462,44 @@ function WorkspaceCreateStep({ onNext }: { onNext: () => void }) {
     const { data: providers = [] } = useQuery({ queryKey: ['providers'], queryFn: listProviders })
     const [creating, setCreating] = useState(false)
 
-    const ICONS = ['🧠', '📁', '💼', '🔬', '📚', '🎯', '🌐', '💡', '🔧', '🎨', '📊', '🚀', '🔒', '⚗️', '🌿', '🔑', '⚙️', '📝', '🗄️', '🌱']
+    // Icon names for workspace icons (stored as strings, rendered as Lucide icons)
+    const ICON_NAMES = ['brain', 'folder', 'briefcase', 'microscope', 'book-open', 'target', 'globe', 'lightbulb', 'wrench', 'palette', 'bar-chart-3', 'rocket', 'shield', 'flask-conical', 'leaf', 'key', 'settings-2', 'pen-line', 'database', 'sprout'] as const
+    type IconName = typeof ICON_NAMES[number]
 
-    type WsDraft = { id: number; name: string; icon: string; providerId: string; modelOverride: string }
+    const ICON_COMPONENTS: Record<IconName, React.ReactNode> = {
+        'brain': <Brain className="w-4 h-4" />,
+        'folder': <Folder className="w-4 h-4" />,
+        'briefcase': <Briefcase className="w-4 h-4" />,
+        'microscope': <Microscope className="w-4 h-4" />,
+        'book-open': <BookOpen className="w-4 h-4" />,
+        'target': <Target className="w-4 h-4" />,
+        'globe': <Globe className="w-4 h-4" />,
+        'lightbulb': <Lightbulb className="w-4 h-4" />,
+        'wrench': <Wrench className="w-4 h-4" />,
+        'palette': <Palette className="w-4 h-4" />,
+        'bar-chart-3': <BarChart3 className="w-4 h-4" />,
+        'rocket': <Rocket className="w-4 h-4" />,
+        'shield': <Shield className="w-4 h-4" />,
+        'flask-conical': <FlaskConical className="w-4 h-4" />,
+        'leaf': <Leaf className="w-4 h-4" />,
+        'key': <Key className="w-4 h-4" />,
+        'settings-2': <Settings2 className="w-4 h-4" />,
+        'pen-line': <PenLine className="w-4 h-4" />,
+        'database': <Database className="w-4 h-4" />,
+        'sprout': <Sprout className="w-4 h-4" />,
+    }
+
+    type WsDraft = { id: number; name: string; icon: IconName; providerId: string; modelOverride: string }
 
     const [workspaces, setWorkspaces] = useState<WsDraft[]>([
-        { id: Date.now(), name: '', icon: '🧠', providerId: '', modelOverride: '' }
+        { id: Date.now(), name: '', icon: 'brain', providerId: '', modelOverride: '' }
     ])
 
     const updateWs = (id: number, patch: Partial<WsDraft>) =>
         setWorkspaces(ws => ws.map(w => w.id === id ? { ...w, ...patch } : w))
 
     const addWorkspace = () =>
-        setWorkspaces(ws => [...ws, { id: Date.now(), name: '', icon: '📁', providerId: '', modelOverride: '' }])
+        setWorkspaces(ws => [...ws, { id: Date.now(), name: '', icon: 'folder', providerId: '', modelOverride: '' }])
 
     const removeWorkspace = (id: number) =>
         setWorkspaces(ws => ws.length > 1 ? ws.filter(w => w.id !== id) : ws)
@@ -490,7 +534,8 @@ function WorkspaceCreateStep({ onNext }: { onNext: () => void }) {
                         key={ws.id}
                         ws={ws}
                         idx={idx}
-                        icons={ICONS}
+                        iconNames={ICON_NAMES}
+                        iconComponents={ICON_COMPONENTS}
                         providers={providers as ProviderOption[]}
                         onChange={patch => updateWs(ws.id, patch)}
                         onRemove={workspaces.length > 1 ? () => removeWorkspace(ws.id) : undefined}
@@ -520,17 +565,26 @@ function WorkspaceCreateStep({ onNext }: { onNext: () => void }) {
     )
 }
 
-type ProviderOption = { id: string; display_name: string; provider_name: string; default_model: string | null }
+type ProviderOption = {
+    id: string
+    display_name: string
+    provider_name: string
+    default_model: string | null
+    enabled_models?: { id: string; name: string }[]
+}
+type IconName = 'brain' | 'folder' | 'briefcase' | 'microscope' | 'book-open' | 'target' | 'globe' | 'lightbulb' | 'wrench' | 'palette' | 'bar-chart-3' | 'rocket' | 'shield' | 'flask-conical' | 'leaf' | 'key' | 'settings-2' | 'pen-line' | 'database' | 'sprout'
 
-function WorkspaceDraftCard({ ws, idx, icons, providers, onChange, onRemove }: {
-    ws: { name: string; icon: string; providerId: string; modelOverride: string }
+function WorkspaceDraftCard({ ws, idx, iconNames, iconComponents, providers, onChange, onRemove }: {
+    ws: { name: string; icon: IconName; providerId: string; modelOverride: string }
     idx: number
-    icons: string[]
+    iconNames: readonly IconName[]
+    iconComponents: Record<IconName, React.ReactNode>
     providers: ProviderOption[]
-    onChange: (patch: Partial<{ name: string; icon: string; providerId: string; modelOverride: string }>) => void
+    onChange: (patch: Partial<{ name: string; icon: IconName; providerId: string; modelOverride: string }>) => void
     onRemove?: () => void
 }) {
     const [showIcons, setShowIcons] = useState(false)
+    const selectedProvider = providers.find(p => p.id === ws.providerId)
 
     return (
         <div className="rounded-xl border border-border/60 bg-muted/20 p-4 space-y-3">
@@ -548,19 +602,19 @@ function WorkspaceDraftCard({ ws, idx, icons, providers, onChange, onRemove }: {
                 <div>
                     <button
                         onClick={() => setShowIcons(v => !v)}
-                        className="w-11 h-11 rounded-xl border border-border bg-background/50 text-2xl flex items-center justify-center hover:border-accent transition-colors"
+                        className="w-11 h-11 rounded-xl border border-border bg-background/50 flex items-center justify-center hover:border-accent transition-colors"
                     >
-                        {ws.icon}
+                        {iconComponents[ws.icon]}
                     </button>
                     {showIcons && (
-                        <div className="absolute z-10 mt-1 p-2 rounded-xl border border-border bg-popover shadow-xl grid grid-cols-5 gap-1">
-                            {icons.map(ic => (
+                        <div className="absolute z-[140] mt-1 p-2 rounded-xl border border-border bg-popover shadow-xl grid grid-cols-5 gap-1">
+                            {iconNames.map(ic => (
                                 <button
                                     key={ic}
                                     onClick={() => { onChange({ icon: ic }); setShowIcons(false) }}
-                                    className={`w-8 h-8 rounded-lg text-lg flex items-center justify-center hover:bg-muted transition-colors ${ws.icon === ic ? 'bg-accent/20 ring-1 ring-accent' : ''}`}
+                                    className={`w-8 h-8 rounded-lg flex items-center justify-center hover:bg-muted transition-colors ${ws.icon === ic ? 'bg-accent/20 ring-1 ring-accent' : ''}`}
                                 >
-                                    {ic}
+                                    {iconComponents[ic]}
                                 </button>
                             ))}
                         </div>
@@ -595,13 +649,18 @@ function WorkspaceDraftCard({ ws, idx, icons, providers, onChange, onRemove }: {
                     </div>
                     <div>
                         <label className="text-[10px] text-muted-foreground mb-1 block">Model override</label>
-                        <input
-                            className="input text-xs"
-                            placeholder={ws.providerId
-                                ? providers.find(p => p.id === ws.providerId)?.default_model ?? 'e.g. gpt-4o'
-                                : 'e.g. gpt-4o'}
+                        <ModelOverrideSelect
+                            models={selectedProvider?.enabled_models ?? []}
                             value={ws.modelOverride}
-                            onChange={e => onChange({ modelOverride: e.target.value })}
+                            onChange={value => onChange({ modelOverride: value })}
+                            disabled={!ws.providerId}
+                            placeholder={ws.providerId
+                                ? (selectedProvider?.default_model
+                                    ? `Default: ${selectedProvider.default_model}`
+                                    : 'Select model override')
+                                : 'Select provider first'}
+                            inheritLabel="Inherit provider default"
+                            compact
                         />
                     </div>
                 </div>

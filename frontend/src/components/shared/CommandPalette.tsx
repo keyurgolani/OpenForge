@@ -2,13 +2,19 @@ import { useEffect, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Command } from 'cmdk'
-import { listWorkspaces, listNotes, createNote } from '@/lib/api'
+import { listWorkspaces, listNotes } from '@/lib/api'
 import { useUIStore } from '@/stores/uiStore'
+import { isModKey, getShortcutDisplay } from '@/lib/keyboard'
+import { openQuickNote, type QuickNoteType } from '@/lib/quick-note'
 import {
     Search, FileText, MessageSquare, Settings, Plus, Bookmark,
-    Code2, Zap, Home, ArrowRight
+    Code2, Zap, Home, ArrowRight, FolderOpen
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { getWorkspaceIcon } from '@/pages/SettingsPage'
+
+const GROUP_CLASS =
+    "[&_[cmdk-group-heading]]:px-4 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.1em] [&_[cmdk-group-heading]]:text-muted-foreground/80 [&_[cmdk-group-heading]]:font-semibold"
 
 export default function CommandPalette() {
     const navigate = useNavigate()
@@ -32,7 +38,7 @@ export default function CommandPalette() {
     // Cmd+K / Ctrl+K to open
     useEffect(() => {
         const handler = (e: KeyboardEvent) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+            if (isModKey(e) && e.key === 'k') {
                 e.preventDefault()
                 setCommandPaletteOpen(true)
             }
@@ -48,10 +54,9 @@ export default function CommandPalette() {
         close()
     }, [close])
 
-    const handleCreateNote = async (type = 'standard') => {
+    const handleCreateNote = (type: QuickNoteType = 'standard') => {
         if (!workspaceId) return
-        const note = await createNote(workspaceId, { type })
-        navigate(`/w/${workspaceId}/notes/${note.id}`)
+        openQuickNote(type)
         close()
     }
 
@@ -60,7 +65,7 @@ export default function CommandPalette() {
     return (
         <AnimatePresence>
             <div
-                className="fixed inset-0 z-50 flex items-start justify-center pt-[20vh]"
+                className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[16vh] pb-6"
                 onClick={close}
             >
                 {/* Backdrop */}
@@ -83,30 +88,30 @@ export default function CommandPalette() {
                         stiffness: 400,
                         mass: 0.8
                     }}
-                    className="relative w-full max-w-xl mx-4 glass-card border border-white/10 shadow-glass-lg overflow-hidden"
+                    className="relative w-full max-w-xl glass-card border border-white/10 shadow-glass-lg overflow-hidden"
                     onClick={e => e.stopPropagation()}
                 >
                     {/* Inner Glow Line */}
                     <div className="absolute inset-0 border border-white/5 rounded-[inherit] pointer-events-none mix-blend-overlay" />
                     <Command className="[&_[cmdk-root]]:bg-transparent" label="Command palette">
-                        <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50">
+                        <div className="flex items-center gap-3.5 px-5 py-4 border-b border-border/55">
                             <Search className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                             <Command.Input
                                 className="flex-1 bg-transparent text-sm outline-none placeholder-muted-foreground"
                                 placeholder="Type a command or search notes…"
                                 autoFocus
                             />
-                            <kbd className="text-xs text-muted-foreground border border-border rounded px-1.5 py-0.5 font-mono">ESC</kbd>
+                            <kbd className="text-xs text-muted-foreground border border-border/80 rounded-md px-2 py-1 font-mono">ESC</kbd>
                         </div>
 
-                        <Command.List className="max-h-80 overflow-y-auto py-2">
-                            <Command.Empty className="flex flex-col items-center py-8 text-muted-foreground text-sm gap-2">
+                        <Command.List className="max-h-[min(56vh,30rem)] overflow-y-auto py-3">
+                            <Command.Empty className="flex flex-col items-center py-10 text-muted-foreground text-sm gap-2.5">
                                 <Search className="w-8 h-8 opacity-30" />
                                 No results found.
                             </Command.Empty>
 
                             {/* Actions */}
-                            <Command.Group heading="Actions" className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:font-medium">
+                            <Command.Group heading="Actions" className={GROUP_CLASS}>
                                 {workspaceId && (
                                     <>
                                         <PaletteItem icon={<Plus className="w-4 h-4" />} onSelect={() => handleCreateNote('standard')}>New Note</PaletteItem>
@@ -131,11 +136,11 @@ export default function CommandPalette() {
 
                             {/* Workspace navigation */}
                             {(workspaces as { id: string; name: string; icon: string }[]).length > 1 && (
-                                <Command.Group heading="Workspaces">
+                                <Command.Group heading="Workspaces" className={`mt-2 pt-2 border-t border-border/40 ${GROUP_CLASS}`}>
                                     {(workspaces as { id: string; name: string; icon: string }[]).map(ws => (
                                         <PaletteItem
                                             key={ws.id}
-                                            icon={<span className="text-base">{ws.icon ?? '📁'}</span>}
+                                            icon={<span className="flex items-center justify-center">{getWorkspaceIcon(ws.icon)}</span>}
                                             onSelect={() => run(() => navigate(`/w/${ws.id}`))}
                                         >
                                             {ws.name}
@@ -146,7 +151,7 @@ export default function CommandPalette() {
 
                             {/* Note search */}
                             {notes.length > 0 && (
-                                <Command.Group heading="Notes">
+                                <Command.Group heading="Notes" className={`mt-2 pt-2 border-t border-border/40 ${GROUP_CLASS}`}>
                                     {(notes as { id: string; title: string; ai_title: string; type: string }[]).map(n => (
                                         <PaletteItem
                                             key={n.id}
@@ -161,10 +166,11 @@ export default function CommandPalette() {
                             )}
                         </Command.List>
 
-                        <div className="flex items-center gap-4 px-3 py-2 border-t border-border/50 text-xs text-muted-foreground">
-                            <span className="flex items-center gap-1"><kbd className="border border-border rounded px-1 py-0.5 font-mono">↑↓</kbd> navigate</span>
-                            <span className="flex items-center gap-1"><kbd className="border border-border rounded px-1 py-0.5 font-mono">↵</kbd> select</span>
-                            <span className="flex items-center gap-1"><kbd className="border border-border rounded px-1 py-0.5 font-mono">ESC</kbd> close</span>
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 border-t border-border/55 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1.5"><kbd className="border border-border/80 rounded px-1.5 py-0.5 font-mono">↑↓</kbd> navigate</span>
+                            <span className="flex items-center gap-1.5"><kbd className="border border-border/80 rounded px-1.5 py-0.5 font-mono">↵</kbd> select</span>
+                            <span className="flex items-center gap-1.5"><kbd className="border border-border/80 rounded px-1.5 py-0.5 font-mono">ESC</kbd> close</span>
+                            <span className="flex items-center gap-1.5 sm:ml-auto"><kbd className="border border-border/80 rounded px-1.5 py-0.5 font-mono">{getShortcutDisplay('commandPalette')}</kbd> toggle</span>
                         </div>
                     </Command>
                 </motion.div>
@@ -187,7 +193,7 @@ function PaletteItem({
     return (
         <Command.Item
             onSelect={onSelect}
-            className="flex items-center gap-3 px-3 py-2 text-sm cursor-pointer rounded-md mx-1 data-[selected=true]:bg-muted/60 transition-colors group"
+            className="mx-2 flex items-center gap-3.5 rounded-lg px-3.5 py-2.5 text-sm cursor-pointer data-[selected=true]:bg-muted/60 transition-colors group"
         >
             <span className="text-muted-foreground group-data-[selected=true]:text-foreground transition-colors">
                 {icon}

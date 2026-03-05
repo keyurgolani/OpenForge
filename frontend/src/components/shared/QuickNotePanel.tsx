@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { createNote, updateNote, deleteNote } from '@/lib/api'
+import { isModKey, getModSymbol } from '@/lib/keyboard'
 import {
     X, Expand, Loader2, Tag, Save, FileText, Zap, Bookmark, Code2, Plus
 } from 'lucide-react'
@@ -88,6 +89,27 @@ export function QuickNotePanel({ open, defaultType = 'standard', onClose }: Prop
 
     const isEmpty = !title.trim() && !content.trim() && !url.trim()
 
+    const buildPayload = () => ({
+        type,
+        title: title.trim() || null,
+        content: content.trim() ? content : '',
+        url: url.trim() || null,
+        tags,
+        gist_language: type === 'gist' ? gistLang : undefined,
+    })
+
+    const persistDraft = async (allowCreateWhenEmpty: boolean): Promise<string | null> => {
+        if (noteId) {
+            await updateNote(workspaceId, noteId, buildPayload())
+            return noteId
+        }
+        if (isEmpty && !allowCreateWhenEmpty) return null
+        const n = await createNote(workspaceId, buildPayload())
+        setNoteId(n.id)
+        qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
+        return n.id
+    }
+
     // Close: if empty discard draft; if has content and no noteId yet — don't save (user explicitly closed)
     const handleClose = useCallback(async () => {
         if (noteId && isEmpty) {
@@ -103,7 +125,7 @@ export function QuickNotePanel({ open, defaultType = 'standard', onClose }: Prop
         const handler = (e: KeyboardEvent) => {
             if (!open) return
             if (e.key === 'Escape') { handleClose(); return }
-            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); handleSave() }
+            if (isModKey(e) && e.key === 'Enter') { e.preventDefault(); handleSave() }
         }
         window.addEventListener('keydown', handler)
         return () => window.removeEventListener('keydown', handler)
@@ -113,20 +135,7 @@ export function QuickNotePanel({ open, defaultType = 'standard', onClose }: Prop
         if (isEmpty) { handleClose(); return }
         setSaving(true)
         try {
-            const payload = {
-                type,
-                title: title.trim() || null,
-                content: content.trim() || null,
-                url: url.trim() || null,
-                tags,
-                gist_language: type === 'gist' ? gistLang : undefined,
-            }
-            if (noteId) {
-                await updateNote(workspaceId, noteId, payload)
-            } else {
-                const n = await createNote(workspaceId, payload)
-                setNoteId(n.id)
-            }
+            await persistDraft(false)
             qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
             handleClose()
         } finally {
@@ -135,22 +144,11 @@ export function QuickNotePanel({ open, defaultType = 'standard', onClose }: Prop
     }
 
     const handleExpand = async () => {
-        if (isEmpty) { handleClose(); return }
         setSaving(true)
         try {
-            let id = noteId
-            if (!id) {
-                const n = await createNote(workspaceId, {
-                    type,
-                    title: title.trim() || null,
-                    content: content.trim() || null,
-                    url: url.trim() || null,
-                    tags,
-                    gist_language: type === 'gist' ? gistLang : undefined,
-                })
-                id = n.id
-                qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
-            }
+            const id = await persistDraft(true)
+            if (!id) return
+            qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
             onClose()
             navigate(`/w/${workspaceId}/notes/${id}`)
         } finally {
@@ -271,7 +269,7 @@ export function QuickNotePanel({ open, defaultType = 'standard', onClose }: Prop
                         {tags.map(t => (
                             <span
                                 key={t}
-                                className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-accent/10 text-accent/80 cursor-pointer hover:bg-destructive/20 hover:text-red-400 transition-colors"
+                                className="chip-accent text-[10px] cursor-pointer hover:bg-destructive/20 hover:text-red-300 transition-colors"
                                 onClick={() => setTags(p => p.filter(x => x !== t))}
                             >
                                 {t} <X className="w-2.5 h-2.5" />
@@ -295,7 +293,7 @@ export function QuickNotePanel({ open, defaultType = 'standard', onClose }: Prop
                 {/* Footer */}
                 <div className="flex items-center justify-between px-4 py-2.5 border-t border-border/40 bg-muted/10">
                     <span className="text-[10px] text-muted-foreground opacity-60">
-                        ⌘↵ save · Esc close  ·  Click type to switch
+                        {getModSymbol()}+↵ save · Esc close · Click type to switch
                     </span>
                     <div className="flex gap-2">
                         <button className="btn-ghost text-xs py-1.5 px-3" onClick={handleClose}>

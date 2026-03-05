@@ -58,7 +58,7 @@ PROMPT_CATALOGUE = [
     {
         "id": "extract_insights",
         "label": "Extract Insights",
-        "description": "Extracts structured insights (todos, reminders, highlights, tags) from a note.",
+        "description": "Extracts structured insights (tasks, timeline dates, facts, crucial points, tags) from a note.",
         "category": "notes",
         "role": "system",
         "variables": ["{note_title}", "{note_content}", "{tags}"],
@@ -71,6 +71,11 @@ PROMPT_CATALOGUE = [
             '  "tasks": ["action item 1"],\n'
             '  "tags": ["tag1", "tag2"]\n'
             "}\n"
+            "Timeline rules:\n"
+            "- Include every explicit date or deadline that should be tracked.\n"
+            "- Use YYYY-MM-DD when date is clear.\n"
+            "- If year is missing, infer from context if possible.\n"
+            "- Do not invent dates.\n"
             "Return empty arrays if none found. Tags should be lowercase single words or hyphenated phrases.\n\n"
             "Title: {note_title}\n\n"
             "Note Content:\n{note_content}"

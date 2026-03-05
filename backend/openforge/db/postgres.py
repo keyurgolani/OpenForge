@@ -39,6 +39,9 @@ async def run_migrations():
     import os
     from alembic.config import Config
     from alembic import command
+    from alembic.script import ScriptDirectory
+    from alembic.util.exc import CommandError
+    from sqlalchemy import create_engine, text
 
     # __file__ = .../backend/openforge/db/postgres.py
     # We need to walk up THREE levels to reach .../backend/
@@ -67,6 +70,52 @@ async def run_migrations():
     sync_url = settings.database_url.replace("+asyncpg", "+psycopg2")
     alembic_cfg.set_main_option("sqlalchemy.url", sync_url)
 
-    # Run in a thread since alembic is synchronous
+    # Run in a thread since Alembic is synchronous.
     loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, lambda: command.upgrade(alembic_cfg, "head"))
+
+    def _upgrade():
+        command.upgrade(alembic_cfg, "head")
+
+    try:
+        await loop.run_in_executor(None, _upgrade)
+    except CommandError as exc:
+        # Recovery path for local dev volumes with a stale/removed revision id.
+        # This can happen after migration squashing/history rewrites.
+        if "Can't locate revision identified by" in str(exc):
+            script_dir = ScriptDirectory.from_config(alembic_cfg)
+            head_revision = script_dir.get_current_head()
+
+            def _normalize_alembic_version():
+                sync_engine = create_engine(sync_url)
+                try:
+                    with sync_engine.begin() as conn:
+                        conn.execute(
+                            text(
+                                "CREATE TABLE IF NOT EXISTS alembic_version "
+                                "(version_num VARCHAR(32) NOT NULL)"
+                            )
+                        )
+                        count = conn.execute(
+                            text("SELECT COUNT(*) FROM alembic_version")
+                        ).scalar_one()
+                        if count == 0:
+                            conn.execute(
+                                text("INSERT INTO alembic_version (version_num) VALUES (:rev)"),
+                                {"rev": head_revision},
+                            )
+                        else:
+                            conn.execute(
+                                text("UPDATE alembic_version SET version_num = :rev"),
+                                {"rev": head_revision},
+                            )
+                finally:
+                    sync_engine.dispose()
+
+            logger.warning(
+                "Alembic revision in database is not present in code; "
+                "normalizing alembic_version to current head and retrying upgrade."
+            )
+            await loop.run_in_executor(None, _normalize_alembic_version)
+            await loop.run_in_executor(None, _upgrade)
+        else:
+            raise

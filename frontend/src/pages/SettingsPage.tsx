@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
@@ -12,9 +12,14 @@ import {
     Settings, Globe2, Loader2, Trash2, CheckCircle2, XCircle, Star, Plus,
     ChevronDown, ChevronUp, Eye, EyeOff, RefreshCw, Zap, Server, Search, Check,
     Layers, Bot, FolderOpen, Pencil, Save, X, Sliders, RotateCcw, MessageSquare,
-    FileText, Timer, History, Play, Clock, CheckCircle, AlertCircle, Circle
+    FileText, Timer, History, Play, Clock, CheckCircle, AlertCircle, Circle, Terminal,
+    Brain, Folder, Briefcase, Microscope, BookOpen, Target, Globe, Lightbulb, Wrench,
+    Palette, BarChart3, Rocket, Shield, FlaskConical, Leaf, Key, Settings2, PenLine,
+    Database, Sprout
 } from 'lucide-react'
 import { ProviderIcon } from '@/components/shared/ProviderIcon'
+import { ModelOverrideSelect } from '@/components/shared/ModelOverrideSelect'
+import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 
 // ── Provider registry ────────────────────────────────────────────────────────
 const PROVIDER_META: Record<string, {
@@ -38,6 +43,24 @@ const PROVIDER_META: Record<string, {
 }
 const PROVIDER_NAMES = Object.keys(PROVIDER_META)
 
+// ── Workspace Icon Registry ─────────────────────────────────────────────────────
+export const WORKSPACE_ICONS = {
+    'brain': Brain, 'folder': Folder, 'briefcase': Briefcase, 'microscope': Microscope,
+    'book-open': BookOpen, 'target': Target, 'globe': Globe, 'lightbulb': Lightbulb,
+    'wrench': Wrench, 'palette': Palette, 'bar-chart-3': BarChart3, 'rocket': Rocket,
+    'shield': Shield, 'flask-conical': FlaskConical, 'leaf': Leaf, 'key': Key,
+    'settings-2': Settings2, 'pen-line': PenLine, 'database': Database, 'sprout': Sprout,
+} as const
+export type WorkspaceIconName = keyof typeof WORKSPACE_ICONS
+export const WORKSPACE_ICON_NAMES = Object.keys(WORKSPACE_ICONS) as WorkspaceIconName[]
+
+export function getWorkspaceIcon(iconName: string | null): React.ReactNode {
+    if (!iconName) return <FolderOpen className="w-4 h-4 text-accent" />
+    const IconComponent = WORKSPACE_ICONS[iconName as WorkspaceIconName]
+    if (!IconComponent) return <FolderOpen className="w-4 h-4 text-accent" />
+    return <IconComponent className="w-4 h-4" />
+}
+
 // ── Root component ────────────────────────────────────────────────────────────
 export default function SettingsPage() {
     const { workspaceId = '' } = useParams<{ workspaceId: string }>()
@@ -52,7 +75,7 @@ export default function SettingsPage() {
     ]
 
     return (
-        <div className="max-w-3xl mx-auto p-6">
+        <div className="max-w-6xl mx-auto p-6 lg:p-8">
             <div className="flex items-center gap-3 mb-8">
                 <Settings className="w-5 h-5 text-accent" />
                 <h1 className="text-xl font-bold">Settings</h1>
@@ -79,7 +102,7 @@ export default function SettingsPage() {
             {activeTab === 'llm' && <LLMSettings />}
             {activeTab === 'prompts' && <PromptsTab />}
             {activeTab === 'schedules' && <SchedulesTab />}
-            {activeTab === 'audit' && <AuditTab />}
+            {activeTab === 'audit' && <AuditTab workspaceId={workspaceId} />}
         </div>
     )
 }
@@ -165,7 +188,8 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
     const [expanded, setExpanded] = useState(false)
     const [name, setName] = useState(ws.name)
     const [description, setDescription] = useState(ws.description ?? '')
-    const [icon, setIcon] = useState(ws.icon ?? '')
+    const [icon, setIcon] = useState(ws.icon ?? 'folder')
+    const [showIcons, setShowIcons] = useState(false)
     const [providerId, setProviderId] = useState(ws.llm_provider_id ?? '')
     const [model, setModel] = useState(ws.llm_model ?? '')
     const [saving, setSaving] = useState(false)
@@ -196,10 +220,10 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
     }
 
     return (
-        <div className={`glass-card-hover overflow-hidden transition-all duration-300 ${isActive ? 'border-accent/50 shadow-glass-lg' : ''}`}>
+        <div className={`glass-card-hover transition-all duration-300 ${isActive ? 'border-accent/50 shadow-glass-lg' : ''}`}>
             <div className="flex items-center gap-3 px-4 py-3">
-                <div className="w-9 h-9 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0 text-lg">
-                    {ws.icon || <FolderOpen className="w-4 h-4 text-accent" />}
+                <div className="w-9 h-9 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0">
+                    {getWorkspaceIcon(ws.icon)}
                 </div>
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -229,8 +253,34 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
                             <input className="input text-sm" value={name} onChange={e => setName(e.target.value)} />
                         </div>
                         <div>
-                            <label className="text-xs text-muted-foreground mb-1 block">Icon (emoji)</label>
-                            <input className="input text-sm" placeholder="e.g. 🧠" value={icon} onChange={e => setIcon(e.target.value)} maxLength={2} />
+                            <label className="text-xs text-muted-foreground mb-1 block">Icon</label>
+                            <div className="relative">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowIcons(v => !v)}
+                                    className="input text-sm flex items-center justify-center gap-2 w-full"
+                                >
+                                    {getWorkspaceIcon(icon)}
+                                    <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                                </button>
+                                {showIcons && (
+                                    <div className="absolute z-[140] mt-1 p-2 rounded-lg border border-border bg-popover shadow-xl grid grid-cols-5 gap-1 w-full">
+                                        {WORKSPACE_ICON_NAMES.map(ic => {
+                                            const IconComp = WORKSPACE_ICONS[ic]
+                                            return (
+                                                <button
+                                                    key={ic}
+                                                    type="button"
+                                                    onClick={() => { setIcon(ic); setShowIcons(false) }}
+                                                    className={`w-8 h-8 rounded-lg flex items-center justify-center hover:bg-muted transition-colors ${icon === ic ? 'bg-accent/20 ring-1 ring-accent' : ''}`}
+                                                >
+                                                    <IconComp className="w-4 h-4" />
+                                                </button>
+                                            )
+                                        })}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                     <div>
@@ -251,11 +301,17 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
                         </div>
                         <div>
                             <label className="text-xs text-muted-foreground mb-1 block">Model override</label>
-                            <input
-                                className="input text-sm"
-                                placeholder={selectedProvider?.default_model ?? 'Inherits from provider'}
+                            <ModelOverrideSelect
+                                models={selectedProvider?.enabled_models ?? []}
                                 value={model}
-                                onChange={e => setModel(e.target.value)}
+                                onChange={setModel}
+                                disabled={!providerId}
+                                placeholder={providerId
+                                    ? (selectedProvider?.default_model
+                                        ? `Default: ${selectedProvider.default_model}`
+                                        : 'Select model override')
+                                    : 'Select provider first'}
+                                inheritLabel="Inherit provider default"
                             />
                         </div>
                     </div>
@@ -347,6 +403,7 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
         setModelSearch(''); setSelectedModels(new Set()); setManualModel('')
         setSaved(false); setSaveError(null)
         setCreatedProviderId(null)
+        setShowAdvanced(false)
     }
 
     const filteredModels = useMemo(() => {
@@ -429,6 +486,8 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
     const canFetch = meta?.needsUrl ? !!baseUrl : !!apiKey
     const totalSelected = models ? selectedModels.size : (manualModel.trim() ? 1 : 0)
 
+    const [showAdvanced, setShowAdvanced] = useState(false)
+
     return (
         <div className="glass-card shadow-glass-lg p-5 space-y-4 border border-accent/30 animate-fade-in">
             <div className="flex items-center justify-between">
@@ -465,6 +524,7 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
             <div className="space-y-2">
                 <label className="text-xs text-muted-foreground font-medium block">2. Enter credentials</label>
                 <input className="input text-sm" placeholder={`Display name (default: ${meta?.name})`} value={displayName} onChange={e => setDisplayName(e.target.value)} />
+
                 {meta?.needsUrl ? (
                     <>
                         <input className="input text-sm" placeholder={meta.urlPlaceholder ?? 'https://your-api.com'} value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
@@ -476,12 +536,27 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
                         </div>
                     </>
                 ) : (
-                    <div className="relative">
-                        <input type={showKey ? 'text' : 'password'} className="input text-sm pr-10" placeholder={meta?.placeholder ?? 'API Key'} value={apiKey} onChange={e => setApiKey(e.target.value)} autoComplete="off" />
-                        <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setShowKey(v => !v)}>
-                            {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    <>
+                        <div className="relative">
+                            <input type={showKey ? 'text' : 'password'} className="input text-sm pr-10" placeholder={meta?.placeholder ?? 'API Key'} value={apiKey} onChange={e => setApiKey(e.target.value)} autoComplete="off" />
+                            <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setShowKey(v => !v)}>
+                                {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                        </div>
+                        <button
+                            type="button"
+                            className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 mt-1 transition-colors"
+                            onClick={() => setShowAdvanced(!showAdvanced)}
+                        >
+                            <Sliders className="w-3 h-3" /> {showAdvanced ? 'Hide advanced settings' : 'Show advanced settings (Custom Base URL)'}
                         </button>
-                    </div>
+                        {showAdvanced && (
+                            <div className="animate-fade-in pt-1">
+                                <label className="text-[10px] text-muted-foreground mb-1 block">Base URL Override (e.g. for API gateways)</label>
+                                <input className="input text-sm" placeholder="https://api.openai.com/v1" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
 
@@ -587,7 +662,7 @@ function ProviderCard({ provider, expanded, onToggle, onDelete, onSetDefault }: 
     }
 
     return (
-        <div className="glass-card-hover overflow-hidden transition-all duration-300">
+        <div className="glass-card-hover transition-all duration-300">
             <div className="flex items-center gap-3 px-4 py-3">
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${meta?.color ?? 'bg-muted border-border'}`}>
                     <ProviderIcon providerId={provider.provider_name} className="w-4 h-4" />
@@ -1016,7 +1091,38 @@ function StatusIcon({ status }: { status: string }) {
     return <Circle className="w-3.5 h-3.5 text-muted-foreground" />
 }
 
-function AuditTab() {
+function AuditTab({ workspaceId }: { workspaceId: string }) {
+    const [subTab, setSubTab] = useState<'history' | 'logs'>('history')
+
+    return (
+        <div className="space-y-6">
+            <div className="flex gap-2 p-1.5 glass-card w-full sm:w-fit rounded-xl overflow-x-auto">
+                <button
+                    onClick={() => setSubTab('history')}
+                    className={`flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-300 whitespace-nowrap ${subTab === 'history'
+                        ? 'bg-accent/20 text-accent ring-1 ring-accent/30'
+                        : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
+                        }`}
+                >
+                    <History className="w-4 h-4" /> Job History
+                </button>
+                <button
+                    onClick={() => setSubTab('logs')}
+                    className={`flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-300 whitespace-nowrap ${subTab === 'logs'
+                        ? 'bg-accent/20 text-accent ring-1 ring-accent/30'
+                        : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
+                        }`}
+                >
+                    <Terminal className="w-4 h-4" /> Container Logs
+                </button>
+            </div>
+
+            {subTab === 'history' ? <JobHistorySubTab /> : <ContainerLogsSubTab workspaceId={workspaceId} />}
+        </div>
+    )
+}
+
+function JobHistorySubTab() {
     const [filterType, setFilterType] = useState('')
     const { data: history = [], isLoading, refetch } = useQuery<TaskLogEntry[]>({
         queryKey: ['task-history', filterType],
@@ -1035,11 +1141,10 @@ function AuditTab() {
     }
 
     return (
-        <div className="space-y-5">
+        <div className="space-y-5 animate-fade-in">
             <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                    <History className="w-4 h-4 text-accent" />
-                    <h3 className="font-semibold text-sm">Task Execution History</h3>
+                    <h3 className="font-semibold text-sm">Background Task Executions</h3>
                 </div>
                 <div className="flex items-center gap-2">
                     <select
@@ -1068,7 +1173,7 @@ function AuditTab() {
             )}
 
             {!isLoading && (history as TaskLogEntry[]).length === 0 && (
-                <div className="text-center py-14 text-muted-foreground">
+                <div className="text-center py-14 text-muted-foreground glass-card rounded-xl">
                     <History className="w-10 h-10 mx-auto mb-3 opacity-30" />
                     <p className="text-sm">No task history yet. Run a task to see it here.</p>
                 </div>
@@ -1077,7 +1182,7 @@ function AuditTab() {
             {!isLoading && (history as TaskLogEntry[]).length > 0 && (
                 <div className="space-y-2">
                     {(history as TaskLogEntry[]).map(log => (
-                        <div key={log.id} className="glass-card px-4 py-3 flex items-start gap-3">
+                        <div key={log.id} className="glass-card px-4 py-3 flex items-start gap-3 rounded-xl border-border/50">
                             <StatusIcon status={log.status} />
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between gap-2">
@@ -1109,4 +1214,116 @@ function AuditTab() {
     )
 }
 
+function ContainerLogsSubTab({ workspaceId }: { workspaceId: string }) {
+    const { send, on, isConnected } = useWorkspaceWebSocket(workspaceId)
+    // Use a ref to keep track of logs without triggering deep rerenders constantly if possible,
+    // though state is fine for this UI size.
+    const [logs, setLogs] = useState<{ id: number; container: string; data: string }[]>([])
+    const [filter, setFilter] = useState('')
+    const [paused, setPaused] = useState(false)
+    const logsEndRef = useRef<HTMLDivElement>(null)
 
+    useEffect(() => {
+        if (!isConnected) return
+        send({ type: 'stream_logs' })
+
+        const offLog = on('container_log', (msg: any) => {
+            setLogs(prev => {
+                if (paused) return prev
+                const newLogs = [...prev, { id: Date.now() + Math.random(), container: msg.container, data: msg.data }]
+                return newLogs.slice(-1000) // Keep last 1000 lines
+            })
+        })
+
+        const offErr = on('container_log_error', (msg: any) => {
+            setLogs(prev => [...prev, { id: Date.now(), container: 'System', data: msg.detail }])
+        })
+
+        return () => {
+            offLog()
+            offErr()
+            send({ type: 'stop_logs' })
+        }
+    }, [isConnected, send, on, paused])
+
+    useEffect(() => {
+        if (!paused) {
+            logsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+        }
+    }, [logs, paused])
+
+    const filteredLogs = logs.filter(l =>
+        filter ? (l.container.toLowerCase().includes(filter.toLowerCase()) ||
+            l.data.toLowerCase().includes(filter.toLowerCase())) : true
+    )
+
+    return (
+        <div className="space-y-4 animate-fade-in flex flex-col h-[500px]">
+            <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-sm">Real-time Stack Logs</h3>
+                    {!isConnected && <span className="text-xs text-amber-400 animate-pulse">(Connecting...)</span>}
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="relative">
+                        <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                        <input
+                            type="text"
+                            placeholder="Filter logs..."
+                            className="input text-xs py-1.5 pl-8 pr-3 w-40"
+                            value={filter}
+                            onChange={e => setFilter(e.target.value)}
+                        />
+                    </div>
+                    <button
+                        className={`btn-ghost text-xs py-1.5 px-2.5 gap-1.5 ${paused ? 'text-accent bg-accent/10' : ''}`}
+                        onClick={() => setPaused(p => !p)}
+                    >
+                        {paused ? <Play className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
+                        {paused ? 'Resume' : 'Pause'}
+                    </button>
+                    <button
+                        className="btn-ghost text-xs py-1.5 px-2.5 gap-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                        onClick={() => setLogs([])}
+                    >
+                        <Trash2 className="w-3.5 h-3.5" /> Clear
+                    </button>
+                </div>
+            </div>
+
+            <div className="flex-1 glass-card border border-border/50 rounded-xl overflow-y-auto p-4 font-mono text-xs bg-black/40 text-gray-300 flex flex-col gap-1 relative">
+                {filteredLogs.length === 0 ? (
+                    <div className="m-auto text-muted-foreground opacity-50 flex items-center gap-2">
+                        {isConnected ? (
+                            <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <span>Waiting for logs...</span>
+                            </>
+                        ) : (
+                            <span>WebSocket not connected.</span>
+                        )}
+                    </div>
+                ) : (
+                    filteredLogs.map(log => {
+                        // Extract ANSI colors if any, or just display raw text (we'll just use raw for now for simplicity, but strip basic ANSI escapes if needed)
+                        const rawText = log.data.replace(/\x1B\[[0-9;]*[mK]/g, '')
+                        // Determine container color somewhat deterministically
+                        const hash = Array.from(log.container).reduce((acc, char) => acc + char.charCodeAt(0), 0)
+                        const colors = ['text-emerald-400', 'text-blue-400', 'text-orange-400', 'text-purple-400', 'text-pink-400', 'text-cyan-400']
+                        const colorClass = colors[hash % colors.length]
+
+                        return (
+                            <div key={log.id} className="flex gap-3 hover:bg-white/5 px-1 rounded">
+                                <span className={`w-36 flex-shrink-0 truncate font-semibold opacity-90 ${colorClass}`}>
+                                    [{log.container}]
+                                </span>
+                                <span className="flex-1 break-all whitespace-pre-wrap">{rawText}</span>
+                            </div>
+                        )
+                    })
+                )}
+                <div ref={logsEndRef} />
+            </div>
+        </div>
+    )
+}

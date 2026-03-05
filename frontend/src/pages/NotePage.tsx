@@ -3,15 +3,17 @@ import { useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getNote, updateNote, summarizeNote, extractInsights, generateTitle } from '@/lib/api'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
+import { useToast } from '@/components/shared/ToastProvider'
 import {
     Split, Eye, Edit3, Sparkles, Brain, Tag, Save, Loader2,
     ChevronRight, X, CheckSquare, Bell, Calendar, Star, Hash,
-    CornerRightDown, Copy
+    CornerRightDown, Copy, FileText
 } from 'lucide-react'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem,
     ContextMenuSeparator, ContextMenuShortcut
 } from '@/components/ui/context-menu'
+import { CopyButton } from '@/components/shared/CopyButton'
 import MarkdownIt from 'markdown-it'
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
@@ -28,6 +30,7 @@ function useDebounce<T>(value: T, delay: number): T {
 export default function NotePage() {
     const { workspaceId = '', noteId = '' } = useParams<{ workspaceId: string; noteId: string }>()
     const qc = useQueryClient()
+    const { error: showError } = useToast()
     const { on } = useWorkspaceWebSocket(workspaceId)
     const [mode, setMode] = useState<'edit' | 'preview' | 'split'>('split')
     const [content, setContent] = useState('')
@@ -80,9 +83,19 @@ export default function NotePage() {
         try {
             if (action === 'summarize') await summarizeNote(workspaceId, noteId)
             else if (action === 'insights') { await extractInsights(workspaceId, noteId); setShowInsights(true) }
-            else if (action === 'title') await generateTitle(workspaceId, noteId)
+            else if (action === 'title') {
+                const result = await generateTitle(workspaceId, noteId)
+                const generatedTitle = (result?.title ?? '').trim()
+                if (generatedTitle) {
+                    setTitle(generatedTitle)
+                }
+            }
             qc.invalidateQueries({ queryKey: ['note', noteId] })
-        } catch { /* toast would be shown in production */ }
+            qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
+        } catch (err: any) {
+            const detail = err?.response?.data?.detail || err?.message || 'AI action failed.'
+            showError('AI action failed', detail)
+        }
         setAiLoading(null)
     }
 
@@ -109,12 +122,12 @@ export default function NotePage() {
         )
     }
 
-    const displayNote = note ? { ...note, content, title } : null
+    const previewTitle = title.trim() || note?.ai_title?.trim() || ''
 
     return (
-        <div className="flex flex-col h-full">
+        <div className="flex h-full min-h-0 flex-col rounded-2xl bg-card/20 overflow-hidden">
             {/* Toolbar */}
-            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/50 flex-shrink-0 flex-wrap gap-y-2">
+            <div className="flex items-center gap-2 px-6 py-2.5 border-b border-border/50 flex-shrink-0 flex-wrap gap-y-2">
                 {/* View mode toggles */}
                 <div className="flex gap-0.5 glass-card p-0.5">
                     {(['edit', 'split', 'preview'] as const).map(m => (
@@ -140,6 +153,12 @@ export default function NotePage() {
 
                 {/* AI toolbar */}
                 <div className="flex gap-1">
+                    <CopyButton
+                        content={content}
+                        label="Copy"
+                        copiedLabel="Copied"
+                        className="btn-ghost text-xs py-1 px-2 gap-1"
+                    />
                     {[
                         { id: 'title', icon: <Hash className="w-3.5 h-3.5" />, label: 'Generate Title' },
                         { id: 'summarize', icon: <CornerRightDown className="w-3.5 h-3.5" />, label: 'Summarize' },
@@ -161,7 +180,7 @@ export default function NotePage() {
 
             {/* AI Summary */}
             {note?.ai_summary && (
-                <div className="mx-4 mt-3 p-3 glass-card border-accent/20 bg-accent/5">
+                <div className="mx-6 mt-3 p-3 glass-card border-accent/20 bg-accent/5">
                     <div className="flex items-center gap-2 font-medium text-accent text-xs mb-2">
                         <Sparkles className="w-3.5 h-3.5" /> AI Summary
                     </div>
@@ -176,7 +195,7 @@ export default function NotePage() {
             <div className="flex flex-1 min-h-0">
                 {/* Editor pane */}
                 {(mode === 'edit' || mode === 'split') && (
-                    <div className={`flex flex-col ${mode === 'split' ? 'w-1/2 border-r border-border/50' : 'w-full'} overflow-hidden`}>
+                    <div className={`flex min-h-0 flex-col ${mode === 'split' ? 'w-1/2 border-r border-border/50' : 'w-full'} overflow-hidden`}>
                         <div className="px-6 py-3 border-b border-border/30">
                             <input
                                 className="w-full text-xl font-bold bg-transparent border-none outline-none text-foreground placeholder-muted-foreground/50"
@@ -187,7 +206,7 @@ export default function NotePage() {
                         </div>
                         <textarea
                             ref={textareaRef}
-                            className="flex-1 p-6 pt-4 bg-transparent border-none outline-none resize-none font-mono text-sm text-foreground leading-relaxed"
+                            className="min-h-0 flex-1 overflow-y-auto p-6 pt-4 bg-transparent border-none outline-none resize-none font-mono text-sm text-foreground leading-relaxed"
                             placeholder="Start writing… (Markdown supported)"
                             value={content}
                             onChange={e => setContent(e.target.value)}
@@ -200,9 +219,9 @@ export default function NotePage() {
                 {(mode === 'preview' || mode === 'split') && (
                     <ContextMenu>
                         <ContextMenuTrigger asChild>
-                            <div className={`${mode === 'split' ? 'w-1/2' : 'w-full'} overflow-y-auto px-8 py-6`}>
-                                {title && (
-                                    <h1 className="text-2xl font-bold mb-4 text-foreground">{title}</h1>
+                            <div className={`${mode === 'split' ? 'w-1/2' : 'w-full'} min-h-0 overflow-y-auto px-8 py-6`}>
+                                {previewTitle && (
+                                    <h1 className="text-2xl font-bold mb-4 text-foreground">{previewTitle}</h1>
                                 )}
                                 <div
                                     className="markdown-content"
@@ -230,7 +249,7 @@ export default function NotePage() {
 
                 {/* Insights panel */}
                 {showInsights && (
-                    <div className="w-80 flex-shrink-0 border-l border-border/50 overflow-y-auto p-4">
+                    <div className="w-80 min-h-0 flex-shrink-0 border-l border-border/50 overflow-y-auto p-4">
                         <div className="flex items-center justify-between mb-4">
                             <span className="font-semibold text-sm flex items-center gap-2"><Brain className="w-4 h-4 text-accent" /> Insights</span>
                             <button onClick={() => setShowInsights(false)} className="btn-ghost p-1"><X className="w-3.5 h-3.5" /></button>

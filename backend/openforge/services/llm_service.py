@@ -1,6 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from uuid import UUID
+from typing import Optional, Union
 from openforge.db.models import LLMProvider, Workspace
 from openforge.schemas.llm import (
     LLMProviderCreate,
@@ -128,15 +129,32 @@ class LLMService:
         return _to_response(provider)
 
     async def get_provider_for_workspace(
-        self, db: AsyncSession, workspace_id: UUID
+        self,
+        db: AsyncSession,
+        workspace_id: UUID,
+        provider_id: Optional[Union[UUID, str]] = None,
+        model_override: Optional[str] = None,
     ) -> tuple[str, str, str, str | None]:
         """Returns (provider_name, decrypted_api_key, model, base_url)."""
+        # If specific provider requested, use it
+        provider = None
+        if provider_id:
+            parsed_provider_id = provider_id
+            if isinstance(provider_id, str):
+                try:
+                    parsed_provider_id = UUID(provider_id)
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail=f"Invalid provider_id: {provider_id}") from exc
+            p_result = await db.execute(
+                select(LLMProvider).where(LLMProvider.id == parsed_provider_id)
+            )
+            provider = p_result.scalar_one_or_none()
+
         # Check workspace override
         ws_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
         workspace = ws_result.scalar_one_or_none()
 
-        provider = None
-        if workspace and workspace.llm_provider_id:
+        if not provider and workspace and workspace.llm_provider_id:
             p_result = await db.execute(
                 select(LLMProvider).where(LLMProvider.id == workspace.llm_provider_id)
             )
@@ -156,7 +174,22 @@ class LLMService:
         if provider.api_key_enc:
             api_key = decrypt_value(provider.api_key_enc)
 
-        model = (workspace.llm_model if workspace and workspace.llm_model else None) or provider.default_model or ""
+        # Priority: explicit override > workspace override > provider default
+        model = (
+            model_override
+            or (workspace.llm_model if workspace and workspace.llm_model else None)
+            or provider.default_model
+            or ((provider.enabled_models or [{}])[0].get("id") if provider.enabled_models else None)
+            or ""
+        )
+        if not model:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"No model configured for provider '{provider.display_name}'. "
+                    "Set a default model in Settings > AI Providers."
+                ),
+            )
         return provider.provider_name, api_key, model, provider.base_url
 
     async def list_models(self, db: AsyncSession, provider_id: UUID) -> list[ModelInfo]:

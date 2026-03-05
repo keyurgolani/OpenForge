@@ -9,6 +9,7 @@ from openforge.db.qdrant_client import get_qdrant
 from openforge.schemas.note import NoteCreate, NoteUpdate, NoteResponse, NoteListItem, NoteListParams
 from openforge.config import get_settings
 from openforge.utils.text import count_words, truncate_text, strip_markdown
+from openforge.utils.title import normalize_note_title
 from fastapi import HTTPException, BackgroundTasks
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 
@@ -24,7 +25,7 @@ def _to_response(note: Note) -> NoteResponse:
         id=note.id,
         workspace_id=note.workspace_id,
         type=note.type,
-        title=note.title,
+        title=normalize_note_title(note.title),
         content=note.content,
         url=note.url,
         url_title=note.url_title,
@@ -44,19 +45,31 @@ def _to_response(note: Note) -> NoteResponse:
 
 
 def _to_list_item(note: Note) -> NoteListItem:
-    preview = truncate_text(strip_markdown(note.content), 200)
+    preview = truncate_text(note.content, 200)
     insights_count = None
     if note.insights:
         count = 0
-        for k in ["todos", "reminders", "deadlines", "highlights"]:
-            count += len(note.insights.get(k, []))
+        for k in [
+            "tasks",
+            "timelines",
+            "facts",
+            "crucial_things",
+            # legacy keys (kept for backward compatibility)
+            "todos",
+            "reminders",
+            "deadlines",
+            "highlights",
+        ]:
+            value = note.insights.get(k, [])
+            if isinstance(value, list):
+                count += len(value)
         insights_count = count
 
     return NoteListItem(
         id=note.id,
         workspace_id=note.workspace_id,
         type=note.type,
-        title=note.title,
+        title=normalize_note_title(note.title),
         content_preview=preview,
         tags=_tags_from_note(note),
         is_pinned=note.is_pinned,
@@ -82,14 +95,16 @@ class NoteService:
         data: NoteCreate,
         background_tasks: BackgroundTasks,
     ) -> NoteResponse:
+        normalized_title = normalize_note_title(data.title)
+
         note = Note(
             workspace_id=workspace_id,
             type=data.type,
-            title=data.title,
+            title=normalized_title,
             content=data.content,
             url=data.url,
             gist_language=data.gist_language,
-            word_count=count_words(data.content),
+            word_count=count_words(data.content, note_type=data.type),
             embedding_status="pending",
         )
         db.add(note)
@@ -104,7 +119,7 @@ class NoteService:
                 workspace_id=workspace_id,
                 content=data.content,
                 note_type=data.type,
-                title=data.title,
+                title=normalized_title,
             )
 
         if data.type == "bookmark" and data.url:
@@ -182,10 +197,10 @@ class NoteService:
 
         content_changed = False
         if data.title is not None:
-            note.title = data.title
+            note.title = normalize_note_title(data.title)
         if data.content is not None and data.content != note.content:
             note.content = data.content
-            note.word_count = count_words(data.content)
+            note.word_count = count_words(data.content, note_type=note.type)
             note.embedding_status = "pending"
             content_changed = True
         if data.url is not None:
@@ -208,7 +223,7 @@ class NoteService:
                 workspace_id=workspace_id,
                 content=note.content,
                 note_type=note.type,
-                title=note.title,
+                title=normalize_note_title(note.title),
             )
 
         return _to_response(note)
@@ -289,10 +304,13 @@ class NoteService:
         title: str | None,
     ):
         """Background task: embed note, generate AI title, update status."""
+        from openforge.db.postgres import AsyncSessionLocal
+        from openforge.api.websocket import ws_manager
+
+        embedding_status = "done"
+
         try:
             from openforge.core.note_processor import note_processor
-            from openforge.db.postgres import AsyncSessionLocal
-            from openforge.api.websocket import ws_manager
 
             tags = []
             async with AsyncSessionLocal() as db:
@@ -307,52 +325,54 @@ class NoteService:
                 title=title,
                 tags=tags,
             )
+        except Exception as e:
+            embedding_status = "failed"
+            logger.error(f"Embedding pipeline failed for note {note_id}: {e}")
 
+        # Always persist latest embedding status even if title generation fails later.
+        try:
             async with AsyncSessionLocal() as db:
                 result = await db.execute(select(Note).where(Note.id == note_id))
                 note = result.scalar_one_or_none()
                 if note:
-                    note.embedding_status = "done"
+                    note.embedding_status = embedding_status
                     await db.commit()
-
-            # Auto-generate AI title if note has no user-set title
-            if not title and content and len(content.strip()) > 50:
-                try:
-                    from openforge.core.llm_gateway import llm_gateway
-                    from openforge.services.llm_service import llm_service
-                    async with AsyncSessionLocal() as db:
-                        provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
-                        generated = await llm_gateway.chat(
-                            messages=[
-                                {"role": "system", "content": "Generate a concise, descriptive title (max 60 chars). Return ONLY the title, no quotes or extra text."},
-                                {"role": "user", "content": content[:2000]},
-                            ],
-                            provider_name=provider_name, api_key=api_key, model=model, base_url=base_url, max_tokens=30,
-                        )
-                        result = await db.execute(select(Note).where(Note.id == note_id))
-                        note = result.scalar_one_or_none()
-                        if note and generated:
-                            note.ai_title = generated.strip()[:500]
-                            await db.commit()
-                except Exception as e:
-                    logger.warning(f"Auto-title generation failed for note {note_id}: {e}")
-
-            await ws_manager.send_to_workspace(
-                str(workspace_id),
-                {"type": "note_updated", "note_id": str(note_id), "fields": ["embedding_status", "ai_title"]},
-            )
         except Exception as e:
-            logger.error(f"Background processing failed for note {note_id}: {e}")
+            logger.warning(f"Failed to update embedding status for note {note_id}: {e}")
+
+        # Auto-generate AI title even if embedding fails.
+        if not title and content and len(content.strip()) > 50:
             try:
-                from openforge.db.postgres import AsyncSessionLocal
+                from openforge.core.llm_gateway import llm_gateway
+                from openforge.services.llm_service import llm_service
                 async with AsyncSessionLocal() as db:
+                    provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
+                    generated = await llm_gateway.chat(
+                        messages=[
+                            {"role": "system", "content": "Generate a concise, descriptive title (max 60 chars). Return ONLY the title, no quotes or extra text."},
+                            {"role": "user", "content": content[:2000]},
+                        ],
+                        provider_name=provider_name, api_key=api_key, model=model, base_url=base_url, max_tokens=30,
+                    )
+
                     result = await db.execute(select(Note).where(Note.id == note_id))
                     note = result.scalar_one_or_none()
-                    if note:
-                        note.embedding_status = "failed"
+                    normalized = normalize_note_title((generated or "").strip().strip('"\''))
+                    if note and normalized:
+                        note.ai_title = normalized
+                        if not normalize_note_title(note.title):
+                            note.title = normalized
                         await db.commit()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Auto-title generation failed for note {note_id}: {e}")
+
+        try:
+            await ws_manager.send_to_workspace(
+                str(workspace_id),
+                {"type": "note_updated", "note_id": str(note_id), "fields": ["embedding_status", "ai_title", "title"]},
+            )
+        except Exception as e:
+            logger.warning(f"Failed to emit workspace update for note {note_id}: {e}")
 
     async def _fetch_url_metadata(self, note_id: UUID, url: str, workspace_id: UUID | None = None):
         """Background task: fetch URL title, description, and readable content for bookmarks."""
@@ -411,7 +431,7 @@ class NoteService:
                     # Populate note content from scraped text if note has no user-set content
                     if readable_text and not note.content:
                         note.content = readable_text
-                        note.word_count = len(readable_text.split())
+                        note.word_count = count_words(readable_text, note_type=note.type)
                         note.embedding_status = "pending"
                     await db.commit()
 
@@ -422,15 +442,13 @@ class NoteService:
                     result = await db.execute(select(Note).where(Note.id == note_id))
                     note = result.scalar_one_or_none()
                     if note and note.content:
-                        import asyncio
-                        asyncio.create_task(
-                            self._process_note_background(
-                                note_id=note_id,
-                                workspace_id=workspace_id,
-                                content=note.content,
-                                note_type="bookmark",
-                                title=note.title,
-                            )
+                        # Directly await instead of create_task to avoid greenlet/event loop issues
+                        await self._process_note_background(
+                            note_id=note_id,
+                            workspace_id=workspace_id,
+                            content=note.content,
+                            note_type="bookmark",
+                            title=note.title,
                         )
         except Exception as e:
             logger.warning(f"Failed to fetch URL metadata for note {note_id}: {e}")

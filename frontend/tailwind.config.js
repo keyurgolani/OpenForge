@@ -6,8 +6,8 @@ export default {
         './src/**/*.{ts,tsx,js,jsx}',
     ],
     theme: {
-    	extend: {
-    		colors: {
+		extend: {
+			colors: {
     			accent: {
     				DEFAULT: 'hsl(var(--accent))',
     				foreground: 'hsl(var(--accent-foreground))'
@@ -58,27 +58,34 @@ export default {
     			md: 'calc(var(--radius) - 2px)',
     			sm: 'calc(var(--radius) - 4px)'
     		},
-    		fontFamily: {
-    			sans: [
-    				'Inter',
-    				'system-ui',
-    				'-apple-system',
-    				'BlinkMacSystemFont',
-    				'Segoe UI',
-    				'sans-serif'
-    			],
-    			mono: [
-    				'JetBrains Mono',
-    				'Menlo',
-    				'monospace'
-    			]
-    		},
-    		boxShadow: {
-    			'glass-sm': 'var(--glass-shadow-sm)',
-    			glass: 'var(--glass-shadow)',
-    			'glass-lg': 'var(--glass-shadow-lg)',
-    			'glass-inset': 'inset 0 1px 1px hsla(0, 0%, 100%, 0.1)'
-    		},
+			fontFamily: {
+				sans: [
+					'Plus Jakarta Sans',
+					'system-ui',
+					'-apple-system',
+					'BlinkMacSystemFont',
+					'Segoe UI',
+					'sans-serif'
+				],
+				display: [
+					'Space Grotesk',
+					'Plus Jakarta Sans',
+					'system-ui',
+					'sans-serif'
+				],
+				mono: [
+					'JetBrains Mono',
+					'Menlo',
+					'monospace'
+				]
+			},
+			boxShadow: {
+				'glass-sm': 'var(--glass-shadow-sm)',
+				glass: 'var(--glass-shadow)',
+				'glass-md': 'var(--glass-shadow-md)',
+				'glass-lg': 'var(--glass-shadow-lg)',
+				'glass-inset': 'inset 0 1px 1px hsla(0, 0%, 100%, 0.1)'
+			},
     		backdropBlur: {
     			glass: 'var(--glass-blur)',
     			'glass-sm': 'var(--glass-blur-sm)',

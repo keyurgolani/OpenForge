@@ -1,8 +1,46 @@
-def count_words(text: str) -> int:
-    """Count words in text by splitting on whitespace."""
+import re
+
+
+_FENCED_CODE_BLOCK_RE = re.compile(r"```[^\n]*\n?(.*?)```", re.DOTALL)
+_INLINE_CODE_RE = re.compile(r"`([^`\n]+)`")
+_CODE_TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|\d+")
+
+
+def _count_code_tokens(text: str) -> int:
+    return len(_CODE_TOKEN_RE.findall(text))
+
+
+def count_words(text: str | None, note_type: str | None = None) -> int:
+    """
+    Count words for note cards.
+
+    - Gists: count code-like tokens so symbol-dense code lines are not counted as one word.
+    - Other note types: count prose by whitespace, but count markdown code (fenced/inline)
+      using code-like tokenization.
+    """
     if not text:
         return 0
-    return len(text.split())
+
+    if note_type == "gist":
+        return _count_code_tokens(text)
+
+    code_token_total = 0
+
+    def _replace_fenced(match: re.Match[str]) -> str:
+        nonlocal code_token_total
+        code_token_total += _count_code_tokens(match.group(1))
+        return " "
+
+    text_without_fenced = _FENCED_CODE_BLOCK_RE.sub(_replace_fenced, text)
+
+    def _replace_inline(match: re.Match[str]) -> str:
+        nonlocal code_token_total
+        code_token_total += _count_code_tokens(match.group(1))
+        return " "
+
+    text_without_code = _INLINE_CODE_RE.sub(_replace_inline, text_without_fenced)
+    prose_words = len(text_without_code.split())
+    return prose_words + code_token_total
 
 
 def truncate_text(text: str, max_chars: int, ellipsis: str = "...") -> str:

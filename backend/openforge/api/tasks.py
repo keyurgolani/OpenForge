@@ -189,6 +189,8 @@ async def run_task_now(
     from datetime import datetime, timezone
 
     async def _run():
+        from sqlalchemy import select as sel
+
         start = datetime.now(timezone.utc)
         status = "done"
         error_msg = None
@@ -196,7 +198,6 @@ async def run_task_now(
         try:
             # Dispatch to appropriate handler
             if task_id == "embed_notes":
-                from sqlalchemy import select as sel
                 from openforge.db.models import Note
                 from openforge.core.note_processor import note_processor
                 async with AsyncSessionLocal() as s:

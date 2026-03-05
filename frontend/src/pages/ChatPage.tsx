@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { listConversations, createConversation, getConversation, deleteConversation, updateConversation, listProviders } from '@/lib/api'
+import { listConversations, createConversation, getConversation, deleteConversation, updateConversation, listProviders, getWorkspace } from '@/lib/api'
 import { useStreamingChat } from '@/hooks/useStreamingChat'
+import { useToast } from '@/components/shared/ToastProvider'
 import {
-    Plus, Send, Loader2, MessageSquare, Trash2, Sparkles, Bot, User,
-    ChevronDown, ChevronRight, ExternalLink, Check, Pencil, ChevronDown as ChevronDownIcon,
-    Paperclip, X, Copy
+    Plus, Send, Loader2, MessageSquare, Trash2, Bot, User,
+    ChevronDown, ChevronRight, ExternalLink, Check, Pencil,
+    Paperclip, X, Copy, Search
 } from 'lucide-react'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem,
@@ -37,20 +38,52 @@ interface ProviderRecord {
     display_name: string
     provider_name: string
     default_model: string | null
+    enabled_models?: { id?: string; name?: string }[]
+    is_system_default?: boolean
+}
+
+interface ModelOption {
+    key: string
+    providerId: string
+    modelId: string
+    providerLabel: string
+    modelLabel: string
+    label: string
+    searchText: string
+}
+
+interface ConversationWithMessages extends Conversation {
+    messages: Message[]
 }
 
 export default function ChatPage() {
     const { workspaceId = '', conversationId } = useParams<{ workspaceId: string; conversationId?: string }>()
     const navigate = useNavigate()
     const qc = useQueryClient()
+    const { error: showError } = useToast()
     const [input, setInput] = useState('')
     const [activeCid, setActiveCid] = useState(conversationId ?? null)
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
     // Per-message model override
-    const [selectedProviderId, setSelectedProviderId] = useState('')
+    const [selectedModelKey, setSelectedModelKey] = useState('')
     const [modelPickerOpen, setModelPickerOpen] = useState(false)
+    const [modelPickerQuery, setModelPickerQuery] = useState('')
+    const modelPickerRef = useRef<HTMLDivElement>(null)
+    const modelPickerSearchRef = useRef<HTMLInputElement>(null)
+    const lastToastedErrorRef = useRef<string | null>(null)
+
+    // File attachments
+    const [attachments, setAttachments] = useState<File[]>([])
+    const [uploadingFiles, setUploadingFiles] = useState(false)
+
+    const { data: workspace } = useQuery({
+        queryKey: ['workspace', workspaceId],
+        queryFn: () => getWorkspace(workspaceId),
+        enabled: !!workspaceId,
+    })
 
     const { data: conversations = [] } = useQuery({
         queryKey: ['conversations', workspaceId],
@@ -69,22 +102,66 @@ export default function ChatPage() {
         queryFn: listProviders,
     })
 
-    const { streamingContent, isStreaming, sources, sendMessage, isConnected } = useStreamingChat(activeCid)
+    const { streamingContent, isStreaming, sendMessage, isConnected, lastError, clearLastError } = useStreamingChat(activeCid)
 
     const messages: Message[] = conversationData?.messages ?? []
 
-    // Build model options from providers (flat list of provider + model pairs)
+    // Build model options from providers (provider + enabled model pairs)
     const modelOptions = useMemo(() => {
-        return (providers as ProviderRecord[])
-            .filter(p => p.default_model)
-            .map(p => ({
-                providerId: p.id,
-                modelId: p.default_model!,
-                label: p.display_name,
-            }))
+        const options: ModelOption[] = []
+        const seen = new Set<string>()
+
+        for (const provider of providers as ProviderRecord[]) {
+            const enabled = provider.enabled_models ?? []
+            const candidateModels = enabled.length > 0
+                ? enabled
+                : (provider.default_model ? [{ id: provider.default_model, name: provider.default_model }] : [])
+
+            for (const model of candidateModels) {
+                const modelId = (model.id ?? '').trim()
+                if (!modelId) continue
+
+                const dedupeKey = `${provider.id}:${modelId}`
+                if (seen.has(dedupeKey)) continue
+                seen.add(dedupeKey)
+
+                const modelName = (model.name ?? modelId).trim()
+                options.push({
+                    key: dedupeKey,
+                    providerId: provider.id,
+                    modelId,
+                    providerLabel: provider.display_name,
+                    modelLabel: modelName,
+                    label: `${provider.display_name} · ${modelName}`,
+                    searchText: `${provider.display_name} ${provider.provider_name} ${modelName} ${modelId}`.toLowerCase(),
+                })
+            }
+        }
+
+        return options.sort((a, b) => a.label.localeCompare(b.label))
     }, [providers])
 
-    const selectedOption = modelOptions.find(o => o.providerId === selectedProviderId)
+    const selectedOption = modelOptions.find(o => o.key === selectedModelKey)
+    const filteredModelOptions = useMemo(() => {
+        const q = modelPickerQuery.trim().toLowerCase()
+        if (!q) return modelOptions
+        return modelOptions.filter(opt => opt.searchText.includes(q))
+    }, [modelOptions, modelPickerQuery])
+
+    // Determine the default model label
+    const defaultLabel = useMemo(() => {
+        if (!workspace) return 'Default model'
+        if (workspace.llm_provider_id) {
+            const dp = (providers as ProviderRecord[]).find(p => p.id === workspace.llm_provider_id)
+            if (dp) {
+                const modelName = workspace.llm_model || dp.default_model || 'provider default'
+                return `${dp.display_name} · ${modelName} (Workspace default)`
+            }
+        }
+        const sys = (providers as ProviderRecord[]).find(p => p.is_system_default)
+        if (sys) return `${sys.display_name} · ${sys.default_model || 'provider default'} (System default)`
+        return 'Default model'
+    }, [workspace, providers])
 
     useEffect(() => {
         if (conversationId !== activeCid) setActiveCid(conversationId ?? null)
@@ -93,6 +170,77 @@ export default function ChatPage() {
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [messages.length, streamingContent])
+
+    useEffect(() => {
+        if (!modelPickerOpen) {
+            setModelPickerQuery('')
+            return
+        }
+        modelPickerSearchRef.current?.focus()
+        const handleOutsideClick = (event: MouseEvent) => {
+            if (!modelPickerRef.current) return
+            if (!modelPickerRef.current.contains(event.target as Node)) {
+                setModelPickerOpen(false)
+            }
+        }
+        document.addEventListener('mousedown', handleOutsideClick)
+        return () => document.removeEventListener('mousedown', handleOutsideClick)
+    }, [modelPickerOpen])
+
+    useEffect(() => {
+        if (!lastError) {
+            lastToastedErrorRef.current = null
+            return
+        }
+        if (lastToastedErrorRef.current === lastError) return
+        lastToastedErrorRef.current = lastError
+        showError('Chat request failed', lastError)
+    }, [lastError, showError])
+
+    const pushOptimisticUserMessage = (cid: string, content: string) => {
+        const createdAt = new Date().toISOString()
+        const optimisticId = `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+        qc.setQueryData(['conversation', cid], (prev: ConversationWithMessages | undefined) => {
+            if (!prev) {
+                return {
+                    id: cid,
+                    title: null,
+                    message_count: 1,
+                    last_message_at: createdAt,
+                    messages: [{ id: optimisticId, role: 'user', content, created_at: createdAt } as Message],
+                } as ConversationWithMessages
+            }
+            const nextMessages = [
+                ...(prev.messages ?? []),
+                { id: optimisticId, role: 'user', content, created_at: createdAt } as Message,
+            ]
+            return {
+                ...prev,
+                messages: nextMessages,
+                message_count: typeof prev.message_count === 'number' ? prev.message_count + 1 : nextMessages.length,
+                last_message_at: createdAt,
+            }
+        })
+
+        qc.setQueryData(['conversations', workspaceId], (prev: Conversation[] | undefined) => {
+            if (!prev) return prev
+            const withUpdate = prev.map(conv => (
+                conv.id === cid
+                    ? {
+                        ...conv,
+                        message_count: (conv.message_count ?? 0) + 1,
+                        last_message_at: createdAt,
+                    }
+                    : conv
+            ))
+            return withUpdate.sort((a, b) => {
+                const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0
+                const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0
+                return bTime - aTime
+            })
+        })
+    }
 
     const handleNewChat = async () => {
         const conv = await createConversation(workspaceId)
@@ -110,39 +258,101 @@ export default function ChatPage() {
         }
     }
 
-    const handleSend = () => {
-        if (!input.trim() || isStreaming) return
+    const handleSend = async () => {
+        if (!input.trim() || isStreaming || uploadingFiles) return
         const msg = input.trim()
-        setInput('')
-        if (textareaRef.current) textareaRef.current.style.height = 'auto'
+        clearLastError()
+
+        // Upload attachments if any
+        let attachmentIds: string[] = []
+        if (attachments.length > 0) {
+            setUploadingFiles(true)
+            try {
+                const uploadPromises = attachments.map(async (file) => {
+                    const formData = new FormData()
+                    formData.append('file', file)
+                    const res = await fetch(`/api/v1/attachments/upload`, {
+                        method: 'POST',
+                        body: formData,
+                    })
+                    if (!res.ok) throw new Error(`Failed to upload ${file.name}`)
+                    return res.json()
+                })
+                const results = await Promise.all(uploadPromises)
+                attachmentIds = results.map((r: any) => r.id)
+            } catch (e) {
+                console.error('Failed to upload attachments:', e)
+                showError('Attachment upload failed', 'Please retry or remove the problematic file.')
+                return
+            } finally {
+                setUploadingFiles(false)
+            }
+        }
+
+        let targetCid = activeCid
+        if (!targetCid) {
+            const conv = await createConversation(workspaceId)
+            targetCid = conv.id
+            qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
+            setActiveCid(conv.id)
+            navigate(`/w/${workspaceId}/chat/${conv.id}`)
+        }
 
         const override = selectedOption
-            ? { provider_id: selectedOption.providerId, model_id: selectedOption.modelId }
-            : undefined
+            ? { provider_id: selectedOption.providerId, model_id: selectedOption.modelId, attachment_ids: attachmentIds }
+            : attachmentIds.length > 0 ? { attachment_ids: attachmentIds } : undefined
 
-        if (!activeCid) {
-            createConversation(workspaceId).then(conv => {
-                qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
-                setActiveCid(conv.id)
-                navigate(`/w/${workspaceId}/chat/${conv.id}`)
-                setTimeout(() => sendMessage(msg, override), 500)
-            })
-        } else {
-            sendMessage(msg, override)
+        const sent = sendMessage(msg, override, targetCid)
+        if (!sent) {
+            showError('Message not sent', 'Chat socket is disconnected. Wait for reconnect and try again.')
+            return
         }
+
+        pushOptimisticUserMessage(targetCid, msg)
+        setInput('')
+        if (attachments.length > 0) setAttachments([])
+        if (textareaRef.current) textareaRef.current.style.height = 'auto'
+    }
+
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files || [])
+        // Filter to allowed types
+        const allowed = files.filter(f => {
+            const type = f.type
+            const ext = f.name.split('.').pop()?.toLowerCase() || ''
+            return (
+                type === 'application/pdf' ||
+                type.startsWith('text/') ||
+                type.startsWith('image/') ||
+                ['pdf', 'txt', 'md', 'json', 'csv', 'xml', 'yaml', 'yml', 'png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)
+            )
+        })
+        setAttachments(prev => [...prev, ...allowed].slice(0, 5)) // Max 5 files
+        if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+
+    const removeAttachment = (index: number) => {
+        setAttachments(prev => prev.filter((_, i) => i !== index))
+    }
+
+    const formatFileSize = (bytes: number) => {
+        if (bytes < 1024) return `${bytes} B`
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
     }
 
     const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        if (lastError) clearLastError()
         setInput(e.target.value)
         e.target.style.height = 'auto'
-        e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px'
+        e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px'
     }
 
     return (
-        <div className="flex h-full">
+        <div className="flex h-full gap-4 p-4">
             {/* Conversation list */}
-            <div className="w-64 flex-shrink-0 border-r border-border/50 flex flex-col">
-                <div className="p-3 border-b border-border/50">
+            <div className="w-72 flex-shrink-0 glass-card overflow-hidden flex flex-col">
+                <div className="p-4 border-b border-border/50 bg-card/30">
                     <button className="btn-primary w-full justify-center text-sm py-2" onClick={handleNewChat}>
                         <Plus className="w-4 h-4" /> New Chat
                     </button>
@@ -166,7 +376,7 @@ export default function ChatPage() {
             </div>
 
             {/* Chat thread */}
-            <div className="flex-1 flex flex-col min-w-0">
+            <div className="flex-1 flex flex-col min-w-0 glass-card overflow-hidden">
                 {!activeCid ? (
                     <div className="flex-1 flex items-center justify-center">
                         <div className="text-center">
@@ -182,7 +392,7 @@ export default function ChatPage() {
                     </div>
                 ) : (
                     <>
-                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                        <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-card/20">
                             {messages.map(msg => (
                                 <ChatMessageCard key={msg.id} message={msg} workspaceId={workspaceId} />
                             ))}
@@ -200,76 +410,172 @@ export default function ChatPage() {
                         </div>
 
                         {/* Input area */}
-                        <div className="border-t border-border/50 p-4">
-                            {/* Only show reconnecting banner when a conversation IS active but WS has dropped */}
+                        <div className="border-t border-border/45 bg-card/35 px-4 py-4 md:px-6 md:py-5">
                             {activeCid && !isConnected && (
-                                <p className="text-xs text-amber-400 mb-2 flex items-center gap-1">
-                                    <Loader2 className="w-3 h-3 animate-spin" /> Reconnecting to server…
+                                <p className="mb-2 flex items-center gap-1.5 text-xs text-amber-300">
+                                    <Loader2 className="h-3 w-3 animate-spin" /> Reconnecting to server…
                                 </p>
                             )}
-                            <div className="flex gap-3 items-end">
-                                <div className="flex-1 glass-card border border-border/60 rounded-xl overflow-hidden">
-                                    <textarea
-                                        ref={textareaRef}
-                                        className="w-full px-4 py-3 bg-transparent resize-none outline-none text-sm placeholder-muted-foreground"
-                                        rows={1}
-                                        placeholder="Ask a question about your notes…"
-                                        value={input}
-                                        onChange={handleTextareaChange}
-                                        onKeyDown={e => {
-                                            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
-                                        }}
-                                        disabled={isStreaming}
-                                        style={{ maxHeight: '100px' }}
-                                    />
-                                    <div className="flex items-center justify-between px-3 pb-2 gap-2">
-                                        <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                            <Sparkles className="w-3 h-3 text-accent" /> Uses workspace knowledge
-                                        </span>
+                            {lastError && (
+                                <div className="mb-3 flex items-start justify-between gap-2 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-100">
+                                    <span className="leading-relaxed">{lastError}</span>
+                                    <button
+                                        type="button"
+                                        className="mt-0.5 rounded p-0.5 text-red-100/80 hover:bg-red-500/20 hover:text-red-50"
+                                        onClick={clearLastError}
+                                        aria-label="Dismiss chat error"
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                </div>
+                            )}
 
-                                        {/* Model override picker */}
-                                        {modelOptions.length > 0 && (
-                                            <div className="relative">
+                            <div className="rounded-2xl border border-border/70 bg-[linear-gradient(160deg,hsla(222,35%,18%,0.62),hsla(223,35%,11%,0.78))] px-3 py-3 shadow-[0_14px_28px_hsla(225,65%,5%,0.34)] md:px-4">
+                                {attachments.length > 0 && (
+                                    <div className="mb-3 flex flex-wrap gap-2">
+                                        {attachments.map((file, index) => (
+                                            <div
+                                                key={`${file.name}-${index}`}
+                                                className="flex max-w-full items-center gap-2 rounded-lg border border-border/70 bg-muted/35 px-2.5 py-1.5 text-xs"
+                                            >
+                                                <Paperclip className="h-3.5 w-3.5 flex-shrink-0 text-accent/90" />
+                                                <span className="truncate max-w-[180px]">{file.name}</span>
+                                                <span className="text-muted-foreground">{formatFileSize(file.size)}</span>
                                                 <button
-                                                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground border border-border/50 rounded-md px-2 py-1 transition-colors"
-                                                    onClick={() => setModelPickerOpen(p => !p)}
+                                                    type="button"
+                                                    onClick={() => removeAttachment(index)}
+                                                    className="rounded p-0.5 text-muted-foreground hover:bg-red-500/15 hover:text-red-300"
+                                                    aria-label={`Remove ${file.name}`}
                                                 >
-                                                    <Bot className="w-3 h-3" />
-                                                    <span className="max-w-[100px] truncate">{selectedOption?.label ?? 'Default model'}</span>
-                                                    <ChevronDownIcon className="w-3 h-3" />
+                                                    <X className="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                <textarea
+                                    ref={textareaRef}
+                                    className="w-full resize-none bg-transparent px-1 py-1 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/80"
+                                    rows={1}
+                                    placeholder="Ask a question about your notes..."
+                                    value={input}
+                                    onChange={handleTextareaChange}
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                            e.preventDefault()
+                                            handleSend()
+                                        }
+                                    }}
+                                    disabled={isStreaming || uploadingFiles}
+                                    style={{ maxHeight: '160px' }}
+                                />
+
+                                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {modelOptions.length > 0 && (
+                                            <div ref={modelPickerRef} className="relative">
+                                                <button
+                                                    type="button"
+                                                    className="inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-muted/30 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-accent/35 hover:text-foreground"
+                                                    onClick={() => setModelPickerOpen(prev => !prev)}
+                                                    aria-expanded={modelPickerOpen}
+                                                >
+                                                    <Bot className="h-3.5 w-3.5" />
+                                                    <span className="max-w-[220px] truncate">{selectedOption?.label ?? defaultLabel}</span>
+                                                    <ChevronDown className={`h-3 w-3 transition-transform ${modelPickerOpen ? 'rotate-180' : ''}`} />
                                                 </button>
                                                 {modelPickerOpen && (
-                                                    <div className="absolute bottom-full right-0 mb-1 z-30 glass-card border border-border shadow-xl py-1 min-w-52 max-h-60 overflow-y-auto animate-scale-in">
-                                                        <button
-                                                            className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/40 ${!selectedProviderId ? 'text-accent' : 'text-muted-foreground'}`}
-                                                            onClick={() => { setSelectedProviderId(''); setModelPickerOpen(false) }}
-                                                        >
-                                                            {!selectedProviderId && <Check className="w-3 h-3 flex-shrink-0" />}
-                                                            <span className={!selectedProviderId ? 'ml-0' : 'ml-5'}>Workspace default</span>
-                                                        </button>
-                                                        {modelOptions.map(opt => (
+                                                    <div className="absolute bottom-full left-0 z-[180] mb-2 w-[min(30rem,84vw)] rounded-xl border border-border/80 bg-popover/95 shadow-2xl backdrop-blur-md">
+                                                        <div className="border-b border-border/60 p-2">
+                                                            <div className="relative">
+                                                                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+                                                                <input
+                                                                    ref={modelPickerSearchRef}
+                                                                    className="input h-8 pl-7 text-xs"
+                                                                    placeholder="Search provider or model..."
+                                                                    value={modelPickerQuery}
+                                                                    onChange={e => setModelPickerQuery(e.target.value)}
+                                                                    onKeyDown={e => {
+                                                                        if (e.key === 'Escape') setModelPickerOpen(false)
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        <div className="max-h-64 overflow-y-auto p-1.5">
                                                             <button
-                                                                key={opt.providerId}
-                                                                className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/40 ${selectedProviderId === opt.providerId ? 'text-accent' : 'text-muted-foreground'}`}
-                                                                onClick={() => { setSelectedProviderId(opt.providerId); setModelPickerOpen(false) }}
+                                                                type="button"
+                                                                className={`mb-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-muted/35 ${!selectedModelKey ? 'bg-accent/10 text-accent' : 'text-muted-foreground'}`}
+                                                                onClick={() => {
+                                                                    setSelectedModelKey('')
+                                                                    setModelPickerOpen(false)
+                                                                }}
                                                             >
-                                                                {selectedProviderId === opt.providerId ? <Check className="w-3 h-3 flex-shrink-0" /> : <span className="w-3" />}
-                                                                <span className="truncate">{opt.label}</span>
+                                                                {!selectedModelKey ? <Check className="h-3.5 w-3.5 flex-shrink-0" /> : <span className="w-3.5" />}
+                                                                <span>Workspace default</span>
                                                             </button>
-                                                        ))}
+                                                            {filteredModelOptions.length === 0 ? (
+                                                                <p className="px-2.5 py-2 text-xs text-muted-foreground">No models match your search.</p>
+                                                            ) : (
+                                                                filteredModelOptions.map(opt => {
+                                                                    const isSelected = selectedModelKey === opt.key
+                                                                    return (
+                                                                        <button
+                                                                            key={opt.key}
+                                                                            type="button"
+                                                                            className={`mb-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-muted/35 ${isSelected ? 'bg-accent/10 text-accent' : 'text-foreground'}`}
+                                                                            onClick={() => {
+                                                                                setSelectedModelKey(opt.key)
+                                                                                setModelPickerOpen(false)
+                                                                            }}
+                                                                        >
+                                                                            {isSelected ? <Check className="h-3.5 w-3.5 flex-shrink-0" /> : <span className="w-3.5" />}
+                                                                            <span className="truncate">{opt.label}</span>
+                                                                        </button>
+                                                                    )
+                                                                })
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 )}
                                             </div>
                                         )}
 
+                                        <input
+                                            ref={fileInputRef}
+                                            type="file"
+                                            multiple
+                                            accept=".pdf,.txt,.md,.json,.csv,.xml,.yaml,.yml,.png,.jpg,.jpeg,.gif,.webp,image/*,text/*,application/pdf"
+                                            className="hidden"
+                                            onChange={handleFileSelect}
+                                        />
                                         <button
-                                            className="btn-primary text-xs py-1.5 px-3"
-                                            onClick={handleSend}
-                                            disabled={isStreaming || !input.trim()}
+                                            type="button"
+                                            className="inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-muted/30 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-accent/35 hover:text-foreground disabled:opacity-50"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            disabled={isStreaming || uploadingFiles || attachments.length >= 5}
+                                            title="Attach files (PDF, images, text)"
                                         >
-                                            {isStreaming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                                            <Paperclip className="h-3.5 w-3.5" />
+                                            Attach
+                                            {attachments.length > 0 && (
+                                                <span className="rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent">{attachments.length}</span>
+                                            )}
                                         </button>
                                     </div>
+
+                                    <button
+                                        type="button"
+                                        className="inline-flex h-9 min-w-9 items-center justify-center rounded-xl border border-accent/45 bg-accent/90 px-3 text-accent-foreground shadow-[0_10px_24px_hsla(194,100%,44%,0.35)] transition-all hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                                        onClick={handleSend}
+                                        disabled={isStreaming || uploadingFiles || !input.trim()}
+                                    >
+                                        {uploadingFiles || isStreaming ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                            <Send className="h-4 w-4" />
+                                        )}
+                                    </button>
                                 </div>
                             </div>
                         </div>

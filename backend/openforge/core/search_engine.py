@@ -1,6 +1,7 @@
 from openforge.core.embedding import embed_text
 from openforge.db.qdrant_client import get_qdrant
 from openforge.config import get_settings
+from openforge.utils.title import normalize_note_title
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 from typing import Optional
 import logging
@@ -56,7 +57,7 @@ class SearchEngine:
         return [
             {
                 "note_id": hit.payload["note_id"],
-                "title": hit.payload.get("title", "Untitled"),
+                "title": normalize_note_title(hit.payload.get("title")) or "",
                 "note_type": hit.payload.get("note_type", "standard"),
                 "chunk_text": hit.payload.get("chunk_text", ""),
                 "header_path": hit.payload.get("header_path", ""),

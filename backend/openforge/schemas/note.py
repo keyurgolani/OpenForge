@@ -7,7 +7,7 @@ from datetime import datetime
 class NoteCreate(BaseModel):
     type: Literal["standard", "fleeting", "bookmark", "gist"] = "standard"
     title: Optional[str] = None
-    content: str = ""
+    content: Optional[str] = ""
     url: Optional[str] = None
     gist_language: Optional[str] = None
 

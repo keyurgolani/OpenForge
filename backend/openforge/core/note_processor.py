@@ -3,6 +3,7 @@ from openforge.core.embedding import embed_texts
 from openforge.core.markdown_utils import chunk_markdown
 from openforge.db.qdrant_client import get_qdrant
 from openforge.config import get_settings
+from openforge.utils.title import normalize_note_title
 from qdrant_client.models import PointStruct, Filter, FieldCondition, MatchValue
 import logging
 from datetime import datetime, timezone
@@ -48,6 +49,7 @@ class NoteProcessor:
 
         # Step 4: Upsert
         now_str = datetime.now(timezone.utc).isoformat()
+        normalized_title = normalize_note_title(title) or ""
         points = []
         for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
             points.append(PointStruct(
@@ -61,7 +63,7 @@ class NoteProcessor:
                     "chunk_text": chunk["text"],
                     "header_path": chunk.get("header_path") or "",
                     "tags": tags,
-                    "title": title or "Untitled",
+                    "title": normalized_title,
                     "created_at": now_str,
                     "updated_at": now_str,
                 },

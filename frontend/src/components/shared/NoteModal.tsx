@@ -94,7 +94,7 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
 
     const meta = note ? (TYPE_META[note.type] ?? TYPE_META.standard) : TYPE_META.standard
     const TypeIcon = meta.icon
-    const displayTitle = note?.title ?? note?.ai_title
+    const displayTitle = note?.title?.trim() || note?.ai_title?.trim() || null
 
     return (
         <AnimatePresence>
@@ -250,7 +250,7 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
                                 <div className="flex items-center gap-2 flex-wrap">
                                     <Tag className="w-3 h-3 text-muted-foreground flex-shrink-0" />
                                     {note.tags.map((t: string) => (
-                                        <span key={t} className="text-xs px-2 py-0.5 rounded-full bg-accent/10 text-accent/80 border border-accent/20">
+                                        <span key={t} className="chip-accent text-xs">
                                             <Hash className="w-2.5 h-2.5 inline mr-0.5" />{t}
                                         </span>
                                     ))}

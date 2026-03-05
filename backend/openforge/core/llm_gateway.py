@@ -43,7 +43,7 @@ class LLMGateway:
             api_base=base_url,
             max_tokens=max_tokens,
         )
-        return response.choices[0].message.content
+        return self._normalize_content(response.choices[0].message.content)
 
     async def stream(
         self,
@@ -281,6 +281,25 @@ class LLMGateway:
         if not prefix or model.startswith(prefix):
             return model
         return f"{prefix}{model}"
+
+    def _normalize_content(self, content) -> str:
+        """Normalize provider-specific message content payloads to plain text."""
+        if content is None:
+            return ""
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: list[str] = []
+            for block in content:
+                if isinstance(block, str):
+                    parts.append(block)
+                    continue
+                if isinstance(block, dict):
+                    text = block.get("text")
+                    if isinstance(text, str):
+                        parts.append(text)
+            return "".join(parts).strip()
+        return str(content)
 
 
 llm_gateway = LLMGateway()

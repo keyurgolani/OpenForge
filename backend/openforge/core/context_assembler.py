@@ -21,6 +21,7 @@ class ContextAssembler:
         conversation_messages: list[dict],
         rag_results: list[dict],
         max_context_tokens: int = 16000,
+        extra_context: str | None = None,
     ) -> list[dict]:
         """Returns assembled messages list for LLM call."""
         rag_budget = int(max_context_tokens * 0.35)
@@ -28,10 +29,13 @@ class ContextAssembler:
 
         # Build RAG context
         rag_text = self._build_rag_context(rag_results, rag_budget)
+
+        # Build full system prompt
+        full_system = system_prompt
         if rag_text:
-            full_system = system_prompt + "\n\nRelevant context from your notes:\n\n" + rag_text
-        else:
-            full_system = system_prompt
+            full_system += "\n\nRelevant context from your notes:\n\n" + rag_text
+        if extra_context:
+            full_system += extra_context
 
         # Build conversation history within budget
         messages = [{"role": "system", "content": full_system}]
