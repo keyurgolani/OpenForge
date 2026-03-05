@@ -10,13 +10,15 @@ from openforge.schemas.note import (
     NoteCreate, NoteUpdate, NoteResponse, NoteListItem, NoteListParams, NoteTagsUpdate
 )
 from openforge.utils.insights import normalize_insights_payload
-from openforge.utils.title_generation import normalize_generated_title
+from openforge.utils.note_title_generation import derive_note_title
+from openforge.utils.task_audit import (
+    mark_task_log_done,
+    mark_task_log_failed,
+    start_task_log,
+)
 from openforge.utils.title import normalize_note_title
 
 router = APIRouter()
-
-def _normalize_generated_title(raw_response: object) -> str | None:
-    return normalize_generated_title(raw_response)
 
 
 async def _get_prompt(db: AsyncSession, prompt_id: str, **kwargs) -> str:
@@ -140,23 +142,36 @@ async def summarize_note(
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Note not found")
 
-    provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
-    tags_str = ", ".join([t.tag for t in note.tags])
-    prompt = await _get_prompt(
-        db, "summarize_note",
-        note_content=note.content[:8000],
-        note_title=normalize_note_title(note.title) or "Untitled",
-        note_type=note.type,
-        tags=tags_str
+    task_log = await start_task_log(
+        db,
+        task_type="summarize_note",
+        workspace_id=workspace_id,
     )
-    summary = await llm_gateway.chat(
-        messages=[
-            {"role": "system", "content": prompt},
-        ],
-        provider_name=provider_name, api_key=api_key, model=model, base_url=base_url,
-    )
-    note.ai_summary = summary
-    await db.commit()
+
+    try:
+        provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
+        tags_str = ", ".join([t.tag for t in note.tags])
+        prompt = await _get_prompt(
+            db, "summarize_note",
+            note_content=note.content[:8000],
+            note_title=normalize_note_title(note.title) or "Untitled",
+            note_type=note.type,
+            tags=tags_str
+        )
+        summary = await llm_gateway.chat(
+            messages=[
+                {"role": "system", "content": prompt},
+            ],
+            provider_name=provider_name, api_key=api_key, model=model, base_url=base_url,
+        )
+        note.ai_summary = summary
+        mark_task_log_done(task_log, item_count=1)
+        await db.commit()
+    except Exception as exc:
+        mark_task_log_failed(task_log, exc)
+        await db.commit()
+        raise
+
     await ws_manager.send_to_workspace(str(workspace_id), {"type": "note_updated", "note_id": str(note_id), "fields": ["ai_summary"]})
     return {"summary": summary}
 
@@ -183,41 +198,58 @@ async def extract_insights(
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Note not found")
 
-    provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
-    tags_str = ", ".join([t.tag for t in note.tags])
-    prompt = await _get_prompt(
-        db, "extract_insights",
-        note_content=note.content[:8000],
-        note_title=normalize_note_title(note.title) or "Untitled",
-        tags=tags_str
-    )
-
-    response = await llm_gateway.chat(
-        messages=[
-            {"role": "system", "content": prompt},
-        ],
-        provider_name=provider_name, api_key=api_key, model=model, base_url=base_url,
+    task_log = await start_task_log(
+        db,
+        task_type="extract_note_insights",
+        workspace_id=workspace_id,
     )
 
     try:
-        # Extract JSON from response
-        json_match = re.search(r"\{[\s\S]*\}", response)
-        if json_match:
-            parsed = json.loads(json_match.group())
-        else:
-            parsed = {}
-        insights = normalize_insights_payload(parsed, note.content or "")
-    except Exception:
-        insights = normalize_insights_payload({}, note.content or "")
+        provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
+        tags_str = ", ".join([t.tag for t in note.tags])
+        prompt = await _get_prompt(
+            db, "extract_insights",
+            note_content=note.content[:8000],
+            note_title=normalize_note_title(note.title) or "Untitled",
+            tags=tags_str
+        )
 
-    note.insights = insights
-    await db.commit()
+        response = await llm_gateway.chat(
+            messages=[
+                {"role": "system", "content": prompt},
+            ],
+            provider_name=provider_name, api_key=api_key, model=model, base_url=base_url,
+        )
 
-    # Save AI tags
-    if insights.get("tags"):
-        await ns.update_tags(db, note_id, insights["tags"], source="ai")
+        try:
+            # Extract JSON from response
+            json_match = re.search(r"\{[\s\S]*\}", response)
+            if json_match:
+                parsed = json.loads(json_match.group())
+            else:
+                parsed = {}
+            insights = normalize_insights_payload(parsed, note.content or "")
+        except Exception:
+            insights = normalize_insights_payload({}, note.content or "")
 
-    await ws_manager.send_to_workspace(str(workspace_id), {"type": "note_updated", "note_id": str(note_id), "fields": ["insights"]})
+        note.insights = insights
+        await db.commit()
+
+        # Save AI tags
+        if insights.get("tags"):
+            await ns.update_tags(db, note_id, insights["tags"], source="ai")
+
+        mark_task_log_done(task_log, item_count=1)
+        await db.commit()
+    except Exception as exc:
+        mark_task_log_failed(task_log, exc)
+        await db.commit()
+        raise
+
+    await ws_manager.send_to_workspace(
+        str(workspace_id),
+        {"type": "note_updated", "note_id": str(note_id), "fields": ["insights", "tags"]},
+    )
     return insights
 
 
@@ -237,23 +269,40 @@ async def generate_title(
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Note not found")
 
-    provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
-    prompt = await _get_prompt(db, "generate_title", note_content=note.content[:2000])
-
-    title_response = await llm_gateway.chat(
-        messages=[
-            {"role": "system", "content": prompt},
-        ],
-        provider_name=provider_name, api_key=api_key, model=model, base_url=base_url, max_tokens=30,
+    task_log = await start_task_log(
+        db,
+        task_type="generate_note_title",
+        workspace_id=workspace_id,
     )
 
-    normalized_title = _normalize_generated_title(title_response)
-    if normalized_title:
-        note.ai_title = normalized_title
-        title_was_empty = not normalize_note_title(note.title)
-        if title_was_empty:
-            note.title = normalized_title
+    try:
+        provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
+        prompt = await _get_prompt(db, "generate_title", note_content=note.content[:2000])
+
+        title_response = await llm_gateway.chat(
+            messages=[
+                {"role": "system", "content": "Generate concise note titles. Return only the title text."},
+                {"role": "user", "content": prompt},
+            ],
+            provider_name=provider_name, api_key=api_key, model=model, base_url=base_url, max_tokens=30,
+        )
+
+        normalized_title = derive_note_title(title_response, note.content or "")
+        title_was_empty = False
+        if normalized_title:
+            note.ai_title = normalized_title
+            title_was_empty = not normalize_note_title(note.title)
+            if title_was_empty:
+                note.title = normalized_title
+
+        mark_task_log_done(task_log, item_count=1 if normalized_title else 0)
         await db.commit()
+    except Exception as exc:
+        mark_task_log_failed(task_log, exc)
+        await db.commit()
+        raise
+
+    if normalized_title:
         updated_fields = ["ai_title"]
         if title_was_empty:
             updated_fields.append("title")

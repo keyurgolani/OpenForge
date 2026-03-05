@@ -146,11 +146,13 @@ export function QuickNotePanel({ open, defaultType = 'standard', onClose }: Prop
     const handleExpand = async () => {
         setSaving(true)
         try {
+            const shouldDiscardIfUntouched = isEmpty
             const id = await persistDraft(true)
             if (!id) return
             qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
             onClose()
-            navigate(`/w/${workspaceId}/notes/${id}`)
+            const query = shouldDiscardIfUntouched ? '?draft=1' : ''
+            navigate(`/w/${workspaceId}/notes/${id}${query}`)
         } finally {
             setSaving(false)
         }

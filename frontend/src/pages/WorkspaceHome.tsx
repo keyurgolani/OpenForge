@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { listNotes, deleteNote, togglePin, toggleArchive } from '@/lib/api'
@@ -68,14 +68,15 @@ const TYPE_META: Record<string, { icon: React.ComponentType<{ className?: string
 }
 
 const MASONRY_GAP_PX = 20
-const NOTE_CARD_BASE_MIN_WIDTH = 350
+const NOTE_CARD_BASE_MIN_WIDTH = 400
 const NOTE_CARD_MIN_WIDTH_MOBILE = 220
-const NOTE_CARD_MAX_HEIGHT_PX = 300
+const NOTE_CARD_MAX_HEIGHT_PX = 350
+const TAG_CHIP_GAP_PX = 6
 
 function getResponsiveCardMinWidth(containerWidth: number): number {
-    // Desktop baseline uses 350px. On narrower viewports, relax min width to prevent overflow.
+    // Desktop baseline uses 400px. On narrower viewports, relax min width to prevent overflow.
     if (containerWidth < 520) return Math.max(NOTE_CARD_MIN_WIDTH_MOBILE, containerWidth - 24)
-    if (containerWidth < 900) return 300
+    if (containerWidth < 900) return 340
     return NOTE_CARD_BASE_MIN_WIDTH
 }
 
@@ -91,8 +92,9 @@ export default function WorkspaceHome() {
     const [showSortMenu, setShowSortMenu] = useState(false)
     const [modalNoteId, setModalNoteId] = useState<string | null>(null)
     const notesLayoutRef = useRef<HTMLDivElement | null>(null)
+    const [bulkBarLeft, setBulkBarLeft] = useState<number | null>(null)
     const [noteCardMinWidth, setNoteCardMinWidth] = useState(() =>
-        typeof window !== 'undefined' ? getResponsiveCardMinWidth(window.innerWidth) : 350
+        typeof window !== 'undefined' ? getResponsiveCardMinWidth(window.innerWidth) : 400
     )
     const [masonryColumnCount, setMasonryColumnCount] = useState(1)
 
@@ -201,6 +203,37 @@ export default function WorkspaceHome() {
         }
     }, [])
 
+    const recalculateBulkBarPosition = useCallback(() => {
+        const node = notesLayoutRef.current
+        if (!node) return
+        const rect = node.getBoundingClientRect()
+        setBulkBarLeft(Math.round(rect.left + rect.width / 2))
+    }, [])
+
+    useEffect(() => {
+        const node = notesLayoutRef.current
+        if (!node) return
+
+        const sync = () => {
+            window.requestAnimationFrame(recalculateBulkBarPosition)
+        }
+
+        sync()
+        const observer = new ResizeObserver(sync)
+        observer.observe(node)
+        window.addEventListener('resize', sync)
+
+        return () => {
+            observer.disconnect()
+            window.removeEventListener('resize', sync)
+        }
+    }, [recalculateBulkBarPosition])
+
+    useEffect(() => {
+        if (!hasSelection) return
+        window.requestAnimationFrame(recalculateBulkBarPosition)
+    }, [hasSelection, recalculateBulkBarPosition])
+
     const notesByColumn = useMemo(() => {
         const columns: Array<Array<{ note: NoteListItem; index: number }>> = Array.from(
             { length: masonryColumnCount },
@@ -216,29 +249,7 @@ export default function WorkspaceHome() {
         <div className="w-full p-6 lg:p-7" onClick={closeAllMenus}>
             <div className="min-w-0 space-y-5">
                 <section className="relative z-30 px-1">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                            <p className="text-[11px] uppercase tracking-[0.16em] font-semibold text-muted-foreground/85">Workspace Notes</p>
-                            <h2 className="text-lg font-semibold tracking-tight mt-0.5">Notes Library</h2>
-                            <p className="text-xs text-muted-foreground/90 mt-1">Filter, scan, and act on notes without leaving the board.</p>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs text-foreground/90">
-                                <FileText className="w-3.5 h-3.5" />
-                                {allNotes.length} total
-                            </span>
-                            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs text-foreground/90">
-                                <Pin className="w-3.5 h-3.5 text-amber-300" />
-                                {pinnedCount} pinned
-                            </span>
-                            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs text-foreground/90">
-                                <Archive className="w-3.5 h-3.5 text-blue-300" />
-                                {archivedCount} archived
-                            </span>
-                        </div>
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap items-center gap-2.5">
+                    <div className="flex flex-wrap items-center gap-2.5">
                         <div className="min-w-[240px] flex-1 relative">
                             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                             <input
@@ -319,6 +330,21 @@ export default function WorkspaceHome() {
                                 {hasSelection ? `${selected.size} selected` : 'Select'}
                             </button>
                         )}
+
+                        <div className="sm:ml-auto flex flex-wrap items-center gap-2">
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs text-foreground/90">
+                                <FileText className="w-3.5 h-3.5" />
+                                {allNotes.length} total
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs text-foreground/90">
+                                <Pin className="w-3.5 h-3.5 text-amber-300" />
+                                {pinnedCount} pinned
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs text-foreground/90">
+                                <Archive className="w-3.5 h-3.5 text-blue-300" />
+                                {archivedCount} archived
+                            </span>
+                        </div>
                     </div>
                 </section>
 
@@ -397,7 +423,10 @@ export default function WorkspaceHome() {
 
                 {/* Bulk action floating toolbar */}
                 {hasSelection && (
-                    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-card border border-accent/30 rounded-2xl px-4 py-2.5 flex items-center gap-3 shadow-2xl shadow-black/40 animate-slide-up">
+                    <div
+                        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-card border border-accent/30 rounded-2xl px-4 py-2.5 flex items-center gap-3 shadow-2xl shadow-black/40 animate-slide-up"
+                        style={bulkBarLeft !== null ? { left: `${bulkBarLeft}px` } : undefined}
+                    >
                         <span className="text-sm font-medium text-accent">{selected.size} selected</span>
                         <div className="w-px h-4 bg-border" />
                         <button className="btn-ghost text-xs gap-1.5 py-1.5 px-2.5" onClick={handleBulkPin}>
@@ -430,6 +459,118 @@ export default function WorkspaceHome() {
 }
 
 // ── NoteCard ────────────────────────────────────────────────────────────────
+function FittedTagRow({ tags }: { tags: string[] }) {
+    const containerRef = useRef<HTMLDivElement | null>(null)
+    const overflowMeasureRef = useRef<HTMLSpanElement | null>(null)
+    const measureTagRefs = useRef<Array<HTMLSpanElement | null>>([])
+    const [visibleTagCount, setVisibleTagCount] = useState(tags.length)
+
+    const recalculate = useCallback(() => {
+        if (tags.length === 0) {
+            setVisibleTagCount(0)
+            return
+        }
+
+        const container = containerRef.current
+        const overflowMeasure = overflowMeasureRef.current
+        if (!container || !overflowMeasure) return
+
+        const containerWidth = Math.floor(container.clientWidth)
+        if (containerWidth <= 0) return
+
+        const tagWidths = tags.map((_, index) => {
+            const node = measureTagRefs.current[index]
+            return node ? Math.ceil(node.getBoundingClientRect().width) : 0
+        })
+
+        const widthForVisibleTags = (count: number) => {
+            if (count <= 0) return 0
+            let width = 0
+            for (let i = 0; i < count; i += 1) width += tagWidths[i] ?? 0
+            width += TAG_CHIP_GAP_PX * Math.max(0, count - 1)
+            return width
+        }
+
+        let bestCount = 0
+        for (let count = tags.length; count >= 0; count -= 1) {
+            const remaining = tags.length - count
+            let requiredWidth = widthForVisibleTags(count)
+
+            if (remaining > 0) {
+                overflowMeasure.textContent = `+${remaining}`
+                const overflowWidth = Math.ceil(overflowMeasure.getBoundingClientRect().width)
+                if (count > 0) requiredWidth += TAG_CHIP_GAP_PX
+                requiredWidth += overflowWidth
+            }
+
+            if (requiredWidth <= containerWidth) {
+                bestCount = count
+                break
+            }
+        }
+
+        setVisibleTagCount(prev => (prev === bestCount ? prev : bestCount))
+    }, [tags])
+
+    useEffect(() => {
+        const container = containerRef.current
+        if (!container) return
+
+        recalculate()
+        const raf = window.requestAnimationFrame(recalculate)
+        const observer = new ResizeObserver(recalculate)
+        observer.observe(container)
+
+        return () => {
+            window.cancelAnimationFrame(raf)
+            observer.disconnect()
+        }
+    }, [recalculate])
+
+    if (tags.length === 0) return null
+
+    const visibleTags = tags.slice(0, visibleTagCount)
+    const hiddenCount = Math.max(0, tags.length - visibleTags.length)
+
+    return (
+        <div className="relative w-full">
+            <div ref={containerRef} className="flex w-full items-center gap-1.5 overflow-hidden whitespace-nowrap">
+                {visibleTags.map((tag, index) => (
+                    <span key={`${tag}-${index}`} className="chip-accent shrink-0 text-[10px] leading-none px-2 py-1">
+                        {tag}
+                    </span>
+                ))}
+                {hiddenCount > 0 && (
+                    <span className="chip-muted shrink-0 text-[10px] leading-none px-2 py-1">
+                        +{hiddenCount}
+                    </span>
+                )}
+            </div>
+
+            <div
+                aria-hidden
+                className="pointer-events-none absolute left-0 top-0 -z-10 invisible flex items-center gap-1.5 whitespace-nowrap"
+            >
+                {tags.map((tag, index) => (
+                    <span
+                        key={`measure-${tag}-${index}`}
+                        ref={el => { measureTagRefs.current[index] = el }}
+                        className="chip-accent shrink-0 text-[10px] leading-none px-2 py-1"
+                    >
+                        {tag}
+                    </span>
+                ))}
+                <span
+                    ref={overflowMeasureRef}
+                    className="chip-muted shrink-0 text-[10px] leading-none px-2 py-1"
+                >
+                    +0
+                </span>
+            </div>
+        </div>
+    )
+}
+
 function NoteCard({
     note, index, isSelected, anySelected, onSelect, onClick,
     onPin, onArchive, onDelete, minWidthPx, maxHeightPx,
@@ -533,20 +674,7 @@ function NoteCard({
                     </div>
 
                     <div className="mt-3 pt-2 border-t border-border/45 space-y-1.5">
-                        {note.tags.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5">
-                                {note.tags.slice(0, 2).map(t => (
-                                    <span key={t} className="chip-accent text-[10px] leading-none px-2 py-1">
-                                        {t}
-                                    </span>
-                                ))}
-                                {note.tags.length > 2 && (
-                                    <span className="text-[10px] px-2 py-1 rounded-full bg-muted/50 text-muted-foreground">
-                                        +{note.tags.length - 2}
-                                    </span>
-                                )}
-                            </div>
-                        )}
+                        <FittedTagRow tags={note.tags} />
 
                         <div className="flex items-end justify-between gap-2">
                             <p className="min-w-0 flex-1 text-[10px] text-muted-foreground/90 truncate">

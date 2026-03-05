@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Outlet, useNavigate, useParams, Link, useLocation } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { listWorkspaces, listNotes, listConversations, createNote } from '@/lib/api'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import { useUIStore } from '@/stores/uiStore'
@@ -101,8 +101,9 @@ export default function AppShell() {
         const parsed = raw ? parseInt(raw, 10) : NaN
         return Number.isFinite(parsed) ? clampInsightsWidth(parsed) : DEFAULT_INSIGHTS_WIDTH
     })
-    const { isConnected } = useWorkspaceWebSocket(workspaceId)
+    const { isConnected, on } = useWorkspaceWebSocket(workspaceId)
     const { setCommandPaletteOpen } = useUIStore()
+    const qc = useQueryClient()
 
     const { data: workspaces = [] } = useQuery({ queryKey: ['workspaces'], queryFn: listWorkspaces })
     const { data: notesData } = useQuery({
@@ -123,12 +124,38 @@ export default function AppShell() {
     const notes = notesData?.notes ?? []
     const pinnedNotes = notes.filter((n: { is_pinned: boolean }) => n.is_pinned)
     const isWorkspaceHome = location.pathname === `/w/${workspaceId}`
-    const currentSectionLabel = useMemo(() => {
-        if (location.pathname.includes('/chat')) return 'Chat'
-        if (location.pathname.includes('/search')) return 'Search'
-        if (location.pathname.includes('/settings')) return 'Settings'
-        if (location.pathname.includes('/notes/')) return 'Note Details'
-        return 'Notes'
+    const isSearchPage = location.pathname.includes('/search')
+    const isSettingsPage = location.pathname.includes('/settings')
+    const isChatPage = location.pathname.includes('/chat')
+    const currentSectionMeta = useMemo(() => {
+        if (location.pathname.includes('/chat')) {
+            return {
+                title: 'Workspace Chat',
+                description: 'Ask questions, review context, and manage conversations.',
+            }
+        }
+        if (location.pathname.includes('/search')) {
+            return {
+                title: 'Workspace Search',
+                description: 'Search by meaning across your notes and saved knowledge.',
+            }
+        }
+        if (location.pathname.includes('/settings')) {
+            return {
+                title: 'Settings',
+                description: 'Manage workspace configuration, providers, and defaults.',
+            }
+        }
+        if (location.pathname.includes('/notes/')) {
+            return {
+                title: 'Note Details',
+                description: 'Review and edit a single note in full detail.',
+            }
+        }
+        return {
+            title: 'Workspace Notes',
+            description: 'Filter, scan, and act on notes without leaving the board.',
+        }
     }, [location.pathname])
 
     const isActive = (path: string) => location.pathname.includes(path)
@@ -199,6 +226,15 @@ export default function AppShell() {
     }), [])
 
     useEffect(() => onQuickNoteOpen(openQuickPanel), [openQuickPanel])
+    useEffect(() => {
+        return on('note_updated', (msg: Record<string, unknown>) => {
+            const updatedNoteId = typeof msg.note_id === 'string' ? msg.note_id : null
+            qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
+            if (updatedNoteId) {
+                qc.invalidateQueries({ queryKey: ['note', updatedNoteId] })
+            }
+        })
+    }, [on, qc, workspaceId])
     useEffect(() => {
         if (!workspaceMenuOpen) return
         const handleOutsideClick = (event: MouseEvent) => {
@@ -342,6 +378,22 @@ export default function AppShell() {
                                         ))
                                     )}
                                 </div>
+                                <div className="mt-2 border-t border-border/60 pt-2">
+                                    <button
+                                        type="button"
+                                        className="w-full rounded-lg border border-transparent px-2.5 py-2 text-left text-xs font-medium transition-colors hover:bg-muted/45 hover:border-border/60"
+                                        onClick={() => {
+                                            setWorkspaceMenuOpen(false)
+                                            setWorkspaceQuery('')
+                                            navigate(`/w/${workspaceId}/settings?tab=workspaces&newWorkspace=1`)
+                                        }}
+                                    >
+                                        <span className="inline-flex items-center gap-2">
+                                            <Plus className="w-3.5 h-3.5" />
+                                            Add Workspace
+                                        </span>
+                                    </button>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -412,16 +464,23 @@ export default function AppShell() {
                     </button>
 
                     {(!sidebarOpen && ws) && (
-                        <div className="min-w-0 flex items-center gap-2.5 rounded-xl border border-border/60 bg-card/55 px-3 py-1.5">
+                        <div className="min-w-0 max-w-[min(34vw,260px)] flex items-center gap-2.5 rounded-xl border border-border/60 bg-card/55 px-3 py-1.5">
                             <div className="w-6 h-6 rounded-md bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0">
                                 {getWorkspaceIcon(ws.icon)}
                             </div>
                             <div className="min-w-0">
-                                <p className="text-sm font-semibold leading-tight truncate max-w-[180px]">{ws.name}</p>
-                                <p className="text-[11px] text-muted-foreground/90 leading-tight">{currentSectionLabel}</p>
+                                <p className="text-sm font-semibold leading-tight truncate">{ws.name}</p>
+                                <p className="text-[11px] text-muted-foreground/90 leading-tight">Workspace</p>
                             </div>
                         </div>
                     )}
+
+                    <div className="min-w-0 max-w-[min(56vw,720px)] flex flex-col leading-tight">
+                        <p className="text-sm font-semibold truncate">{currentSectionMeta.title}</p>
+                        <p className="hidden sm:block text-xs text-muted-foreground/90 truncate">
+                            {currentSectionMeta.description}
+                        </p>
+                    </div>
 
                     <div className="flex-1" />
 
@@ -491,7 +550,7 @@ export default function AppShell() {
 
                 <div className="relative z-0 flex-1 min-h-0 flex gap-3 p-3">
                     <main
-                        className={`relative z-20 flex-1 overflow-auto ${isWorkspaceHome
+                        className={`relative z-20 flex-1 min-h-0 overflow-auto ${(isWorkspaceHome || isSearchPage || isSettingsPage || isChatPage)
                             ? ''
                             : 'rounded-2xl border border-border/60 bg-card/25'}`}
                     >
@@ -592,7 +651,7 @@ export default function AppShell() {
                                                     </button>
 
                                                     {!isCollapsed && (
-                                                        <ul className="mt-2.5 space-y-1.5 pl-[1.9rem]">
+                                                        <ul className="mt-2.5 space-y-1.5 pl-[1.2rem]">
                                                             {items.slice(0, meta.maxItems).map((item, i) => (
                                                                 <li key={i}>
                                                                     <button

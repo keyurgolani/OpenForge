@@ -6,8 +6,8 @@ import { useStreamingChat } from '@/hooks/useStreamingChat'
 import { useToast } from '@/components/shared/ToastProvider'
 import {
     Plus, Send, Loader2, MessageSquare, Trash2, Bot, User,
-    ChevronDown, ChevronRight, ExternalLink, Check, Pencil,
-    Paperclip, X, Copy, Search
+    ChevronDown, ChevronRight, ChevronLeft, ExternalLink, Check, Pencil,
+    Paperclip, X, Copy, Search, Brain
 } from 'lucide-react'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem,
@@ -16,11 +16,24 @@ import {
 import MarkdownIt from 'markdown-it'
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
+const MIN_CHAT_LIST_WIDTH = 280
+const MAX_CHAT_LIST_WIDTH = 560
+const DEFAULT_CHAT_LIST_WIDTH = 320
+const CHAT_LIST_COLLAPSED_WIDTH = 56
+const CHAT_LIST_WIDTH_STORAGE_KEY = 'openforge.shell.chat.list.width'
+const CHAT_LIST_COLLAPSED_STORAGE_KEY = 'openforge.shell.chat.list.collapsed'
+
+const clampChatListWidth = (value: number) =>
+    Math.max(MIN_CHAT_LIST_WIDTH, Math.min(MAX_CHAT_LIST_WIDTH, value))
 
 interface Message {
     id: string
     role: 'user' | 'assistant'
     content: string
+    thinking?: string | null
+    model_used?: string | null
+    provider_used?: string | null
+    generation_ms?: number | null
     context_sources?: { note_id: string; title: string; snippet: string; score: number }[]
     created_at: string
 }
@@ -63,9 +76,21 @@ export default function ChatPage() {
     const { error: showError } = useToast()
     const [input, setInput] = useState('')
     const [activeCid, setActiveCid] = useState(conversationId ?? null)
-    const messagesEndRef = useRef<HTMLDivElement>(null)
+    const messagesContainerRef = useRef<HTMLDivElement>(null)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
+    const [chatListWidth, setChatListWidth] = useState<number>(() => {
+        if (typeof window === 'undefined') return DEFAULT_CHAT_LIST_WIDTH
+        const raw = window.localStorage.getItem(CHAT_LIST_WIDTH_STORAGE_KEY)
+        const parsed = raw ? parseInt(raw, 10) : NaN
+        return Number.isFinite(parsed) ? clampChatListWidth(parsed) : DEFAULT_CHAT_LIST_WIDTH
+    })
+    const [isChatListCollapsed, setIsChatListCollapsed] = useState(() => {
+        if (typeof window === 'undefined') return false
+        return window.localStorage.getItem(CHAT_LIST_COLLAPSED_STORAGE_KEY) === '1'
+    })
+    const shouldRestoreTextareaFocusRef = useRef(false)
+    const [stickToBottom, setStickToBottom] = useState(true)
 
     // Per-message model override
     const [selectedModelKey, setSelectedModelKey] = useState('')
@@ -78,6 +103,7 @@ export default function ChatPage() {
     // File attachments
     const [attachments, setAttachments] = useState<File[]>([])
     const [uploadingFiles, setUploadingFiles] = useState(false)
+    const [streamThinkingExpanded, setStreamThinkingExpanded] = useState(true)
 
     const { data: workspace } = useQuery({
         queryKey: ['workspace', workspaceId],
@@ -102,7 +128,17 @@ export default function ChatPage() {
         queryFn: listProviders,
     })
 
-    const { streamingContent, isStreaming, sendMessage, isConnected, lastError, clearLastError } = useStreamingChat(activeCid)
+    const {
+        streamingContent,
+        streamingThinking,
+        isStreaming,
+        sources,
+        sendMessage,
+        isConnected,
+        lastError,
+        clearLastError,
+        thinkingByMessageId,
+    } = useStreamingChat(activeCid)
 
     const messages: Message[] = conversationData?.messages ?? []
 
@@ -148,6 +184,15 @@ export default function ChatPage() {
         return modelOptions.filter(opt => opt.searchText.includes(q))
     }, [modelOptions, modelPickerQuery])
 
+    const providerDisplayByName = useMemo(() => {
+        const map: Record<string, string> = {}
+        for (const provider of providers as ProviderRecord[]) {
+            const key = (provider.provider_name || '').trim()
+            if (key) map[key] = provider.display_name
+        }
+        return map
+    }, [providers])
+
     // Determine the default model label
     const defaultLabel = useMemo(() => {
         if (!workspace) return 'Default model'
@@ -168,8 +213,19 @@ export default function ChatPage() {
     }, [conversationId]) // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }, [messages.length, streamingContent])
+        setStickToBottom(true)
+    }, [activeCid])
+
+    useEffect(() => {
+        setStreamThinkingExpanded(true)
+    }, [activeCid])
+
+    useEffect(() => {
+        if (!stickToBottom) return
+        const container = messagesContainerRef.current
+        if (!container) return
+        container.scrollTo({ top: container.scrollHeight, behavior: streamingContent ? 'auto' : 'smooth' })
+    }, [messages.length, streamingContent, stickToBottom])
 
     useEffect(() => {
         if (!modelPickerOpen) {
@@ -196,6 +252,31 @@ export default function ChatPage() {
         lastToastedErrorRef.current = lastError
         showError('Chat request failed', lastError)
     }, [lastError, showError])
+
+    useEffect(() => {
+        if (!streamingThinking || !streamingContent) return
+        setStreamThinkingExpanded(false)
+    }, [streamingThinking, streamingContent])
+
+    const focusComposer = () => {
+        const textarea = textareaRef.current
+        if (!textarea || textarea.disabled) return false
+        textarea.focus({ preventScroll: true })
+        const caretPos = textarea.value.length
+        textarea.setSelectionRange(caretPos, caretPos)
+        return true
+    }
+
+    useEffect(() => {
+        if (!shouldRestoreTextareaFocusRef.current) return
+        if (isStreaming || uploadingFiles) return
+        const rafId = window.requestAnimationFrame(() => {
+            if (focusComposer()) {
+                shouldRestoreTextareaFocusRef.current = false
+            }
+        })
+        return () => window.cancelAnimationFrame(rafId)
+    }, [isStreaming, uploadingFiles, activeCid])
 
     const pushOptimisticUserMessage = (cid: string, content: string) => {
         const createdAt = new Date().toISOString()
@@ -262,6 +343,7 @@ export default function ChatPage() {
         if (!input.trim() || isStreaming || uploadingFiles) return
         const msg = input.trim()
         clearLastError()
+        setStickToBottom(true)
 
         // Upload attachments if any
         let attachmentIds: string[] = []
@@ -283,6 +365,7 @@ export default function ChatPage() {
             } catch (e) {
                 console.error('Failed to upload attachments:', e)
                 showError('Attachment upload failed', 'Please retry or remove the problematic file.')
+                focusComposer()
                 return
             } finally {
                 setUploadingFiles(false)
@@ -305,6 +388,7 @@ export default function ChatPage() {
         const sent = sendMessage(msg, override, targetCid)
         if (!sent) {
             showError('Message not sent', 'Chat socket is disconnected. Wait for reconnect and try again.')
+            focusComposer()
             return
         }
 
@@ -312,6 +396,9 @@ export default function ChatPage() {
         setInput('')
         if (attachments.length > 0) setAttachments([])
         if (textareaRef.current) textareaRef.current.style.height = 'auto'
+        setStreamThinkingExpanded(true)
+        shouldRestoreTextareaFocusRef.current = true
+        focusComposer()
     }
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -348,35 +435,50 @@ export default function ChatPage() {
         e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px'
     }
 
-    return (
-        <div className="flex h-full gap-4 p-4">
-            {/* Conversation list */}
-            <div className="w-72 flex-shrink-0 glass-card overflow-hidden flex flex-col">
-                <div className="p-4 border-b border-border/50 bg-card/30">
-                    <button className="btn-primary w-full justify-center text-sm py-2" onClick={handleNewChat}>
-                        <Plus className="w-4 h-4" /> New Chat
-                    </button>
-                </div>
-                <div className="flex-1 overflow-y-auto py-2">
-                    {(conversations as Conversation[]).length === 0 && (
-                        <p className="text-xs text-muted-foreground text-center py-8 px-4">No conversations yet. Start a new chat!</p>
-                    )}
-                    {(conversations as Conversation[]).map(c => (
-                        <ConversationRow
-                            key={c.id}
-                            conv={c}
-                            active={activeCid === c.id}
-                            workspaceId={workspaceId}
-                            onSelect={() => { setActiveCid(c.id); navigate(`/w/${workspaceId}/chat/${c.id}`) }}
-                            onDelete={() => handleDeleteConv(c.id)}
-                            onRename={(title) => updateConversation(workspaceId, c.id, { title, title_locked: true }).then(() => qc.invalidateQueries({ queryKey: ['conversations', workspaceId] }))}
-                        />
-                    ))}
-                </div>
-            </div>
+    const handleMessagesScroll = (event: React.UIEvent<HTMLDivElement>) => {
+        const el = event.currentTarget
+        const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+        setStickToBottom(distanceFromBottom <= 64)
+    }
 
-            {/* Chat thread */}
-            <div className="flex-1 flex flex-col min-w-0 glass-card overflow-hidden">
+    const handleChatListResizeStart = (e: React.MouseEvent<HTMLButtonElement>) => {
+        e.preventDefault()
+        const startX = e.clientX
+        const startWidth = chatListWidth
+        let currentWidth = startWidth
+
+        const onMouseMove = (moveEvent: MouseEvent) => {
+            const delta = startX - moveEvent.clientX
+            currentWidth = clampChatListWidth(startWidth + delta)
+            setChatListWidth(currentWidth)
+        }
+
+        const onMouseUp = () => {
+            window.removeEventListener('mousemove', onMouseMove)
+            window.removeEventListener('mouseup', onMouseUp)
+            window.localStorage.setItem(CHAT_LIST_WIDTH_STORAGE_KEY, String(currentWidth))
+        }
+
+        window.addEventListener('mousemove', onMouseMove)
+        window.addEventListener('mouseup', onMouseUp)
+    }
+
+    const toggleChatListSidebar = () => {
+        setIsChatListCollapsed(prev => {
+            const next = !prev
+            if (typeof window !== 'undefined') {
+                window.localStorage.setItem(CHAT_LIST_COLLAPSED_STORAGE_KEY, next ? '1' : '0')
+            }
+            return next
+        })
+    }
+
+    const hasStreamingPayload = Boolean(streamingThinking || streamingContent)
+
+    return (
+        <div className="flex h-full min-h-0 gap-3">
+            {/* Conversation pane (flat main area) */}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                 {!activeCid ? (
                     <div className="flex-1 flex items-center justify-center">
                         <div className="text-center">
@@ -392,25 +494,87 @@ export default function ChatPage() {
                     </div>
                 ) : (
                     <>
-                        <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-card/20">
+                        <div
+                            ref={messagesContainerRef}
+                            className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4"
+                            onScroll={handleMessagesScroll}
+                        >
                             {messages.map(msg => (
-                                <ChatMessageCard key={msg.id} message={msg} workspaceId={workspaceId} />
+                                <ChatMessageCard
+                                    key={msg.id}
+                                    message={msg}
+                                    workspaceId={workspaceId}
+                                    thinking={thinkingByMessageId[msg.id] ?? msg.thinking ?? undefined}
+                                    providerDisplayByName={providerDisplayByName}
+                                />
                             ))}
-                            {isStreaming && streamingContent && (
+                            {isStreaming && (
                                 <div className="flex gap-3">
                                     <div className="w-7 h-7 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0 mt-1">
                                         <Bot className="w-4 h-4 text-accent" />
                                     </div>
-                                    <div className="glass-card px-4 py-3 max-w-2xl">
-                                        <div className="markdown-content streaming-cursor" dangerouslySetInnerHTML={{ __html: md.render(streamingContent) }} />
+                                    <div className="max-w-[92%] lg:max-w-[84%] xl:max-w-[78%] 2xl:max-w-[72%] space-y-2">
+                                        <div className="agent-generation-pill">
+                                            <span className="agent-generation-orb" aria-hidden />
+                                            Agent generating response...
+                                        </div>
+                                        {!hasStreamingPayload && (
+                                            <div className="glass-card px-4 py-3 text-sm text-muted-foreground/90">
+                                                <span className="inline-flex items-center gap-1.5">
+                                                    <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent/70" />
+                                                    Preparing the response
+                                                </span>
+                                            </div>
+                                        )}
+                                        {sources.length > 0 && (
+                                            <div className="glass-card px-4 py-3">
+                                                <div className="mb-2 text-[11px] uppercase tracking-wide text-muted-foreground">
+                                                    Sources
+                                                </div>
+                                                <div className="space-y-2">
+                                                    {sources.map(src => (
+                                                        <div key={src.note_id} className="rounded-lg border border-border/60 bg-muted/25 px-3 py-2">
+                                                            <div className="mb-1 flex items-center justify-between gap-2">
+                                                                <span className="truncate text-xs font-medium text-foreground/90">{src.title}</span>
+                                                                <span className="text-[10px] text-muted-foreground">{Math.round(src.score * 100)}%</span>
+                                                            </div>
+                                                            <p className="line-clamp-2 text-xs text-muted-foreground">{src.snippet}</p>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                        {streamingThinking && (
+                                            <div className="rounded-2xl border border-accent/25 bg-accent/8 px-4 py-3">
+                                                <button
+                                                    type="button"
+                                                    className="mb-1.5 flex w-full items-center gap-1.5 text-left text-[11px] uppercase tracking-wide text-accent/90"
+                                                    onClick={() => setStreamThinkingExpanded(prev => !prev)}
+                                                    aria-label={streamThinkingExpanded ? 'Collapse thinking' : 'Expand thinking'}
+                                                >
+                                                    {streamThinkingExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                                                    <Brain className="h-3.5 w-3.5" />
+                                                    Thinking
+                                                </button>
+                                                {streamThinkingExpanded && (
+                                                    <div className="text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap break-words">
+                                                        {streamingThinking}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                        {streamingContent && (
+                                            <div className="glass-card px-4 py-3">
+                                                <div className="markdown-content streaming-cursor" dangerouslySetInnerHTML={{ __html: md.render(streamingContent) }} />
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )}
-                            <div ref={messagesEndRef} />
                         </div>
 
                         {/* Input area */}
-                        <div className="border-t border-border/45 bg-card/35 px-4 py-4 md:px-6 md:py-5">
+                        <div className="border-t border-border/45 px-4 py-4 md:px-6 md:py-5">
                             {activeCid && !isConnected && (
                                 <p className="mb-2 flex items-center gap-1.5 text-xs text-amber-300">
                                     <Loader2 className="h-3 w-3 animate-spin" /> Reconnecting to server…
@@ -582,6 +746,104 @@ export default function ChatPage() {
                     </>
                 )}
             </div>
+
+            {/* Conversation list rail (right edge, similar to workspace insights position) */}
+            <aside
+                className="relative z-10 flex-shrink-0 overflow-hidden rounded-2xl border border-border/60 bg-card/28 py-4 flex flex-col transition-[width] duration-200 ease-out"
+                style={{ width: isChatListCollapsed ? `${CHAT_LIST_COLLAPSED_WIDTH}px` : `${chatListWidth}px` }}
+            >
+                {!isChatListCollapsed && (
+                    <button
+                        type="button"
+                        onMouseDown={handleChatListResizeStart}
+                        className="absolute -left-1 top-0 h-full w-2 cursor-col-resize bg-transparent hover:bg-accent/25 active:bg-accent/35 transition-colors hidden md:block"
+                        aria-label="Resize chat list sidebar"
+                        title="Drag to resize"
+                    />
+                )}
+
+                {isChatListCollapsed ? (
+                    <div className="h-full flex flex-col items-center gap-3 px-2 py-2">
+                        <button
+                            type="button"
+                            onClick={toggleChatListSidebar}
+                            className="w-8 h-8 rounded-lg border border-border/70 bg-card/60 flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-accent/50 transition-colors"
+                            aria-label="Expand conversations sidebar"
+                            title="Expand conversations"
+                        >
+                            <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleNewChat}
+                            className="w-8 h-8 rounded-lg border border-border/70 bg-card/60 flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-accent/50 transition-colors"
+                            aria-label="Create new chat"
+                            title="New chat"
+                        >
+                            <Plus className="w-4 h-4" />
+                        </button>
+                        <div className="w-6 h-px bg-border/70" />
+                        <MessageSquare className="w-4 h-4 text-accent mt-1" />
+                        <span className="text-[10px] font-semibold tracking-[0.16em] uppercase text-muted-foreground [writing-mode:vertical-rl] rotate-180">
+                            Chats
+                        </span>
+                        <span className="rounded-full border border-border/70 bg-muted/50 px-2 py-1 text-[10px] font-semibold text-foreground/90">
+                            {(conversations as Conversation[]).length}
+                        </span>
+                    </div>
+                ) : (
+                    <>
+                        <div className="px-4">
+                            <div className="flex items-start justify-between gap-3 mb-4">
+                                <div className="space-y-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <MessageSquare className="w-4 h-4 text-accent" />
+                                        <h3 className="font-semibold text-sm tracking-tight">Conversations</h3>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground/90">Recent workspace chats and context trails.</p>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <div className="flex-shrink-0 rounded-full border border-border/70 bg-muted/60 px-2.5 py-1 text-[11px] font-medium text-foreground/80">
+                                        {(conversations as Conversation[]).length}
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={toggleChatListSidebar}
+                                        className="w-7 h-7 rounded-md border border-border/70 bg-card/60 flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-accent/50 transition-colors"
+                                        aria-label="Collapse conversations sidebar"
+                                        title="Collapse conversations"
+                                    >
+                                        <ChevronRight className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            <button className="btn-primary w-full justify-center text-sm py-2" onClick={handleNewChat}>
+                                <Plus className="w-4 h-4" /> New Chat
+                            </button>
+                        </div>
+
+                        <div className="my-4 border-t border-border/50" />
+
+                        <div className="flex-1 overflow-y-auto px-2 pb-2">
+                            {(conversations as Conversation[]).length === 0 && (
+                                <p className="text-xs text-muted-foreground text-center py-8 px-4">No conversations yet. Start a new chat!</p>
+                            )}
+                            {(conversations as Conversation[]).map(c => (
+                                <ConversationRow
+                                    key={c.id}
+                                    conv={c}
+                                    active={activeCid === c.id}
+                                    workspaceId={workspaceId}
+                                    onSelect={() => { setActiveCid(c.id); navigate(`/w/${workspaceId}/chat/${c.id}`) }}
+                                    onDelete={() => handleDeleteConv(c.id)}
+                                    onRename={(title) => updateConversation(workspaceId, c.id, { title, title_locked: true }).then(() => qc.invalidateQueries({ queryKey: ['conversations', workspaceId] }))}
+                                />
+                            ))}
+                        </div>
+                    </>
+                )}
+            </aside>
         </div>
     )
 }
@@ -609,7 +871,10 @@ function ConversationRow({ conv, active, workspaceId, onSelect, onDelete, onRena
         <ContextMenu>
             <ContextMenuTrigger asChild>
                 <div
-                    className={`group flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors ${active ? 'bg-muted/60' : 'hover:bg-muted/30'}`}
+                    className={`group flex items-center gap-2 rounded-xl border px-3 py-2.5 cursor-pointer transition-colors ${active
+                        ? 'border-accent/35 bg-accent/12'
+                        : 'border-transparent hover:border-border/60 hover:bg-muted/35'
+                        }`}
                     onClick={onSelect}
                 >
                     <MessageSquare className="w-3.5 h-3.5 flex-shrink-0 text-muted-foreground" />
@@ -653,9 +918,31 @@ function ConversationRow({ conv, active, workspaceId, onSelect, onDelete, onRena
 }
 
 // ── Chat message card ───────────────────────────────────────────────────────
-function ChatMessageCard({ message: msg, workspaceId }: { message: Message; workspaceId: string }) {
+function ChatMessageCard({
+    message: msg,
+    workspaceId,
+    thinking,
+    providerDisplayByName,
+}: {
+    message: Message
+    workspaceId: string
+    thinking?: string
+    providerDisplayByName?: Record<string, string>
+}) {
     const [sourcesOpen, setSourcesOpen] = useState(false)
+    const [thinkingOpen, setThinkingOpen] = useState(false)
     const navigate = useNavigate()
+    const hasThinking = !!thinking?.trim()
+    const generationSeconds = msg.generation_ms && msg.generation_ms > 0
+        ? (msg.generation_ms / 1000).toFixed(msg.generation_ms < 10000 ? 1 : 0)
+        : null
+    const providerText = msg.provider_used
+        ? (providerDisplayByName?.[msg.provider_used] || msg.provider_used)
+        : null
+    const modelText = msg.model_used?.trim() || null
+    const modelLabel = providerText && modelText
+        ? `${providerText} · ${modelText}`
+        : (modelText || providerText)
 
     return (
         <ContextMenu>
@@ -664,14 +951,12 @@ function ChatMessageCard({ message: msg, workspaceId }: { message: Message; work
                     <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-1 ${msg.role === 'user' ? 'bg-accent/30' : 'bg-muted/60'}`}>
                         {msg.role === 'user' ? <User className="w-4 h-4 text-accent" /> : <Bot className="w-4 h-4 text-muted-foreground" />}
                     </div>
-                    <div className={`flex flex-col gap-1 max-w-2xl ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                        <div className={`px-4 py-3 rounded-2xl ${msg.role === 'user' ? 'bg-accent/20 border border-accent/30' : 'glass-card'}`}>
-                            {msg.role === 'user' ? (
+                    <div className={`flex flex-col gap-1 max-w-[92%] lg:max-w-[84%] xl:max-w-[78%] 2xl:max-w-[72%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                        {msg.role === 'user' && (
+                            <div className="px-4 py-3 rounded-2xl bg-accent/20 border border-accent/30">
                                 <p className="text-sm">{msg.content}</p>
-                            ) : (
-                                <div className="markdown-content text-sm" dangerouslySetInnerHTML={{ __html: md.render(msg.content) }} />
-                            )}
-                        </div>
+                            </div>
+                        )}
                         {msg.role === 'assistant' && msg.context_sources && msg.context_sources.length > 0 && (
                             <button
                                 className="text-xs text-muted-foreground flex items-center gap-1 hover:text-foreground transition-colors"
@@ -702,7 +987,33 @@ function ChatMessageCard({ message: msg, workspaceId }: { message: Message; work
                                 ))}
                             </div>
                         )}
-                        <span className="text-xs text-muted-foreground">{new Date(msg.created_at).toLocaleTimeString()}</span>
+                        {msg.role === 'assistant' && hasThinking && (
+                            <button
+                                className="text-xs text-muted-foreground flex items-center gap-1 hover:text-foreground transition-colors"
+                                onClick={() => setThinkingOpen(p => !p)}
+                            >
+                                {thinkingOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                <Brain className="w-3 h-3" />
+                                Thinking
+                            </button>
+                        )}
+                        {msg.role === 'assistant' && hasThinking && thinkingOpen && (
+                            <div className="w-full rounded-2xl border border-accent/20 bg-accent/6 px-4 py-3">
+                                <div className="text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap break-words">
+                                    {thinking}
+                                </div>
+                            </div>
+                        )}
+                        {msg.role === 'assistant' && (
+                            <div className="px-4 py-3 rounded-2xl glass-card">
+                                <div className="markdown-content text-sm" dangerouslySetInnerHTML={{ __html: md.render(msg.content) }} />
+                            </div>
+                        )}
+                        <span className="text-xs text-muted-foreground">
+                            {new Date(msg.created_at).toLocaleTimeString()}
+                            {msg.role === 'assistant' && generationSeconds && ` · ${generationSeconds}s`}
+                            {msg.role === 'assistant' && modelLabel && ` · ${modelLabel}`}
+                        </span>
                     </div>
                 </div>
             </ContextMenuTrigger>

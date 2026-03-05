@@ -324,6 +324,19 @@
     @apply animate-blink text-accent ml-0.5;
   }
 
+  .agent-generation-pill {
+    @apply inline-flex items-center gap-2 rounded-full border border-accent/25 bg-accent/10 px-3 py-1 text-[11px] uppercase tracking-wide text-accent/90;
+  }
+
+  .agent-generation-orb {
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 9999px;
+    background: radial-gradient(circle at 35% 35%, hsla(192, 100%, 82%, 0.95), hsla(192, 100%, 55%, 0.92) 58%, hsla(192, 100%, 42%, 0.86) 100%);
+    box-shadow: 0 0 0 hsla(192, 100%, 66%, 0.5);
+    animation: of-agent-glow 1.25s ease-in-out infinite;
+  }
+
   .markdown-content {
     @apply text-sm text-foreground leading-relaxed;
 
@@ -505,6 +518,29 @@
 
   100% {
     transform: translate3d(48px, 24px, 0) scale(1.08);
+  }
+}
+
+@keyframes of-agent-glow {
+  0% {
+    transform: scale(0.9);
+    box-shadow:
+      0 0 0 0 hsla(192, 100%, 66%, 0.58),
+      0 0 14px hsla(192, 100%, 66%, 0.7);
+  }
+
+  60% {
+    transform: scale(1.08);
+    box-shadow:
+      0 0 0 7px hsla(192, 100%, 66%, 0),
+      0 0 22px hsla(192, 100%, 66%, 0.82);
+  }
+
+  100% {
+    transform: scale(0.9);
+    box-shadow:
+      0 0 0 0 hsla(192, 100%, 66%, 0),
+      0 0 14px hsla(192, 100%, 66%, 0.7);
   }
 }
 

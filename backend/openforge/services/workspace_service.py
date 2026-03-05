@@ -71,7 +71,10 @@ class WorkspaceService:
                 select(func.count(Note.id)).where(Note.workspace_id == ws.id)
             )
             conv_count_r = await db.execute(
-                select(func.count(Conversation.id)).where(Conversation.workspace_id == ws.id)
+                select(func.count(Conversation.id)).where(
+                    Conversation.workspace_id == ws.id,
+                    Conversation.is_archived == False,  # noqa: E712
+                )
             )
             responses.append(_to_response(
                 ws,
@@ -87,7 +90,12 @@ class WorkspaceService:
             raise HTTPException(status_code=404, detail="Workspace not found")
 
         note_count_r = await db.execute(select(func.count(Note.id)).where(Note.workspace_id == ws.id))
-        conv_count_r = await db.execute(select(func.count(Conversation.id)).where(Conversation.workspace_id == ws.id))
+        conv_count_r = await db.execute(
+            select(func.count(Conversation.id)).where(
+                Conversation.workspace_id == ws.id,
+                Conversation.is_archived == False,  # noqa: E712
+            )
+        )
         return _to_response(ws, note_count_r.scalar() or 0, conv_count_r.scalar() or 0)
 
     async def update_workspace(self, db: AsyncSession, workspace_id: UUID, data: WorkspaceUpdate) -> WorkspaceResponse:

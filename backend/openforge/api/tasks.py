@@ -58,6 +58,14 @@ TASK_CATALOGUE = [
         "default_enabled": False,
         "default_interval_hours": 168,  # weekly
     },
+    {
+        "id": "purge_chat_trash",
+        "label": "Purge Chat Trash",
+        "description": "Permanently delete trashed chat threads older than the configured retention window.",
+        "category": "maintenance",
+        "default_enabled": True,
+        "default_interval_hours": 24,
+    },
 ]
 
 
@@ -215,6 +223,10 @@ async def run_task_now(
                             n.embedding_status = "done"
                             await s.commit()
                 item_count = len(pending)
+            elif task_id == "purge_chat_trash":
+                from openforge.services.conversation_service import conversation_service
+                async with AsyncSessionLocal() as s:
+                    item_count = await conversation_service.purge_expired_archived_conversations(s)
         except Exception as e:
             status = "failed"
             error_msg = str(e)[:500]

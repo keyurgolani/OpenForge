@@ -11,6 +11,13 @@ export const getOnboarding = (): Promise<any> => api.get('/onboarding').then(r =
 export const advanceOnboarding = (step: string): Promise<any> =>
     api.post('/onboarding/step', { step }).then(r => r.data)
 
+// ── App Settings ──
+export const listSettings = (): Promise<any> => api.get('/settings').then(r => r.data)
+export const updateSetting = (
+    key: string,
+    data: { value: any; category?: string; sensitive?: boolean },
+): Promise<any> => api.put(`/settings/${key}`, data).then(r => r.data)
+
 // ── LLM Providers ──
 export const listProviders = (): Promise<any> => api.get('/llm/providers').then(r => r.data)
 export const createProvider = (data: object): Promise<any> => api.post('/llm/providers', data).then(r => r.data)
@@ -57,8 +64,10 @@ export const generateTitle = (wid: string, nid: string): Promise<any> =>
     api.post(`/workspaces/${wid}/notes/${nid}/generate-title`).then(r => r.data)
 
 // ── Conversations ──
-export const listConversations = (wid: string): Promise<any> =>
-    api.get(`/workspaces/${wid}/conversations`).then(r => r.data)
+export const listConversations = (
+    wid: string,
+    params?: { include_archived?: boolean },
+): Promise<any> => api.get(`/workspaces/${wid}/conversations`, { params }).then(r => r.data)
 export const createConversation = (wid: string, data?: object): Promise<any> =>
     api.post(`/workspaces/${wid}/conversations`, data ?? {}).then(r => r.data)
 export const getConversation = (wid: string, cid: string, params?: object): Promise<any> =>

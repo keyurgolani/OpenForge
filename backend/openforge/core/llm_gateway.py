@@ -2,6 +2,7 @@ import litellm
 from typing import AsyncGenerator
 import tiktoken
 import httpx
+import json
 import logging
 
 logger = logging.getLogger("openforge.llm")
@@ -36,6 +37,15 @@ class LLMGateway:
         base_url: str | None = None,
         max_tokens: int = 2000,
     ) -> str:
+        if provider_name == "ollama":
+            return await self._chat_ollama_native(
+                messages=messages,
+                model=model,
+                base_url=base_url,
+                api_key=api_key,
+                max_tokens=max_tokens,
+            )
+
         response = await litellm.acompletion(
             model=self._resolve_model(provider_name, model),
             messages=messages,
@@ -54,6 +64,18 @@ class LLMGateway:
         base_url: str | None = None,
         max_tokens: int = 2000,
     ) -> AsyncGenerator[str, None]:
+        if provider_name == "ollama":
+            async for token in self._stream_ollama_native(
+                messages=messages,
+                model=model,
+                base_url=base_url,
+                api_key=api_key,
+                max_tokens=max_tokens,
+                include_thinking=False,
+            ):
+                yield token
+            return
+
         response = await litellm.acompletion(
             model=self._resolve_model(provider_name, model),
             messages=messages,
@@ -66,6 +88,153 @@ class LLMGateway:
             delta = chunk.choices[0].delta
             if delta and delta.content:
                 yield delta.content
+
+    async def stream_events(
+        self,
+        messages: list[dict],
+        provider_name: str,
+        api_key: str,
+        model: str,
+        base_url: str | None = None,
+        max_tokens: int = 2000,
+        include_thinking: bool = False,
+    ) -> AsyncGenerator[dict[str, str], None]:
+        if provider_name == "ollama":
+            async for event in self._stream_ollama_native_events(
+                messages=messages,
+                model=model,
+                base_url=base_url,
+                api_key=api_key,
+                max_tokens=max_tokens,
+                include_thinking=include_thinking,
+            ):
+                yield event
+            return
+
+        async for token in self.stream(
+            messages=messages,
+            provider_name=provider_name,
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+            max_tokens=max_tokens,
+        ):
+            yield {"type": "token", "content": token}
+
+    async def _chat_ollama_native(
+        self,
+        messages: list[dict],
+        model: str,
+        base_url: str | None,
+        api_key: str,
+        max_tokens: int,
+    ) -> str:
+        payload = self._build_ollama_payload(
+            messages=messages,
+            model=model,
+            max_tokens=max_tokens,
+            stream=False,
+            include_thinking=False,
+        )
+        headers = self._ollama_headers(api_key)
+        base = self._normalize_ollama_base_url(base_url)
+
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                f"{base}/api/chat",
+                json=payload,
+                headers=headers,
+            )
+            response.raise_for_status()
+            chunk = response.json()
+
+        return self._extract_ollama_chunk_text(chunk)
+
+    async def _stream_ollama_native(
+        self,
+        messages: list[dict],
+        model: str,
+        base_url: str | None,
+        api_key: str,
+        max_tokens: int,
+        include_thinking: bool,
+    ) -> AsyncGenerator[str, None]:
+        payload = self._build_ollama_payload(
+            messages=messages,
+            model=model,
+            max_tokens=max_tokens,
+            stream=True,
+            include_thinking=include_thinking,
+        )
+        headers = self._ollama_headers(api_key)
+        base = self._normalize_ollama_base_url(base_url)
+
+        timeout = httpx.Timeout(connect=10.0, read=None, write=30.0, pool=10.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            async with client.stream(
+                "POST",
+                f"{base}/api/chat",
+                json=payload,
+                headers=headers,
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    try:
+                        chunk = json.loads(line)
+                    except json.JSONDecodeError:
+                        logger.debug("Skipping non-JSON Ollama stream line: %s", line)
+                        continue
+
+                    token = self._extract_ollama_chunk_text(chunk)
+                    if token:
+                        yield token
+
+    async def _stream_ollama_native_events(
+        self,
+        messages: list[dict],
+        model: str,
+        base_url: str | None,
+        api_key: str,
+        max_tokens: int,
+        include_thinking: bool,
+    ) -> AsyncGenerator[dict[str, str], None]:
+        payload = self._build_ollama_payload(
+            messages=messages,
+            model=model,
+            max_tokens=max_tokens,
+            stream=True,
+            include_thinking=include_thinking,
+        )
+        headers = self._ollama_headers(api_key)
+        base = self._normalize_ollama_base_url(base_url)
+
+        timeout = httpx.Timeout(connect=10.0, read=None, write=30.0, pool=10.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            async with client.stream(
+                "POST",
+                f"{base}/api/chat",
+                json=payload,
+                headers=headers,
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    try:
+                        chunk = json.loads(line)
+                    except json.JSONDecodeError:
+                        logger.debug("Skipping non-JSON Ollama stream line: %s", line)
+                        continue
+
+                    thinking = self._extract_ollama_chunk_thinking(chunk)
+                    if thinking:
+                        yield {"type": "thinking", "content": thinking}
+
+                    token = self._extract_ollama_chunk_text(chunk)
+                    if token:
+                        yield {"type": "token", "content": token}
 
     async def list_models(
         self,
@@ -81,7 +250,7 @@ class LLMGateway:
         try:
             # ── Ollama ────────────────────────────────────────────────────
             if provider_name == "ollama":
-                base = (base_url or "http://localhost:11434").rstrip("/")
+                base = self._normalize_ollama_base_url(base_url)
                 headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
                 async with httpx.AsyncClient(timeout=5.0) as client:
                     resp = await client.get(f"{base}/api/tags", headers=headers)
@@ -281,6 +450,82 @@ class LLMGateway:
         if not prefix or model.startswith(prefix):
             return model
         return f"{prefix}{model}"
+
+    def _build_ollama_payload(
+        self,
+        messages: list[dict],
+        model: str,
+        max_tokens: int,
+        stream: bool,
+        include_thinking: bool = False,
+    ) -> dict:
+        ollama_messages = self._to_ollama_messages(messages)
+        payload = {
+            "model": self._normalize_ollama_model(model),
+            "messages": ollama_messages,
+            "stream": stream,
+            "think": include_thinking,
+        }
+        if max_tokens > 0:
+            payload["options"] = {"num_predict": max_tokens}
+        return payload
+
+    def _to_ollama_messages(self, messages: list[dict]) -> list[dict]:
+        normalized_messages: list[dict] = []
+        for message in messages:
+            role = str(message.get("role") or "user")
+            content = self._normalize_content(message.get("content"))
+            if not content and role == "assistant":
+                continue
+            normalized_messages.append({"role": role, "content": content})
+        return normalized_messages
+
+    def _normalize_ollama_model(self, model: str) -> str:
+        return model.split("/", 1)[1] if model.startswith("ollama/") else model
+
+    def _ollama_headers(self, api_key: str) -> dict:
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        return headers
+
+    def _normalize_ollama_base_url(self, base_url: str | None) -> str:
+        base = (base_url or "http://localhost:11434").rstrip("/")
+        if base.endswith("/v1"):
+            return base[:-3]
+        return base
+
+    def _extract_ollama_chunk_text(self, chunk: dict) -> str:
+        if not isinstance(chunk, dict):
+            return ""
+
+        message = chunk.get("message")
+        if isinstance(message, dict):
+            content = message.get("content")
+            if isinstance(content, str) and content:
+                return content
+
+        response = chunk.get("response")
+        if isinstance(response, str) and response:
+            return response
+
+        return ""
+
+    def _extract_ollama_chunk_thinking(self, chunk: dict) -> str:
+        if not isinstance(chunk, dict):
+            return ""
+
+        thinking = chunk.get("thinking")
+        if isinstance(thinking, str) and thinking:
+            return thinking
+
+        message = chunk.get("message")
+        if isinstance(message, dict):
+            message_thinking = message.get("thinking")
+            if isinstance(message_thinking, str) and message_thinking:
+                return message_thinking
+
+        return ""
 
     def _normalize_content(self, content) -> str:
         """Normalize provider-specific message content payloads to plain text."""

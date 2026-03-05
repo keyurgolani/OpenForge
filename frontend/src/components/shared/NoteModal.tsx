@@ -10,10 +10,11 @@
  *  - Keyboard shortcut: Escape closes
  *  - Click backdrop → closes
  */
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getNote, togglePin, toggleArchive, deleteNote, summarizeNote, extractInsights, generateTitle } from '@/lib/api'
+import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import {
     X, ExternalLink, Pin, PinOff, Archive, ArchiveX, Trash2, Sparkles,
     FileText, Bookmark, Code2, Zap, Clock, Tag, Hash, Loader2,
@@ -41,6 +42,8 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
     const navigate = useNavigate()
     const qc = useQueryClient()
     const backdropRef = useRef<HTMLDivElement>(null)
+    const [aiLoading, setAiLoading] = useState<string | null>(null)
+    const { on } = useWorkspaceWebSocket(workspaceId)
 
     const { data: note, isLoading } = useQuery({
         queryKey: ['note', noteId],
@@ -60,6 +63,14 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
         document.body.style.overflow = 'hidden'
         return () => { document.body.style.overflow = '' }
     }, [])
+
+    useEffect(() => {
+        return on('note_updated', (msg: Record<string, unknown>) => {
+            if (msg.note_id !== noteId) return
+            qc.invalidateQueries({ queryKey: ['note', noteId] })
+            qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
+        })
+    }, [noteId, on, qc, workspaceId])
 
     const handlePin = async () => {
         await togglePin(workspaceId, noteId)
@@ -81,10 +92,46 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
     }
 
     const handleAI = async (action: string) => {
-        if (action === 'summarize') await summarizeNote(workspaceId, noteId)
-        else if (action === 'insights') await extractInsights(workspaceId, noteId)
-        else if (action === 'title') await generateTitle(workspaceId, noteId)
-        qc.invalidateQueries({ queryKey: ['note', noteId] })
+        if (aiLoading) return
+        setAiLoading(action)
+        try {
+            if (action === 'summarize') {
+                const result = await summarizeNote(workspaceId, noteId)
+                const summary = (result?.summary ?? '').trim()
+                if (summary) {
+                    qc.setQueryData(['note', noteId], (prev: any) => prev ? { ...prev, ai_summary: summary } : prev)
+                }
+            } else if (action === 'insights') {
+                const insights = await extractInsights(workspaceId, noteId)
+                qc.setQueryData(['note', noteId], (prev: any) => {
+                    if (!prev) return prev
+                    const next: any = { ...prev, insights }
+                    if (Array.isArray(insights?.tags) && insights.tags.length > 0) {
+                        const currentTags = Array.isArray(prev.tags) ? prev.tags : []
+                        next.tags = Array.from(new Set([...currentTags, ...insights.tags]))
+                    }
+                    return next
+                })
+            } else if (action === 'title') {
+                const result = await generateTitle(workspaceId, noteId)
+                const generatedTitle = (result?.title ?? '').trim()
+                if (generatedTitle) {
+                    qc.setQueryData(['note', noteId], (prev: any) => {
+                        if (!prev) return prev
+                        const titleWasEmpty = !(prev.title ?? '').trim()
+                        return {
+                            ...prev,
+                            ai_title: generatedTitle,
+                            title: titleWasEmpty ? generatedTitle : prev.title,
+                        }
+                    })
+                }
+            }
+            qc.invalidateQueries({ queryKey: ['note', noteId] })
+            qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
+        } finally {
+            setAiLoading(null)
+        }
     }
 
     const openNote = () => {
@@ -340,24 +387,30 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
                             <button
                                 className="btn-ghost text-xs py-1 px-2.5 gap-1.5"
                                 onClick={() => handleAI('summarize')}
+                                disabled={!!aiLoading}
                             >
-                                <Brain className="w-3 h-3" /> Summarize
+                                {aiLoading === 'summarize' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Brain className="w-3 h-3" />}
+                                Summarize
                             </button>
                         )}
                         {(!note.insights || Object.keys(note.insights).length === 0) && (
                             <button
                                 className="btn-ghost text-xs py-1 px-2.5 gap-1.5"
                                 onClick={() => handleAI('insights')}
+                                disabled={!!aiLoading}
                             >
-                                <Sparkles className="w-3 h-3" /> Extract insights
+                                {aiLoading === 'insights' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                                Extract insights
                             </button>
                         )}
                         {!note.title && (
                             <button
                                 className="btn-ghost text-xs py-1 px-2.5 gap-1.5"
                                 onClick={() => handleAI('title')}
+                                disabled={!!aiLoading}
                             >
-                                <Star className="w-3 h-3" /> Generate title
+                                {aiLoading === 'title' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Star className="w-3 h-3" />}
+                                Generate title
                             </button>
                         )}
                     </div>

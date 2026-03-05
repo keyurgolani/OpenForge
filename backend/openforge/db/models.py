@@ -156,8 +156,10 @@ class Conversation(Base):
         UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
     )
     title: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    title_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_pinned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     message_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_message_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -186,9 +188,11 @@ class Message(Base):
     )
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    thinking: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     model_used: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     provider_used: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     token_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    generation_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     context_sources: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=now_utc

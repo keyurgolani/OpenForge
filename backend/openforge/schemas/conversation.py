@@ -10,6 +10,7 @@ class ConversationCreate(BaseModel):
 
 class ConversationUpdate(BaseModel):
     title: Optional[str] = None
+    title_locked: Optional[bool] = None
     is_pinned: Optional[bool] = None
     is_archived: Optional[bool] = None
 
@@ -19,9 +20,11 @@ class MessageResponse(BaseModel):
     conversation_id: UUID
     role: str
     content: str
+    thinking: Optional[str] = None
     model_used: Optional[str] = None
     provider_used: Optional[str] = None
     token_count: Optional[int] = None
+    generation_ms: Optional[int] = None
     context_sources: Optional[list] = None
     created_at: datetime
 
@@ -32,8 +35,10 @@ class ConversationResponse(BaseModel):
     id: UUID
     workspace_id: UUID
     title: Optional[str] = None
+    title_locked: bool = False
     is_pinned: bool = False
     is_archived: bool = False
+    archived_at: Optional[datetime] = None
     message_count: int = 0
     last_message_at: Optional[datetime] = None
     last_message_preview: Optional[str] = None

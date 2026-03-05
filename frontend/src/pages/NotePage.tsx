@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams } from 'react-router-dom'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useParams, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getNote, updateNote, summarizeNote, extractInsights, generateTitle } from '@/lib/api'
+import { getNote, updateNote, summarizeNote, extractInsights, generateTitle, deleteNote } from '@/lib/api'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import { useToast } from '@/components/shared/ToastProvider'
 import {
@@ -29,6 +29,7 @@ function useDebounce<T>(value: T, delay: number): T {
 
 export default function NotePage() {
     const { workspaceId = '', noteId = '' } = useParams<{ workspaceId: string; noteId: string }>()
+    const location = useLocation()
     const qc = useQueryClient()
     const { error: showError } = useToast()
     const { on } = useWorkspaceWebSocket(workspaceId)
@@ -39,6 +40,12 @@ export default function NotePage() {
     const [saving, setSaving] = useState(false)
     const [aiLoading, setAiLoading] = useState<string | null>(null)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
+    const hadMeaningfulInputRef = useRef(false)
+    const latestDraftStateRef = useRef<{ title: string; content: string; note: any | null }>({ title: '', content: '', note: null })
+    const isDiscardableDraft = useMemo(
+        () => new URLSearchParams(location.search).get('draft') === '1',
+        [location.search],
+    )
 
     const { data: note, isLoading } = useQuery({
         queryKey: ['note', noteId],
@@ -52,6 +59,34 @@ export default function NotePage() {
             setTitle(note.title ?? '')
         }
     }, [note])
+
+    useEffect(() => {
+        latestDraftStateRef.current = { title, content, note: note ?? null }
+    }, [title, content, note])
+
+    useEffect(() => {
+        if (!isDiscardableDraft || !noteId) return
+
+        return () => {
+            if (hadMeaningfulInputRef.current) return
+
+            const latest = latestDraftStateRef.current
+            const titleText = (latest.title || latest.note?.title || '').trim()
+            const contentText = (latest.content || latest.note?.content || '').trim()
+            const urlText = (latest.note?.url || '').trim()
+            const aiTitleText = (latest.note?.ai_title || '').trim()
+            const aiSummaryText = (latest.note?.ai_summary || '').trim()
+            const hasInsights = !!latest.note?.insights && Object.keys(latest.note.insights).length > 0
+            const hasTags = Array.isArray(latest.note?.tags) && latest.note.tags.length > 0
+
+            const isStillEmpty = !titleText && !contentText && !urlText && !aiTitleText && !aiSummaryText && !hasInsights && !hasTags
+            if (!isStillEmpty) return
+
+            deleteNote(workspaceId, noteId)
+                .then(() => qc.invalidateQueries({ queryKey: ['notes', workspaceId] }))
+                .catch(() => { /* best-effort cleanup */ })
+        }
+    }, [isDiscardableDraft, noteId, workspaceId, qc])
 
     // WebSocket: refresh note on AI update
     useEffect(() => {
@@ -79,15 +114,41 @@ export default function NotePage() {
     }, [debouncedContent, debouncedTitle, note, noteId, workspaceId, qc])
 
     const handleAI = async (action: string) => {
+        if (aiLoading) return
         setAiLoading(action)
         try {
-            if (action === 'summarize') await summarizeNote(workspaceId, noteId)
-            else if (action === 'insights') { await extractInsights(workspaceId, noteId); setShowInsights(true) }
-            else if (action === 'title') {
+            if (action === 'summarize') {
+                const result = await summarizeNote(workspaceId, noteId)
+                const summary = (result?.summary ?? '').trim()
+                if (summary) {
+                    qc.setQueryData(['note', noteId], (prev: any) => prev ? { ...prev, ai_summary: summary } : prev)
+                }
+            } else if (action === 'insights') {
+                const insights = await extractInsights(workspaceId, noteId)
+                setShowInsights(true)
+                qc.setQueryData(['note', noteId], (prev: any) => {
+                    if (!prev) return prev
+                    const next: any = { ...prev, insights }
+                    if (Array.isArray(insights?.tags) && insights.tags.length > 0) {
+                        const currentTags = Array.isArray(prev.tags) ? prev.tags : []
+                        next.tags = Array.from(new Set([...currentTags, ...insights.tags]))
+                    }
+                    return next
+                })
+            } else if (action === 'title') {
                 const result = await generateTitle(workspaceId, noteId)
                 const generatedTitle = (result?.title ?? '').trim()
                 if (generatedTitle) {
                     setTitle(generatedTitle)
+                    qc.setQueryData(['note', noteId], (prev: any) => {
+                        if (!prev) return prev
+                        const titleWasEmpty = !(prev.title ?? '').trim()
+                        return {
+                            ...prev,
+                            ai_title: generatedTitle,
+                            title: titleWasEmpty ? generatedTitle : prev.title,
+                        }
+                    })
                 }
             }
             qc.invalidateQueries({ queryKey: ['note', noteId] })
@@ -95,8 +156,9 @@ export default function NotePage() {
         } catch (err: any) {
             const detail = err?.response?.data?.detail || err?.message || 'AI action failed.'
             showError('AI action failed', detail)
+        } finally {
+            setAiLoading(null)
         }
-        setAiLoading(null)
     }
 
     const insertMarkdown = (before: string, after: string = '') => {
@@ -180,7 +242,7 @@ export default function NotePage() {
 
             {/* AI Summary */}
             {note?.ai_summary && (
-                <div className="mx-6 mt-3 p-3 glass-card border-accent/20 bg-accent/5">
+                <div className="mx-6 mt-3 max-h-[30vh] flex-shrink-0 overflow-y-auto p-3 glass-card border-accent/20 bg-accent/5">
                     <div className="flex items-center gap-2 font-medium text-accent text-xs mb-2">
                         <Sparkles className="w-3.5 h-3.5" /> AI Summary
                     </div>
@@ -192,7 +254,7 @@ export default function NotePage() {
             )}
 
             {/* Editor area */}
-            <div className="flex flex-1 min-h-0">
+            <div className="flex flex-1 min-h-0 overflow-hidden">
                 {/* Editor pane */}
                 {(mode === 'edit' || mode === 'split') && (
                     <div className={`flex min-h-0 flex-col ${mode === 'split' ? 'w-1/2 border-r border-border/50' : 'w-full'} overflow-hidden`}>
@@ -201,7 +263,10 @@ export default function NotePage() {
                                 className="w-full text-xl font-bold bg-transparent border-none outline-none text-foreground placeholder-muted-foreground/50"
                                 placeholder={note?.ai_title ?? 'Untitled'}
                                 value={title}
-                                onChange={e => setTitle(e.target.value)}
+                                onChange={e => {
+                                    if (e.target.value.trim().length > 0) hadMeaningfulInputRef.current = true
+                                    setTitle(e.target.value)
+                                }}
                             />
                         </div>
                         <textarea
@@ -209,7 +274,10 @@ export default function NotePage() {
                             className="min-h-0 flex-1 overflow-y-auto p-6 pt-4 bg-transparent border-none outline-none resize-none font-mono text-sm text-foreground leading-relaxed"
                             placeholder="Start writing… (Markdown supported)"
                             value={content}
-                            onChange={e => setContent(e.target.value)}
+                            onChange={e => {
+                                if (e.target.value.trim().length > 0) hadMeaningfulInputRef.current = true
+                                setContent(e.target.value)
+                            }}
                             style={{ tabSize: 2 }}
                         />
                     </div>

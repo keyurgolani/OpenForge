@@ -53,4 +53,4 @@ async def update_conversation(
 async def delete_conversation(
     workspace_id: UUID, conversation_id: UUID, db: AsyncSession = Depends(get_db)
 ):
-    await conversation_service.delete_conversation(db, conversation_id)
+    await conversation_service.delete_conversation(db, workspace_id, conversation_id)

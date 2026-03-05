@@ -1,8 +1,10 @@
+import asyncio
 from fastapi import WebSocket
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
 import logging
+import time
 from typing import List, Optional
 
 from openforge.core.llm_gateway import llm_gateway
@@ -10,8 +12,12 @@ from openforge.core.search_engine import search_engine
 from openforge.core.context_assembler import ContextAssembler
 from openforge.services.conversation_service import conversation_service
 from openforge.services.llm_service import llm_service
+from openforge.services.chat_retrieval import (
+    build_context_sources,
+    select_relevant_rag_results,
+)
 from openforge.api.websocket import ws_manager
-from openforge.db.models import MessageAttachment
+from openforge.db.models import MessageAttachment, Conversation
 
 logger = logging.getLogger("openforge.chat")
 
@@ -31,6 +37,16 @@ class ChatService:
         model_id: Optional[str] = None,
     ):
         """Full chat message handling pipeline."""
+        conv_result = await db.execute(select(Conversation).where(Conversation.id == conversation_id))
+        conversation = conv_result.scalar_one_or_none()
+        if not conversation or conversation.workspace_id != workspace_id or conversation.is_archived:
+            await ws_manager.send_to_connection(websocket, {
+                "type": "chat_error",
+                "conversation_id": str(conversation_id),
+                "detail": "Conversation not found",
+            })
+            return
+
         # Build enhanced content with attachments
         enhanced_content = user_content
         attachment_context = ""
@@ -63,11 +79,23 @@ class ChatService:
         if attachment_context:
             rag_query = f"{user_content}\n{attachment_context}"
 
-        rag_results = search_engine.search(
+        raw_rag_results = search_engine.search(
             query=rag_query,
             workspace_id=str(workspace_id),
-            limit=5,
+            limit=12,
+            score_threshold=0.35,
         )
+        rag_results = select_relevant_rag_results(raw_rag_results, limit=5)
+        context_sources = build_context_sources(rag_results)
+
+        # Emit selected sources before generation starts so UI can mirror
+        # the actual sequence: retrieval -> thinking -> response.
+        if context_sources:
+            await ws_manager.send_to_connection(websocket, {
+                "type": "chat_sources",
+                "conversation_id": str(conversation_id),
+                "data": context_sources,
+            })
 
         # 3. Assemble prompt
         history = await conversation_service.get_recent_messages(db, conversation_id, limit=20)
@@ -100,20 +128,36 @@ class ChatService:
             return
 
         full_response = ""
+        full_thinking = ""
+        generation_started = time.perf_counter()
         try:
-            async for token in llm_gateway.stream(
+            async for event in llm_gateway.stream_events(
                 messages=assembled,
                 provider_name=provider_name,
                 api_key=api_key,
                 model=model,
                 base_url=base_url,
+                include_thinking=True,
             ):
-                full_response += token
-                await ws_manager.send_to_connection(websocket, {
-                    "type": "chat_token",
-                    "conversation_id": str(conversation_id),
-                    "data": token,
-                })
+                if event.get("type") == "thinking":
+                    thinking = event.get("content", "")
+                    if thinking:
+                        full_thinking += thinking
+                        await ws_manager.send_to_connection(websocket, {
+                            "type": "chat_thinking",
+                            "conversation_id": str(conversation_id),
+                            "data": thinking,
+                        })
+                    continue
+
+                token = event.get("content", "")
+                if token:
+                    full_response += token
+                    await ws_manager.send_to_connection(websocket, {
+                        "type": "chat_token",
+                        "conversation_id": str(conversation_id),
+                        "data": token,
+                    })
         except Exception as e:
             logger.error(f"LLM streaming error: {e}")
             await ws_manager.send_to_connection(websocket, {
@@ -124,34 +168,50 @@ class ChatService:
             return
 
         # 5. Save assistant message
-        context_sources = [
-            {"note_id": r["note_id"], "title": r["title"], "snippet": r["chunk_text"][:200], "score": r["score"]}
-            for r in rag_results[:5]
-        ]
+        generation_ms = int((time.perf_counter() - generation_started) * 1000)
+        has_runtime_override = bool(provider_id or model_id)
+
         msg = await conversation_service.add_message(
             db,
             conversation_id,
             role="assistant",
             content=full_response,
+            thinking=full_thinking.strip() or None,
             model_used=model,
             provider_used=provider_name,
             token_count=llm_gateway.count_tokens(full_response),
+            generation_ms=generation_ms,
             context_sources=context_sources,
+            trigger_auto_title=not has_runtime_override,
         )
 
-        # 6. Send sources + done
-        if rag_results:
-            await ws_manager.send_to_connection(websocket, {
-                "type": "chat_sources",
-                "conversation_id": str(conversation_id),
-                "data": context_sources,
-            })
-
+        # 6. Notify completion
         await ws_manager.send_to_connection(websocket, {
             "type": "chat_done",
             "conversation_id": str(conversation_id),
             "message_id": str(msg.id),
+            "generation_ms": generation_ms,
         })
+
+        if has_runtime_override:
+            async def _refresh_chat_title() -> None:
+                from openforge.db.postgres import AsyncSessionLocal
+
+                try:
+                    async with AsyncSessionLocal() as title_db:
+                        await conversation_service.refresh_conversation_title(
+                            title_db,
+                            workspace_id=workspace_id,
+                            conversation_id=conversation_id,
+                            provider_name=provider_name,
+                            api_key=api_key,
+                            model=model,
+                            base_url=base_url,
+                        )
+                except Exception as e:
+                    logger.warning("Chat title refresh failed for conversation %s: %s", conversation_id, e)
+
+            asyncio.create_task(_refresh_chat_title())
 
 
 chat_service = ChatService()
