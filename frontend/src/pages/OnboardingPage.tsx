@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -151,175 +151,261 @@ function WelcomeStep({ onNext, loading }: { onNext: () => void; loading: boolean
 }
 
 function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolean }) {
+    // Configured providers (accumulated during this step)
+    const [configured, setConfigured] = useState<{ id: string; name: string }[]>([])
+
+    // Add-provider form state
     const [selected, setSelected] = useState<string | null>(null)
     const [apiKey, setApiKey] = useState('')
     const [showKey, setShowKey] = useState(false)
-    const [baseUrl, setBaseUrl] = useState('http://localhost:11434')
-    const [model, setModel] = useState('')
-    const [models, setModels] = useState<{ id: string; name: string }[]>([])
-    const [testing, setTesting] = useState(false)
+    const [baseUrl, setBaseUrl] = useState('')
+    const [displayName, setDisplayName] = useState('')
+
+    // Model fetch state
+    const [fetchingModels, setFetchingModels] = useState(false)
+    const [models, setModels] = useState<{ id: string; name: string }[] | null>(null)
+    const [modelError, setModelError] = useState<string | null>(null)
+    const [modelSearch, setModelSearch] = useState('')
+    const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set())
+    const [manualModel, setManualModel] = useState('')
+
+    // Save state
+    const [saving, setSaving] = useState(false)
+    const [saveError, setSaveError] = useState<string | null>(null)
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
-    const [saved, setSaved] = useState(false)
 
     const provider = PROVIDERS.find(p => p.id === selected)
 
-    // Reset API key when provider changes — prevents stale key from previous selection
-    const handleSelectProvider = (id: string) => {
-        setSelected(id)
-        setApiKey('')
-        setShowKey(false)
-        setTestResult(null)
-        setSaved(false)
-        setModels([])
-        setModel('')
+    const resetForm = () => {
+        setSelected(null); setApiKey(''); setShowKey(false); setBaseUrl('')
+        setDisplayName(''); setModels(null); setModelError(null); setModelSearch('')
+        setSelectedModels(new Set()); setManualModel(''); setSaveError(null); setTestResult(null)
     }
 
-    const handleTest = async () => {
-        if (!selected) return
-        setTesting(true)
-        setTestResult(null)
+    const handleSelectProvider = (id: string) => {
+        setSelected(id); setApiKey(''); setShowKey(false)
+        setBaseUrl(id === 'ollama' ? 'http://localhost:11434' : '')
+        setDisplayName(''); setModels(null); setModelError(null)
+        setSelectedModels(new Set()); setManualModel(''); setSaveError(null); setTestResult(null)
+    }
+
+    const canFetch = provider?.needsUrl ? !!baseUrl : !!apiKey
+
+    const filteredModels = useMemo(() => {
+        if (!models) return []
+        const q = modelSearch.toLowerCase()
+        return q ? models.filter(m => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)) : models
+    }, [models, modelSearch])
+
+    const handleFetchModels = async () => {
+        if (!selected || !canFetch) return
+        setFetchingModels(true); setModelError(null); setModels(null)
+        setSelectedModels(new Set()); setTestResult(null)
         try {
-            const p = await createProvider({
+            const temp = await createProvider({
                 provider_name: selected,
-                display_name: provider?.name ?? selected,
+                display_name: displayName || provider?.name || selected,
                 api_key: apiKey || undefined,
-                base_url: provider?.needsUrl ? baseUrl : undefined,
-                default_model: model || undefined,
+                base_url: baseUrl || undefined,
             })
-            const result = await testConnection(p.id)
+            const result = await testConnection(temp.id)
             setTestResult(result)
             if (result.success) {
-                const modelList = await listModels(p.id)
-                setModels(modelList)
+                try {
+                    const list = await listModels(temp.id)
+                    setModels(list)
+                    if (list.length > 0 && list.length <= 20) {
+                        setSelectedModels(new Set(list.map((m: { id: string }) => m.id)))
+                    }
+                } catch (me: unknown) {
+                    const err = me as { response?: { data?: { detail?: string } }; message?: string }
+                    setModelError(err?.response?.data?.detail ?? err?.message ?? 'Could not fetch models')
+                    setModels([])
+                }
             }
-            setSaved(result.success)
         } catch (e: unknown) {
-            const msg = (e as { response?: { data?: { detail?: string } }; message?: string })
-            setTestResult({ success: false, message: msg?.response?.data?.detail ?? msg?.message ?? 'Connection failed' })
+            const err = e as { response?: { data?: { detail?: string } }; message?: string }
+            setTestResult({ success: false, message: err?.response?.data?.detail ?? err?.message ?? 'Connection failed' })
         } finally {
-            setTesting(false)
+            setFetchingModels(false)
         }
     }
 
+    const toggleModel = (id: string) => setSelectedModels(prev => {
+        const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n
+    })
+
+    const handleSave = async () => {
+        const modelsToAdd = models ? [...selectedModels] : manualModel.trim() ? [manualModel.trim()] : []
+        if (!modelsToAdd.length) { setSaveError('Select at least one model or enter a model ID.'); return }
+        setSaving(true); setSaveError(null)
+        try {
+            for (const modelId of modelsToAdd) {
+                const label = models?.find(m => m.id === modelId)?.name ?? modelId
+                const saved = await createProvider({
+                    provider_name: selected!,
+                    display_name: displayName ? `${displayName} — ${label}` : `${provider?.name ?? selected} — ${label}`,
+                    api_key: apiKey || undefined,
+                    base_url: baseUrl || undefined,
+                    default_model: modelId,
+                })
+                setConfigured(c => [...c, { id: saved.id, name: saved.display_name }])
+            }
+            resetForm()
+        } catch (e: unknown) {
+            const err = e as { response?: { data?: { detail?: string } }; message?: string }
+            setSaveError(err?.response?.data?.detail ?? err?.message ?? 'Save failed')
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    const totalSelected = models ? selectedModels.size : (manualModel.trim() ? 1 : 0)
+
     return (
-        <div className="glass-card p-8 space-y-5 animate-slide-up">
+        <div className="glass-card p-6 space-y-5 animate-slide-up">
             <div>
-                <h2 className="text-xl font-bold mb-1">Connect an AI Provider</h2>
-                <p className="text-muted-foreground text-sm">Choose a provider to enable AI features. You can add more in Settings later.</p>
+                <h2 className="text-xl font-bold mb-1">Connect AI Providers</h2>
+                <p className="text-muted-foreground text-sm">
+                    Configure one or more providers. You can add more in Settings later.
+                </p>
             </div>
 
-            {/* Provider grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {PROVIDERS.map(p => (
-                    <button
-                        key={p.id}
-                        onClick={() => handleSelectProvider(p.id)}
-                        className={`p-3 rounded-xl border text-left transition-all duration-200 group ${selected === p.id
-                            ? `border-accent bg-gradient-to-br ${p.color} to-transparent ring-1 ring-accent/30`
-                            : 'border-border hover:border-border/80 hover:bg-muted/30'
-                            }`}
-                    >
-                        <div className="text-xl mb-1 flex justify-center">
-                            <ProviderIcon providerId={p.id} className="w-5 h-5" />
+            {/* Configured providers list */}
+            {configured.length > 0 && (
+                <div className="space-y-1.5">
+                    <p className="text-xs font-medium text-muted-foreground">Configured</p>
+                    {configured.map(c => (
+                        <div key={c.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/5 border border-emerald-500/20 text-xs">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                            <span className="text-emerald-300 truncate">{c.name}</span>
                         </div>
-                        <div className="font-medium text-xs leading-tight">{p.name}</div>
-                        {p.needsUrl && !p.needsKey && <div className="text-[10px] text-emerald-400 mt-0.5">Custom URL</div>}
-                    </button>
-                ))}
-            </div>
-
-            {selected && (
-                <div className="space-y-3 pt-1">
-                    {provider?.needsUrl ? (
-                        <div className="space-y-2">
-                            <div>
-                                <label className="text-xs text-muted-foreground mb-1 block">Base URL</label>
-                                <input
-                                    className="input"
-                                    placeholder={selected === 'ollama' ? 'http://localhost:11434' : 'https://your-endpoint.com'}
-                                    value={baseUrl}
-                                    onChange={e => setBaseUrl(e.target.value)}
-                                />
-                            </div>
-                            <div>
-                                <label className="text-xs text-muted-foreground mb-1 block">
-                                    Bearer Token <span className="text-muted-foreground/60">(optional)</span>
-                                </label>
-                                <div className="relative">
-                                    <input
-                                        type={showKey ? 'text' : 'password'}
-                                        className="input pr-10"
-                                        placeholder="Token (leave blank if not required)"
-                                        value={apiKey}
-                                        onChange={e => setApiKey(e.target.value)}
-                                        autoComplete="off"
-                                    />
-                                    <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setShowKey(v => !v)}>
-                                        {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    ) : (
-                        <div>
-                            <label className="text-xs text-muted-foreground mb-1 block">{provider?.name} API Key</label>
-                            <div className="relative">
-                                <input
-                                    type={showKey ? 'text' : 'password'}
-                                    className="input pr-10"
-                                    placeholder="sk-…"
-                                    value={apiKey}
-                                    onChange={e => setApiKey(e.target.value)}
-                                    autoComplete="off"
-                                />
-                                <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setShowKey(v => !v)}>
-                                    {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
-
-                    {models.length > 0 && (
-                        <div>
-                            <label className="text-xs text-muted-foreground mb-1 block">
-                                Default Model <span className="text-accent">({models.length} available)</span>
-                            </label>
-                            <select className="input" value={model} onChange={e => setModel(e.target.value)}>
-                                <option value="">Select a model…</option>
-                                {models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                            </select>
-                        </div>
-                    )}
-
-                    <button
-                        className="btn-ghost w-full justify-center border border-border py-2.5"
-                        onClick={handleTest}
-                        disabled={testing || (provider?.needsKey && !apiKey)}
-                    >
-                        {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe2 className="w-4 h-4" />}
-                        {testing ? 'Testing connection…' : 'Test & Save Provider'}
-                    </button>
-
-                    {testResult && (
-                        <div className={`p-3 rounded-xl text-sm flex items-start gap-2 ${testResult.success
-                            ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
-                            : 'bg-destructive/10 text-red-300 border border-destructive/20'
-                            }`}>
-                            <span>{testResult.success ? '✓' : '✗'}</span>
-                            <span>{testResult.message}</span>
-                        </div>
-                    )}
+                    ))}
                 </div>
             )}
+
+            {/* Add-provider form */}
+            <div className="space-y-4 rounded-xl border border-border/60 p-4 bg-muted/10">
+                {/* Step 1: Provider selection */}
+                <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-2">1. Select provider</p>
+                    <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+                        {PROVIDERS.map(p => (
+                            <button key={p.id} onClick={() => handleSelectProvider(p.id)}
+                                className={`p-2.5 rounded-xl border text-center transition-all ${selected === p.id
+                                    ? `border-accent ring-1 ring-accent/30 bg-gradient-to-br ${p.color} to-transparent`
+                                    : 'border-border hover:bg-muted/30'
+                                    }`}
+                            >
+                                <div className="flex justify-center mb-1.5">
+                                    <ProviderIcon providerId={p.id} className="w-4 h-4" />
+                                </div>
+                                <div className="text-[10px] leading-tight font-medium truncate">{p.name}</div>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {selected && (
+                    <>
+                        {/* Step 2: Credentials */}
+                        <div className="space-y-2">
+                            <p className="text-xs font-medium text-muted-foreground">2. Enter credentials</p>
+                            {provider?.needsUrl ? (
+                                <>
+                                    <input className="input text-sm" placeholder={selected === 'ollama' ? 'http://localhost:11434' : 'https://your-endpoint.com'} value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
+                                    <div className="relative">
+                                        <input type={showKey ? 'text' : 'password'} className="input text-sm pr-10" placeholder="Bearer token (optional)" value={apiKey} onChange={e => setApiKey(e.target.value)} autoComplete="off" />
+                                        <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowKey(v => !v)}>
+                                            {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                        </button>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="relative">
+                                    <input type={showKey ? 'text' : 'password'} className="input text-sm pr-10" placeholder={`${provider?.name} API Key`} value={apiKey} onChange={e => setApiKey(e.target.value)} autoComplete="off" />
+                                    <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowKey(v => !v)}>
+                                        {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Step 3: Test + fetch models */}
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <p className="text-xs font-medium text-muted-foreground">3. Test &amp; load models</p>
+                                <button className="btn-primary text-xs py-1.5 px-3" onClick={handleFetchModels} disabled={fetchingModels || !canFetch}>
+                                    {fetchingModels ? <Loader2 className="w-3 h-3 animate-spin" /> : <Globe2 className="w-3 h-3" />}
+                                    {models !== null ? 'Refresh' : 'Test & Fetch'}
+                                </button>
+                            </div>
+
+                            {testResult && (
+                                <div className={`flex items-center gap-2 text-xs p-2.5 rounded-lg ${testResult.success ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' : 'bg-destructive/10 text-red-300 border border-destructive/20'}`}>
+                                    {testResult.success ? <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" /> : <span className="text-red-400">✗</span>}
+                                    {testResult.message}
+                                </div>
+                            )}
+
+                            {modelError && (
+                                <div className="text-xs p-2.5 rounded-lg bg-muted/30 border border-border/50 space-y-1.5">
+                                    <p className="text-muted-foreground">{modelError}</p>
+                                    <input className="input text-xs" placeholder="Enter model ID manually (e.g. gpt-4o)" value={manualModel} onChange={e => setManualModel(e.target.value)} />
+                                </div>
+                            )}
+
+                            {models !== null && models.length > 0 && (
+                                <div className="space-y-1.5">
+                                    <div className="relative">
+                                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                                        <input className="input text-xs pl-7" placeholder={`Filter ${models.length} models…`} value={modelSearch} onChange={e => setModelSearch(e.target.value)} />
+                                    </div>
+                                    <div className="flex items-center justify-between px-0.5">
+                                        <span className="text-[10px] text-muted-foreground">{selectedModels.size} selected</span>
+                                        <button className="text-[10px] text-accent" onClick={() => selectedModels.size === filteredModels.length ? setSelectedModels(new Set()) : setSelectedModels(new Set(filteredModels.map(m => m.id)))}>
+                                            {selectedModels.size === filteredModels.length ? 'Deselect all' : 'Select all'}
+                                        </button>
+                                    </div>
+                                    <div className="max-h-48 overflow-y-auto rounded-lg border border-border/50 bg-background/30 divide-y divide-border/20">
+                                        {filteredModels.map(m => {
+                                            const checked = selectedModels.has(m.id)
+                                            return (
+                                                <button key={m.id} onClick={() => toggleModel(m.id)} className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/30 transition-colors ${checked ? 'bg-accent/5' : ''}`}>
+                                                    <div className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${checked ? 'bg-accent border-accent' : 'border-border'}`}>
+                                                        {checked && <CheckCircle2 className="w-2.5 h-2.5 text-accent-foreground" />}
+                                                    </div>
+                                                    <span className={checked ? 'text-foreground' : 'text-muted-foreground'}>{m.name}</span>
+                                                </button>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {models === null && !modelError && (
+                                <input className="input text-xs" placeholder="Or type model ID directly (e.g. gpt-4o)" value={manualModel} onChange={e => setManualModel(e.target.value)} />
+                            )}
+                        </div>
+
+                        {saveError && <p className="text-xs text-red-400">{saveError}</p>}
+
+                        <button className="btn-primary w-full justify-center py-2.5 text-sm" onClick={handleSave} disabled={saving || totalSelected === 0}>
+                            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                            {saving ? 'Saving…' : totalSelected > 0 ? `Add ${totalSelected} model${totalSelected > 1 ? 's' : ''}` : 'Select models above'}
+                        </button>
+                    </>
+                )}
+            </div>
 
             <button
                 className="btn-primary w-full justify-center py-3"
                 onClick={onNext}
-                disabled={loading}
+                disabled={loading || configured.length === 0}
             >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                {saved ? 'Continue' : 'Skip for now'} <ArrowRight className="w-4 h-4" />
+                {configured.length === 0 ? 'Configure at least one provider' : `Continue with ${configured.length} provider${configured.length > 1 ? 's' : ''}`}
+                <ArrowRight className="w-4 h-4" />
             </button>
         </div>
     )
