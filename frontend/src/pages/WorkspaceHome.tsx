@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { listNotes, createNote, deleteNote, togglePin, toggleArchive } from '@/lib/api'
 import {
-    Plus, Search, FileText, Bookmark, Code2, Zap, Pin, Archive,
+    Search, FileText, Bookmark, Code2, Zap, Pin, Archive,
     MoreHorizontal, Trash2, PinOff, ArchiveX, Loader2, Sparkles,
-    Inbox, CheckSquare, Square, Tag, Clock, ExternalLink, Copy
+    Inbox, CheckSquare, Square, Clock, ExternalLink, Copy, SortAsc,
+    ChevronDown, Tag
 } from 'lucide-react'
 
 interface NoteListItem {
@@ -21,17 +22,24 @@ interface NoteListItem {
     embedding_status: string
     insights_count: number | null
     updated_at: string
+    created_at: string
     url: string | null
     url_title: string | null
     gist_language: string | null
 }
 
-const TYPE_FILTERS = [
-    { id: '', label: 'All', icon: null },
+const TYPE_OPTS = [
+    { id: '', label: 'All types' },
     { id: 'standard', label: 'Notes', icon: FileText },
     { id: 'fleeting', label: 'Fleeting', icon: Zap },
     { id: 'bookmark', label: 'Bookmarks', icon: Bookmark },
     { id: 'gist', label: 'Gists', icon: Code2 },
+]
+
+const SORT_OPTS = [
+    { id: 'updated_at', label: 'Last modified' },
+    { id: 'created_at', label: 'Date created' },
+    { id: 'word_count', label: 'Word count' },
 ]
 
 const TYPE_META: Record<string, { icon: React.ComponentType<{ className?: string }>; label: string; color: string }> = {
@@ -45,18 +53,28 @@ export default function WorkspaceHome() {
     const { workspaceId = '' } = useParams<{ workspaceId: string }>()
     const navigate = useNavigate()
     const qc = useQueryClient()
-    const [typeFilter, setTypeFilter] = useState('')
+
     const [filterText, setFilterText] = useState('')
-    const [creating, setCreating] = useState(false)
+    const [typeFilter, setTypeFilter] = useState('')
+    const [sortBy, setSortBy] = useState('updated_at')
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+    const [showTypeMenu, setShowTypeMenu] = useState(false)
+    const [showSortMenu, setShowSortMenu] = useState(false)
     const [openMenu, setOpenMenu] = useState<string | null>(null)
+    const [creating, setCreating] = useState(false) // eslint-disable-line @typescript-eslint/no-unused-vars
 
     // Multi-select
     const [selected, setSelected] = useState<Set<string>>(new Set())
     const hasSelection = selected.size > 0
 
     const { data, isLoading } = useQuery({
-        queryKey: ['notes', workspaceId, typeFilter],
-        queryFn: () => listNotes(workspaceId, { type: typeFilter || undefined, page_size: 200 }),
+        queryKey: ['notes', workspaceId, typeFilter, sortBy, sortOrder],
+        queryFn: () => listNotes(workspaceId, {
+            type: typeFilter || undefined,
+            sort_by: sortBy,
+            sort_order: sortOrder,
+            page_size: 200,
+        }),
         enabled: !!workspaceId,
     })
 
@@ -88,7 +106,6 @@ export default function WorkspaceHome() {
         setSelected(s => { const n = new Set(s); n.delete(noteId); return n })
     }
 
-    // Bulk actions
     const handleBulkDelete = async () => {
         await Promise.all([...selected].map(id => deleteNote(workspaceId, id)))
         qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
@@ -109,15 +126,8 @@ export default function WorkspaceHome() {
 
     const toggleSelect = (id: string, e: React.MouseEvent) => {
         e.stopPropagation()
-        setSelected(s => {
-            const n = new Set(s)
-            n.has(id) ? n.delete(id) : n.add(id)
-            return n
-        })
+        setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
     }
-
-    const selectAll = () => setSelected(new Set(notes.map(n => n.id)))
-    const clearSelection = () => setSelected(new Set())
 
     const notes: NoteListItem[] = useMemo(() => {
         const allNotes = data?.notes ?? []
@@ -131,56 +141,100 @@ export default function WorkspaceHome() {
         )
     }, [data, filterText])
 
+    const selectAll = () => setSelected(new Set(notes.map(n => n.id)))
+    const clearSelection = () => setSelected(new Set())
+
+    const closeAllMenus = () => { setShowTypeMenu(false); setShowSortMenu(false) }
+
+    const typeMeta = TYPE_OPTS.find(o => o.id === typeFilter)
+    const sortMeta = SORT_OPTS.find(o => o.id === sortBy)
+
     return (
-        <div className="p-6 max-w-[1800px] mx-auto">
-            {/* Header */}
-            <div className="flex items-center gap-4 mb-5">
+        <div className="p-6 max-w-[1800px] mx-auto" onClick={closeAllMenus}>
+            {/* Toolbar */}
+            <div className="flex items-center gap-3 mb-5">
+                {/* Search */}
                 <div className="flex-1 relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                     <input
                         className="input pl-9"
-                        placeholder="Filter notes…"
+                        placeholder="Search notes…"
                         value={filterText}
                         onChange={e => setFilterText(e.target.value)}
                     />
                 </div>
-                <button
-                    className="btn-primary"
-                    onClick={() => handleCreate('standard')}
-                    disabled={creating}
-                >
-                    {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                    New Note
-                </button>
-            </div>
 
-            {/* Type filter pills */}
-            <div className="flex gap-2 mb-5 flex-wrap">
-                {TYPE_FILTERS.map(f => {
-                    const Icon = f.icon
-                    return (
-                        <button
-                            key={f.id}
-                            onClick={() => setTypeFilter(f.id)}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all border ${typeFilter === f.id
-                                    ? 'bg-accent text-accent-foreground border-accent'
-                                    : 'border-border text-muted-foreground hover:text-foreground hover:border-border/80'
-                                }`}
-                        >
-                            {Icon && <Icon className="w-3 h-3" />}
-                            {f.label}
-                        </button>
-                    )
-                })}
+                {/* Type filter dropdown */}
+                <div className="relative" onClick={e => e.stopPropagation()}>
+                    <button
+                        className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm transition-colors ${typeFilter ? 'border-accent text-accent bg-accent/10' : 'border-border text-muted-foreground hover:text-foreground hover:border-border/80'}`}
+                        onClick={() => { setShowTypeMenu(p => !p); setShowSortMenu(false) }}
+                    >
+                        <Tag className="w-3.5 h-3.5" />
+                        <span>{typeMeta?.label ?? 'All types'}</span>
+                        <ChevronDown className="w-3.5 h-3.5" />
+                    </button>
+                    {showTypeMenu && (
+                        <div className="absolute top-full right-0 mt-1 z-30 bg-card border border-border rounded-xl shadow-2xl py-1 min-w-40 animate-scale-in">
+                            {TYPE_OPTS.map(opt => {
+                                const Icon = 'icon' in opt ? opt.icon : null
+                                return (
+                                    <button
+                                        key={opt.id}
+                                        className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-muted/50 transition-colors ${typeFilter === opt.id ? 'text-accent font-medium' : 'text-foreground'}`}
+                                        onClick={() => { setTypeFilter(opt.id); setShowTypeMenu(false) }}
+                                    >
+                                        {Icon && <Icon className="w-3.5 h-3.5" />}
+                                        {!Icon && <span className="w-3.5" />}
+                                        {opt.label}
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    )}
+                </div>
 
-                {/* Select-all when not empty */}
+                {/* Sort dropdown */}
+                <div className="relative" onClick={e => e.stopPropagation()}>
+                    <button
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-border/80 text-sm transition-colors"
+                        onClick={() => { setShowSortMenu(p => !p); setShowTypeMenu(false) }}
+                    >
+                        <SortAsc className="w-3.5 h-3.5" />
+                        <span>{sortMeta?.label ?? 'Sort'}</span>
+                        <ChevronDown className="w-3.5 h-3.5" />
+                    </button>
+                    {showSortMenu && (
+                        <div className="absolute top-full right-0 mt-1 z-30 bg-card border border-border rounded-xl shadow-2xl py-1 min-w-44 animate-scale-in">
+                            {SORT_OPTS.map(opt => (
+                                <button
+                                    key={opt.id}
+                                    className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-muted/50 transition-colors ${sortBy === opt.id ? 'text-accent font-medium' : 'text-foreground'}`}
+                                    onClick={() => { setSortBy(opt.id); setShowSortMenu(false) }}
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
+                            <div className="border-t border-border/50 mt-1 pt-1">
+                                <button
+                                    className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-muted/50 text-foreground"
+                                    onClick={() => { setSortOrder(o => o === 'asc' ? 'desc' : 'asc'); setShowSortMenu(false) }}
+                                >
+                                    {sortOrder === 'desc' ? '↓ Descending' : '↑ Ascending'}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Select all */}
                 {notes.length > 0 && (
                     <button
-                        className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs text-muted-foreground border border-border hover:text-foreground hover:border-border/80 transition-all"
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-border/80 text-sm transition-colors"
                         onClick={hasSelection ? clearSelection : selectAll}
                     >
-                        {hasSelection ? <CheckSquare className="w-3 h-3" /> : <Square className="w-3 h-3" />}
-                        {hasSelection ? `${selected.size} selected` : 'Select all'}
+                        {hasSelection ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
+                        {hasSelection ? `${selected.size} selected` : 'Select'}
                     </button>
                 )}
             </div>
@@ -199,10 +253,10 @@ export default function WorkspaceHome() {
                 <div className="text-center py-20">
                     <Inbox className="w-14 h-14 mx-auto mb-4 text-muted-foreground/30" />
                     <h3 className="text-lg font-semibold mb-2">
-                        {filterText ? 'No notes match your filter' : 'No notes yet'}
+                        {filterText ? 'No notes match your search' : 'No notes yet'}
                     </h3>
                     <p className="text-muted-foreground text-sm mb-6">
-                        {filterText ? 'Try a different search term.' : 'Create your first note to get started.'}
+                        {filterText ? 'Try a different search term.' : 'Use the + New Note button to get started.'}
                     </p>
                     {!filterText && (
                         <div className="flex justify-center gap-3 flex-wrap">
@@ -253,7 +307,7 @@ export default function WorkspaceHome() {
 
             {/* Bulk action floating toolbar */}
             {hasSelection && (
-                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 glass-card border border-accent/30 px-4 py-2.5 flex items-center gap-3 shadow-2xl shadow-black/40 animate-slide-up">
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-card border border-accent/30 rounded-2xl px-4 py-2.5 flex items-center gap-3 shadow-2xl shadow-black/40 animate-slide-up">
                     <span className="text-sm font-medium text-accent">{selected.size} selected</span>
                     <div className="w-px h-4 bg-border" />
                     <button className="btn-ghost text-xs gap-1.5 py-1.5 px-2.5" onClick={handleBulkPin}>
@@ -307,40 +361,48 @@ function NoteCard({
 
     return (
         <div
-            className={`glass-card-hover p-4 cursor-pointer group relative animate-fade-in flex flex-col gap-2 transition-all ${isSelected ? 'ring-2 ring-accent border-accent/60' : ''
-                }`}
+            className={`glass-card-hover p-4 cursor-pointer group relative animate-fade-in flex flex-col gap-2 transition-all ${isSelected ? 'ring-2 ring-accent border-accent/60' : ''}`}
             style={{ animationDelay: `${Math.min(index * 25, 200)}ms` }}
             onClick={onClick}
         >
-            {/* Checkbox — appears on hover or when any note is selected */}
+            {/* Checkbox — appears on hover or when any note selected */}
             <div
                 className={`absolute top-3 left-3 z-10 transition-opacity ${anySelected || isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                 onClick={e => onSelect(note.id, e)}
             >
-                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${isSelected ? 'bg-accent border-accent' : 'border-border bg-background/50'
-                    }`}>
+                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${isSelected ? 'bg-accent border-accent' : 'border-border bg-background/50'}`}>
                     {isSelected && <CheckSquare className="w-3 h-3 text-accent-foreground" />}
                 </div>
             </div>
 
-            {/* Type badge — top right */}
-            <div className="flex items-center justify-end">
-                <span className={`flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide ${meta.color}`}>
+            {/* Card header row: type badge + pin + AI indicator + 3-dots */}
+            {/* NOTE: 3-dots is the LAST item in this row — no overlap possible */}
+            <div className="flex items-center justify-between gap-2 min-w-0">
+                {/* Left: type badge */}
+                <span className={`flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide ${meta.color} flex-shrink-0`}>
                     <TypeIcon className="w-3 h-3" />
                     {note.type === 'fleeting' && <Clock className="w-3 h-3" />}
                     {meta.label}
+                    {note.is_pinned && <Pin className="w-3 h-3 text-amber-400 ml-0.5" />}
+                    {note.embedding_status === 'done' && (
+                        <Sparkles className="w-3 h-3 text-accent/60 ml-0.5" />
+                    )}
                 </span>
-                {note.is_pinned && <Pin className="w-3 h-3 text-amber-400 ml-1.5" />}
-                {note.embedding_status === 'done' && (
-                    <Sparkles className="w-3 h-3 text-accent/50 ml-1" />
-                )}
+
+                {/* Right: 3-dots menu trigger — always rightmost, no overlap */}
+                <button
+                    className="opacity-0 group-hover:opacity-100 btn-ghost p-1 transition-opacity flex-shrink-0"
+                    onClick={e => { e.stopPropagation(); onMenuToggle() }}
+                >
+                    <MoreHorizontal className="w-4 h-4" />
+                </button>
             </div>
 
             {/* URL bar for bookmarks */}
             {note.type === 'bookmark' && note.url && (
                 <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground bg-muted/30 rounded px-2 py-1 truncate">
                     <ExternalLink className="w-3 h-3 flex-shrink-0" />
-                    <span className="truncate">{new URL(note.url).hostname}</span>
+                    <span className="truncate">{(() => { try { return new URL(note.url).hostname } catch { return note.url } })()}</span>
                 </div>
             )}
 
@@ -403,32 +465,28 @@ function NoteCard({
                 )}
             </div>
 
-            {/* Context menu trigger */}
-            <button
-                className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 btn-ghost p-1 transition-opacity z-10"
-                onClick={e => { e.stopPropagation(); onMenuToggle() }}
-            >
-                <MoreHorizontal className="w-4 h-4" />
-            </button>
-
+            {/* Context menu — solid background, always visible */}
             {menuOpen && (
-                <div className="absolute top-10 right-3 z-20 glass-card border border-border shadow-xl py-1 min-w-36 animate-scale-in">
+                <div
+                    className="absolute top-9 right-3 z-20 bg-card border border-border shadow-2xl shadow-black/40 rounded-xl py-1 min-w-36 animate-scale-in"
+                    onClick={e => e.stopPropagation()}
+                >
                     <button
-                        className="flex items-center gap-2 px-3 py-2 text-xs w-full hover:bg-muted/50"
+                        className="flex items-center gap-2 px-3 py-2 text-xs w-full text-foreground hover:bg-muted/50 transition-colors"
                         onClick={e => { e.stopPropagation(); onPin() }}
                     >
                         {note.is_pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
                         {note.is_pinned ? 'Unpin' : 'Pin'}
                     </button>
                     <button
-                        className="flex items-center gap-2 px-3 py-2 text-xs w-full hover:bg-muted/50"
+                        className="flex items-center gap-2 px-3 py-2 text-xs w-full text-foreground hover:bg-muted/50 transition-colors"
                         onClick={e => { e.stopPropagation(); onArchive() }}
                     >
                         {note.is_archived ? <ArchiveX className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
                         {note.is_archived ? 'Unarchive' : 'Archive'}
                     </button>
                     <button
-                        className="flex items-center gap-2 px-3 py-2 text-xs w-full hover:bg-destructive/20 text-red-400"
+                        className="flex items-center gap-2 px-3 py-2 text-xs w-full hover:bg-destructive/20 text-red-400 transition-colors"
                         onClick={e => { e.stopPropagation(); onDelete() }}
                     >
                         <Trash2 className="w-3.5 h-3.5" /> Delete

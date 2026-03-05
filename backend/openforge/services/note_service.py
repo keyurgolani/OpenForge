@@ -106,9 +106,8 @@ class NoteService:
                 title=data.title,
             )
 
-        # Fetch URL metadata for bookmarks
         if data.type == "bookmark" and data.url:
-            background_tasks.add_task(self._fetch_url_metadata, note_id=note.id, url=data.url)
+            background_tasks.add_task(self._fetch_url_metadata, note_id=note.id, url=data.url, workspace_id=workspace_id)
 
         return _to_response(note)
 
@@ -288,7 +287,7 @@ class NoteService:
         note_type: str,
         title: str | None,
     ):
-        """Background task: embed note and update status."""
+        """Background task: embed note, generate AI title, update status."""
         try:
             from openforge.core.note_processor import note_processor
             from openforge.db.postgres import AsyncSessionLocal
@@ -315,12 +314,34 @@ class NoteService:
                     note.embedding_status = "done"
                     await db.commit()
 
+            # Auto-generate AI title if note has no user-set title
+            if not title and content and len(content.strip()) > 50:
+                try:
+                    from openforge.core.llm_gateway import llm_gateway
+                    from openforge.services.llm_service import llm_service
+                    async with AsyncSessionLocal() as db:
+                        provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
+                        generated = await llm_gateway.chat(
+                            messages=[
+                                {"role": "system", "content": "Generate a concise, descriptive title (max 60 chars). Return ONLY the title, no quotes or extra text."},
+                                {"role": "user", "content": content[:2000]},
+                            ],
+                            provider_name=provider_name, api_key=api_key, model=model, base_url=base_url, max_tokens=30,
+                        )
+                        result = await db.execute(select(Note).where(Note.id == note_id))
+                        note = result.scalar_one_or_none()
+                        if note and generated:
+                            note.ai_title = generated.strip()[:500]
+                            await db.commit()
+                except Exception as e:
+                    logger.warning(f"Auto-title generation failed for note {note_id}: {e}")
+
             await ws_manager.send_to_workspace(
                 str(workspace_id),
-                {"type": "note_updated", "note_id": str(note_id), "fields": ["embedding_status"]},
+                {"type": "note_updated", "note_id": str(note_id), "fields": ["embedding_status", "ai_title"]},
             )
         except Exception as e:
-            logger.error(f"Background embedding failed for note {note_id}: {e}")
+            logger.error(f"Background processing failed for note {note_id}: {e}")
             try:
                 from openforge.db.postgres import AsyncSessionLocal
                 async with AsyncSessionLocal() as db:
@@ -332,23 +353,50 @@ class NoteService:
             except Exception:
                 pass
 
-    async def _fetch_url_metadata(self, note_id: UUID, url: str):
-        """Background task: fetch URL title and description for bookmarks."""
+    async def _fetch_url_metadata(self, note_id: UUID, url: str, workspace_id: UUID | None = None):
+        """Background task: fetch URL title, description, and readable content for bookmarks."""
         try:
             import httpx
             from openforge.db.postgres import AsyncSessionLocal
-            async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            async with httpx.AsyncClient(
+                timeout=15.0,
+                follow_redirects=True,
+                headers={"User-Agent": "Mozilla/5.0 (compatible; OpenForge/1.0; +https://github.com/openforge)"},
+            ) as client:
                 resp = await client.get(url)
                 resp.raise_for_status()
 
             import re
             html = resp.text
+
+            # Extract title
             title_match = re.search(r"<title[^>]*>([^<]+)</title>", html, re.IGNORECASE)
+            # Extract meta description
             desc_match = re.search(
                 r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']+)["\']',
-                html,
-                re.IGNORECASE,
+                html, re.IGNORECASE,
+            ) or re.search(
+                r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+name=["\']description["\']',
+                html, re.IGNORECASE,
             )
+            # Extract OG description as fallback
+            og_desc_match = re.search(
+                r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']+)["\']',
+                html, re.IGNORECASE,
+            )
+
+            # Extract readable text from body — strip tags, collapse whitespace
+            body_match = re.search(r"<body[^>]*>(.*?)</body>", html, re.IGNORECASE | re.DOTALL)
+            readable_text = ""
+            if body_match:
+                body_html = body_match.group(1)
+                # Remove script/style blocks
+                body_html = re.sub(r"<(script|style|nav|footer|header)[^>]*>.*?</\1>", "", body_html, flags=re.IGNORECASE | re.DOTALL)
+                # Strip remaining tags
+                text = re.sub(r"<[^>]+>", " ", body_html)
+                # Normalize whitespace
+                text = re.sub(r"\s+", " ", text).strip()
+                readable_text = text[:8000]  # cap at 8k chars
 
             async with AsyncSessionLocal() as db:
                 result = await db.execute(select(Note).where(Note.id == note_id))
@@ -356,9 +404,33 @@ class NoteService:
                 if note:
                     if title_match:
                         note.url_title = title_match.group(1).strip()[:500]
-                    if desc_match:
-                        note.url_description = desc_match.group(1).strip()
+                    desc = (desc_match or og_desc_match)
+                    if desc:
+                        note.url_description = desc.group(1).strip()[:1000]
+                    # Populate note content from scraped text if note has no user-set content
+                    if readable_text and not note.content:
+                        note.content = readable_text
+                        note.word_count = len(readable_text.split())
+                        note.embedding_status = "pending"
                     await db.commit()
+
+            # Trigger embedding + AI title for the scraped content
+            if readable_text and workspace_id:
+                from openforge.db.postgres import AsyncSessionLocal as ASL
+                async with ASL() as db:
+                    result = await db.execute(select(Note).where(Note.id == note_id))
+                    note = result.scalar_one_or_none()
+                    if note and note.content:
+                        import asyncio
+                        asyncio.create_task(
+                            self._process_note_background(
+                                note_id=note_id,
+                                workspace_id=workspace_id,
+                                content=note.content,
+                                note_type="bookmark",
+                                title=note.title,
+                            )
+                        )
         except Exception as e:
             logger.warning(f"Failed to fetch URL metadata for note {note_id}: {e}")
 
