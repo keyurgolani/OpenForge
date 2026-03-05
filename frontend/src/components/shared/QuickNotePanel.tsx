@@ -1,189 +1,294 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { createNote } from '@/lib/api'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
+import { createNote, updateNote, deleteNote } from '@/lib/api'
 import {
-    X, Maximize2, FileText, Hash, Loader2, Check
+    X, Expand, Loader2, Tag, Save, FileText, Zap, Bookmark, Code2, Plus
 } from 'lucide-react'
 
-interface QuickNotePanelProps {
-    workspaceId: string
+type NoteType = 'standard' | 'fleeting' | 'bookmark' | 'gist'
+
+const TYPE_CONFIG: Record<NoteType, {
+    label: string
+    Icon: React.ComponentType<{ className?: string }>
+    color: string
+    titlePlaceholder: string
+    contentPlaceholder: string
+}> = {
+    standard: {
+        label: 'Note',
+        Icon: FileText,
+        color: 'text-blue-400',
+        titlePlaceholder: 'Note title…',
+        contentPlaceholder: 'Start writing… (markdown supported)',
+    },
+    fleeting: {
+        label: 'Fleeting',
+        Icon: Zap,
+        color: 'text-yellow-400',
+        titlePlaceholder: 'Quick thought…',
+        contentPlaceholder: 'Capture it fast…',
+    },
+    bookmark: {
+        label: 'Bookmark',
+        Icon: Bookmark,
+        color: 'text-purple-400',
+        titlePlaceholder: 'Bookmark title…',
+        contentPlaceholder: 'Notes about this link…',
+    },
+    gist: {
+        label: 'Gist',
+        Icon: Code2,
+        color: 'text-green-400',
+        titlePlaceholder: 'Gist title…',
+        contentPlaceholder: 'Paste code here…',
+    },
+}
+
+const GIST_LANGUAGES = ['TypeScript', 'JavaScript', 'Python', 'Go', 'Rust', 'SQL', 'Bash', 'JSON', 'YAML', 'Other']
+
+interface Props {
+    open: boolean
+    defaultType?: NoteType
     onClose: () => void
 }
 
-export default function QuickNotePanel({ workspaceId, onClose }: QuickNotePanelProps) {
+export function QuickNotePanel({ open, defaultType = 'standard', onClose }: Props) {
+    const { workspaceId = '' } = useParams<{ workspaceId: string }>()
     const navigate = useNavigate()
     const qc = useQueryClient()
-    const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+    const [type, setType] = useState<NoteType>(defaultType)
     const [title, setTitle] = useState('')
     const [content, setContent] = useState('')
+    const [url, setUrl] = useState('')
+    const [gistLang, setGistLang] = useState('TypeScript')
     const [tagInput, setTagInput] = useState('')
     const [tags, setTags] = useState<string[]>([])
-    const [saved, setSaved] = useState(false)
-    const [createdNoteId, setCreatedNoteId] = useState<string | null>(null)
+    const [saving, setSaving] = useState(false)
+    const [noteId, setNoteId] = useState<string | null>(null) // draft note id
 
-    // Focus textarea on mount
-    useEffect(() => {
-        setTimeout(() => textareaRef.current?.focus(), 50)
-    }, [])
+    const titleRef = useRef<HTMLInputElement>(null)
+    const textareaRef = useRef<HTMLTextAreaElement>(null)
+    const panelRef = useRef<HTMLDivElement>(null)
 
-    // Close on Escape
+    // Focus title on open
     useEffect(() => {
-        const handler = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') onClose()
+        if (open) {
+            setType(defaultType)
+            setTimeout(() => titleRef.current?.focus(), 80)
         }
-        document.addEventListener('keydown', handler)
-        return () => document.removeEventListener('keydown', handler)
-    }, [onClose])
+        if (!open) {
+            // reset state
+            setTitle(''); setContent(''); setUrl(''); setTagInput(''); setTags([])
+            setGistLang('TypeScript'); setNoteId(null)
+        }
+    }, [open, defaultType])
 
-    const create = useMutation({
-        mutationFn: () => createNote(workspaceId, {
-            title: title.trim() || null,
-            content: content.trim(),
-            tags,
-            note_type: 'note',
-        }),
-        onSuccess: (note: { id: string }) => {
-            setCreatedNoteId(note.id)
-            setSaved(true)
+    const isEmpty = !title.trim() && !content.trim() && !url.trim()
+
+    // Close: if empty discard draft; if has content and no noteId yet — don't save (user explicitly closed)
+    const handleClose = useCallback(async () => {
+        if (noteId && isEmpty) {
+            // a draft was created but user cleared it — delete it
+            await deleteNote(workspaceId, noteId).catch(() => { })
             qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
-            setTimeout(onClose, 900)
-        },
-    })
+        }
+        onClose()
+    }, [noteId, isEmpty, workspaceId, qc, onClose])
 
-    const handleSave = useCallback(() => {
-        if (!content.trim() && !title.trim()) return
-        create.mutate()
-    }, [content, title, create])
-
-    // Save on Ctrl/Cmd+Enter
+    // Keyboard shortcuts
     useEffect(() => {
         const handler = (e: KeyboardEvent) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') handleSave()
+            if (!open) return
+            if (e.key === 'Escape') { handleClose(); return }
+            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); handleSave() }
         }
-        document.addEventListener('keydown', handler)
-        return () => document.removeEventListener('keydown', handler)
-    }, [handleSave])
+        window.addEventListener('keydown', handler)
+        return () => window.removeEventListener('keydown', handler)
+    }, [open, handleClose]) // eslint-disable-line react-hooks/exhaustive-deps
 
-    const handleExpandToFull = async () => {
-        // Save first if unsaved, then navigate to the full note page
-        if (createdNoteId) {
-            navigate(`/w/${workspaceId}/notes/${createdNoteId}`)
-            onClose()
-        } else if (content.trim() || title.trim()) {
-            try {
-                const note = await createNote(workspaceId, {
+    const handleSave = async () => {
+        if (isEmpty) { handleClose(); return }
+        setSaving(true)
+        try {
+            const payload = {
+                type,
+                title: title.trim() || null,
+                content: content.trim() || null,
+                url: url.trim() || null,
+                tags,
+                gist_language: type === 'gist' ? gistLang : undefined,
+            }
+            if (noteId) {
+                await updateNote(workspaceId, noteId, payload)
+            } else {
+                const n = await createNote(workspaceId, payload)
+                setNoteId(n.id)
+            }
+            qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
+            handleClose()
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    const handleExpand = async () => {
+        if (isEmpty) { handleClose(); return }
+        setSaving(true)
+        try {
+            let id = noteId
+            if (!id) {
+                const n = await createNote(workspaceId, {
+                    type,
                     title: title.trim() || null,
-                    content: content.trim(),
+                    content: content.trim() || null,
+                    url: url.trim() || null,
                     tags,
-                    note_type: 'note',
+                    gist_language: type === 'gist' ? gistLang : undefined,
                 })
+                id = n.id
                 qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
-                navigate(`/w/${workspaceId}/notes/${note.id}`)
-                onClose()
-            } catch { /* ignore */ }
-        } else {
-            // Empty note — just navigate to new note
-            const note = await createNote(workspaceId, { content: '', note_type: 'note' })
-            navigate(`/w/${workspaceId}/notes/${note.id}`)
+            }
             onClose()
+            navigate(`/w/${workspaceId}/notes/${id}`)
+        } finally {
+            setSaving(false)
         }
     }
 
-    const handleAddTag = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if ((e.key === 'Enter' || e.key === ',') && tagInput.trim()) {
-            e.preventDefault()
-            const tag = tagInput.trim().toLowerCase().replace(/^#/, '')
-            if (tag && !tags.includes(tag)) setTags(t => [...t, tag])
-            setTagInput('')
-        }
-        if (e.key === 'Backspace' && !tagInput && tags.length) {
-            setTags(t => t.slice(0, -1))
-        }
+    const handleAddTag = () => {
+        const t = tagInput.trim().toLowerCase().replace(/\s+/g, '-')
+        if (t && !tags.includes(t)) setTags(p => [...p, t])
+        setTagInput('')
     }
 
-    const hasContent = content.trim() || title.trim()
+    if (!open) return null
+
+    const cfg = TYPE_CONFIG[type]
 
     return (
         <>
             {/* Backdrop */}
-            <div
-                className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40 animate-fade-in"
-                onClick={onClose}
-            />
+            <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={handleClose} />
 
-            {/* Panel — slides up from below the top bar */}
-            <div className="fixed left-1/2 -translate-x-1/2 top-16 z-50 w-full max-w-2xl px-4 animate-slide-up">
-                <div className="glass-card border border-border/60 shadow-2xl shadow-black/40 overflow-hidden">
-                    {/* Toolbar row */}
-                    <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/40 bg-muted/20">
-                        <FileText className="w-3.5 h-3.5 text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">Quick note</span>
-                        <span className="text-[10px] text-muted-foreground/50 ml-1 hidden sm:block">
-                            ⌘Enter to save · Esc to close
-                        </span>
-                        <div className="flex-1" />
-                        <button
-                            className="btn-ghost p-1.5 text-xs gap-1.5 flex items-center"
-                            onClick={handleExpandToFull}
-                            title="Expand to full page"
-                        >
-                            <Maximize2 className="w-3.5 h-3.5" />
-                            <span className="hidden sm:block">Expand</span>
-                        </button>
-                        <button className="btn-ghost p-1.5" onClick={onClose}>
-                            <X className="w-3.5 h-3.5" />
-                        </button>
+            {/* Panel */}
+            <div
+                ref={panelRef}
+                className="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg glass-card border border-accent/20 shadow-2xl shadow-black/60 animate-scale-in"
+                onClick={e => e.stopPropagation()}
+            >
+                {/* Header */}
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-border/50">
+                    {/* Type selector */}
+                    <div className="flex gap-1">
+                        {(Object.entries(TYPE_CONFIG) as [NoteType, typeof TYPE_CONFIG[NoteType]][]).map(([t, c]) => (
+                            <button
+                                key={t}
+                                onClick={() => setType(t)}
+                                className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all ${type === t ? `bg-muted ${c.color}` : 'text-muted-foreground hover:text-foreground'
+                                    }`}
+                                title={c.label}
+                            >
+                                <c.Icon className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">{c.label}</span>
+                            </button>
+                        ))}
                     </div>
 
-                    {/* Title */}
-                    <input
-                        className="w-full px-4 pt-3 pb-1 text-base font-semibold bg-transparent border-none outline-none placeholder-muted-foreground/40"
-                        placeholder="Title (optional)"
-                        value={title}
-                        onChange={e => setTitle(e.target.value)}
-                    />
+                    <div className="flex-1" />
+
+                    <button className="btn-ghost p-1.5" onClick={handleExpand} title="Expand to full editor">
+                        <Expand className="w-3.5 h-3.5" />
+                    </button>
+                    <button className="btn-ghost p-1.5" onClick={handleClose} title="Close (Esc)">
+                        <X className="w-3.5 h-3.5" />
+                    </button>
+                </div>
+
+                <div className="p-4 space-y-3">
+                    {/* Bookmark URL field */}
+                    {type === 'bookmark' && (
+                        <input
+                            className="input text-sm"
+                            placeholder="https://… (required for bookmark)"
+                            value={url}
+                            onChange={e => setUrl(e.target.value)}
+                            autoFocus={type === 'bookmark'}
+                        />
+                    )}
+
+                    {/* Gist language selector */}
+                    {type === 'gist' && (
+                        <select className="input text-sm" value={gistLang} onChange={e => setGistLang(e.target.value)}>
+                            {GIST_LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
+                        </select>
+                    )}
+
+                    {/* Title — only standard, bookmark, gist (fleeting = no title) */}
+                    {type !== 'fleeting' && (
+                        <input
+                            ref={titleRef}
+                            className="w-full bg-transparent text-base font-semibold placeholder-muted-foreground/50 outline-none"
+                            placeholder={cfg.titlePlaceholder}
+                            value={title}
+                            onChange={e => setTitle(e.target.value)}
+                        />
+                    )}
 
                     {/* Content */}
                     <textarea
-                        ref={textareaRef}
-                        className="w-full px-4 py-2 min-h-[140px] max-h-[45vh] bg-transparent border-none outline-none resize-none text-sm text-foreground leading-relaxed placeholder-muted-foreground/40 font-mono"
-                        placeholder="Start writing… (Markdown supported)"
+                        ref={type === 'fleeting' ? textareaRef : undefined}
+                        className={`w-full bg-transparent text-sm placeholder-muted-foreground/50 outline-none resize-none leading-relaxed ${type === 'gist' ? 'font-mono text-xs' : ''
+                            }`}
+                        placeholder={cfg.contentPlaceholder}
                         value={content}
                         onChange={e => setContent(e.target.value)}
-                        style={{ tabSize: 2 }}
+                        rows={type === 'gist' ? 8 : 5}
                     />
 
-                    {/* Footer row — tags + save */}
-                    <div className="flex items-center gap-2 px-4 py-2.5 border-t border-border/40 bg-muted/10 flex-wrap">
-                        <Hash className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                    {/* Tags */}
+                    <div className="flex flex-wrap gap-1.5 items-center">
                         {tags.map(t => (
                             <span
                                 key={t}
-                                className="chip-accent text-[10px] cursor-pointer hover:opacity-70 transition-opacity"
-                                onClick={() => setTags(ts => ts.filter(x => x !== t))}
+                                className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-accent/10 text-accent/80 cursor-pointer hover:bg-destructive/20 hover:text-red-400 transition-colors"
+                                onClick={() => setTags(p => p.filter(x => x !== t))}
                             >
-                                {t} ×
+                                {t} <X className="w-2.5 h-2.5" />
                             </span>
                         ))}
-                        <input
-                            className="text-xs bg-transparent border-none outline-none text-muted-foreground placeholder-muted-foreground/40 min-w-[80px] flex-1"
-                            placeholder="Add tag…"
-                            value={tagInput}
-                            onChange={e => setTagInput(e.target.value)}
-                            onKeyDown={handleAddTag}
-                        />
-                        <div className="flex-1" />
+                        <div className="flex items-center gap-1 flex-1 min-w-28">
+                            <Tag className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                            <input
+                                className="flex-1 bg-transparent text-xs placeholder-muted-foreground/50 outline-none"
+                                placeholder="Add tag…"
+                                value={tagInput}
+                                onChange={e => setTagInput(e.target.value)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); handleAddTag() }
+                                }}
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Footer */}
+                <div className="flex items-center justify-between px-4 py-2.5 border-t border-border/40 bg-muted/10">
+                    <span className="text-[10px] text-muted-foreground opacity-60">
+                        ⌘↵ save · Esc close  ·  Click type to switch
+                    </span>
+                    <div className="flex gap-2">
+                        <button className="btn-ghost text-xs py-1.5 px-3" onClick={handleClose}>
+                            {isEmpty ? 'Discard' : 'Cancel'}
+                        </button>
                         <button
                             className="btn-primary text-xs py-1.5 px-3"
                             onClick={handleSave}
-                            disabled={!hasContent || create.isPending || saved}
+                            disabled={saving || isEmpty}
                         >
-                            {saved
-                                ? <><Check className="w-3.5 h-3.5" /> Saved</>
-                                : create.isPending
-                                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                    : 'Save note'}
+                            {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                            Save
                         </button>
                     </div>
                 </div>

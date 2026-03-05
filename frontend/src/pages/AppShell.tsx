@@ -5,7 +5,7 @@ import { listWorkspaces, listNotes, listConversations } from '@/lib/api'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import { useUIStore } from '@/stores/uiStore'
 import CommandPalette from '@/components/shared/CommandPalette'
-import QuickNotePanel from '@/components/shared/QuickNotePanel'
+import { QuickNotePanel } from '@/components/shared/QuickNotePanel'
 import {
     Home, MessageSquare, Search, Settings, Plus, Folder,
     FileText, Pin, Archive, Bookmark, Code2, Zap, WifiOff,
@@ -159,12 +159,10 @@ export default function AppShell() {
                     </button>
                 </header>
 
-                {showQuickNote && (
-                    <QuickNotePanel
-                        workspaceId={workspaceId}
-                        onClose={() => setShowQuickNote(false)}
-                    />
-                )}
+                <QuickNotePanel
+                    open={showQuickNote}
+                    onClose={() => setShowQuickNote(false)}
+                />
 
                 <main className="flex-1 overflow-auto">
                     <Outlet />

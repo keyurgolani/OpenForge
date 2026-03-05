@@ -57,12 +57,12 @@ export function useStreamingChat(conversationId: string | null) {
         return () => unsubs.forEach(u => u())
     }, [conversationId, on, queryClient, workspaceId])
 
-    const sendMessage = useCallback((content: string) => {
+    const sendMessage = useCallback((content: string, modelOverride?: { provider_id?: string; model_id?: string }) => {
         if (!conversationId || !content.trim()) return
         setIsStreaming(true)
         setStreamingContent('')
         setSources([])
-        send({ type: 'chat_message', conversation_id: conversationId, content })
+        send({ type: 'chat_message', conversation_id: conversationId, content, ...modelOverride })
     }, [conversationId, send])
 
     return { streamingContent, isStreaming, sources, sendMessage, isConnected }

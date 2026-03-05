@@ -1,11 +1,12 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { listConversations, createConversation, getConversation, deleteConversation } from '@/lib/api'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { listConversations, createConversation, getConversation, deleteConversation, updateConversation, listProviders } from '@/lib/api'
 import { useStreamingChat } from '@/hooks/useStreamingChat'
 import {
     Plus, Send, Loader2, MessageSquare, Trash2, Sparkles, Bot, User,
-    ChevronDown, ChevronRight, ExternalLink, X
+    ChevronDown, ChevronRight, ExternalLink, Check, Pencil, ChevronDown as ChevronDownIcon,
+    Paperclip, X
 } from 'lucide-react'
 import MarkdownIt from 'markdown-it'
 
@@ -22,8 +23,16 @@ interface Message {
 interface Conversation {
     id: string
     title: string | null
+    title_locked?: boolean
     message_count: number
     last_message_at: string | null
+}
+
+interface ProviderRecord {
+    id: string
+    display_name: string
+    provider_name: string
+    default_model: string | null
 }
 
 export default function ChatPage() {
@@ -34,6 +43,10 @@ export default function ChatPage() {
     const [activeCid, setActiveCid] = useState(conversationId ?? null)
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+    // Per-message model override
+    const [selectedProviderId, setSelectedProviderId] = useState('')
+    const [modelPickerOpen, setModelPickerOpen] = useState(false)
 
     const { data: conversations = [] } = useQuery({
         queryKey: ['conversations', workspaceId],
@@ -47,16 +60,33 @@ export default function ChatPage() {
         enabled: !!activeCid,
     })
 
+    const { data: providers = [] } = useQuery({
+        queryKey: ['providers'],
+        queryFn: listProviders,
+    })
+
     const { streamingContent, isStreaming, sources, sendMessage, isConnected } = useStreamingChat(activeCid)
 
     const messages: Message[] = conversationData?.messages ?? []
 
-    useEffect(() => {
-        if (conversationId !== activeCid) setActiveCid(conversationId ?? null)
-    }, [conversationId])
+    // Build model options from providers (flat list of provider + model pairs)
+    const modelOptions = useMemo(() => {
+        return (providers as ProviderRecord[])
+            .filter(p => p.default_model)
+            .map(p => ({
+                providerId: p.id,
+                modelId: p.default_model!,
+                label: p.display_name,
+            }))
+    }, [providers])
+
+    const selectedOption = modelOptions.find(o => o.providerId === selectedProviderId)
 
     useEffect(() => {
-        // Scroll to bottom on new messages or streaming
+        if (conversationId !== activeCid) setActiveCid(conversationId ?? null)
+    }, [conversationId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [messages.length, streamingContent])
 
@@ -82,15 +112,19 @@ export default function ChatPage() {
         setInput('')
         if (textareaRef.current) textareaRef.current.style.height = 'auto'
 
+        const override = selectedOption
+            ? { provider_id: selectedOption.providerId, model_id: selectedOption.modelId }
+            : undefined
+
         if (!activeCid) {
             createConversation(workspaceId).then(conv => {
                 qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
                 setActiveCid(conv.id)
                 navigate(`/w/${workspaceId}/chat/${conv.id}`)
-                setTimeout(() => sendMessage(msg), 500)
+                setTimeout(() => sendMessage(msg, override), 500)
             })
         } else {
-            sendMessage(msg)
+            sendMessage(msg, override)
         }
     }
 
@@ -114,23 +148,15 @@ export default function ChatPage() {
                         <p className="text-xs text-muted-foreground text-center py-8 px-4">No conversations yet. Start a new chat!</p>
                     )}
                     {(conversations as Conversation[]).map(c => (
-                        <div
+                        <ConversationRow
                             key={c.id}
-                            className={`group flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors ${activeCid === c.id ? 'bg-muted/60' : 'hover:bg-muted/30'}`}
-                            onClick={() => { setActiveCid(c.id); navigate(`/w/${workspaceId}/chat/${c.id}`) }}
-                        >
-                            <MessageSquare className="w-3.5 h-3.5 flex-shrink-0 text-muted-foreground" />
-                            <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium truncate">{c.title ?? 'New Chat'}</p>
-                                <p className="text-xs text-muted-foreground">{c.message_count} messages</p>
-                            </div>
-                            <button
-                                className="opacity-0 group-hover:opacity-100 btn-ghost p-1"
-                                onClick={e => { e.stopPropagation(); handleDeleteConv(c.id) }}
-                            >
-                                <Trash2 className="w-3 h-3" />
-                            </button>
-                        </div>
+                            conv={c}
+                            active={activeCid === c.id}
+                            workspaceId={workspaceId}
+                            onSelect={() => { setActiveCid(c.id); navigate(`/w/${workspaceId}/chat/${c.id}`) }}
+                            onDelete={() => handleDeleteConv(c.id)}
+                            onRename={(title) => updateConversation(workspaceId, c.id, { title, title_locked: true }).then(() => qc.invalidateQueries({ queryKey: ['conversations', workspaceId] }))}
+                        />
                     ))}
                 </div>
             </div>
@@ -162,10 +188,7 @@ export default function ChatPage() {
                                         <Bot className="w-4 h-4 text-accent" />
                                     </div>
                                     <div className="glass-card px-4 py-3 max-w-2xl">
-                                        <div
-                                            className="markdown-content streaming-cursor"
-                                            dangerouslySetInnerHTML={{ __html: md.render(streamingContent) }}
-                                        />
+                                        <div className="markdown-content streaming-cursor" dangerouslySetInnerHTML={{ __html: md.render(streamingContent) }} />
                                     </div>
                                 </div>
                             )}
@@ -174,7 +197,8 @@ export default function ChatPage() {
 
                         {/* Input area */}
                         <div className="border-t border-border/50 p-4">
-                            {!isConnected && (
+                            {/* Only show reconnecting banner when a conversation IS active but WS has dropped */}
+                            {activeCid && !isConnected && (
                                 <p className="text-xs text-amber-400 mb-2 flex items-center gap-1">
                                     <Loader2 className="w-3 h-3 animate-spin" /> Reconnecting to server…
                                 </p>
@@ -194,10 +218,46 @@ export default function ChatPage() {
                                         disabled={isStreaming}
                                         style={{ maxHeight: '100px' }}
                                     />
-                                    <div className="flex items-center justify-between px-3 pb-2">
+                                    <div className="flex items-center justify-between px-3 pb-2 gap-2">
                                         <span className="text-xs text-muted-foreground flex items-center gap-1">
                                             <Sparkles className="w-3 h-3 text-accent" /> Uses workspace knowledge
                                         </span>
+
+                                        {/* Model override picker */}
+                                        {modelOptions.length > 0 && (
+                                            <div className="relative">
+                                                <button
+                                                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground border border-border/50 rounded-md px-2 py-1 transition-colors"
+                                                    onClick={() => setModelPickerOpen(p => !p)}
+                                                >
+                                                    <Bot className="w-3 h-3" />
+                                                    <span className="max-w-[100px] truncate">{selectedOption?.label ?? 'Default model'}</span>
+                                                    <ChevronDownIcon className="w-3 h-3" />
+                                                </button>
+                                                {modelPickerOpen && (
+                                                    <div className="absolute bottom-full right-0 mb-1 z-30 glass-card border border-border shadow-xl py-1 min-w-52 max-h-60 overflow-y-auto animate-scale-in">
+                                                        <button
+                                                            className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/40 ${!selectedProviderId ? 'text-accent' : 'text-muted-foreground'}`}
+                                                            onClick={() => { setSelectedProviderId(''); setModelPickerOpen(false) }}
+                                                        >
+                                                            {!selectedProviderId && <Check className="w-3 h-3 flex-shrink-0" />}
+                                                            <span className={!selectedProviderId ? 'ml-0' : 'ml-5'}>Workspace default</span>
+                                                        </button>
+                                                        {modelOptions.map(opt => (
+                                                            <button
+                                                                key={opt.providerId}
+                                                                className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/40 ${selectedProviderId === opt.providerId ? 'text-accent' : 'text-muted-foreground'}`}
+                                                                onClick={() => { setSelectedProviderId(opt.providerId); setModelPickerOpen(false) }}
+                                                            >
+                                                                {selectedProviderId === opt.providerId ? <Check className="w-3 h-3 flex-shrink-0" /> : <span className="w-3" />}
+                                                                <span className="truncate">{opt.label}</span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
                                         <button
                                             className="btn-primary text-xs py-1.5 px-3"
                                             onClick={handleSend}
@@ -216,6 +276,60 @@ export default function ChatPage() {
     )
 }
 
+// ── Conversation row with inline rename ─────────────────────────────────────
+function ConversationRow({ conv, active, workspaceId, onSelect, onDelete, onRename }: {
+    conv: Conversation; active: boolean; workspaceId: string
+    onSelect: () => void; onDelete: () => void; onRename: (title: string) => void
+}) {
+    const [editing, setEditing] = useState(false)
+    const [draft, setDraft] = useState(conv.title ?? '')
+    const inputRef = useRef<HTMLInputElement>(null)
+
+    const startEdit = (e: React.MouseEvent) => {
+        e.stopPropagation(); setDraft(conv.title ?? ''); setEditing(true)
+        setTimeout(() => { inputRef.current?.focus(); inputRef.current?.select() }, 50)
+    }
+
+    const commitEdit = () => {
+        if (draft.trim() && draft.trim() !== conv.title) onRename(draft.trim())
+        setEditing(false)
+    }
+
+    return (
+        <div
+            className={`group flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors ${active ? 'bg-muted/60' : 'hover:bg-muted/30'}`}
+            onClick={onSelect}
+        >
+            <MessageSquare className="w-3.5 h-3.5 flex-shrink-0 text-muted-foreground" />
+            <div className="flex-1 min-w-0">
+                {editing ? (
+                    <input
+                        ref={inputRef}
+                        className="w-full text-xs bg-background border border-accent/40 rounded px-1 py-0.5 outline-none"
+                        value={draft}
+                        onChange={e => setDraft(e.target.value)}
+                        onBlur={commitEdit}
+                        onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditing(false) }}
+                        onClick={e => e.stopPropagation()}
+                    />
+                ) : (
+                    <p className="text-xs font-medium truncate">{conv.title ?? 'New Chat'}</p>
+                )}
+                <p className="text-xs text-muted-foreground">{conv.message_count} messages</p>
+            </div>
+            <div className="opacity-0 group-hover:opacity-100 flex gap-0.5">
+                <button className="btn-ghost p-1" onClick={startEdit} title="Rename">
+                    <Pencil className="w-3 h-3" />
+                </button>
+                <button className="btn-ghost p-1" onClick={e => { e.stopPropagation(); onDelete() }}>
+                    <Trash2 className="w-3 h-3" />
+                </button>
+            </div>
+        </div>
+    )
+}
+
+// ── Chat message card ───────────────────────────────────────────────────────
 function ChatMessageCard({ message: msg, workspaceId }: { message: Message; workspaceId: string }) {
     const [sourcesOpen, setSourcesOpen] = useState(false)
     const navigate = useNavigate()
