@@ -77,4 +77,13 @@ export const listPrompts = (): Promise<any> => api.get('/prompts').then(r => r.d
 export const updatePrompt = (id: string, data: { override: string | null }): Promise<any> =>
     api.put(`/prompts/${id}`, data).then(r => r.data)
 
+// ── Tasks / Scheduling ──
+export const listSchedules = (): Promise<any> => api.get('/tasks/schedules').then(r => r.data)
+export const updateSchedule = (id: string, data: { enabled?: boolean; interval_hours?: number }): Promise<any> =>
+    api.put(`/tasks/schedules/${id}`, data).then(r => r.data)
+export const runTaskNow = (id: string): Promise<any> =>
+    api.post(`/tasks/schedules/${id}/run`).then(r => r.data)
+export const getTaskHistory = (params?: { task_type?: string; limit?: number }): Promise<any> =>
+    api.get('/tasks/history', { params }).then(r => r.data)
+
 export default api

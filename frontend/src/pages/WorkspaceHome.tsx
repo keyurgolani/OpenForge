@@ -365,19 +365,10 @@ function NoteCard({
             style={{ animationDelay: `${Math.min(index * 25, 200)}ms` }}
             onClick={onClick}
         >
-            {/* Checkbox — appears on hover or when any note selected */}
-            <div
-                className={`absolute top-3 left-3 z-10 transition-opacity ${anySelected || isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-                onClick={e => onSelect(note.id, e)}
-            >
-                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${isSelected ? 'bg-accent border-accent' : 'border-border bg-background/50'}`}>
-                    {isSelected && <CheckSquare className="w-3 h-3 text-accent-foreground" />}
-                </div>
-            </div>
 
-            {/* Card header row: type badge + pin + AI indicator + 3-dots */}
-            {/* NOTE: 3-dots is the LAST item in this row — no overlap possible */}
-            <div className="flex items-center justify-between gap-2 min-w-0">
+
+            {/* Card header row: type badge only on left */}
+            <div className="flex items-center gap-2 min-w-0 pr-7">
                 {/* Left: type badge */}
                 <span className={`flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide ${meta.color} flex-shrink-0`}>
                     <TypeIcon className="w-3 h-3" />
@@ -388,15 +379,47 @@ function NoteCard({
                         <Sparkles className="w-3 h-3 text-accent/60 ml-0.5" />
                     )}
                 </span>
-
-                {/* Right: 3-dots menu trigger — always rightmost, no overlap */}
-                <button
-                    className="opacity-0 group-hover:opacity-100 btn-ghost p-1 transition-opacity flex-shrink-0"
-                    onClick={e => { e.stopPropagation(); onMenuToggle() }}
-                >
-                    <MoreHorizontal className="w-4 h-4" />
-                </button>
             </div>
+
+            {/* === TOP-RIGHT CONTROLS === */}
+            {isSelected ? (
+                /* SELECTED: filled accent circle, clicking deselects */
+                <button
+                    className="absolute top-2.5 right-2.5 z-20 w-6 h-6 rounded-full bg-accent border-2 border-accent shadow-md shadow-accent/30 flex items-center justify-center transition-all duration-150"
+                    style={{ transform: 'scale(1.1)' }}
+                    onClick={e => { e.stopPropagation(); onSelect(note.id, e) }}
+                    aria-label="Deselect note"
+                >
+                    <svg className="w-3.5 h-3.5 text-white" viewBox="0 0 14 14" fill="none">
+                        <path d="M2.5 7L5.5 10L11.5 4" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                </button>
+            ) : anySelected ? (
+                /* SELECTION MODE (others selected, this one not): show empty circle, no 3-dots */
+                <button
+                    className="absolute top-2.5 right-2.5 z-20 w-6 h-6 rounded-full border-2 border-muted-foreground/30 bg-background/60 flex items-center justify-center transition-all duration-150 hover:border-accent hover:bg-accent/15"
+                    onClick={e => { e.stopPropagation(); onSelect(note.id, e) }}
+                    aria-label="Select note"
+                />
+            ) : (
+                /* NORMAL: circle for select on hover at top-right; 3-dots for context menu just below */
+                <>
+                    {/* Select circle — appears on group hover, transparent until hovered itself */}
+                    <button
+                        className="absolute top-2.5 right-2.5 z-20 w-6 h-6 rounded-full border-2 border-transparent flex items-center justify-center transition-all duration-150 opacity-0 group-hover:opacity-100 group-hover:border-border/60 group-hover:bg-background/50 hover:!border-accent hover:!bg-accent/15"
+                        onClick={e => { e.stopPropagation(); onSelect(note.id, e) }}
+                        aria-label="Select note"
+                    />
+                    {/* 3-dots context menu — hidden behind circle; appears on button-level hover */}
+                    <button
+                        className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 btn-ghost p-1 rounded-md transition-opacity"
+                        onClick={e => { e.stopPropagation(); onMenuToggle() }}
+                        title="More options"
+                    >
+                        <MoreHorizontal className="w-4 h-4" />
+                    </button>
+                </>
+            )}
 
             {/* URL bar for bookmarks */}
             {note.type === 'bookmark' && note.url && (

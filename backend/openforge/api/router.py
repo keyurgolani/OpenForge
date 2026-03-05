@@ -6,6 +6,7 @@ from openforge.api import notes
 from openforge.api import conversations
 from openforge.api import search
 from openforge.api import prompts
+from openforge.api import tasks
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -17,3 +18,4 @@ api_router.include_router(notes.router, prefix="/workspaces", tags=["notes"])
 api_router.include_router(conversations.router, prefix="/workspaces", tags=["conversations"])
 api_router.include_router(search.router, prefix="/workspaces", tags=["search"])
 api_router.include_router(prompts.router, prefix="/prompts", tags=["prompts"])
+api_router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
