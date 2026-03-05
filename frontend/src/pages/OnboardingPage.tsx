@@ -3,21 +3,26 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
     getOnboarding, advanceOnboarding, createProvider,
-    testConnection, listModels, createWorkspace
+    testConnection, listModels, createWorkspace, listProviders
 } from '@/lib/api'
-import { Sparkles, ArrowRight, CheckCircle2, Loader2, Globe2, Eye, EyeOff } from 'lucide-react'
+import { Sparkles, ArrowRight, CheckCircle2, Loader2, Globe2, Eye, EyeOff, Plus, Trash2, FileText, Search, MessageSquare, Lock } from 'lucide-react'
+import { ProviderIcon } from '@/components/shared/ProviderIcon'
 
 const PROVIDERS = [
-    { id: 'openai', name: 'OpenAI', icon: '🌐', color: 'from-emerald-500/20', needsKey: true },
-    { id: 'anthropic', name: 'Anthropic', icon: '🔮', color: 'from-orange-500/20', needsKey: true },
-    { id: 'gemini', name: 'Google Gemini', icon: '♊', color: 'from-blue-500/20', needsKey: true },
-    { id: 'groq', name: 'Groq', icon: '⚡', color: 'from-yellow-500/20', needsKey: true },
-    { id: 'deepseek', name: 'DeepSeek', icon: '🧠', color: 'from-cyan-500/20', needsKey: true },
-    { id: 'mistral', name: 'Mistral AI', icon: '🌀', color: 'from-purple-500/20', needsKey: true },
-    { id: 'openrouter', name: 'OpenRouter', icon: '🔀', color: 'from-pink-500/20', needsKey: true },
-    { id: 'xai', name: 'xAI (Grok)', icon: '𝕏', color: 'from-gray-500/20', needsKey: true },
-    { id: 'cohere', name: 'Cohere', icon: '🌊', color: 'from-teal-500/20', needsKey: true },
-    { id: 'ollama', name: 'Ollama (Local)', icon: '🦙', color: 'from-lime-500/20', needsKey: false },
+    { id: 'openai', name: 'OpenAI', color: 'from-emerald-500/20 border-emerald-500/30', needsKey: true, needsUrl: false },
+    { id: 'anthropic', name: 'Anthropic', color: 'from-orange-500/20 border-orange-500/30', needsKey: true, needsUrl: false },
+    { id: 'gemini', name: 'Google Gemini', color: 'from-blue-500/20 border-blue-500/30', needsKey: true, needsUrl: false },
+    { id: 'groq', name: 'Groq', color: 'from-yellow-500/20 border-yellow-500/30', needsKey: true, needsUrl: false },
+    { id: 'deepseek', name: 'DeepSeek', color: 'from-cyan-500/20 border-cyan-500/30', needsKey: true, needsUrl: false },
+    { id: 'mistral', name: 'Mistral AI', color: 'from-purple-500/20 border-purple-500/30', needsKey: true, needsUrl: false },
+    { id: 'openrouter', name: 'OpenRouter', color: 'from-pink-500/20 border-pink-500/30', needsKey: true, needsUrl: false },
+    { id: 'xai', name: 'xAI (Grok)', color: 'from-gray-500/20 border-gray-500/30', needsKey: true, needsUrl: false },
+    { id: 'cohere', name: 'Cohere', color: 'from-teal-500/20 border-teal-500/30', needsKey: true, needsUrl: false },
+    { id: 'zhipuai', name: 'Z.AI (ZhipuAI)', color: 'from-indigo-500/20 border-indigo-500/30', needsKey: true, needsUrl: false },
+    { id: 'huggingface', name: 'HuggingFace', color: 'from-orange-400/20 border-orange-400/30', needsKey: true, needsUrl: false },
+    { id: 'ollama', name: 'Ollama (Local)', color: 'from-lime-500/20 border-lime-500/30', needsKey: false, needsUrl: true },
+    { id: 'custom-openai', name: 'Custom OpenAI-compatible', color: 'from-violet-500/20 border-violet-500/30', needsKey: false, needsUrl: true },
+    { id: 'custom-anthropic', name: 'Custom Anthropic-compat.', color: 'from-rose-500/20 border-rose-500/30', needsKey: false, needsUrl: true },
 ]
 
 const STEPS = ['welcome', 'llm_setup', 'workspace_create']
@@ -75,8 +80,8 @@ export default function OnboardingPage() {
                         return (
                             <div key={s} className="flex items-center gap-2">
                                 <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ${isDone ? 'bg-accent/40 text-accent ring-2 ring-accent/30' :
-                                        isActive ? 'bg-accent text-accent-foreground scale-110 ring-2 ring-accent/50 shadow-lg shadow-accent/20' :
-                                            'bg-muted text-muted-foreground'
+                                    isActive ? 'bg-accent text-accent-foreground scale-110 ring-2 ring-accent/50 shadow-lg shadow-accent/20' :
+                                        'bg-muted text-muted-foreground'
                                     }`}>
                                     {isDone ? <CheckCircle2 className="w-4 h-4" /> : i + 1}
                                 </div>
@@ -112,9 +117,17 @@ export default function OnboardingPage() {
 }
 
 function WelcomeStep({ onNext, loading }: { onNext: () => void; loading: boolean }) {
+    const FEATURES = [
+        { Icon: FileText, text: 'Rich markdown notes with AI insights' },
+        { Icon: Search, text: 'Semantic search across all your content' },
+        { Icon: MessageSquare, text: 'Chat with your notes using any LLM' },
+        { Icon: Lock, text: '100% private — runs on your hardware' },
+    ]
     return (
         <div className="glass-card p-8 text-center space-y-6 animate-fade-in">
-            <div className="text-6xl">🔨</div>
+            <div className="w-16 h-16 rounded-2xl bg-accent/20 border border-accent/30 flex items-center justify-center mx-auto shadow-lg shadow-accent/10">
+                <Sparkles className="w-8 h-8 text-accent" />
+            </div>
             <div>
                 <h2 className="text-2xl font-bold mb-2">Welcome to OpenForge</h2>
                 <p className="text-muted-foreground leading-relaxed">
@@ -122,14 +135,9 @@ function WelcomeStep({ onNext, loading }: { onNext: () => void; loading: boolean
                 </p>
             </div>
             <div className="grid grid-cols-2 gap-3 text-left text-sm">
-                {[
-                    ['📝', 'Rich markdown notes with AI insights'],
-                    ['🔍', 'Semantic search across all your content'],
-                    ['💬', 'Chat with your notes using any LLM'],
-                    ['🔒', '100% private — runs on your hardware'],
-                ].map(([icon, text]) => (
-                    <div key={text} className="flex items-start gap-2 p-3 rounded-lg bg-muted/30 border border-border/50">
-                        <span className="text-lg">{icon}</span>
+                {FEATURES.map(({ Icon, text }) => (
+                    <div key={text} className="flex items-start gap-2.5 p-3 rounded-lg bg-muted/30 border border-border/50">
+                        <Icon className="w-4 h-4 text-accent mt-0.5 flex-shrink-0" />
                         <span className="text-muted-foreground text-xs leading-relaxed">{text}</span>
                     </div>
                 ))}
@@ -174,8 +182,8 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
             const p = await createProvider({
                 provider_name: selected,
                 display_name: provider?.name ?? selected,
-                api_key: provider?.needsKey ? (apiKey || undefined) : undefined,
-                base_url: selected === 'ollama' ? baseUrl : undefined,
+                api_key: apiKey || undefined,
+                base_url: provider?.needsUrl ? baseUrl : undefined,
                 default_model: model || undefined,
             })
             const result = await testConnection(p.id)
@@ -207,22 +215,54 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
                         key={p.id}
                         onClick={() => handleSelectProvider(p.id)}
                         className={`p-3 rounded-xl border text-left transition-all duration-200 group ${selected === p.id
-                                ? `border-accent bg-gradient-to-br ${p.color} to-transparent ring-1 ring-accent/30`
-                                : 'border-border hover:border-border/80 hover:bg-muted/30'
+                            ? `border-accent bg-gradient-to-br ${p.color} to-transparent ring-1 ring-accent/30`
+                            : 'border-border hover:border-border/80 hover:bg-muted/30'
                             }`}
                     >
-                        <div className="text-xl mb-1">{p.icon}</div>
+                        <div className="text-xl mb-1 flex justify-center">
+                            <ProviderIcon providerId={p.id} className="w-5 h-5" />
+                        </div>
                         <div className="font-medium text-xs leading-tight">{p.name}</div>
-                        {!p.needsKey && <div className="text-[10px] text-emerald-400 mt-0.5">No key needed</div>}
+                        {p.needsUrl && !p.needsKey && <div className="text-[10px] text-emerald-400 mt-0.5">Custom URL</div>}
                     </button>
                 ))}
             </div>
 
             {selected && (
                 <div className="space-y-3 pt-1">
-                    {provider?.needsKey ? (
+                    {provider?.needsUrl ? (
+                        <div className="space-y-2">
+                            <div>
+                                <label className="text-xs text-muted-foreground mb-1 block">Base URL</label>
+                                <input
+                                    className="input"
+                                    placeholder={selected === 'ollama' ? 'http://localhost:11434' : 'https://your-endpoint.com'}
+                                    value={baseUrl}
+                                    onChange={e => setBaseUrl(e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs text-muted-foreground mb-1 block">
+                                    Bearer Token <span className="text-muted-foreground/60">(optional)</span>
+                                </label>
+                                <div className="relative">
+                                    <input
+                                        type={showKey ? 'text' : 'password'}
+                                        className="input pr-10"
+                                        placeholder="Token (leave blank if not required)"
+                                        value={apiKey}
+                                        onChange={e => setApiKey(e.target.value)}
+                                        autoComplete="off"
+                                    />
+                                    <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setShowKey(v => !v)}>
+                                        {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
                         <div>
-                            <label className="text-xs text-muted-foreground mb-1 block">{provider.name} API Key</label>
+                            <label className="text-xs text-muted-foreground mb-1 block">{provider?.name} API Key</label>
                             <div className="relative">
                                 <input
                                     type={showKey ? 'text' : 'password'}
@@ -232,21 +272,13 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
                                     onChange={e => setApiKey(e.target.value)}
                                     autoComplete="off"
                                 />
-                                <button
-                                    type="button"
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                                    onClick={() => setShowKey(v => !v)}
-                                >
+                                <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setShowKey(v => !v)}>
                                     {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                 </button>
                             </div>
                         </div>
-                    ) : (
-                        <div>
-                            <label className="text-xs text-muted-foreground mb-1 block">Ollama Base URL</label>
-                            <input className="input" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
-                        </div>
                     )}
+
 
                     {models.length > 0 && (
                         <div>
@@ -271,8 +303,8 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
 
                     {testResult && (
                         <div className={`p-3 rounded-xl text-sm flex items-start gap-2 ${testResult.success
-                                ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
-                                : 'bg-destructive/10 text-red-300 border border-destructive/20'
+                            ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
+                            : 'bg-destructive/10 text-red-300 border border-destructive/20'
                             }`}>
                             <span>{testResult.success ? '✓' : '✗'}</span>
                             <span>{testResult.message}</span>
@@ -294,62 +326,172 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
 }
 
 function WorkspaceCreateStep({ onNext }: { onNext: () => void }) {
-    const [name, setName] = useState('')
-    const [icon, setIcon] = useState('🧠')
+    const { data: providers = [] } = useQuery({ queryKey: ['providers'], queryFn: listProviders })
     const [creating, setCreating] = useState(false)
 
-    const ICONS = ['🧠', '📁', '💼', '🔬', '📚', '🎯', '🌐', '💡', '🔧', '🎨', '📊', '🚀', '🔒', '⚗️', '🌿']
+    const ICONS = ['🧠', '📁', '💼', '🔬', '📚', '🎯', '🌐', '💡', '🔧', '🎨', '📊', '🚀', '🔒', '⚗️', '🌿', '🔑', '⚙️', '📝', '🗄️', '🌱']
+
+    type WsDraft = { id: number; name: string; icon: string; providerId: string; modelOverride: string }
+
+    const [workspaces, setWorkspaces] = useState<WsDraft[]>([
+        { id: Date.now(), name: '', icon: '🧠', providerId: '', modelOverride: '' }
+    ])
+
+    const updateWs = (id: number, patch: Partial<WsDraft>) =>
+        setWorkspaces(ws => ws.map(w => w.id === id ? { ...w, ...patch } : w))
+
+    const addWorkspace = () =>
+        setWorkspaces(ws => [...ws, { id: Date.now(), name: '', icon: '📁', providerId: '', modelOverride: '' }])
+
+    const removeWorkspace = (id: number) =>
+        setWorkspaces(ws => ws.length > 1 ? ws.filter(w => w.id !== id) : ws)
+
+    const canLaunch = workspaces.some(w => w.name.trim())
 
     const handleCreate = async () => {
-        if (!name.trim()) return
+        const valid = workspaces.filter(w => w.name.trim())
+        if (!valid.length) return
         setCreating(true)
-        await createWorkspace({ name: name.trim(), icon })
+        await Promise.all(valid.map(w => createWorkspace({
+            name: w.name.trim(),
+            icon: w.icon,
+            llm_provider_id: w.providerId || undefined,
+            llm_model: w.modelOverride || undefined,
+        })))
         onNext()
     }
 
     return (
         <div className="glass-card p-8 space-y-5 animate-slide-up">
             <div>
-                <h2 className="text-xl font-bold mb-1">Create Your First Workspace</h2>
-                <p className="text-muted-foreground text-sm">Workspaces help you organize notes by project or topic.</p>
+                <h2 className="text-xl font-bold mb-1">Create Your Workspaces</h2>
+                <p className="text-muted-foreground text-sm">
+                    At least one is required. Each workspace can have its own AI provider and model override.
+                </p>
             </div>
 
-            <div>
-                <label className="text-xs text-muted-foreground mb-2 block">Choose an icon</label>
-                <div className="flex flex-wrap gap-2">
-                    {ICONS.map(ic => (
-                        <button
-                            key={ic}
-                            onClick={() => setIcon(ic)}
-                            className={`w-10 h-10 rounded-lg text-xl transition-all ${icon === ic ? 'border-2 border-accent bg-accent/20 scale-110' : 'border border-border hover:bg-muted/50'}`}
-                        >
-                            {ic}
-                        </button>
-                    ))}
-                </div>
+            <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
+                {workspaces.map((ws, idx) => (
+                    <WorkspaceDraftCard
+                        key={ws.id}
+                        ws={ws}
+                        idx={idx}
+                        icons={ICONS}
+                        providers={providers as ProviderOption[]}
+                        onChange={patch => updateWs(ws.id, patch)}
+                        onRemove={workspaces.length > 1 ? () => removeWorkspace(ws.id) : undefined}
+                    />
+                ))}
             </div>
 
-            <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Workspace name</label>
-                <input
-                    className="input"
-                    placeholder="My Knowledge Base"
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleCreate()}
-                    autoFocus
-                />
-            </div>
+            <button
+                className="btn-ghost w-full justify-center border border-dashed border-border py-2.5 text-sm"
+                onClick={addWorkspace}
+            >
+                <Plus className="w-4 h-4" /> Add another workspace
+            </button>
 
             <button
                 className="btn-primary w-full justify-center py-3"
                 onClick={handleCreate}
-                disabled={!name.trim() || creating}
+                disabled={!canLaunch || creating}
             >
                 {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                {creating ? 'Creating…' : 'Create Workspace & Launch'}
+                {creating
+                    ? `Creating ${workspaces.filter(w => w.name.trim()).length} workspace(s)…`
+                    : `Launch OpenForge`}
                 <ArrowRight className="w-4 h-4" />
             </button>
+        </div>
+    )
+}
+
+type ProviderOption = { id: string; display_name: string; provider_name: string; default_model: string | null }
+
+function WorkspaceDraftCard({ ws, idx, icons, providers, onChange, onRemove }: {
+    ws: { name: string; icon: string; providerId: string; modelOverride: string }
+    idx: number
+    icons: string[]
+    providers: ProviderOption[]
+    onChange: (patch: Partial<{ name: string; icon: string; providerId: string; modelOverride: string }>) => void
+    onRemove?: () => void
+}) {
+    const [showIcons, setShowIcons] = useState(false)
+
+    return (
+        <div className="rounded-xl border border-border/60 bg-muted/20 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-muted-foreground">Workspace {idx + 1}</span>
+                {onRemove && (
+                    <button onClick={onRemove} className="ml-auto text-muted-foreground hover:text-red-400 transition-colors">
+                        <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                )}
+            </div>
+
+            {/* Icon + name row */}
+            <div className="flex gap-2 items-start">
+                <div>
+                    <button
+                        onClick={() => setShowIcons(v => !v)}
+                        className="w-11 h-11 rounded-xl border border-border bg-background/50 text-2xl flex items-center justify-center hover:border-accent transition-colors"
+                    >
+                        {ws.icon}
+                    </button>
+                    {showIcons && (
+                        <div className="absolute z-10 mt-1 p-2 rounded-xl border border-border bg-popover shadow-xl grid grid-cols-5 gap-1">
+                            {icons.map(ic => (
+                                <button
+                                    key={ic}
+                                    onClick={() => { onChange({ icon: ic }); setShowIcons(false) }}
+                                    className={`w-8 h-8 rounded-lg text-lg flex items-center justify-center hover:bg-muted transition-colors ${ws.icon === ic ? 'bg-accent/20 ring-1 ring-accent' : ''}`}
+                                >
+                                    {ic}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                <input
+                    className="input flex-1"
+                    placeholder={`Workspace ${idx + 1} name…`}
+                    value={ws.name}
+                    onChange={e => onChange({ name: e.target.value })}
+                    autoFocus={idx === 0}
+                />
+            </div>
+
+            {/* Provider override */}
+            {providers.length > 0 && (
+                <div className="grid grid-cols-2 gap-2">
+                    <div>
+                        <label className="text-[10px] text-muted-foreground mb-1 block">Provider override</label>
+                        <select
+                            className="input text-xs"
+                            value={ws.providerId}
+                            onChange={e => onChange({ providerId: e.target.value, modelOverride: '' })}
+                        >
+                            <option value="">Use global default</option>
+                            {providers.map(p => (
+                                <option key={p.id} value={p.id}>
+                                    {p.display_name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="text-[10px] text-muted-foreground mb-1 block">Model override</label>
+                        <input
+                            className="input text-xs"
+                            placeholder={ws.providerId
+                                ? providers.find(p => p.id === ws.providerId)?.default_model ?? 'e.g. gpt-4o'
+                                : 'e.g. gpt-4o'}
+                            value={ws.modelOverride}
+                            onChange={e => onChange({ modelOverride: e.target.value })}
+                        />
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

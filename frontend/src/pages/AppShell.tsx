@@ -5,9 +5,10 @@ import { listWorkspaces, listNotes, listConversations } from '@/lib/api'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import { useUIStore } from '@/stores/uiStore'
 import CommandPalette from '@/components/shared/CommandPalette'
+import QuickNotePanel from '@/components/shared/QuickNotePanel'
 import {
-    Home, MessageSquare, Search, Settings, Plus, ChevronDown, ChevronRight,
-    FileText, Pin, Archive, Bookmark, Code2, Zap, Wifi, WifiOff,
+    Home, MessageSquare, Search, Settings, Plus, Folder,
+    FileText, Pin, Archive, Bookmark, Code2, Zap, WifiOff,
     PanelLeft, Command
 } from 'lucide-react'
 
@@ -16,6 +17,7 @@ export default function AppShell() {
     const navigate = useNavigate()
     const location = useLocation()
     const [sidebarOpen, setSidebarOpen] = useState(true)
+    const [showQuickNote, setShowQuickNote] = useState(false)
     const { isConnected } = useWorkspaceWebSocket(workspaceId)
     const { setCommandPaletteOpen } = useUIStore()
 
@@ -46,7 +48,9 @@ export default function AppShell() {
                 <div className="flex-shrink-0 p-4">
                     {/* Workspace selector */}
                     <div className="flex items-center gap-2 mb-4">
-                        <span className="text-2xl">{ws?.icon ?? '📁'}</span>
+                        <div className="w-8 h-8 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0">
+                            {ws?.icon ? <span className="text-lg">{ws.icon}</span> : <Folder className="w-4 h-4 text-accent" />}
+                        </div>
                         <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold truncate">{ws?.name ?? 'Workspace'}</p>
                             <p className="text-xs text-muted-foreground">{(workspaces as unknown[]).length} workspace{(workspaces as unknown[]).length !== 1 ? 's' : ''}</p>
@@ -61,7 +65,7 @@ export default function AppShell() {
                         onChange={e => navigate(`/w/${e.target.value}`)}
                     >
                         {(workspaces as { id: string; name: string; icon: string }[]).map(w => (
-                            <option key={w.id} value={w.id}>{w.icon} {w.name}</option>
+                            <option key={w.id} value={w.id}>{w.name}</option>
                         ))}
                     </select>
 
@@ -149,11 +153,18 @@ export default function AppShell() {
 
                     <button
                         className="btn-primary py-1.5 px-3 text-xs"
-                        onClick={() => navigate(`/w/${workspaceId}`)}
+                        onClick={() => setShowQuickNote(p => !p)}
                     >
                         <Plus className="w-3.5 h-3.5" /> New Note
                     </button>
                 </header>
+
+                {showQuickNote && (
+                    <QuickNotePanel
+                        workspaceId={workspaceId}
+                        onClose={() => setShowQuickNote(false)}
+                    />
+                )}
 
                 <main className="flex-1 overflow-auto">
                     <Outlet />
