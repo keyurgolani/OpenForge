@@ -72,4 +72,9 @@ export const deleteConversation = (wid: string, cid: string) =>
 export const searchNotes = (wid: string, q: string, params?: object): Promise<any> =>
     api.get(`/workspaces/${wid}/search`, { params: { q, ...params } }).then(r => r.data)
 
+// ── Prompts ──
+export const listPrompts = (): Promise<any> => api.get('/prompts').then(r => r.data)
+export const updatePrompt = (id: string, data: { override: string | null }): Promise<any> =>
+    api.put(`/prompts/${id}`, data).then(r => r.data)
+
 export default api

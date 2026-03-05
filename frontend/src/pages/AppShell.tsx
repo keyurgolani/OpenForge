@@ -133,6 +133,15 @@ export default function AppShell() {
                         <PanelLeft className="w-4 h-4" />
                     </button>
 
+                    {!sidebarOpen && ws && (
+                        <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-6 h-6 rounded-md bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0">
+                                {ws.icon ? <span className="text-sm">{ws.icon}</span> : <Folder className="w-3.5 h-3.5 text-accent" />}
+                            </div>
+                            <span className="text-sm font-medium truncate max-w-48">{ws.name}</span>
+                        </div>
+                    )}
+
                     <div className="flex-1" />
 
                     {!isConnected && (

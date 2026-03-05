@@ -1,15 +1,17 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
     listProviders, createProvider, updateProvider, deleteProvider,
     testConnection, listModels, setDefaultProvider,
-    listWorkspaces, updateWorkspace, createWorkspace, deleteWorkspace
+    listWorkspaces, updateWorkspace, createWorkspace, deleteWorkspace,
+    listPrompts, updatePrompt
 } from '@/lib/api'
 import {
     Settings, Globe2, Loader2, Trash2, CheckCircle2, XCircle, Star, Plus,
     ChevronDown, ChevronUp, Eye, EyeOff, RefreshCw, Zap, Server, Search, Check,
-    Layers, Bot, FolderOpen, Pencil, Save, X
+    Layers, Bot, FolderOpen, Pencil, Save, X, Sliders, RotateCcw, MessageSquare,
+    FileText
 } from 'lucide-react'
 import { ProviderIcon } from '@/components/shared/ProviderIcon'
 
@@ -38,11 +40,12 @@ const PROVIDER_NAMES = Object.keys(PROVIDER_META)
 // ── Root component ────────────────────────────────────────────────────────────
 export default function SettingsPage() {
     const { workspaceId = '' } = useParams<{ workspaceId: string }>()
-    const [activeTab, setActiveTab] = useState<'workspaces' | 'llm'>('workspaces')
+    const [activeTab, setActiveTab] = useState<'workspaces' | 'llm' | 'prompts'>('workspaces')
 
     const TABS = [
         { id: 'workspaces' as const, label: 'Workspaces', Icon: FolderOpen },
         { id: 'llm' as const, label: 'AI Providers', Icon: Bot },
+        { id: 'prompts' as const, label: 'Prompts', Icon: Sliders },
     ]
 
     return (
@@ -59,8 +62,8 @@ export default function SettingsPage() {
                         key={id}
                         onClick={() => setActiveTab(id)}
                         className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-all ${activeTab === id
-                                ? 'border-accent text-accent'
-                                : 'border-transparent text-muted-foreground hover:text-foreground'
+                            ? 'border-accent text-accent'
+                            : 'border-transparent text-muted-foreground hover:text-foreground'
                             }`}
                     >
                         <Icon className="w-4 h-4" />
@@ -71,6 +74,7 @@ export default function SettingsPage() {
 
             {activeTab === 'workspaces' && <WorkspacesSettings activeWorkspaceId={workspaceId} />}
             {activeTab === 'llm' && <LLMSettings />}
+            {activeTab === 'prompts' && <PromptsTab />}
         </div>
     )
 }
@@ -643,3 +647,182 @@ function ProviderCard({ provider, expanded, onToggle, onDelete, onSetDefault }: 
         </div>
     )
 }
+
+// ── Prompts Tab ───────────────────────────────────────────────────────────────
+interface PromptEntry {
+    id: string
+    label: string
+    description: string
+    category: string
+    role: string
+    variables: string[]
+    default: string
+    override: string | null
+    updated_at: string | null
+}
+
+function PromptsTab() {
+    const qc = useQueryClient()
+    const { data: prompts = [], isLoading } = useQuery<PromptEntry[]>({
+        queryKey: ['prompts'],
+        queryFn: listPrompts,
+    })
+
+    const [drafts, setDrafts] = useState<Record<string, string>>({})
+    const [saving, setSaving] = useState<Record<string, boolean>>({})
+    const [saved, setSaved] = useState<Record<string, boolean>>({})
+
+    useEffect(() => {
+        const d: Record<string, string> = {}
+        for (const p of (prompts as PromptEntry[])) {
+            if (!(p.id in drafts)) d[p.id] = p.override ?? ''
+        }
+        if (Object.keys(d).length > 0) setDrafts(prev => ({ ...d, ...prev }))
+    }, [prompts]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    const handleSave = async (p: PromptEntry) => {
+        setSaving(s => ({ ...s, [p.id]: true }))
+        const val = drafts[p.id]?.trim() || null
+        await updatePrompt(p.id, { override: val })
+        qc.invalidateQueries({ queryKey: ['prompts'] })
+        setSaving(s => ({ ...s, [p.id]: false }))
+        setSaved(s => ({ ...s, [p.id]: true }))
+        setTimeout(() => setSaved(s => ({ ...s, [p.id]: false })), 2000)
+    }
+
+    const handleReset = async (p: PromptEntry) => {
+        setSaving(s => ({ ...s, [p.id]: true }))
+        await updatePrompt(p.id, { override: null })
+        qc.invalidateQueries({ queryKey: ['prompts'] })
+        setDrafts(d => ({ ...d, [p.id]: '' }))
+        setSaving(s => ({ ...s, [p.id]: false }))
+    }
+
+    const insertVariable = (promptId: string, variable: string) => {
+        setDrafts(d => ({ ...d, [promptId]: (d[promptId] ?? '') + variable }))
+    }
+
+    const categories = ['notes', 'chat']
+    const categoryLabels: Record<string, string> = {
+        notes: 'Note Intelligence',
+        chat: 'Chat & Retrieval',
+    }
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center py-20">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+        )
+    }
+
+    return (
+        <div className="space-y-8">
+            <div className="glass-card p-4 border-accent/20 bg-accent/5">
+                <div className="flex items-start gap-3">
+                    <Sliders className="w-4 h-4 text-accent mt-0.5 flex-shrink-0" />
+                    <div className="text-sm">
+                        <p className="font-medium text-foreground mb-1">Customise AI Prompts</p>
+                        <p className="text-muted-foreground text-xs leading-relaxed">
+                            Override the system prompts used for each AI task. Leave a prompt blank to use the default.
+                            Click variable chips to insert them into your custom prompt.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            {categories.map(cat => {
+                const catPrompts = (prompts as PromptEntry[]).filter(p => p.category === cat)
+                if (!catPrompts.length) return null
+                const CatIcon = cat === 'notes' ? FileText : MessageSquare
+                return (
+                    <div key={cat}>
+                        <div className="flex items-center gap-2 mb-4">
+                            <CatIcon className="w-4 h-4 text-accent" />
+                            <h3 className="font-semibold text-sm">{categoryLabels[cat]}</h3>
+                            <div className="flex-1 h-px bg-border/50" />
+                        </div>
+                        <div className="space-y-5">
+                            {catPrompts.map(p => {
+                                const draft = drafts[p.id] ?? ''
+                                const isModified = draft !== (p.override ?? '')
+                                const hasOverride = !!p.override
+                                return (
+                                    <div key={p.id} className="glass-card p-4 space-y-3">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-0.5">
+                                                    <span className="font-medium text-sm">{p.label}</span>
+                                                    {hasOverride && (
+                                                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/15 text-accent font-medium">Custom</span>
+                                                    )}
+                                                </div>
+                                                <p className="text-xs text-muted-foreground">{p.description}</p>
+                                            </div>
+                                        </div>
+
+                                        {p.variables.length > 0 && (
+                                            <div className="flex flex-wrap gap-1.5 items-center">
+                                                <span className="text-[10px] text-muted-foreground">Insert variable:</span>
+                                                {p.variables.map(v => (
+                                                    <button
+                                                        key={v}
+                                                        className="text-[10px] font-mono px-2 py-0.5 rounded bg-muted/50 border border-border/50 hover:bg-accent/20 hover:text-accent hover:border-accent/30 transition-colors"
+                                                        onClick={() => insertVariable(p.id, v)}
+                                                    >
+                                                        {v}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        <div>
+                                            <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1.5">Default system prompt</p>
+                                            <div className="bg-muted/20 border border-border/40 rounded-lg p-3 text-xs text-muted-foreground font-mono whitespace-pre-wrap leading-relaxed max-h-32 overflow-y-auto">
+                                                {p.default}
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1.5">
+                                                Custom override {!hasOverride && '(leave blank to use default)'}
+                                            </p>
+                                            <textarea
+                                                className="input w-full text-xs font-mono resize-none leading-relaxed"
+                                                rows={5}
+                                                placeholder={p.default}
+                                                value={draft}
+                                                onChange={e => setDrafts(d => ({ ...d, [p.id]: e.target.value }))}
+                                            />
+                                        </div>
+
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                className="btn-primary text-xs py-1.5 px-3"
+                                                disabled={saving[p.id] || !isModified}
+                                                onClick={() => handleSave(p)}
+                                            >
+                                                {saving[p.id] ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : saved[p.id] ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
+                                                {saved[p.id] ? 'Saved!' : 'Save override'}
+                                            </button>
+                                            {hasOverride && (
+                                                <button
+                                                    className="btn-ghost text-xs py-1.5 px-3 text-muted-foreground"
+                                                    disabled={saving[p.id]}
+                                                    onClick={() => handleReset(p)}
+                                                >
+                                                    <RotateCcw className="w-3.5 h-3.5" /> Reset to default
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </div>
+                )
+            })}
+        </div>
+    )
+}
+
