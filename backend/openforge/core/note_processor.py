@@ -1,5 +1,6 @@
 from uuid import uuid4, UUID
 from openforge.core.embedding import embed_texts
+from openforge.core.embedding_document import build_note_embedding_document
 from openforge.core.markdown_utils import chunk_markdown
 from openforge.db.qdrant_client import get_qdrant
 from openforge.config import get_settings
@@ -20,6 +21,8 @@ class NoteProcessor:
         note_type: str,
         title: str | None,
         tags: list[str],
+        ai_summary: str | None = None,
+        insights: dict | None = None,
     ):
         """Full embedding pipeline for a note."""
         settings = get_settings()
@@ -34,12 +37,17 @@ class NoteProcessor:
             ),
         )
 
-        if not content or len(content.strip()) < 20:
+        embedding_document = build_note_embedding_document(
+            content=content,
+            ai_summary=ai_summary,
+            insights=insights if isinstance(insights, dict) else None,
+        )
+        if not embedding_document or len(embedding_document.strip()) < 20:
             logger.info(f"Note {note_id} too short to embed, skipping.")
             return
 
         # Step 2: Chunk
-        chunks = chunk_markdown(content)
+        chunks = chunk_markdown(embedding_document)
         if not chunks:
             return
 

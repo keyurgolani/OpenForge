@@ -15,9 +15,9 @@ router = APIRouter()
 
 # ── Default prompts catalogue ──────────────────────────────────────────────
 # Variables available:
-#   {note_title}      - Note title (or AI-generated title)
+#   {note_title}      - Knowledge title (or AI-generated title)
 #   {note_content}    - Full note content (up to 8000 chars)
-#   {note_type}       - Note type (standard, fleeting, bookmark, gist)
+#   {note_type}       - Knowledge type (standard, fleeting, bookmark, gist)
 #   {url}             - Bookmark URL
 #   {tags}            - Comma-separated note tags
 #   {language}        - Gist programming language
@@ -28,21 +28,21 @@ router = APIRouter()
 PROMPT_CATALOGUE = [
     {
         "id": "generate_title",
-        "label": "Generate Note Title",
-        "description": "Used to auto-generate a concise title for a note when it has no user-set title.",
+        "label": "Generate Knowledge Title",
+        "description": "Used to auto-generate a concise title for a knowledge item when it has no user-set title.",
         "category": "notes",
         "role": "system",
         "variables": ["{note_content}"],
         "default": (
             "Generate a concise, descriptive title (max 60 chars) for the following note content. "
             "Return ONLY the title — no quotes, markdown, or extra explanation.\n\n"
-            "Note Content:\n{note_content}"
+            "Knowledge Content:\n{note_content}"
         ),
     },
     {
         "id": "summarize_note",
-        "label": "Summarize Note",
-        "description": "Used when the user clicks 'Summarize' on a note. Produces a structured summary.",
+        "label": "Summarize Knowledge",
+        "description": "Used when the user clicks 'Summarize' on a knowledge item. Produces a structured summary.",
         "category": "notes",
         "role": "system",
         "variables": ["{note_title}", "{note_content}", "{note_type}", "{tags}"],
@@ -52,18 +52,18 @@ PROMPT_CATALOGUE = [
             "Use structured markdown with short paragraphs or bullet points.\n\n"
             "Title: {note_title}\n"
             "Tags: {tags}\n\n"
-            "Note Content:\n{note_content}"
+            "Knowledge Content:\n{note_content}"
         ),
     },
     {
         "id": "extract_insights",
         "label": "Extract Insights",
-        "description": "Extracts structured insights (tasks, timeline dates, facts, crucial points, tags) from a note.",
+        "description": "Extracts structured insights (tasks, timeline dates, facts, crucial points, tags) from a knowledge item.",
         "category": "notes",
         "role": "system",
         "variables": ["{note_title}", "{note_content}", "{tags}"],
         "default": (
-            "Extract structured insights from this note. Return ONLY valid JSON with this exact structure:\n"
+            "Extract structured insights from this knowledge item. Return ONLY valid JSON with this exact structure:\n"
             "{\n"
             '  "timelines": [{"date": "YYYY-MM-DD", "event": "description"}],\n'
             '  "facts": ["key fact 1"],\n'
@@ -78,7 +78,7 @@ PROMPT_CATALOGUE = [
             "- Do not invent dates.\n"
             "Return empty arrays if none found. Tags should be lowercase single words or hyphenated phrases.\n\n"
             "Title: {note_title}\n\n"
-            "Note Content:\n{note_content}"
+            "Knowledge Content:\n{note_content}"
         ),
     },
     {
@@ -91,21 +91,22 @@ PROMPT_CATALOGUE = [
         "default": (
             "You are a helpful AI assistant integrated into OpenForge, a self-hosted knowledge management workspace. "
             "Answer the user's questions clearly and concisely. "
-            "When you use information from the user's notes, cite the source by name. "
+            "When you use information from the user's knowledge, cite the source by name naturally in the sentence. "
+            "Do not start responses with robotic preambles like 'Based on the provided context'. "
             "Format responses in clear markdown when helpful."
         ),
     },
     {
         "id": "chat_rag_context",
         "label": "Chat RAG Context Prefix",
-        "description": "Injected before retrieved note context chunks in each chat message.",
+        "description": "Injected before retrieved knowledge context chunks in each chat message.",
         "category": "chat",
         "role": "user",
         "variables": ["{query}"],
         "default": (
-            "Use the following notes from the user's workspace as context to answer the question. "
-            "Only use information from these notes if it is relevant.\n\n"
-            "Relevant notes:\n"
+            "Use the following knowledge from the user's workspace as context to answer the question. "
+            "Only use information from this knowledge if it is relevant.\n\n"
+            "Relevant knowledge:\n"
         ),
     },
     {

@@ -10,14 +10,21 @@
  *  - Keyboard shortcut: Escape closes
  *  - Click backdrop → closes
  */
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { getNote, togglePin, toggleArchive, deleteNote, summarizeNote, extractInsights, generateTitle } from '@/lib/api'
+import { createPortal } from 'react-dom'
+import {
+    getKnowledge,
+    togglePin,
+    toggleArchive,
+    deleteKnowledge,
+    generateKnowledgeIntelligence,
+} from '@/lib/api'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import {
     X, ExternalLink, Pin, PinOff, Archive, ArchiveX, Trash2, Sparkles,
-    FileText, Bookmark, Code2, Zap, Clock, Tag, Hash, Loader2, CornerRightDown,
+    FileText, Bookmark, Code2, Zap, Clock, Tag, Hash, Loader2,
     Brain, Star, ChevronRight, ChevronDown,
 } from 'lucide-react'
 import MarkdownIt from 'markdown-it'
@@ -44,12 +51,11 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
     const backdropRef = useRef<HTMLDivElement>(null)
     const [aiLoading, setAiLoading] = useState<string | null>(null)
     const [aiIntelligenceOpen, setAiIntelligenceOpen] = useState(false)
-    const [sheetLayout, setSheetLayout] = useState<{ left: number; width: number } | null>(null)
     const { on } = useWorkspaceWebSocket(workspaceId)
 
     const { data: note, isLoading } = useQuery({
         queryKey: ['note', noteId],
-        queryFn: () => getNote(workspaceId, noteId),
+        queryFn: () => getKnowledge(workspaceId, noteId),
         enabled: !!noteId,
     })
 
@@ -74,41 +80,6 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
         })
     }, [noteId, on, qc, workspaceId])
 
-    const syncSheetLayout = useCallback(() => {
-        const sheetAnchor = document.querySelector<HTMLElement>('[data-openforge-note-sheet-anchor="1"]')
-            ?? document.querySelector<HTMLElement>('[data-openforge-main-content="1"]')
-        if (!sheetAnchor) {
-            setSheetLayout(null)
-            return
-        }
-        const rect = sheetAnchor.getBoundingClientRect()
-        if (!rect.width) {
-            setSheetLayout(null)
-            return
-        }
-        setSheetLayout({
-            left: Math.max(0, Math.round(rect.left)),
-            width: Math.round(rect.width),
-        })
-    }, [])
-
-    useEffect(() => {
-        syncSheetLayout()
-        const sheetAnchor = document.querySelector<HTMLElement>('[data-openforge-note-sheet-anchor="1"]')
-            ?? document.querySelector<HTMLElement>('[data-openforge-main-content="1"]')
-        if (!sheetAnchor) return
-
-        const onResize = () => syncSheetLayout()
-        window.addEventListener('resize', onResize)
-        const observer = new ResizeObserver(onResize)
-        observer.observe(sheetAnchor)
-
-        return () => {
-            observer.disconnect()
-            window.removeEventListener('resize', onResize)
-        }
-    }, [syncSheetLayout])
-
     const handlePin = async () => {
         await togglePin(workspaceId, noteId)
         qc.invalidateQueries({ queryKey: ['note', noteId] })
@@ -122,48 +93,41 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
     }
 
     const handleDelete = async () => {
-        if (!confirm('Delete this note?')) return
-        await deleteNote(workspaceId, noteId)
+        if (!confirm('Delete this knowledge item?')) return
+        await deleteKnowledge(workspaceId, noteId)
         qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
         onClose()
     }
 
-    const handleAI = async (action: string) => {
+    const handleGenerateIntelligence = async () => {
         if (aiLoading) return
-        setAiLoading(action)
+        setAiLoading('intelligence')
         try {
-            if (action === 'summarize') {
-                const result = await summarizeNote(workspaceId, noteId)
-                const summary = (result?.summary ?? '').trim()
-                if (summary) {
-                    qc.setQueryData(['note', noteId], (prev: any) => prev ? { ...prev, ai_summary: summary } : prev)
-                }
-            } else if (action === 'insights' || action === 'keywords') {
-                const insights = await extractInsights(workspaceId, noteId)
-                qc.setQueryData(['note', noteId], (prev: any) => {
-                    if (!prev) return prev
-                    const next: any = { ...prev, insights }
-                    if (Array.isArray(insights?.tags) && insights.tags.length > 0) {
-                        const currentTags = Array.isArray(prev.tags) ? prev.tags : []
-                        next.tags = Array.from(new Set([...currentTags, ...insights.tags]))
-                    }
-                    return next
-                })
-            } else if (action === 'title') {
-                const result = await generateTitle(workspaceId, noteId)
-                const generatedTitle = (result?.title ?? '').trim()
+            const result = await generateKnowledgeIntelligence(workspaceId, noteId)
+            qc.setQueryData(['note', noteId], (prev: any) => {
+                if (!prev) return prev
+                const next: any = { ...prev }
+                const generatedTitle = (result?.ai_title ?? result?.title ?? '').trim()
                 if (generatedTitle) {
-                    qc.setQueryData(['note', noteId], (prev: any) => {
-                        if (!prev) return prev
-                        const titleWasEmpty = !(prev.title ?? '').trim()
-                        return {
-                            ...prev,
-                            ai_title: generatedTitle,
-                            title: titleWasEmpty ? generatedTitle : prev.title,
-                        }
-                    })
+                    const titleWasEmpty = !(prev.title ?? '').trim()
+                    next.ai_title = generatedTitle
+                    if (titleWasEmpty) {
+                        next.title = generatedTitle
+                    }
                 }
-            }
+                if (result?.summary) {
+                    next.ai_summary = result.summary
+                }
+                if (result?.insights) {
+                    next.insights = result.insights
+                }
+                if (Array.isArray(result?.tags) && result.tags.length > 0) {
+                    const currentTags = Array.isArray(prev.tags) ? prev.tags : []
+                    next.tags = Array.from(new Set([...currentTags, ...result.tags]))
+                }
+                return next
+            })
+            setAiIntelligenceOpen(true)
             qc.invalidateQueries({ queryKey: ['note', noteId] })
             qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
         } finally {
@@ -171,8 +135,8 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
         }
     }
 
-    const openNote = () => {
-        navigate(`/w/${workspaceId}/notes/${noteId}`)
+    const openKnowledge = () => {
+        navigate(`/w/${workspaceId}/knowledge/${noteId}`)
         onClose()
     }
 
@@ -181,14 +145,9 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
     const displayTitle = note?.title?.trim() || note?.ai_title?.trim() || null
     const hasInsights = !!note?.insights && Object.keys(note.insights).length > 0
     const hasAiIntelligence = !!note?.ai_summary || hasInsights
-    const noteAiActions = [
-        { id: 'title', icon: Hash, label: 'Generate Title' },
-        { id: 'keywords', icon: Tag, label: 'Generate Keywords' },
-        { id: 'insights', icon: Brain, label: 'Extract Insights' },
-        { id: 'summarize', icon: CornerRightDown, label: 'Summarize' },
-    ] as const
+    const noteAiAction = { id: 'intelligence', icon: Brain, label: 'Generate Intelligence' } as const
 
-    return (
+    const modalContent = (
         <AnimatePresence>
             {/* Backdrop */}
             <motion.div
@@ -202,24 +161,21 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
             />
 
             {/* Sheet — slides up from bottom */}
-            <motion.div
-                initial={{ y: '100%', scale: 0.95, opacity: 0.5 }}
-                animate={{ y: 0, scale: 1, opacity: 1 }}
-                exit={{ y: '100%', scale: 0.95, opacity: 0 }}
-                transition={{
-                    type: 'spring',
-                    damping: 25,
-                    stiffness: 300,
-                    mass: 0.8
-                }}
-                className="fixed bottom-0 z-50 bg-card/90 backdrop-blur-3xl border-t border-white/10 rounded-t-[32px] shadow-glass-lg flex flex-col"
-                style={{
-                    maxHeight: '88vh',
-                    left: sheetLayout ? `${sheetLayout.left}px` : '0px',
-                    width: sheetLayout ? `${sheetLayout.width}px` : '100vw',
-                }}
-                onClick={e => e.stopPropagation()}
-            >
+            <div className="fixed inset-x-0 bottom-0 z-50 flex justify-center pointer-events-none">
+                <motion.div
+                    initial={{ y: '100%', scale: 0.95, opacity: 0.5 }}
+                    animate={{ y: 0, scale: 1, opacity: 1 }}
+                    exit={{ y: '100%', scale: 0.95, opacity: 0 }}
+                    transition={{
+                        type: 'spring',
+                        damping: 25,
+                        stiffness: 300,
+                        mass: 0.8
+                    }}
+                    className="pointer-events-auto w-[90vw] max-w-[90vw] bg-card/90 backdrop-blur-3xl border-t border-white/10 rounded-t-[32px] shadow-glass-lg flex flex-col"
+                    style={{ maxHeight: '70vh' }}
+                    onClick={e => e.stopPropagation()}
+                >
                 {/* Inner Glow Line */}
                 <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
                 {/* Drag handle */}
@@ -265,6 +221,15 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
                         {note && (
                             <>
                                 <button
+                                    className="btn-ghost text-xs py-1.5 px-2.5 gap-1.5"
+                                    onClick={handleGenerateIntelligence}
+                                    disabled={!!aiLoading}
+                                    title={noteAiAction.label}
+                                >
+                                    {aiLoading === noteAiAction.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <noteAiAction.icon className="w-3 h-3" />}
+                                    {noteAiAction.label}
+                                </button>
+                                <button
                                     className="btn-ghost p-1.5"
                                     onClick={handlePin}
                                     title={note.is_pinned ? 'Unpin' : 'Pin'}
@@ -290,10 +255,10 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
                         )}
                         <button
                             className="btn-primary text-xs py-1.5 px-3 gap-1.5"
-                            onClick={openNote}
+                            onClick={openKnowledge}
                             title="Open in full editor"
                         >
-                            <ExternalLink className="w-3.5 h-3.5" /> Open note
+                            <ExternalLink className="w-3.5 h-3.5" /> Open knowledge
                         </button>
                         <button className="btn-ghost p-1.5 ml-1" onClick={onClose} title="Close (Esc)">
                             <X className="w-4 h-4" />
@@ -352,126 +317,112 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
                                 )}
                             </div>
 
-                            {/* AI intelligence (secondary to content) */}
-                            {hasAiIntelligence && (
-                                <div className="pt-1">
-                                    <button
-                                        type="button"
-                                        onClick={() => setAiIntelligenceOpen(prev => !prev)}
-                                        className="w-full flex items-center justify-between rounded-lg border border-border/55 bg-card/20 px-3 py-2 text-left"
-                                        aria-expanded={aiIntelligenceOpen}
-                                        aria-label={aiIntelligenceOpen ? 'Collapse AI intelligence' : 'Expand AI intelligence'}
-                                    >
-                                        <span className="inline-flex items-center gap-2">
-                                            <Sparkles className="w-3.5 h-3.5 text-accent/80" />
-                                            <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">AI Intelligence</span>
-                                        </span>
-                                        {aiIntelligenceOpen ? (
-                                            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                                        ) : (
-                                            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-                                        )}
-                                    </button>
-
-                                    {aiIntelligenceOpen && (
-                                        <div className="mt-3 space-y-3">
-                                            {note.ai_summary && (
-                                                <div className="rounded-xl border border-border/50 bg-card/35 p-3">
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <Brain className="w-3.5 h-3.5 text-accent" />
-                                                        <span className="text-xs font-medium text-accent">Summary</span>
-                                                    </div>
-                                                    <div
-                                                        className="prose prose-sm prose-invert max-w-none text-sm leading-relaxed text-muted-foreground"
-                                                        dangerouslySetInnerHTML={{ __html: md.render(note.ai_summary) }}
-                                                    />
-                                                </div>
-                                            )}
-
-                                            {hasInsights && (
-                                                <div className="rounded-xl border border-border/50 bg-card/30 p-3 space-y-3">
-                                                    <div className="flex items-center gap-2">
-                                                        <Star className="w-3.5 h-3.5 text-amber-400" />
-                                                        <span className="text-xs font-medium">Insights</span>
-                                                    </div>
-                                                    {note.insights.tasks?.length > 0 && (
-                                                        <div>
-                                                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Tasks</p>
-                                                            <ul className="space-y-0.5">
-                                                                {note.insights.tasks.map((t: string, i: number) => (
-                                                                    <li key={i} className="text-xs flex items-start gap-1.5">
-                                                                        <span className="mt-0.5 w-3 h-3 rounded-sm border border-border/60 flex-shrink-0" />
-                                                                        {t}
-                                                                    </li>
-                                                                ))}
-                                                            </ul>
-                                                        </div>
-                                                    )}
-                                                    {note.insights.timelines?.length > 0 && (
-                                                        <div>
-                                                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Timelines</p>
-                                                            <ul className="space-y-0.5">
-                                                                {note.insights.timelines.map((h: any, i: number) => (
-                                                                    <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
-                                                                        <span className="text-accent mt-0.5 font-bold">{h.date}</span> {h.event}
-                                                                    </li>
-                                                                ))}
-                                                            </ul>
-                                                        </div>
-                                                    )}
-                                                    {note.insights.facts?.length > 0 && (
-                                                        <div>
-                                                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Facts</p>
-                                                            <ul className="space-y-0.5">
-                                                                {note.insights.facts.map((h: string, i: number) => (
-                                                                    <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
-                                                                        <span className="text-accent mt-0.5">•</span> {h}
-                                                                    </li>
-                                                                ))}
-                                                            </ul>
-                                                        </div>
-                                                    )}
-                                                    {note.insights.crucial_things?.length > 0 && (
-                                                        <div>
-                                                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Crucial Things</p>
-                                                            <ul className="space-y-0.5">
-                                                                {note.insights.crucial_things.map((h: string, i: number) => (
-                                                                    <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
-                                                                        <span className="text-red-400 mt-0.5">!</span> {h}
-                                                                    </li>
-                                                                ))}
-                                                            </ul>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
                         </>
                     )}
                 </div>
 
-                {/* Footer — AI quick actions */}
-                {!isLoading && note && (
-                    <div className="flex items-center gap-2 px-5 py-3 border-t border-border/50 flex-shrink-0 flex-wrap">
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">AI:</span>
-                        {noteAiActions.map(action => (
-                            <button
-                                key={action.id}
-                                className="btn-ghost text-xs py-1 px-2.5 gap-1.5"
-                                onClick={() => handleAI(action.id)}
-                                disabled={!!aiLoading}
-                                title={action.label}
-                            >
-                                {aiLoading === action.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <action.icon className="w-3 h-3" />}
-                                {action.label}
-                            </button>
-                        ))}
+                {/* Sticky AI intelligence strip (stays at bottom when collapsed) */}
+                {!isLoading && note && hasAiIntelligence && (
+                    <div className="sticky bottom-0 z-10 px-5 pt-2 pb-3 border-t border-border/50 bg-card/90 backdrop-blur-md flex-shrink-0">
+                        <button
+                            type="button"
+                            onClick={() => setAiIntelligenceOpen(prev => !prev)}
+                            className="w-full flex items-center justify-between rounded-lg border border-border/55 bg-card/20 px-3 py-2 text-left"
+                            aria-expanded={aiIntelligenceOpen}
+                            aria-label={aiIntelligenceOpen ? 'Collapse AI intelligence' : 'Expand AI intelligence'}
+                        >
+                            <span className="inline-flex items-center gap-2">
+                                <Sparkles className="w-3.5 h-3.5 text-accent/80" />
+                                <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">AI Intelligence</span>
+                            </span>
+                            {aiIntelligenceOpen ? (
+                                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                            ) : (
+                                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                            )}
+                        </button>
+
+                        {aiIntelligenceOpen && (
+                            <div className="mt-3 max-h-[28vh] overflow-y-auto pr-1 space-y-3">
+                                {note.ai_summary && (
+                                    <div className="rounded-xl border border-border/50 bg-card/35 p-3">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <Brain className="w-3.5 h-3.5 text-accent" />
+                                            <span className="text-xs font-medium text-accent">Summary</span>
+                                        </div>
+                                        <div
+                                            className="prose prose-sm prose-invert max-w-none text-sm leading-relaxed text-muted-foreground"
+                                            dangerouslySetInnerHTML={{ __html: md.render(note.ai_summary) }}
+                                        />
+                                    </div>
+                                )}
+
+                                {hasInsights && (
+                                    <div className="rounded-xl border border-border/50 bg-card/30 p-3 space-y-3">
+                                        <div className="flex items-center gap-2">
+                                            <Star className="w-3.5 h-3.5 text-amber-400" />
+                                            <span className="text-xs font-medium">Insights</span>
+                                        </div>
+                                        {note.insights.tasks?.length > 0 && (
+                                            <div>
+                                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Tasks</p>
+                                                <ul className="space-y-0.5">
+                                                    {note.insights.tasks.map((t: string, i: number) => (
+                                                        <li key={i} className="text-xs flex items-start gap-1.5">
+                                                            <span className="mt-0.5 w-3 h-3 rounded-sm border border-border/60 flex-shrink-0" />
+                                                            {t}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                        {note.insights.timelines?.length > 0 && (
+                                            <div>
+                                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Timelines</p>
+                                                <ul className="space-y-0.5">
+                                                    {note.insights.timelines.map((h: any, i: number) => (
+                                                        <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                                                            <span className="text-accent mt-0.5 font-bold">{h.date}</span> {h.event}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                        {note.insights.facts?.length > 0 && (
+                                            <div>
+                                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Facts</p>
+                                                <ul className="space-y-0.5">
+                                                    {note.insights.facts.map((h: string, i: number) => (
+                                                        <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                                                            <span className="text-accent mt-0.5">•</span> {h}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                        {note.insights.crucial_things?.length > 0 && (
+                                            <div>
+                                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Crucial Things</p>
+                                                <ul className="space-y-0.5">
+                                                    {note.insights.crucial_things.map((h: string, i: number) => (
+                                                        <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                                                            <span className="text-red-400 mt-0.5">!</span> {h}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 )}
-            </motion.div>
+                </motion.div>
+            </div>
         </AnimatePresence>
     )
+
+    if (typeof document === 'undefined') return null
+    return createPortal(modalContent, document.body)
 }

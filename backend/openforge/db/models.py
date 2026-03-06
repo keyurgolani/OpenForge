@@ -84,11 +84,11 @@ class Workspace(Base):
     )
 
     llm_provider: Mapped[Optional["LLMProvider"]] = relationship(back_populates="workspaces")
-    notes: Mapped[list["Note"]] = relationship(back_populates="workspace", cascade="all, delete-orphan")
+    notes: Mapped[list["Knowledge"]] = relationship(back_populates="workspace", cascade="all, delete-orphan")
     conversations: Mapped[list["Conversation"]] = relationship(back_populates="workspace", cascade="all, delete-orphan")
 
 
-class Note(Base):
+class Knowledge(Base):
     __tablename__ = "notes"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -119,7 +119,7 @@ class Note(Base):
     )
 
     workspace: Mapped["Workspace"] = relationship(back_populates="notes")
-    tags: Mapped[list["NoteTag"]] = relationship(back_populates="note", cascade="all, delete-orphan")
+    tags: Mapped[list["KnowledgeTag"]] = relationship(back_populates="knowledge", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("idx_notes_workspace", "workspace_id"),
@@ -129,7 +129,7 @@ class Note(Base):
     )
 
 
-class NoteTag(Base):
+class KnowledgeTag(Base):
     __tablename__ = "note_tags"
 
     note_id: Mapped[uuid.UUID] = mapped_column(
@@ -138,12 +138,26 @@ class NoteTag(Base):
     tag: Mapped[str] = mapped_column(String(100), primary_key=True)
     source: Mapped[str] = mapped_column(String(10), nullable=False, default="ai")
 
-    note: Mapped["Note"] = relationship(back_populates="tags")
+    knowledge: Mapped["Knowledge"] = relationship(back_populates="tags")
+
+    @property
+    def note(self) -> "Knowledge":
+        # Backward compatibility for legacy naming.
+        return self.knowledge
+
+    @note.setter
+    def note(self, value: "Knowledge") -> None:
+        self.knowledge = value
 
     __table_args__ = (
         Index("idx_note_tags_tag", "tag"),
         Index("idx_note_tags_note", "note_id"),
     )
+
+
+# Backward compatibility aliases for legacy naming.
+Note = Knowledge
+NoteTag = KnowledgeTag
 
 
 class Conversation(Base):
@@ -264,6 +278,7 @@ class TaskLog(Base):
     duration_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     item_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    target_link: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         Index("idx_task_logs_started", "started_at"),

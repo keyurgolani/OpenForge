@@ -85,7 +85,41 @@ export function useKeyboardShortcuts(
     options?: ShortcutOptions
   }>
 ) {
-  shortcuts.forEach(({ key, withModKey, handler, options }) => {
-    useKeyboardShortcut(key, withModKey, handler, options)
-  })
+  useEffect(() => {
+    const listeners: Array<(e: KeyboardEvent) => void> = []
+
+    shortcuts.forEach(({ key, withModKey, handler, options }) => {
+      const {
+        enabled = true,
+        preventDefault = true,
+        stopPropagation = false,
+        ignoreInputs = true,
+      } = options ?? {}
+
+      const listener = (e: KeyboardEvent) => {
+        if (!enabled) return
+        if (e.key.toLowerCase() !== key.toLowerCase()) return
+        if (withModKey && !isModKey(e)) return
+        if (!withModKey && (e.metaKey || e.ctrlKey)) return
+
+        if (ignoreInputs) {
+          const target = e.target as HTMLElement
+          const tagName = target.tagName.toLowerCase()
+          const isInput = tagName === 'input' || tagName === 'textarea' || tagName === 'select'
+          if (isInput || target.isContentEditable) return
+        }
+
+        if (preventDefault) e.preventDefault()
+        if (stopPropagation) e.stopPropagation()
+        handler(e)
+      }
+
+      listeners.push(listener)
+      window.addEventListener('keydown', listener)
+    })
+
+    return () => {
+      listeners.forEach(listener => window.removeEventListener('keydown', listener))
+    }
+  }, [shortcuts])
 }

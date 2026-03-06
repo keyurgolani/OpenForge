@@ -12,10 +12,10 @@ def _count_code_tokens(text: str) -> int:
 
 def count_words(text: str | None, note_type: str | None = None) -> int:
     """
-    Count words for note cards.
+    Count words for knowledge cards.
 
     - Gists: count code-like tokens so symbol-dense code lines are not counted as one word.
-    - Other note types: count prose by whitespace, but count markdown code (fenced/inline)
+    - Other knowledge types: count prose by whitespace, but count markdown code (fenced/inline)
       using code-like tokenization.
     """
     if not text:

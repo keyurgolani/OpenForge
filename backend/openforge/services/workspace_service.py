@@ -5,7 +5,7 @@ import os
 import shutil
 import logging
 
-from openforge.db.models import Workspace, Note, Conversation
+from openforge.db.models import Workspace, Knowledge, Conversation
 from openforge.db.qdrant_client import get_qdrant
 from openforge.schemas.workspace import WorkspaceCreate, WorkspaceUpdate, WorkspaceResponse
 from openforge.config import get_settings
@@ -15,7 +15,7 @@ from qdrant_client.models import Filter, FieldCondition, MatchValue
 logger = logging.getLogger("openforge.workspace")
 
 
-def _to_response(workspace: Workspace, note_count: int = 0, conv_count: int = 0) -> WorkspaceResponse:
+def _to_response(workspace: Workspace, knowledge_count: int = 0, conv_count: int = 0) -> WorkspaceResponse:
     return WorkspaceResponse(
         id=workspace.id,
         name=workspace.name,
@@ -25,7 +25,8 @@ def _to_response(workspace: Workspace, note_count: int = 0, conv_count: int = 0)
         llm_provider_id=workspace.llm_provider_id,
         llm_model=workspace.llm_model,
         sort_order=workspace.sort_order,
-        note_count=note_count,
+        note_count=knowledge_count,
+        knowledge_count=knowledge_count,
         conversation_count=conv_count,
         created_at=workspace.created_at,
         updated_at=workspace.updated_at,
@@ -67,8 +68,8 @@ class WorkspaceService:
 
         responses = []
         for ws in workspaces:
-            note_count_r = await db.execute(
-                select(func.count(Note.id)).where(Note.workspace_id == ws.id)
+            knowledge_count_r = await db.execute(
+                select(func.count(Knowledge.id)).where(Knowledge.workspace_id == ws.id)
             )
             conv_count_r = await db.execute(
                 select(func.count(Conversation.id)).where(
@@ -78,7 +79,7 @@ class WorkspaceService:
             )
             responses.append(_to_response(
                 ws,
-                note_count=note_count_r.scalar() or 0,
+                knowledge_count=knowledge_count_r.scalar() or 0,
                 conv_count=conv_count_r.scalar() or 0,
             ))
         return responses
@@ -89,14 +90,14 @@ class WorkspaceService:
         if not ws:
             raise HTTPException(status_code=404, detail="Workspace not found")
 
-        note_count_r = await db.execute(select(func.count(Note.id)).where(Note.workspace_id == ws.id))
+        knowledge_count_r = await db.execute(select(func.count(Knowledge.id)).where(Knowledge.workspace_id == ws.id))
         conv_count_r = await db.execute(
             select(func.count(Conversation.id)).where(
                 Conversation.workspace_id == ws.id,
                 Conversation.is_archived == False,  # noqa: E712
             )
         )
-        return _to_response(ws, note_count_r.scalar() or 0, conv_count_r.scalar() or 0)
+        return _to_response(ws, knowledge_count_r.scalar() or 0, conv_count_r.scalar() or 0)
 
     async def update_workspace(self, db: AsyncSession, workspace_id: UUID, data: WorkspaceUpdate) -> WorkspaceResponse:
         result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))

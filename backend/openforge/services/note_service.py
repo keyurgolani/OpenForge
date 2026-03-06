@@ -7,6 +7,7 @@ import logging
 import re
 import shutil
 import base64
+import json
 from html import unescape
 from urllib.parse import urlparse, quote, unquote
 
@@ -17,6 +18,8 @@ from openforge.config import get_settings
 from openforge.utils.text import count_words, normalize_word_count, truncate_text, strip_markdown
 from openforge.utils.note_title_generation import derive_note_title
 from openforge.utils.title import normalize_note_title
+from openforge.utils.insights import normalize_insights_payload
+from openforge.utils.task_audit import start_task_log, mark_task_log_done, mark_task_log_failed
 from fastapi import HTTPException, BackgroundTasks
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 
@@ -106,6 +109,287 @@ class NoteService:
             "www.github.com": self._extract_github_bookmark_content,
         }
 
+    async def _get_prompt_text(self, db: AsyncSession, prompt_id: str, **kwargs) -> str:
+        from openforge.db.models import Config
+        from openforge.api.prompts import PROMPT_CATALOGUE
+
+        entry = next((p for p in PROMPT_CATALOGUE if p["id"] == prompt_id), None)
+        default_text = entry["default"] if entry else ""
+
+        result = await db.execute(select(Config).where(Config.key == f"prompt.{prompt_id}"))
+        row = result.scalar_one_or_none()
+        text = row.value.get("text") if row and row.value and "text" in row.value else default_text
+
+        for k, v in kwargs.items():
+            text = text.replace(f"{{{k}}}", str(v))
+        return text
+
+    async def _finalize_task_log(
+        self,
+        log_id: UUID | None,
+        *,
+        item_count: int | None = None,
+        error: Exception | str | None = None,
+    ) -> None:
+        if not log_id:
+            return
+        from openforge.db.postgres import AsyncSessionLocal
+
+        async with AsyncSessionLocal() as db:
+            from openforge.db.models import TaskLog
+            result = await db.execute(select(TaskLog).where(TaskLog.id == log_id))
+            log = result.scalar_one_or_none()
+            if not log:
+                return
+            if error is None:
+                mark_task_log_done(log, item_count=item_count)
+            else:
+                mark_task_log_failed(log, error)
+            await db.commit()
+
+    async def run_bookmark_content_extraction_job(
+        self,
+        *,
+        note_id: UUID,
+        workspace_id: UUID,
+        audit_task_type: str | None = "extract_bookmark_content",
+        trigger_intelligence_after_extract: bool = False,
+    ) -> bool:
+        from openforge.db.postgres import AsyncSessionLocal
+
+        log_id: UUID | None = None
+        if audit_task_type:
+            async with AsyncSessionLocal() as db:
+                task_log = await start_task_log(
+                    db,
+                    task_type=audit_task_type,
+                    workspace_id=workspace_id,
+                    target_link=f"/w/{workspace_id}/knowledge/{note_id}",
+                )
+                await db.commit()
+                log_id = task_log.id
+
+        try:
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(Note).where(Note.id == note_id, Note.workspace_id == workspace_id)
+                )
+                note = result.scalar_one_or_none()
+                if not note:
+                    raise RuntimeError("Knowledge not found")
+                if note.type != "bookmark":
+                    raise RuntimeError("Knowledge is not a bookmark")
+                if not (note.url or "").strip():
+                    raise RuntimeError("Bookmark URL is empty")
+                content_before = bool((note.content or "").strip())
+                url = note.url
+
+            await self._fetch_url_metadata(note_id=note_id, url=url, workspace_id=workspace_id)
+
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(Note).where(Note.id == note_id, Note.workspace_id == workspace_id)
+                )
+                note_after = result.scalar_one_or_none()
+                has_content_after = bool((note_after.content or "").strip()) if note_after else False
+                if not has_content_after and not content_before:
+                    logger.warning(
+                        "Bookmark extraction produced no content for note %s in workspace %s",
+                        note_id,
+                        workspace_id,
+                    )
+                    await self._finalize_task_log(log_id, item_count=0)
+                    return False
+
+            if trigger_intelligence_after_extract:
+                try:
+                    await self.run_knowledge_intelligence_job(
+                        note_id=note_id,
+                        workspace_id=workspace_id,
+                        audit_task_type="generate_knowledge_intelligence",
+                    )
+                except Exception as intelligence_error:
+                    logger.warning(
+                        "Post-bookmark intelligence generation failed for %s: %s",
+                        note_id,
+                        intelligence_error,
+                    )
+
+            await self._finalize_task_log(log_id, item_count=1)
+            return True
+        except Exception as exc:
+            await self._finalize_task_log(log_id, error=exc)
+            raise
+
+    async def run_knowledge_intelligence_job(
+        self,
+        *,
+        note_id: UUID,
+        workspace_id: UUID,
+        audit_task_type: str | None = "generate_knowledge_intelligence",
+    ) -> dict:
+        from sqlalchemy.orm import selectinload
+        from openforge.core.llm_gateway import llm_gateway
+        from openforge.services.llm_service import llm_service
+        from openforge.db.postgres import AsyncSessionLocal
+        from openforge.api.websocket import ws_manager
+
+        log_id: UUID | None = None
+        if audit_task_type:
+            async with AsyncSessionLocal() as db:
+                task_log = await start_task_log(
+                    db,
+                    task_type=audit_task_type,
+                    workspace_id=workspace_id,
+                    target_link=f"/w/{workspace_id}/knowledge/{note_id}",
+                )
+                await db.commit()
+                log_id = task_log.id
+
+        try:
+            result_payload: dict = {}
+
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(Note)
+                    .options(selectinload(Note.tags))
+                    .where(Note.id == note_id, Note.workspace_id == workspace_id)
+                )
+                note = result.scalar_one_or_none()
+                if not note:
+                    raise RuntimeError("Knowledge not found")
+                if note.type == "bookmark" and not (note.content or "").strip() and (note.url or "").strip():
+                    await db.commit()
+                    await self.run_bookmark_content_extraction_job(
+                        note_id=note_id,
+                        workspace_id=workspace_id,
+                        audit_task_type="extract_bookmark_content" if audit_task_type else None,
+                    )
+
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(Note)
+                    .options(selectinload(Note.tags))
+                    .where(Note.id == note_id, Note.workspace_id == workspace_id)
+                )
+                note = result.scalar_one_or_none()
+                if not note:
+                    raise RuntimeError("Knowledge not found after bookmark extraction")
+                if not (note.content or "").strip():
+                    raise RuntimeError("Knowledge content is empty; intelligence generation skipped")
+
+                provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
+                tags_str = ", ".join([t.tag for t in note.tags])
+
+                title_prompt = await self._get_prompt_text(db, "generate_title", note_content=note.content[:2000])
+                title_response = await llm_gateway.chat(
+                    messages=[
+                        {"role": "system", "content": "Generate concise knowledge titles. Return only the title text."},
+                        {"role": "user", "content": title_prompt},
+                    ],
+                    provider_name=provider_name,
+                    api_key=api_key,
+                    model=model,
+                    base_url=base_url,
+                    max_tokens=30,
+                )
+                normalized_title = derive_note_title(title_response, note.content or "")
+                title_was_empty = False
+                if normalized_title:
+                    note.ai_title = normalized_title
+                    title_was_empty = not normalize_note_title(note.title)
+                    if title_was_empty:
+                        note.title = normalized_title
+
+                insights_prompt = await self._get_prompt_text(
+                    db,
+                    "extract_insights",
+                    note_content=note.content[:8000],
+                    note_title=normalize_note_title(note.title) or "Untitled",
+                    tags=tags_str,
+                )
+                insights_response = await llm_gateway.chat(
+                    messages=[
+                        {"role": "system", "content": insights_prompt},
+                    ],
+                    provider_name=provider_name,
+                    api_key=api_key,
+                    model=model,
+                    base_url=base_url,
+                )
+                try:
+                    json_match = re.search(r"\{[\s\S]*\}", insights_response)
+                    parsed = json.loads(json_match.group()) if json_match else {}
+                except Exception:
+                    parsed = {}
+                insights_payload = normalize_insights_payload(parsed, note.content or "")
+                note.insights = insights_payload
+
+                summary_prompt = await self._get_prompt_text(
+                    db,
+                    "summarize_note",
+                    note_content=note.content[:8000],
+                    note_title=normalize_note_title(note.title) or "Untitled",
+                    note_type=note.type,
+                    tags=tags_str,
+                )
+                summary = await llm_gateway.chat(
+                    messages=[
+                        {"role": "system", "content": summary_prompt},
+                    ],
+                    provider_name=provider_name,
+                    api_key=api_key,
+                    model=model,
+                    base_url=base_url,
+                )
+                note.ai_summary = summary
+
+                await db.execute(
+                    delete(NoteTag).where(NoteTag.note_id == note_id, NoteTag.source == "ai")
+                )
+                for tag in insights_payload.get("tags", []):
+                    normalized_tag = str(tag).strip().lower()
+                    if normalized_tag:
+                        db.add(NoteTag(note_id=note_id, tag=normalized_tag, source="ai"))
+
+                note.embedding_status = "pending"
+                embed_content_for_refresh = note.content or ""
+                embed_note_type_for_refresh = note.type
+                embed_title_for_refresh = (
+                    normalize_note_title(note.title)
+                    or normalize_note_title(note.ai_title)
+                )
+                await db.commit()
+                result_payload = {
+                    "title": normalize_note_title(note.title),
+                    "ai_title": note.ai_title,
+                    "summary": note.ai_summary,
+                    "insights": note.insights or {},
+                    "tags": [str(tag).strip().lower() for tag in insights_payload.get("tags", []) if str(tag).strip()],
+                    "embedding_status": note.embedding_status,
+                }
+
+            await ws_manager.send_to_workspace(
+                str(workspace_id),
+                {
+                    "type": "note_updated",
+                    "note_id": str(note_id),
+                    "fields": ["ai_title", "title", "insights", "tags", "ai_summary", "embedding_status"],
+                },
+            )
+            await self._process_note_background(
+                note_id=note_id,
+                workspace_id=workspace_id,
+                content=embed_content_for_refresh,
+                note_type=embed_note_type_for_refresh,
+                title=embed_title_for_refresh,
+            )
+            await self._finalize_task_log(log_id, item_count=1)
+            return result_payload
+        except Exception as exc:
+            await self._finalize_task_log(log_id, error=exc)
+            raise
+
     async def _backfill_stale_word_counts(self, db: AsyncSession, notes: list[Note]) -> None:
         changed = False
         for note in notes:
@@ -129,6 +413,13 @@ class NoteService:
         background_tasks: BackgroundTasks,
     ) -> NoteResponse:
         normalized_title = normalize_note_title(data.title)
+        has_initial_content = bool((data.content or "").strip())
+        has_bookmark_url = bool((data.url or "").strip())
+        initial_embedding_status = (
+            "scraping"
+            if data.type == "bookmark" and has_bookmark_url and not has_initial_content
+            else "pending"
+        )
 
         note = Note(
             workspace_id=workspace_id,
@@ -138,14 +429,14 @@ class NoteService:
             url=data.url,
             gist_language=data.gist_language,
             word_count=count_words(data.content, note_type=data.type),
-            embedding_status="pending",
+            embedding_status=initial_embedding_status,
         )
         db.add(note)
         await db.commit()
         await db.refresh(note, ["tags"])
 
         # Schedule background embedding
-        if data.content and len(data.content.strip()) > 20:
+        if has_initial_content and data.content and len(data.content.strip()) > 20:
             background_tasks.add_task(
                 self._process_note_background,
                 note_id=note.id,
@@ -155,8 +446,23 @@ class NoteService:
                 title=normalized_title,
             )
 
+        # Schedule intelligence generation for newly created knowledge with initial content.
+        if has_initial_content:
+            background_tasks.add_task(
+                self.run_knowledge_intelligence_job,
+                note_id=note.id,
+                workspace_id=workspace_id,
+                audit_task_type="generate_knowledge_intelligence",
+            )
+
         if data.type == "bookmark" and data.url:
-            background_tasks.add_task(self._fetch_url_metadata, note_id=note.id, url=data.url, workspace_id=workspace_id)
+            background_tasks.add_task(
+                self.run_bookmark_content_extraction_job,
+                note_id=note.id,
+                workspace_id=workspace_id,
+                audit_task_type="extract_bookmark_content",
+                trigger_intelligence_after_extract=not has_initial_content,
+            )
 
         return _to_response(note)
 
@@ -348,17 +654,38 @@ class NoteService:
             from openforge.core.note_processor import note_processor
 
             tags = []
+            embed_content = content
+            embed_note_type = note_type
+            embed_title = title
+            embed_summary = None
+            embed_insights = None
             async with AsyncSessionLocal() as db:
+                note_result = await db.execute(
+                    select(Note).where(Note.id == note_id, Note.workspace_id == workspace_id)
+                )
+                current_note = note_result.scalar_one_or_none()
+                if current_note:
+                    embed_content = current_note.content or content
+                    embed_note_type = current_note.type or note_type
+                    embed_title = (
+                        normalize_note_title(current_note.title)
+                        or normalize_note_title(current_note.ai_title)
+                        or title
+                    )
+                    embed_summary = current_note.ai_summary
+                    embed_insights = current_note.insights if isinstance(current_note.insights, dict) else None
                 result = await db.execute(select(NoteTag).where(NoteTag.note_id == note_id))
                 tags = [t.tag for t in result.scalars().all()]
 
             await note_processor.process_note(
                 note_id=note_id,
                 workspace_id=workspace_id,
-                content=content,
-                note_type=note_type,
-                title=title,
+                content=embed_content,
+                note_type=embed_note_type,
+                title=embed_title,
                 tags=tags,
+                ai_summary=embed_summary,
+                insights=embed_insights,
             )
         except Exception as e:
             embedding_status = "failed"
@@ -414,6 +741,24 @@ class NoteService:
         try:
             import httpx
             from openforge.db.postgres import AsyncSessionLocal
+            from openforge.api.websocket import ws_manager
+
+            # Mark bookmark as actively scraping so the UI can show progress immediately.
+            if workspace_id:
+                try:
+                    async with AsyncSessionLocal() as db:
+                        result = await db.execute(select(Note).where(Note.id == note_id))
+                        note = result.scalar_one_or_none()
+                        if note and note.type == "bookmark" and not (note.content or "").strip():
+                            if note.embedding_status != "scraping":
+                                note.embedding_status = "scraping"
+                                await db.commit()
+                    await ws_manager.send_to_workspace(
+                        str(workspace_id),
+                        {"type": "note_updated", "note_id": str(note_id), "fields": ["embedding_status"]},
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to emit bookmark scraping start for note {note_id}: {e}")
 
             domain_override_strategy = "none"
             domain_override_content = ""
@@ -444,6 +789,7 @@ class NoteService:
                     title = title or chrome_title
                     description = description or chrome_description
                     chrome_fallback_text = self._extract_readable_text_from_html(rendered_html)
+            metadata_fallback_text = self._build_bookmark_metadata_fallback_text(title, description)
 
             candidates: list[tuple[str, str]] = []
             if domain_override_content.strip():
@@ -452,6 +798,7 @@ class NoteService:
                 ("cloudflare_markdown", cloudflare_markdown),
                 ("html_to_markdown", markdown_from_html),
                 ("chrome_readable_text", chrome_fallback_text),
+                ("metadata_fallback", metadata_fallback_text),
             ])
             strategy, readable_text = self._pick_bookmark_content(candidates)
             if readable_text:
@@ -460,20 +807,41 @@ class NoteService:
             else:
                 logger.warning("Bookmark %s scraping produced empty content", note_id)
 
+            changed_fields: list[str] = []
             async with AsyncSessionLocal() as db:
                 result = await db.execute(select(Note).where(Note.id == note_id))
                 note = result.scalar_one_or_none()
                 if note:
                     if title:
                         note.url_title = title[:500]
+                        changed_fields.append("url_title")
                     if description:
                         note.url_description = description[:1000]
+                        changed_fields.append("url_description")
                     # Populate note content from scraped text if note has no user-set content
                     if readable_text and not note.content:
                         note.content = readable_text
                         note.word_count = count_words(readable_text, note_type=note.type)
                         note.embedding_status = "pending"
+                        changed_fields.extend(["content", "word_count", "embedding_status"])
+                    elif not readable_text and note.embedding_status == "scraping":
+                        # Scraping completed but we could not extract usable content.
+                        note.embedding_status = "failed"
+                        changed_fields.append("embedding_status")
                     await db.commit()
+
+            if workspace_id and changed_fields:
+                try:
+                    await ws_manager.send_to_workspace(
+                        str(workspace_id),
+                        {
+                            "type": "note_updated",
+                            "note_id": str(note_id),
+                            "fields": sorted(set(changed_fields)),
+                        },
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to emit bookmark scraping completion for note {note_id}: {e}")
 
             # Trigger embedding + AI title for the scraped content
             if readable_text and workspace_id:
@@ -492,6 +860,23 @@ class NoteService:
                         )
         except Exception as e:
             logger.warning(f"Failed to fetch URL metadata for note {note_id}: {e}")
+            if workspace_id:
+                try:
+                    from openforge.db.postgres import AsyncSessionLocal
+                    from openforge.api.websocket import ws_manager
+
+                    async with AsyncSessionLocal() as db:
+                        result = await db.execute(select(Note).where(Note.id == note_id))
+                        note = result.scalar_one_or_none()
+                        if note and note.embedding_status == "scraping":
+                            note.embedding_status = "failed"
+                            await db.commit()
+                    await ws_manager.send_to_workspace(
+                        str(workspace_id),
+                        {"type": "note_updated", "note_id": str(note_id), "fields": ["embedding_status"]},
+                    )
+                except Exception as emit_error:
+                    logger.warning(f"Failed to emit bookmark scraping failure for note {note_id}: {emit_error}")
 
     def _extract_metadata_from_html(self, html_doc: str) -> tuple[str | None, str | None]:
         if not html_doc:
@@ -540,6 +925,20 @@ class NoteService:
         cleaned = re.sub(r"<[^>]+>", " ", fragment)
         cleaned = unescape(cleaned)
         return re.sub(r"\s+", " ", cleaned).strip()
+
+    def _build_bookmark_metadata_fallback_text(
+        self, title: str | None, description: str | None
+    ) -> str:
+        title_text = (title or "").strip()
+        description_text = (description or "").strip()
+        if not title_text and not description_text:
+            return ""
+        parts: list[str] = []
+        if title_text:
+            parts.append(f"# {title_text}")
+        if description_text:
+            parts.append(description_text)
+        return "\n\n".join(parts).strip()
 
     def _convert_html_to_markdown(self, html_doc: str) -> str:
         if not html_doc:

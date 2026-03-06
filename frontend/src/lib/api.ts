@@ -39,29 +39,44 @@ export const updateWorkspace = (id: string, data: object): Promise<any> =>
     api.put(`/workspaces/${id}`, data).then(r => r.data)
 export const deleteWorkspace = (id: string) => api.delete(`/workspaces/${id}`)
 
-// ── Notes ──
-export const listNotes = (wid: string, params?: object): Promise<any> =>
-    api.get(`/workspaces/${wid}/notes`, { params }).then(r => r.data)
-export const createNote = (wid: string, data: object): Promise<any> =>
-    api.post(`/workspaces/${wid}/notes`, data).then(r => r.data)
-export const getNote = (wid: string, nid: string): Promise<any> =>
-    api.get(`/workspaces/${wid}/notes/${nid}`).then(r => r.data)
-export const updateNote = (wid: string, nid: string, data: object): Promise<any> =>
-    api.put(`/workspaces/${wid}/notes/${nid}`, data).then(r => r.data)
-export const deleteNote = (wid: string, nid: string) =>
-    api.delete(`/workspaces/${wid}/notes/${nid}`)
-export const updateNoteTags = (wid: string, nid: string, tags: string[]): Promise<any> =>
-    api.put(`/workspaces/${wid}/notes/${nid}/tags`, { tags }).then(r => r.data)
+// ── Knowledge ──
+export const listKnowledge = (wid: string, params?: object): Promise<any> =>
+    api.get(`/workspaces/${wid}/knowledge`, { params }).then(r => r.data)
+export const createKnowledge = (wid: string, data: object): Promise<any> =>
+    api.post(`/workspaces/${wid}/knowledge`, data).then(r => r.data)
+export const getKnowledge = (wid: string, nid: string): Promise<any> =>
+    api.get(`/workspaces/${wid}/knowledge/${nid}`).then(r => r.data)
+export const updateKnowledge = (wid: string, nid: string, data: object): Promise<any> =>
+    api.put(`/workspaces/${wid}/knowledge/${nid}`, data).then(r => r.data)
+export const deleteKnowledge = (wid: string, nid: string) =>
+    api.delete(`/workspaces/${wid}/knowledge/${nid}`)
+export const updateKnowledgeTags = (wid: string, nid: string, tags: string[]): Promise<any> =>
+    api.put(`/workspaces/${wid}/knowledge/${nid}/tags`, { tags }).then(r => r.data)
 export const togglePin = (wid: string, nid: string): Promise<any> =>
-    api.put(`/workspaces/${wid}/notes/${nid}/pin`).then(r => r.data)
+    api.put(`/workspaces/${wid}/knowledge/${nid}/pin`).then(r => r.data)
 export const toggleArchive = (wid: string, nid: string): Promise<any> =>
-    api.put(`/workspaces/${wid}/notes/${nid}/archive`).then(r => r.data)
-export const summarizeNote = (wid: string, nid: string): Promise<any> =>
-    api.post(`/workspaces/${wid}/notes/${nid}/summarize`).then(r => r.data)
-export const extractInsights = (wid: string, nid: string): Promise<any> =>
-    api.post(`/workspaces/${wid}/notes/${nid}/extract-insights`).then(r => r.data)
-export const generateTitle = (wid: string, nid: string): Promise<any> =>
-    api.post(`/workspaces/${wid}/notes/${nid}/generate-title`).then(r => r.data)
+    api.put(`/workspaces/${wid}/knowledge/${nid}/archive`).then(r => r.data)
+export const summarizeKnowledge = (wid: string, nid: string): Promise<any> =>
+    api.post(`/workspaces/${wid}/knowledge/${nid}/summarize`).then(r => r.data)
+export const extractKnowledgeInsights = (wid: string, nid: string): Promise<any> =>
+    api.post(`/workspaces/${wid}/knowledge/${nid}/extract-insights`).then(r => r.data)
+export const generateKnowledgeTitle = (wid: string, nid: string): Promise<any> =>
+    api.post(`/workspaces/${wid}/knowledge/${nid}/generate-title`).then(r => r.data)
+export const generateKnowledgeIntelligence = (wid: string, nid: string): Promise<any> =>
+    api.post(`/workspaces/${wid}/knowledge/${nid}/generate-intelligence`).then(r => r.data)
+export const extractBookmarkContent = (wid: string, nid: string): Promise<any> =>
+    api.post(`/workspaces/${wid}/knowledge/${nid}/extract-bookmark-content`).then(r => r.data)
+
+// Backward-compatible aliases
+export const listNotes = listKnowledge
+export const createNote = createKnowledge
+export const getNote = getKnowledge
+export const updateNote = updateKnowledge
+export const deleteNote = deleteKnowledge
+export const updateNoteTags = updateKnowledgeTags
+export const summarizeNote = summarizeKnowledge
+export const extractInsights = extractKnowledgeInsights
+export const generateTitle = generateKnowledgeTitle
 
 // ── Conversations ──
 export const listConversations = (
@@ -88,10 +103,21 @@ export const updatePrompt = (id: string, data: { override: string | null }): Pro
 
 // ── Tasks / Scheduling ──
 export const listSchedules = (): Promise<any> => api.get('/tasks/schedules').then(r => r.data)
-export const updateSchedule = (id: string, data: { enabled?: boolean; interval_hours?: number }): Promise<any> =>
+export const updateSchedule = (
+    id: string,
+    data: {
+        enabled?: boolean
+        interval_hours?: number
+        target_scope?: 'one' | 'remaining' | 'all'
+        knowledge_id?: string
+    },
+): Promise<any> =>
     api.put(`/tasks/schedules/${id}`, data).then(r => r.data)
-export const runTaskNow = (id: string): Promise<any> =>
-    api.post(`/tasks/schedules/${id}/run`).then(r => r.data)
+export const runTaskNow = (
+    id: string,
+    data?: { target_scope?: 'one' | 'remaining' | 'all'; workspace_id?: string; knowledge_id?: string },
+): Promise<any> =>
+    api.post(`/tasks/schedules/${id}/run`, data ?? {}).then(r => r.data)
 export const getTaskHistory = (params?: { task_type?: string; limit?: number }): Promise<any> =>
     api.get('/tasks/history', { params }).then(r => r.data)
 

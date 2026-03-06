@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Outlet, useNavigate, useParams, Link, useLocation } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { listWorkspaces, listNotes, listConversations, createNote } from '@/lib/api'
+import { listWorkspaces, listKnowledge, listConversations } from '@/lib/api'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import { useUIStore } from '@/stores/uiStore'
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
@@ -103,7 +103,7 @@ export default function AppShell() {
     const { data: workspaces = [] } = useQuery({ queryKey: ['workspaces'], queryFn: listWorkspaces })
     const { data: notesData } = useQuery({
         queryKey: ['notes', workspaceId],
-        queryFn: () => listNotes(workspaceId, { page_size: 200 }),
+        queryFn: () => listKnowledge(workspaceId, { page_size: 200 }),
         enabled: !!workspaceId,
     })
     const { data: conversations = [] } = useQuery({
@@ -116,13 +116,13 @@ export default function AppShell() {
         .find(w => w.id === workspaceId)
     const workspaceList = workspaces as { id: string; name: string; icon: string; color: string }[]
     const workspaceMenuRef = useRef<HTMLDivElement | null>(null)
-    const notes = notesData?.notes ?? []
+    const notes = notesData?.knowledge ?? notesData?.notes ?? []
     const pinnedNotes = notes.filter((n: { is_pinned: boolean }) => n.is_pinned)
     const isWorkspaceHome = location.pathname === `/w/${workspaceId}`
     const isSearchPage = location.pathname.includes('/search')
     const isSettingsPage = location.pathname.includes('/settings')
     const isChatPage = location.pathname.includes('/chat')
-    const isNotePage = location.pathname.includes('/notes/')
+    const isNotePage = location.pathname.includes('/notes/') || location.pathname.includes('/knowledge/')
     const currentSectionMeta = useMemo(() => {
         if (location.pathname.includes('/chat')) {
             return {
@@ -133,7 +133,7 @@ export default function AppShell() {
         if (location.pathname.includes('/search')) {
             return {
                 title: 'Workspace Search',
-                description: 'Search by meaning across your notes and saved knowledge.',
+                description: 'Search by meaning across your knowledge and saved sources.',
             }
         }
         if (location.pathname.includes('/settings')) {
@@ -142,15 +142,15 @@ export default function AppShell() {
                 description: 'Manage workspace configuration, providers, and defaults.',
             }
         }
-        if (location.pathname.includes('/notes/')) {
+        if (location.pathname.includes('/notes/') || location.pathname.includes('/knowledge/')) {
             return {
-                title: 'Note Details',
-                description: 'Review and edit a single note in full detail.',
+                title: 'Knowledge Details',
+                description: 'Review and edit a single knowledge item in full detail.',
             }
         }
         return {
-            title: 'Workspace Notes',
-            description: 'Filter, scan, and act on notes without leaving the board.',
+            title: 'Workspace Knowledge',
+            description: 'Filter, scan, and act on knowledge without leaving the board.',
         }
     }, [location.pathname])
 
@@ -390,7 +390,7 @@ export default function AppShell() {
                         {/* Nav */}
                         <nav className="space-y-1">
                             <Link to={`/w/${workspaceId}`} className={`sidebar-item ${location.pathname === `/w/${workspaceId}` ? 'active' : ''}`}>
-                                <Home className="w-4 h-4" /> Notes
+                                <Home className="w-4 h-4" /> Knowledge
                             </Link>
                             <Link to={`/w/${workspaceId}/search`} className={`sidebar-item ${isActive('/search') ? 'active' : ''}`}>
                                 <Search className="w-4 h-4" /> Search
@@ -414,7 +414,11 @@ export default function AppShell() {
                                 <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Pinned</span>
                             </div>
                             {pinnedNotes.slice(0, 5).map((n: { id: string; title: string; ai_title: string; type: string }) => (
-                                <Link key={n.id} to={`/w/${workspaceId}/notes/${n.id}`} className={`sidebar-item text-xs ${isActive(`/notes/${n.id}`) ? 'active' : ''}`}>
+                                <Link
+                                    key={n.id}
+                                    to={`/w/${workspaceId}/knowledge/${n.id}`}
+                                    className={`sidebar-item text-xs ${(isActive(`/knowledge/${n.id}`) || isActive(`/notes/${n.id}`)) ? 'active' : ''}`}
+                                >
                                     <NoteTypeIcon type={n.type} />
                                     <span className="truncate">{n.title || n.ai_title || 'Untitled'}</span>
                                 </Link>
@@ -495,7 +499,7 @@ export default function AppShell() {
                             onClick={handleNewNote}
                             title={`New note (${shortcutDisplay.newNote})`}
                         >
-                            <Plus className="w-3.5 h-3.5" /> New Note
+                            <Plus className="w-3.5 h-3.5" /> New Knowledge
                         </button>
                         <button
                             className="bg-accent text-accent-foreground hover:bg-accent/90 px-2 rounded-r-md transition-colors"
@@ -508,7 +512,7 @@ export default function AppShell() {
                                 className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground focus:outline-none"
                                 onClick={() => openQuickPanel('standard')}
                             >
-                                <FileText className="w-3.5 h-3.5" /> Standard Note
+                                <FileText className="w-3.5 h-3.5" /> Note
                             </button>
                             <button
                                 className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground focus:outline-none"
@@ -591,7 +595,7 @@ export default function AppShell() {
                                                 <Brain className="w-4 h-4 text-accent" />
                                                 <h3 className="font-semibold text-sm tracking-tight">Workspace Insights</h3>
                                             </div>
-                                            <p className="text-xs text-muted-foreground/90">Summarized intelligence from your notes.</p>
+                                            <p className="text-xs text-muted-foreground/90">Summarized intelligence from your workspace knowledge.</p>
                                         </div>
                                         <div className="flex items-center gap-1.5">
                                             <div className="flex-shrink-0 rounded-full border border-border/70 bg-muted/60 px-2.5 py-1 text-[11px] font-medium text-foreground/80">
@@ -652,7 +656,7 @@ export default function AppShell() {
                                                                         <li key={i}>
                                                                             <button
                                                                                 type="button"
-                                                                                onClick={() => navigate(`/w/${workspaceId}/notes/${item.noteId}`)}
+                                                                                onClick={() => navigate(`/w/${workspaceId}/knowledge/${item.noteId}`)}
                                                                                 className="w-full flex items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
                                                                             >
                                                                                 <span className={`mt-1.5 h-1.5 w-1.5 rounded-full flex-shrink-0 ${meta.dotClass}`} />

@@ -149,6 +149,29 @@ export default function ChatPage() {
     } = useStreamingChat(activeCid)
 
     const messages: Message[] = conversationData?.messages ?? []
+    const mostRecentConversationId = useMemo(() => {
+        const list = conversations as Conversation[]
+        if (list.length === 0) return null
+
+        const parseTimestamp = (value: string | null) => {
+            if (!value) return Number.NEGATIVE_INFINITY
+            const parsed = Date.parse(value)
+            return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY
+        }
+
+        let best = list[0]
+        let bestTs = parseTimestamp(list[0]?.last_message_at ?? null)
+
+        for (const conv of list.slice(1)) {
+            const ts = parseTimestamp(conv.last_message_at ?? null)
+            if (ts > bestTs) {
+                best = conv
+                bestTs = ts
+            }
+        }
+
+        return best?.id ?? null
+    }, [conversations])
 
     // Build model options from providers (provider + enabled model pairs)
     const modelOptions = useMemo(() => {
@@ -217,8 +240,21 @@ export default function ChatPage() {
     }, [workspace, providers])
 
     useEffect(() => {
-        if (conversationId !== activeCid) setActiveCid(conversationId ?? null)
+        if (conversationId !== activeCid) {
+            shouldRestoreTextareaFocusRef.current = true
+            setActiveCid(conversationId ?? null)
+        }
     }, [conversationId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => {
+        if (conversationId) return
+        if (!workspaceId) return
+        if (!mostRecentConversationId) return
+        if (activeCid === mostRecentConversationId) return
+        shouldRestoreTextareaFocusRef.current = true
+        setActiveCid(mostRecentConversationId)
+        navigate(`/w/${workspaceId}/chat/${mostRecentConversationId}`, { replace: true })
+    }, [activeCid, conversationId, mostRecentConversationId, navigate, workspaceId])
 
     useEffect(() => {
         setStickToBottom(true)
@@ -335,14 +371,43 @@ export default function ChatPage() {
         }
     }, [activeCid, composerHeight])
 
-    const focusComposer = () => {
+    const focusComposer = useCallback(() => {
         const textarea = textareaRef.current
         if (!textarea || textarea.disabled) return false
         textarea.focus({ preventScroll: true })
         const caretPos = textarea.value.length
         textarea.setSelectionRange(caretPos, caretPos)
         return true
-    }
+    }, [])
+
+    const scheduleComposerFocus = useCallback((delayMs = 0) => {
+        shouldRestoreTextareaFocusRef.current = true
+
+        const attemptFocus = () => {
+            if (focusComposer()) {
+                shouldRestoreTextareaFocusRef.current = false
+                return
+            }
+
+            window.setTimeout(() => {
+                if (focusComposer()) {
+                    shouldRestoreTextareaFocusRef.current = false
+                }
+            }, 90)
+        }
+
+        if (delayMs > 0) {
+            window.setTimeout(attemptFocus, delayMs)
+            return
+        }
+
+        window.requestAnimationFrame(attemptFocus)
+    }, [focusComposer])
+
+    useEffect(() => {
+        if (!activeCid) return
+        scheduleComposerFocus(40)
+    }, [activeCid, scheduleComposerFocus])
 
     const ensureExpandedBlockVisible = useCallback((element: HTMLElement | null, behavior: ScrollBehavior = 'smooth') => {
         const container = messagesContainerRef.current
@@ -483,7 +548,7 @@ export default function ChatPage() {
     const handleNewChat = async () => {
         const conv = await createConversation(workspaceId)
         qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
-        shouldRestoreTextareaFocusRef.current = true
+        scheduleComposerFocus(40)
         setActiveCid(conv.id)
         navigate(`/w/${workspaceId}/chat/${conv.id}`)
     }
@@ -495,6 +560,12 @@ export default function ChatPage() {
             setActiveCid(null)
             navigate(`/w/${workspaceId}/chat`)
         }
+    }
+
+    const handleSelectConversation = (cid: string) => {
+        scheduleComposerFocus(20)
+        setActiveCid(cid)
+        navigate(`/w/${workspaceId}/chat/${cid}`)
     }
 
     const handleSend = async () => {
@@ -523,7 +594,7 @@ export default function ChatPage() {
             } catch (e) {
                 console.error('Failed to upload attachments:', e)
                 showError('Attachment upload failed', 'Please retry or remove the problematic file.')
-                focusComposer()
+                scheduleComposerFocus()
                 return
             } finally {
                 setUploadingFiles(false)
@@ -546,7 +617,7 @@ export default function ChatPage() {
         const sent = sendMessage(msg, override, targetCid)
         if (!sent) {
             showError('Message not sent', 'Chat socket is disconnected. Wait for reconnect and try again.')
-            focusComposer()
+            scheduleComposerFocus()
             return
         }
 
@@ -555,8 +626,7 @@ export default function ChatPage() {
         if (attachments.length > 0) setAttachments([])
         if (textareaRef.current) textareaRef.current.style.height = 'auto'
         setStreamThinkingExpanded(true)
-        shouldRestoreTextareaFocusRef.current = true
-        focusComposer()
+        scheduleComposerFocus()
     }
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -655,7 +725,7 @@ export default function ChatPage() {
                                 <Bot className="w-8 h-8 text-accent/60" />
                             </div>
                             <h3 className="text-lg font-semibold mb-2">Start a Conversation</h3>
-                            <p className="text-muted-foreground text-sm mb-4">Ask questions about your notes or anything else.</p>
+                            <p className="text-muted-foreground text-sm mb-4">Ask questions about your knowledge or anything else.</p>
                             <button className="btn-primary" onClick={handleNewChat}>
                                 <Plus className="w-4 h-4" /> New Chat
                             </button>
@@ -741,7 +811,7 @@ export default function ChatPage() {
                                                     >
                                                         {streamThinkingExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                                                         <Brain className="h-3.5 w-3.5" />
-                                                        Thinking
+                                                        {streamThinkingExpanded ? 'Thinking' : 'Thought'}
                                                     </button>
                                                     <div className={`chat-collapse ${streamThinkingExpanded ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
                                                         <div className="chat-collapse-inner">
@@ -840,7 +910,7 @@ export default function ChatPage() {
                                         ref={textareaRef}
                                         className="chat-composer-textarea"
                                         rows={1}
-                                        placeholder="Ask a question about your notes..."
+                                        placeholder="Ask a question about your knowledge..."
                                         value={input}
                                         onChange={handleTextareaChange}
                                         onKeyDown={e => {
@@ -1054,7 +1124,7 @@ export default function ChatPage() {
                                     conv={c}
                                     active={activeCid === c.id}
                                     workspaceId={workspaceId}
-                                    onSelect={() => { setActiveCid(c.id); navigate(`/w/${workspaceId}/chat/${c.id}`) }}
+                                    onSelect={() => handleSelectConversation(c.id)}
                                     onDelete={() => handleDeleteConv(c.id)}
                                     onRename={(title) => updateConversation(workspaceId, c.id, { title, title_locked: true }).then(() => qc.invalidateQueries({ queryKey: ['conversations', workspaceId] }))}
                                 />
@@ -1201,7 +1271,7 @@ function ChatMessageCard({
                                 }}
                             >
                                 {sourcesOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                                {msg.context_sources.length} source{msg.context_sources.length !== 1 ? 's' : ''} used
+                                {`Used ${msg.context_sources.length} Knowledge`}
                             </button>
                         )}
                         {msg.context_sources && msg.context_sources.length > 0 && (
@@ -1212,7 +1282,7 @@ function ChatMessageCard({
                                             <div key={src.note_id} className="glass-card p-3 text-xs group">
                                                 <div className="flex items-center justify-between mb-1">
                                                     <span className="font-medium text-foreground">{src.title}</span>
-                                                    <button className="opacity-0 group-hover:opacity-100 text-accent" onClick={() => navigate(`/w/${workspaceId}/notes/${src.note_id}`)}>
+                                                    <button className="opacity-0 group-hover:opacity-100 text-accent" onClick={() => navigate(`/w/${workspaceId}/knowledge/${src.note_id}`)}>
                                                         <ExternalLink className="w-3 h-3" />
                                                     </button>
                                                 </div>
@@ -1251,7 +1321,7 @@ function ChatMessageCard({
                             >
                                 {thinkingOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                                 <Brain className="w-3 h-3" />
-                                Thinking
+                                {thinkingOpen ? 'Thinking' : 'Thought'}
                             </button>
                         )}
                         {msg.role === 'assistant' && hasThinking && (

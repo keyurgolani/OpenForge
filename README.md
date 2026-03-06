@@ -2,15 +2,15 @@
 
 **Self-hosted AI workspace and knowledge management platform.**
 
-Organize your notes, have AI-powered conversations grounded in your own knowledge base, and perform semantic search across everything — all running locally, with no data leaving your machine.
+Organize your knowledge, have AI-powered conversations grounded in your own knowledge base, and perform semantic search across everything — all running locally, with no data leaving your machine.
 
 ---
 
 ## Features
 
-- 📝 **Multi-type notes** — Standard notes, fleeting thoughts, bookmarks, and code gists
+- 📝 **Multi-type knowledge** — Notes, fleeting thoughts, bookmarks, and code gists
 - 🔍 **Semantic search** — Vector similarity search using a local embedding model (BAAI/bge-small-en-v1.5)
-- 💬 **RAG-powered chat** — Conversations that retrieve relevant notes as context before answering
+- 💬 **RAG-powered chat** — Conversations that retrieve relevant knowledge as context before answering
 - 🤖 **AI features** — Auto-summarize, extract insights (todos, deadlines, highlights, tags), generate titles
 - 🔌 **Multi-provider LLM** — OpenAI, Anthropic, Google Gemini, Groq, Ollama (local), DeepSeek, and more
 - 🏠 **Self-hosted** — Docker-based single-container deployment, all data stays on your server
@@ -88,8 +88,8 @@ npm run dev   # → http://localhost:5173 (proxies /api to port 3000)
 Frontend (React 19 + Vite + Tailwind)
     ↕ HTTP + WebSocket
 Backend (FastAPI + Python 3.11)
-    ├── PostgreSQL 16          — workspaces, notes, conversations, messages
-    ├── Qdrant                 — note chunk embeddings (BAAI/bge-small-en-v1.5, 384-dim)
+    ├── PostgreSQL 16          — workspaces, knowledge, conversations, messages
+    ├── Qdrant                 — knowledge chunk embeddings (BAAI/bge-small-en-v1.5, 384-dim)
     └── LiteLLM                — unified LLM gateway (OpenAI, Anthropic, Gemini, Ollama…)
 ```
 
@@ -99,7 +99,7 @@ The chat pipeline: user message → embed query → Qdrant semantic search → t
 
 ## Roadmap
 
-- **v1.1**: Mobile PWA polish, bulk note import (markdown files, Notion export)
+- **v1.1**: Mobile PWA polish, bulk knowledge import (markdown files, Notion export)
 - **v2**: Agent loop with tool use (web search, calculator, file tools)
 - **v3**: Continuous learning from conversation feedback, shared workspaces (multi-user)
 

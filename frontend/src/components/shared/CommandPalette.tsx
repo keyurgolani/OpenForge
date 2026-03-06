@@ -2,7 +2,7 @@ import { useEffect, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Command } from 'cmdk'
-import { listWorkspaces, listNotes } from '@/lib/api'
+import { listWorkspaces, listKnowledge } from '@/lib/api'
 import { useUIStore } from '@/stores/uiStore'
 import { isModKey, getShortcutDisplay } from '@/lib/keyboard'
 import { openQuickNote, type QuickNoteType } from '@/lib/quick-note'
@@ -29,11 +29,11 @@ export default function CommandPalette() {
 
     const { data: notesData } = useQuery({
         queryKey: ['notes', workspaceId, 'palette'],
-        queryFn: () => listNotes(workspaceId, { page_size: 50 }),
+        queryFn: () => listKnowledge(workspaceId, { page_size: 50 }),
         enabled: commandPaletteOpen && !!workspaceId,
     })
 
-    const notes = notesData?.notes ?? []
+    const notes = notesData?.knowledge ?? notesData?.notes ?? []
 
     // Cmd+K / Ctrl+K to open
     useEffect(() => {
@@ -98,7 +98,7 @@ export default function CommandPalette() {
                             <Search className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                             <Command.Input
                                 className="flex-1 bg-transparent text-sm outline-none placeholder-muted-foreground"
-                                placeholder="Type a command or search notes…"
+                                placeholder="Type a command or search knowledge…"
                                 autoFocus
                             />
                             <kbd className="text-xs text-muted-foreground border border-border/80 rounded-md px-2 py-1 font-mono">ESC</kbd>
@@ -114,7 +114,7 @@ export default function CommandPalette() {
                             <Command.Group heading="Actions" className={GROUP_CLASS}>
                                 {workspaceId && (
                                     <>
-                                        <PaletteItem icon={<Plus className="w-4 h-4" />} onSelect={() => handleCreateNote('standard')}>New Note</PaletteItem>
+                                        <PaletteItem icon={<Plus className="w-4 h-4" />} onSelect={() => handleCreateNote('standard')}>New Knowledge</PaletteItem>
                                         <PaletteItem icon={<Zap className="w-4 h-4" />} onSelect={() => handleCreateNote('fleeting')}>New Fleeting Note</PaletteItem>
                                         <PaletteItem icon={<Bookmark className="w-4 h-4" />} onSelect={() => handleCreateNote('bookmark')}>New Bookmark</PaletteItem>
                                         <PaletteItem icon={<Code2 className="w-4 h-4" />} onSelect={() => handleCreateNote('gist')}>New Code Gist</PaletteItem>
@@ -149,14 +149,14 @@ export default function CommandPalette() {
                                 </Command.Group>
                             )}
 
-                            {/* Note search */}
+                            {/* Knowledge search */}
                             {notes.length > 0 && (
-                                <Command.Group heading="Notes" className={`mt-2 pt-2 border-t border-border/40 ${GROUP_CLASS}`}>
+                                <Command.Group heading="Knowledge" className={`mt-2 pt-2 border-t border-border/40 ${GROUP_CLASS}`}>
                                     {(notes as { id: string; title: string; ai_title: string; type: string }[]).map(n => (
                                         <PaletteItem
                                             key={n.id}
                                             icon={<FileText className="w-4 h-4" />}
-                                            onSelect={() => run(() => navigate(`/w/${workspaceId}/notes/${n.id}`))}
+                                            onSelect={() => run(() => navigate(`/w/${workspaceId}/knowledge/${n.id}`))}
                                             hint={n.type}
                                         >
                                             {n.title || n.ai_title || 'Untitled'}

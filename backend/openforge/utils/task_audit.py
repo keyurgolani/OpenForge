@@ -20,6 +20,7 @@ async def start_task_log(
     *,
     task_type: str,
     workspace_id: Optional[UUID] = None,
+    target_link: Optional[str] = None,
 ) -> TaskLog:
     """Create a running task log row in the current DB session."""
     log = TaskLog(
@@ -27,6 +28,7 @@ async def start_task_log(
         status="running",
         workspace_id=workspace_id,
         started_at=_utc_now(),
+        target_link=target_link,
     )
     db.add(log)
     await db.flush()

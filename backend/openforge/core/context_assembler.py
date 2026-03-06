@@ -33,7 +33,7 @@ class ContextAssembler:
         # Build full system prompt
         full_system = system_prompt
         if rag_text:
-            full_system += "\n\nRelevant context from your notes:\n\n" + rag_text
+            full_system += "\n\nWorkspace knowledge snippets (internal grounding data):\n\n" + rag_text
         if extra_context:
             full_system += extra_context
 

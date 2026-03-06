@@ -52,6 +52,7 @@ export default function SearchPage() {
     const [query, setQuery] = useState(searchParams.get('q') ?? '')
     const [typeFilter, setTypeFilter] = useState('')
     const [modalNoteId, setModalNoteId] = useState<string | null>(null)
+    const searchLayoutRef = useRef<HTMLDivElement | null>(null)
 
     // Debounce the query
     const [debouncedQuery, setDebouncedQuery] = useState(query)
@@ -91,7 +92,7 @@ export default function SearchPage() {
 
     return (
         <div className="h-full w-full p-6 lg:p-7">
-            <div data-openforge-note-sheet-anchor="1" className="flex h-full min-h-0 flex-col gap-4">
+            <div ref={searchLayoutRef} data-openforge-note-sheet-anchor="1" className="flex h-full min-h-0 flex-col gap-4">
                 {/* Search bar */}
                 <div className="relative">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground pointer-events-none" />
@@ -114,7 +115,10 @@ export default function SearchPage() {
                             className={`chip cursor-pointer transition-all ${typeFilter === t ? 'chip-accent' : 'chip-muted'}`}
                         >
                             {t ? (
-                                <><span className="mr-1">{TYPE_ICONS[t]}</span> {t}</>
+                                <>
+                                    <span className="mr-1">{TYPE_ICONS[t]}</span>
+                                    {TYPE_META[t]?.label ?? t}
+                                </>
                             ) : 'All types'}
                         </button>
                     ))}
@@ -141,7 +145,7 @@ export default function SearchPage() {
                                 <SearchX className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-30" />
                                 <h3 className="text-lg font-medium mb-2">No results found</h3>
                                 <p className="text-muted-foreground text-sm">
-                                    No notes match <em>"{debouncedQuery}"</em>. Try different keywords or create new notes.
+                                    No knowledge matches <em>"{debouncedQuery}"</em>. Try different keywords or create new knowledge.
                                 </p>
                             </div>
                         </div>
@@ -207,8 +211,8 @@ export default function SearchPage() {
                                                 </div>
                                             </ContextMenuTrigger>
                                             <ContextMenuContent className="w-48">
-                                                <ContextMenuItem onClick={() => navigate(`/w/${workspaceId}/notes/${noteId}`)} className="gap-2">
-                                                    <ExternalLink className="w-4 h-4" /> Open Note
+                                                <ContextMenuItem onClick={() => navigate(`/w/${workspaceId}/knowledge/${noteId}`)} className="gap-2">
+                                                    <ExternalLink className="w-4 h-4" /> Open Knowledge
                                                 </ContextMenuItem>
                                                 <ContextMenuItem onClick={() => navigator.clipboard.writeText(first.title || first.chunk_text || '')} className="gap-2">
                                                     <Copy className="w-4 h-4" /> Copy Title

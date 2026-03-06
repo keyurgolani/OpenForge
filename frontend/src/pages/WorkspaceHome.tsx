@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { listNotes, deleteNote, togglePin, toggleArchive } from '@/lib/api'
+import { listKnowledge, deleteKnowledge, togglePin, toggleArchive, extractBookmarkContent } from '@/lib/api'
 import { NoteModal } from '@/components/shared/NoteModal'
 import { CopyButton } from '@/components/shared/CopyButton'
 import { openQuickNote, type QuickNoteType } from '@/lib/quick-note'
@@ -10,7 +10,7 @@ import {
     Search, FileText, Bookmark, Code2, Zap, Pin, Archive,
     Trash2, PinOff, ArchiveX, Loader2, Sparkles,
     Inbox, CheckSquare, Square, Clock, ExternalLink, Copy, SortAsc,
-    ChevronDown, Tag
+    ChevronDown, Tag, RefreshCw
 } from 'lucide-react'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem,
@@ -48,7 +48,7 @@ interface NoteListItem {
 
 const TYPE_OPTS = [
     { id: '', label: 'All types' },
-    { id: 'standard', label: 'Notes', icon: FileText },
+    { id: 'standard', label: 'Note', icon: FileText },
     { id: 'fleeting', label: 'Fleeting', icon: Zap },
     { id: 'bookmark', label: 'Bookmarks', icon: Bookmark },
     { id: 'gist', label: 'Gists', icon: Code2 },
@@ -104,7 +104,7 @@ export default function WorkspaceHome() {
 
     const { data, isLoading } = useQuery({
         queryKey: ['notes', workspaceId, typeFilter, sortBy, sortOrder],
-        queryFn: () => listNotes(workspaceId, {
+        queryFn: () => listKnowledge(workspaceId, {
             type: typeFilter || undefined,
             sort_by: sortBy,
             sort_order: sortOrder,
@@ -118,7 +118,7 @@ export default function WorkspaceHome() {
     }
 
     const handleDelete = async (noteId: string) => {
-        await deleteNote(workspaceId, noteId)
+        await deleteKnowledge(workspaceId, noteId)
         qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
         setSelected(s => { const n = new Set(s); n.delete(noteId); return n })
     }
@@ -134,8 +134,14 @@ export default function WorkspaceHome() {
         setSelected(s => { const n = new Set(s); n.delete(noteId); return n })
     }
 
+    const handleExtractBookmarkContent = async (noteId: string) => {
+        await extractBookmarkContent(workspaceId, noteId)
+        qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
+        qc.invalidateQueries({ queryKey: ['note', noteId] })
+    }
+
     const handleBulkDelete = async () => {
-        await Promise.all([...selected].map(id => deleteNote(workspaceId, id)))
+        await Promise.all([...selected].map(id => deleteKnowledge(workspaceId, id)))
         qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
         setSelected(new Set())
     }
@@ -158,7 +164,7 @@ export default function WorkspaceHome() {
     }
 
     const notes: NoteListItem[] = useMemo(() => {
-        const allNotes = data?.notes ?? []
+        const allNotes = data?.knowledge ?? data?.notes ?? []
         if (!filterText) return allNotes
         const q = filterText.toLowerCase()
         return allNotes.filter((n: NoteListItem) =>
@@ -176,7 +182,7 @@ export default function WorkspaceHome() {
 
     const typeMeta = TYPE_OPTS.find(o => o.id === typeFilter)
     const sortMeta = SORT_OPTS.find(o => o.id === sortBy)
-    const allNotes = data?.notes ?? []
+    const allNotes = data?.knowledge ?? data?.notes ?? []
     const pinnedCount = allNotes.filter((n: NoteListItem) => n.is_pinned).length
     const archivedCount = allNotes.filter((n: NoteListItem) => n.is_archived).length
 
@@ -363,10 +369,10 @@ export default function WorkspaceHome() {
                         <div className="text-center py-20">
                             <Inbox className="w-14 h-14 mx-auto mb-4 text-muted-foreground/30" />
                             <h3 className="text-lg font-semibold mb-2">
-                                {filterText ? 'No notes match your search' : 'No notes yet'}
+                                {filterText ? 'No knowledge match your search' : 'No knowledge yet'}
                             </h3>
                             <p className="text-muted-foreground text-sm mb-6">
-                                {filterText ? 'Try a different search term.' : 'Use the + New Note button to get started.'}
+                                {filterText ? 'Try a different search term.' : 'Use the + New Knowledge button to get started.'}
                             </p>
                             {!filterText && (
                                 <div className="flex justify-center gap-3 flex-wrap">
@@ -412,6 +418,7 @@ export default function WorkspaceHome() {
                                             onClick={() => setModalNoteId(note.id)}
                                             onPin={() => handlePin(note.id)}
                                             onArchive={() => handleArchive(note.id)}
+                                            onExtractBookmarkContent={() => handleExtractBookmarkContent(note.id)}
                                             onDelete={() => handleDelete(note.id)}
                                         />
                                     ))}
@@ -573,7 +580,7 @@ function FittedTagRow({ tags }: { tags: string[] }) {
 
 function NoteCard({
     note, index, isSelected, anySelected, onSelect, onClick,
-    onPin, onArchive, onDelete, minWidthPx, maxHeightPx,
+    onPin, onArchive, onExtractBookmarkContent, onDelete, minWidthPx, maxHeightPx,
 }: {
     note: NoteListItem
     index: number
@@ -585,11 +592,19 @@ function NoteCard({
     onClick: () => void
     onPin: () => void
     onArchive: () => void
+    onExtractBookmarkContent: () => void
     onDelete: () => void
 }) {
     const meta = TYPE_META[note.type] ?? TYPE_META.standard
     const TypeIcon = meta.icon
     const displayTitle = note.title?.trim() || note.ai_title?.trim() || null
+    const isBookmarkScraping =
+        note.type === 'bookmark'
+        && note.embedding_status === 'scraping'
+    const isBookmarkContentMissing =
+        note.type === 'bookmark'
+        && !note.content_preview?.trim()
+        && !note.url_title?.trim()
     const bookmarkHost = (() => {
         if (note.type !== 'bookmark' || !note.url) return null
         try { return new URL(note.url).hostname } catch { return note.url }
@@ -625,7 +640,7 @@ function NoteCard({
                     <button
                         className={`absolute top-0 right-0 z-20 h-8 w-8 rounded-tr-2xl rounded-bl-xl border flex items-center justify-center transition-colors ${selectClass}`}
                         onClick={e => onSelect(note.id, e)}
-                        aria-label={isSelected ? 'Deselect note' : 'Select note'}
+                        aria-label={isSelected ? 'Deselect knowledge' : 'Select knowledge'}
                     >
                         {isSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
                     </button>
@@ -650,6 +665,7 @@ function NoteCard({
                         </div>
                         <div className="flex items-center gap-1.5">
                             {note.is_pinned && <Pin className="w-3.5 h-3.5 text-amber-300" />}
+                            {isBookmarkScraping && <Loader2 className="w-3.5 h-3.5 text-accent animate-spin" />}
                             {note.embedding_status === 'done' && <Sparkles className="w-3.5 h-3.5 text-accent" />}
                         </div>
                     </div>
@@ -661,7 +677,12 @@ function NoteCard({
                     </div>
 
                     <div className="mt-2 min-h-0 overflow-hidden">
-                        {note.type === 'gist' ? (
+                        {isBookmarkScraping && isBookmarkContentMissing ? (
+                            <div className="text-[12px] text-muted-foreground/90 italic flex items-center gap-1.5">
+                                <Loader2 className="w-3 h-3 animate-spin text-accent" />
+                                Scraping bookmark content...
+                            </div>
+                        ) : note.type === 'gist' ? (
                             <div className="text-[11px] font-mono whitespace-pre-wrap line-clamp-7 text-foreground/84">
                                 {note.content_preview || note.title || ''}
                             </div>
@@ -685,6 +706,16 @@ function NoteCard({
                                 {note.type === 'bookmark' && note.url && (
                                     <button
                                         className={actionBtnClass}
+                                        onClick={e => runAction(e, onExtractBookmarkContent)}
+                                        title="Extract bookmark content"
+                                        aria-label="Extract bookmark content"
+                                    >
+                                        <RefreshCw className="w-3.5 h-3.5" />
+                                    </button>
+                                )}
+                                {note.type === 'bookmark' && note.url && (
+                                    <button
+                                        className={actionBtnClass}
                                         onClick={handleOpenUrl}
                                         title="Open URL"
                                         aria-label="Open bookmark URL"
@@ -705,24 +736,24 @@ function NoteCard({
                                 <button
                                     className={actionBtnClass}
                                     onClick={e => runAction(e, onPin)}
-                                    title={note.is_pinned ? 'Unpin note' : 'Pin note'}
-                                    aria-label={note.is_pinned ? 'Unpin note' : 'Pin note'}
+                                    title={note.is_pinned ? 'Unpin knowledge' : 'Pin knowledge'}
+                                    aria-label={note.is_pinned ? 'Unpin knowledge' : 'Pin knowledge'}
                                 >
                                     {note.is_pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
                                 </button>
                                 <button
                                     className={actionBtnClass}
                                     onClick={e => runAction(e, onArchive)}
-                                    title={note.is_archived ? 'Restore note' : 'Archive note'}
-                                    aria-label={note.is_archived ? 'Restore note' : 'Archive note'}
+                                    title={note.is_archived ? 'Restore knowledge' : 'Archive knowledge'}
+                                    aria-label={note.is_archived ? 'Restore knowledge' : 'Archive knowledge'}
                                 >
                                     {note.is_archived ? <ArchiveX className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
                                 </button>
                                 <button
                                     className={`${actionBtnClass} text-red-300 border-red-400/25 hover:bg-red-500/10`}
                                     onClick={e => runAction(e, onDelete)}
-                                    title="Delete note"
-                                    aria-label="Delete note"
+                                    title="Delete knowledge"
+                                    aria-label="Delete knowledge"
                                 >
                                     <Trash2 className="w-3.5 h-3.5" />
                                 </button>
@@ -759,7 +790,7 @@ function NoteCard({
             <ContextMenuContent className="w-48">
                 <ContextMenuItem onClick={onPin} className="gap-2">
                     {note.is_pinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
-                    <span>{note.is_pinned ? 'Unpin Note' : 'Pin Note'}</span>
+                    <span>{note.is_pinned ? 'Unpin Knowledge' : 'Pin Knowledge'}</span>
                 </ContextMenuItem>
                 <ContextMenuItem onClick={onArchive} className="gap-2">
                     {note.is_archived ? <ArchiveX className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
@@ -781,7 +812,7 @@ function NoteCard({
                 <ContextMenuSeparator />
                 <ContextMenuItem onClick={onDelete} className="gap-2 text-red-500 focus:text-red-400 focus:bg-red-500/10">
                     <Trash2 className="w-4 h-4" />
-                    <span>Delete Note</span>
+                    <span>Delete Knowledge</span>
                     <ContextMenuShortcut>{getShortcutDisplay('deleteNote')}</ContextMenuShortcut>
                 </ContextMenuItem>
             </ContextMenuContent>

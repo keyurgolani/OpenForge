@@ -60,9 +60,9 @@ export function isModKey(e: KeyboardEvent | React.KeyboardEvent): boolean {
  */
 export const SHORTCUTS = {
   commandPalette: { key: 'K', modifiers: ['cmd'] as const, label: 'Command Palette' },
-  newNote: { key: 'N', modifiers: ['cmd'] as const, label: 'New Note' },
-  archiveNote: { key: 'A', modifiers: ['cmd', 'shift'] as const, label: 'Archive Note' },
-  deleteNote: { key: '⌫', modifiers: ['cmd'] as const, label: 'Delete Note' },
+  newNote: { key: 'N', modifiers: ['cmd'] as const, label: 'New Knowledge' },
+  archiveNote: { key: 'A', modifiers: ['cmd', 'shift'] as const, label: 'Archive Knowledge' },
+  deleteNote: { key: '⌫', modifiers: ['cmd'] as const, label: 'Delete Knowledge' },
   save: { key: 'S', modifiers: ['cmd'] as const, label: 'Save' },
   search: { key: '/', modifiers: [] as const, label: 'Search' },
   escape: { key: 'ESC', modifiers: [] as const, label: 'Close/Cancel' },

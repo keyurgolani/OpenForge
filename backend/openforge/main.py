@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pathlib import Path
 
 from openforge.config import get_settings
+from openforge.services.task_scheduler import task_scheduler
 
 settings = get_settings()
 
@@ -48,9 +49,11 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Embedding model pre-load failed (will load on first use): {e}")
 
     logger.info("OpenForge ready.")
+    await task_scheduler.start()
     yield
 
     logger.info("OpenForge shutting down...")
+    await task_scheduler.stop()
     try:
         from openforge.db.postgres import engine
         await engine.dispose()

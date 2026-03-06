@@ -42,6 +42,26 @@ def test_pick_bookmark_content_falls_back_to_chrome_text_last() -> None:
     assert content == "Rendered DOM text"
 
 
+def test_pick_bookmark_content_falls_back_to_metadata_last() -> None:
+    service = NoteService()
+    strategy, content = service._pick_bookmark_content(
+        [
+            ("cloudflare_markdown", ""),
+            ("html_to_markdown", ""),
+            ("chrome_readable_text", ""),
+            ("metadata_fallback", "# Example\n\nDescription text"),
+        ]
+    )
+    assert strategy == "metadata_fallback"
+    assert content.startswith("# Example")
+
+
+def test_build_bookmark_metadata_fallback_text_uses_title_and_description() -> None:
+    service = NoteService()
+    fallback = service._build_bookmark_metadata_fallback_text("Example Title", "Example description.")
+    assert fallback == "# Example Title\n\nExample description."
+
+
 def test_parse_github_repo_or_directory_for_repo_root() -> None:
     service = NoteService()
     parsed = service._parse_github_repo_or_directory("https://github.com/keyurgolani/OpenForge")

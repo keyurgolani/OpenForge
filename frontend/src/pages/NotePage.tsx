@@ -1,17 +1,22 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getNote, updateNote, summarizeNote, extractInsights, generateTitle, deleteNote } from '@/lib/api'
+import {
+    getKnowledge,
+    updateKnowledge,
+    generateKnowledgeIntelligence,
+    deleteKnowledge,
+} from '@/lib/api'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import { useToast } from '@/components/shared/ToastProvider'
 import {
-    Split, Eye, Edit3, Sparkles, Brain, Tag, Save, Loader2,
-    ChevronDown, ChevronRight, ChevronLeft, CheckSquare, Bell, Calendar, Star, Hash,
-    CornerRightDown, Copy, FileText
+    Split, Eye, Edit3, Sparkles, Brain, Tag, Loader2,
+    ChevronRight, ChevronLeft, CheckSquare, Calendar, Star,
+    Copy, FileText
 } from 'lucide-react'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem,
-    ContextMenuSeparator, ContextMenuShortcut
+    ContextMenuSeparator
 } from '@/components/ui/context-menu'
 import { CopyButton } from '@/components/shared/CopyButton'
 import { isModKey } from '@/lib/keyboard'
@@ -29,6 +34,8 @@ const NOTE_EDITOR_HISTORY_LIMIT = 300
 const MIN_NOTE_SPLIT_RATIO = 0.24
 const MAX_NOTE_SPLIT_RATIO = 0.76
 type NoteIntelligenceSectionKey = 'summary' | 'tasks' | 'facts' | 'crucial_things' | 'timelines'
+const DISCARDABLE_DRAFT_CLEANUP_DELAY_MS = 700
+const pendingDiscardableDraftCleanup = new Map<string, number>()
 
 const clampNoteIntelligenceWidth = (value: number) =>
     Math.max(MIN_NOTE_INTELLIGENCE_WIDTH, Math.min(MAX_NOTE_INTELLIGENCE_WIDTH, value))
@@ -80,7 +87,7 @@ export default function NotePage() {
 
     const { data: note, isLoading } = useQuery({
         queryKey: ['note', noteId],
-        queryFn: () => getNote(workspaceId, noteId),
+        queryFn: () => getKnowledge(workspaceId, noteId),
         enabled: !!noteId,
     })
 
@@ -138,6 +145,13 @@ export default function NotePage() {
 
     useEffect(() => {
         if (!isDiscardableDraft || !noteId) return
+        const cleanupKey = `${workspaceId}:${noteId}`
+
+        const pendingTimer = pendingDiscardableDraftCleanup.get(cleanupKey)
+        if (pendingTimer !== undefined) {
+            window.clearTimeout(pendingTimer)
+            pendingDiscardableDraftCleanup.delete(cleanupKey)
+        }
 
         return () => {
             if (hadMeaningfulInputRef.current) return
@@ -154,9 +168,14 @@ export default function NotePage() {
             const isStillEmpty = !titleText && !contentText && !urlText && !aiTitleText && !aiSummaryText && !hasInsights && !hasTags
             if (!isStillEmpty) return
 
-            deleteNote(workspaceId, noteId)
-                .then(() => qc.invalidateQueries({ queryKey: ['notes', workspaceId] }))
-                .catch(() => { /* best-effort cleanup */ })
+            const timerId = window.setTimeout(() => {
+                if (pendingDiscardableDraftCleanup.get(cleanupKey) !== timerId) return
+                pendingDiscardableDraftCleanup.delete(cleanupKey)
+                deleteKnowledge(workspaceId, noteId)
+                    .then(() => qc.invalidateQueries({ queryKey: ['notes', workspaceId] }))
+                    .catch(() => { /* best-effort cleanup */ })
+            }, DISCARDABLE_DRAFT_CLEANUP_DELAY_MS)
+            pendingDiscardableDraftCleanup.set(cleanupKey, timerId)
         }
     }, [isDiscardableDraft, noteId, workspaceId, qc])
 
@@ -177,7 +196,7 @@ export default function NotePage() {
         if (!note) return
         if (debouncedContent === saveRef.current.content && debouncedTitle === saveRef.current.title) return
         setSaving(true)
-        updateNote(workspaceId, noteId, { content: debouncedContent, title: debouncedTitle || null })
+        updateKnowledge(workspaceId, noteId, { content: debouncedContent, title: debouncedTitle || null })
             .then(() => {
                 saveRef.current = { content: debouncedContent, title: debouncedTitle }
                 qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
@@ -185,54 +204,54 @@ export default function NotePage() {
             .finally(() => setTimeout(() => setSaving(false), 500))
     }, [debouncedContent, debouncedTitle, note, noteId, workspaceId, qc])
 
-    const handleAI = async (action: string) => {
+    const getActionErrorMessage = (reason: unknown) => {
+        const err = reason as { response?: { data?: { detail?: string } }, message?: string }
+        return err?.response?.data?.detail || err?.message || 'Unknown error'
+    }
+
+    const handleGenerateIntelligence = async () => {
         if (aiLoading) return
-        setAiLoading(action)
+        setAiLoading('intelligence')
         try {
-            if (action === 'summarize') {
-                const result = await summarizeNote(workspaceId, noteId)
-                const summary = (result?.summary ?? '').trim()
-                if (summary) {
-                    qc.setQueryData(['note', noteId], (prev: any) => prev ? { ...prev, ai_summary: summary } : prev)
-                }
-            } else if (action === 'insights' || action === 'keywords') {
-                const insights = await extractInsights(workspaceId, noteId)
-                if (action === 'insights') {
-                    setIsNoteIntelligenceCollapsed(false)
-                    if (typeof window !== 'undefined') {
-                        window.localStorage.setItem(NOTE_INTELLIGENCE_COLLAPSED_STORAGE_KEY, '0')
-                    }
-                }
-                qc.setQueryData(['note', noteId], (prev: any) => {
-                    if (!prev) return prev
-                    const next: any = { ...prev, insights }
-                    if (Array.isArray(insights?.tags) && insights.tags.length > 0) {
-                        const currentTags = Array.isArray(prev.tags) ? prev.tags : []
-                        next.tags = Array.from(new Set([...currentTags, ...insights.tags]))
-                    }
-                    return next
-                })
-            } else if (action === 'title') {
-                const result = await generateTitle(workspaceId, noteId)
-                const generatedTitle = (result?.title ?? '').trim()
-                if (generatedTitle) {
-                    setTitle(generatedTitle)
-                    qc.setQueryData(['note', noteId], (prev: any) => {
-                        if (!prev) return prev
-                        const titleWasEmpty = !(prev.title ?? '').trim()
-                        return {
-                            ...prev,
-                            ai_title: generatedTitle,
-                            title: titleWasEmpty ? generatedTitle : prev.title,
-                        }
-                    })
+            const result = await generateKnowledgeIntelligence(workspaceId, noteId)
+            const generatedTitle = (result?.ai_title ?? result?.title ?? '').trim()
+            if (generatedTitle) {
+                setTitle(generatedTitle)
+            }
+            if (result?.insights) {
+                setIsNoteIntelligenceCollapsed(false)
+                if (typeof window !== 'undefined') {
+                    window.localStorage.setItem(NOTE_INTELLIGENCE_COLLAPSED_STORAGE_KEY, '0')
                 }
             }
+
+            qc.setQueryData(['note', noteId], (prev: any) => {
+                if (!prev) return prev
+                const next: any = { ...prev }
+                if (generatedTitle) {
+                    const titleWasEmpty = !(prev.title ?? '').trim()
+                    next.ai_title = generatedTitle
+                    if (titleWasEmpty) {
+                        next.title = generatedTitle
+                    }
+                }
+                if (result?.summary) {
+                    next.ai_summary = result.summary
+                }
+                if (result?.insights) {
+                    next.insights = result.insights
+                }
+                if (Array.isArray(result?.tags) && result.tags.length > 0) {
+                    const currentTags = Array.isArray(prev.tags) ? prev.tags : []
+                    next.tags = Array.from(new Set([...currentTags, ...result.tags]))
+                }
+                return next
+            })
+
             qc.invalidateQueries({ queryKey: ['note', noteId] })
             qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
-        } catch (err: any) {
-            const detail = err?.response?.data?.detail || err?.message || 'AI action failed.'
-            showError('AI action failed', detail)
+        } catch (err: unknown) {
+            showError('Intelligence generation failed', getActionErrorMessage(err))
         } finally {
             setAiLoading(null)
         }
@@ -279,21 +298,8 @@ export default function NotePage() {
         applyContentFromHistory(nextValue)
     }, [content, applyContentFromHistory, pushRedoSnapshot, pushUndoSnapshot])
 
-    if (isLoading) {
-        return (
-            <div className="flex items-center justify-center h-full">
-                <Loader2 className="w-6 h-6 animate-spin text-accent" />
-            </div>
-        )
-    }
-
     const previewTitle = title.trim() || note?.ai_title?.trim() || ''
-    const noteAiActions = [
-        { id: 'title', icon: Hash, label: 'Generate Title' },
-        { id: 'keywords', icon: Tag, label: 'Generate Keywords' },
-        { id: 'insights', icon: Brain, label: 'Extract Insights' },
-        { id: 'summarize', icon: CornerRightDown, label: 'Summarize' },
-    ] as const
+    const noteAiAction = { id: 'intelligence', icon: Brain, label: 'Generate Intelligence' } as const
     const summaryText = (note?.ai_summary ?? '').trim()
     const tasksItems = Array.isArray(note?.insights?.tasks) ? note.insights.tasks : []
     const factsItems = Array.isArray(note?.insights?.facts) ? note.insights.facts : []
@@ -429,6 +435,14 @@ export default function NotePage() {
         window.addEventListener('mouseup', onMouseUp)
     }
 
+    if (isLoading) {
+        return (
+            <div className="flex h-full items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-accent" />
+            </div>
+        )
+    }
+
     return (
         <div className="flex h-full min-h-0 gap-3">
             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -465,12 +479,15 @@ export default function NotePage() {
                             copiedLabel="Copied"
                             className="btn-ghost text-xs py-1 px-2 gap-1"
                         />
-                        {noteAiActions.map(btn => (
-                            <button key={btn.id} onClick={() => handleAI(btn.id)} disabled={!!aiLoading} className="btn-ghost text-xs py-1 px-2 gap-1" title={btn.label}>
-                                {aiLoading === btn.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <btn.icon className="w-3.5 h-3.5" />}
-                                <span className="hidden sm:inline">{btn.label}</span>
-                            </button>
-                        ))}
+                        <button
+                            onClick={handleGenerateIntelligence}
+                            disabled={!!aiLoading}
+                            className="btn-ghost text-xs py-1 px-2 gap-1"
+                            title={noteAiAction.label}
+                        >
+                            {aiLoading === noteAiAction.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <noteAiAction.icon className="w-3.5 h-3.5" />}
+                            <span className="hidden sm:inline">{noteAiAction.label}</span>
+                        </button>
                     </div>
 
                     {/* Save indicator */}
@@ -575,23 +592,12 @@ export default function NotePage() {
                                 </div>
                             </ContextMenuTrigger>
                             <ContextMenuContent className="w-56">
-                                {noteAiActions.map(action => (
-                                    <ContextMenuItem
-                                        key={action.id}
-                                        onClick={() => {
-                                            if (action.id === 'insights') {
-                                                setIsNoteIntelligenceCollapsed(false)
-                                                if (typeof window !== 'undefined') {
-                                                    window.localStorage.setItem(NOTE_INTELLIGENCE_COLLAPSED_STORAGE_KEY, '0')
-                                                }
-                                            }
-                                            handleAI(action.id)
-                                        }}
-                                        className="gap-2"
-                                    >
-                                        <action.icon className="w-4 h-4" /> {action.label}
-                                    </ContextMenuItem>
-                                ))}
+                                <ContextMenuItem
+                                    onClick={handleGenerateIntelligence}
+                                    className="gap-2"
+                                >
+                                    <noteAiAction.icon className="w-4 h-4" /> {noteAiAction.label}
+                                </ContextMenuItem>
                                 <ContextMenuSeparator />
                                 <ContextMenuItem onClick={() => navigator.clipboard.writeText(content)} className="gap-2">
                                     <Copy className="w-4 h-4" /> Copy Content
@@ -611,7 +617,7 @@ export default function NotePage() {
                         type="button"
                         onMouseDown={handleNoteIntelligenceResizeStart}
                         className="absolute -left-1 top-0 h-full w-2 cursor-col-resize bg-transparent hover:bg-accent/25 active:bg-accent/35 transition-colors"
-                        aria-label="Resize note intelligence sidebar"
+                        aria-label="Resize knowledge intelligence sidebar"
                         title="Drag to resize"
                     />
                 )}
@@ -622,8 +628,8 @@ export default function NotePage() {
                             type="button"
                             onClick={toggleNoteIntelligenceSidebar}
                             className="w-8 h-8 rounded-lg border border-border/70 bg-card/60 flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-accent/50 transition-colors"
-                            aria-label="Expand note intelligence sidebar"
-                            title="Expand note intelligence"
+                            aria-label="Expand knowledge intelligence sidebar"
+                            title="Expand knowledge intelligence"
                         >
                             <ChevronLeft className="w-4 h-4" />
                         </button>
@@ -643,7 +649,7 @@ export default function NotePage() {
                                 <div className="space-y-1 min-w-0">
                                     <div className="flex items-center gap-2">
                                         <Brain className="w-4 h-4 text-accent" />
-                                        <h3 className="font-semibold text-sm tracking-tight">Note Intelligence</h3>
+                                        <h3 className="font-semibold text-sm tracking-tight">Knowledge Intelligence</h3>
                                     </div>
                                     <p className="text-xs text-muted-foreground/90">Summary and extracted insights for this note.</p>
                                 </div>
@@ -651,8 +657,8 @@ export default function NotePage() {
                                     type="button"
                                     onClick={toggleNoteIntelligenceSidebar}
                                     className="w-7 h-7 rounded-md border border-border/70 bg-card/60 flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-accent/50 transition-colors"
-                                    aria-label="Collapse note intelligence sidebar"
-                                    title="Collapse note intelligence"
+                                    aria-label="Collapse knowledge intelligence sidebar"
+                                    title="Collapse knowledge intelligence"
                                 >
                                     <ChevronRight className="w-4 h-4" />
                                 </button>

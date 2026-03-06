@@ -92,6 +92,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                         <NotePage />
                                     </ErrorBoundary>
                                 } />
+                                <Route path="knowledge/:noteId" element={
+                                    <ErrorBoundary>
+                                        <NotePage />
+                                    </ErrorBoundary>
+                                } />
                                 <Route path="chat" element={
                                     <ErrorBoundary>
                                         <ChatPage />

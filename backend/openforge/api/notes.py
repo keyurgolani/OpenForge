@@ -5,9 +5,10 @@ from typing import Optional
 import json
 import re
 from openforge.db.postgres import get_db
+from openforge.services.knowledge_service import knowledge_service
 from openforge.services.note_service import note_service
-from openforge.schemas.note import (
-    NoteCreate, NoteUpdate, NoteResponse, NoteListItem, NoteListParams, NoteTagsUpdate
+from openforge.schemas.knowledge import (
+    KnowledgeCreate, KnowledgeUpdate, KnowledgeResponse, KnowledgeListItem, KnowledgeListParams, KnowledgeTagsUpdate
 )
 from openforge.utils.insights import normalize_insights_payload
 from openforge.utils.note_title_generation import derive_note_title
@@ -39,6 +40,7 @@ async def _get_prompt(db: AsyncSession, prompt_id: str, **kwargs) -> str:
 
 
 @router.get("/{workspace_id}/notes", response_model=dict)
+@router.get("/{workspace_id}/knowledge", response_model=dict)
 async def list_notes(
     workspace_id: UUID,
     type: Optional[str] = None,
@@ -51,7 +53,7 @@ async def list_notes(
     page_size: int = 50,
     db: AsyncSession = Depends(get_db),
 ):
-    params = NoteListParams(
+    params = KnowledgeListParams(
         type=type,
         tag=tag,
         is_pinned=is_pinned,
@@ -61,67 +63,75 @@ async def list_notes(
         page=page,
         page_size=page_size,
     )
-    notes, total = await note_service.list_notes(db, workspace_id, params)
-    return {"notes": [n.model_dump() for n in notes], "total": total, "page": page, "page_size": page_size}
+    knowledge_items, total = await knowledge_service.list_knowledge(db, workspace_id, params)
+    return {"notes": [k.model_dump() for k in knowledge_items], "knowledge": [k.model_dump() for k in knowledge_items], "total": total, "page": page, "page_size": page_size}
 
 
-@router.post("/{workspace_id}/notes", response_model=NoteResponse, status_code=201)
+@router.post("/{workspace_id}/notes", response_model=KnowledgeResponse, status_code=201)
+@router.post("/{workspace_id}/knowledge", response_model=KnowledgeResponse, status_code=201)
 async def create_note(
     workspace_id: UUID,
-    body: NoteCreate,
+    body: KnowledgeCreate,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    return await note_service.create_note(db, workspace_id, body, background_tasks)
+    return await knowledge_service.create_knowledge(db, workspace_id, body, background_tasks)
 
 
-@router.get("/{workspace_id}/notes/{note_id}", response_model=NoteResponse)
+@router.get("/{workspace_id}/notes/{note_id}", response_model=KnowledgeResponse)
+@router.get("/{workspace_id}/knowledge/{note_id}", response_model=KnowledgeResponse)
 async def get_note(
     workspace_id: UUID, note_id: UUID, db: AsyncSession = Depends(get_db)
 ):
-    return await note_service.get_note(db, workspace_id, note_id)
+    return await knowledge_service.get_knowledge(db, workspace_id, note_id)
 
 
-@router.put("/{workspace_id}/notes/{note_id}", response_model=NoteResponse)
+@router.put("/{workspace_id}/notes/{note_id}", response_model=KnowledgeResponse)
+@router.put("/{workspace_id}/knowledge/{note_id}", response_model=KnowledgeResponse)
 async def update_note(
     workspace_id: UUID,
     note_id: UUID,
-    body: NoteUpdate,
+    body: KnowledgeUpdate,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    return await note_service.update_note(db, workspace_id, note_id, body, background_tasks)
+    return await knowledge_service.update_knowledge(db, workspace_id, note_id, body, background_tasks)
 
 
 @router.delete("/{workspace_id}/notes/{note_id}", status_code=204)
+@router.delete("/{workspace_id}/knowledge/{note_id}", status_code=204)
 async def delete_note(
     workspace_id: UUID, note_id: UUID, db: AsyncSession = Depends(get_db)
 ):
-    await note_service.delete_note(db, workspace_id, note_id)
+    await knowledge_service.delete_knowledge(db, workspace_id, note_id)
 
 
-@router.put("/{workspace_id}/notes/{note_id}/tags", response_model=NoteResponse)
+@router.put("/{workspace_id}/notes/{note_id}/tags", response_model=KnowledgeResponse)
+@router.put("/{workspace_id}/knowledge/{note_id}/tags", response_model=KnowledgeResponse)
 async def update_tags(
-    workspace_id: UUID, note_id: UUID, body: NoteTagsUpdate, db: AsyncSession = Depends(get_db)
+    workspace_id: UUID, note_id: UUID, body: KnowledgeTagsUpdate, db: AsyncSession = Depends(get_db)
 ):
-    return await note_service.update_tags(db, note_id, body.tags, source="user")
+    return await knowledge_service.update_tags(db, note_id, body.tags, source="user")
 
 
-@router.put("/{workspace_id}/notes/{note_id}/pin", response_model=NoteResponse)
+@router.put("/{workspace_id}/notes/{note_id}/pin", response_model=KnowledgeResponse)
+@router.put("/{workspace_id}/knowledge/{note_id}/pin", response_model=KnowledgeResponse)
 async def toggle_pin(
     workspace_id: UUID, note_id: UUID, db: AsyncSession = Depends(get_db)
 ):
-    return await note_service.toggle_pin(db, note_id)
+    return await knowledge_service.toggle_pin(db, note_id)
 
 
-@router.put("/{workspace_id}/notes/{note_id}/archive", response_model=NoteResponse)
+@router.put("/{workspace_id}/notes/{note_id}/archive", response_model=KnowledgeResponse)
+@router.put("/{workspace_id}/knowledge/{note_id}/archive", response_model=KnowledgeResponse)
 async def toggle_archive(
     workspace_id: UUID, note_id: UUID, db: AsyncSession = Depends(get_db)
 ):
-    return await note_service.toggle_archive(db, note_id)
+    return await knowledge_service.toggle_archive(db, note_id)
 
 
 @router.post("/{workspace_id}/notes/{note_id}/summarize")
+@router.post("/{workspace_id}/knowledge/{note_id}/summarize")
 async def summarize_note(
     workspace_id: UUID, note_id: UUID, db: AsyncSession = Depends(get_db)
 ):
@@ -129,23 +139,24 @@ async def summarize_note(
     from openforge.services.llm_service import llm_service
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
-    from openforge.db.models import Note
+    from openforge.db.models import Knowledge
     from openforge.api.websocket import ws_manager
 
     result = await db.execute(
-        select(Note)
-        .options(selectinload(Note.tags))
-        .where(Note.id == note_id, Note.workspace_id == workspace_id)
+        select(Knowledge)
+        .options(selectinload(Knowledge.tags))
+        .where(Knowledge.id == note_id, Knowledge.workspace_id == workspace_id)
     )
     note = result.scalar_one_or_none()
     if not note:
         from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Note not found")
+        raise HTTPException(status_code=404, detail="Knowledge not found")
 
     task_log = await start_task_log(
         db,
         task_type="summarize_note",
         workspace_id=workspace_id,
+        target_link=f"/w/{workspace_id}/knowledge/{note_id}",
     )
 
     try:
@@ -165,6 +176,7 @@ async def summarize_note(
             provider_name=provider_name, api_key=api_key, model=model, base_url=base_url,
         )
         note.ai_summary = summary
+        note.embedding_status = "pending"
         mark_task_log_done(task_log, item_count=1)
         await db.commit()
     except Exception as exc:
@@ -172,11 +184,22 @@ async def summarize_note(
         await db.commit()
         raise
 
-    await ws_manager.send_to_workspace(str(workspace_id), {"type": "note_updated", "note_id": str(note_id), "fields": ["ai_summary"]})
+    await ws_manager.send_to_workspace(
+        str(workspace_id),
+        {"type": "note_updated", "note_id": str(note_id), "fields": ["ai_summary", "embedding_status"]},
+    )
+    await note_service._process_note_background(
+        note_id=note_id,
+        workspace_id=workspace_id,
+        content=note.content or "",
+        note_type=note.type,
+        title=normalize_note_title(note.title) or normalize_note_title(note.ai_title),
+    )
     return {"summary": summary}
 
 
 @router.post("/{workspace_id}/notes/{note_id}/extract-insights")
+@router.post("/{workspace_id}/knowledge/{note_id}/extract-insights")
 async def extract_insights(
     workspace_id: UUID, note_id: UUID, db: AsyncSession = Depends(get_db)
 ):
@@ -184,24 +207,25 @@ async def extract_insights(
     from openforge.services.llm_service import llm_service
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
-    from openforge.db.models import Note
+    from openforge.db.models import Knowledge
     from openforge.api.websocket import ws_manager
-    from openforge.services.note_service import note_service as ns
+    from openforge.services.knowledge_service import knowledge_service as ks
 
     result = await db.execute(
-        select(Note)
-        .options(selectinload(Note.tags))
-        .where(Note.id == note_id, Note.workspace_id == workspace_id)
+        select(Knowledge)
+        .options(selectinload(Knowledge.tags))
+        .where(Knowledge.id == note_id, Knowledge.workspace_id == workspace_id)
     )
     note = result.scalar_one_or_none()
     if not note:
         from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Note not found")
+        raise HTTPException(status_code=404, detail="Knowledge not found")
 
     task_log = await start_task_log(
         db,
         task_type="extract_note_insights",
         workspace_id=workspace_id,
+        target_link=f"/w/{workspace_id}/knowledge/{note_id}",
     )
 
     try:
@@ -233,11 +257,12 @@ async def extract_insights(
             insights = normalize_insights_payload({}, note.content or "")
 
         note.insights = insights
+        note.embedding_status = "pending"
         await db.commit()
 
         # Save AI tags
         if insights.get("tags"):
-            await ns.update_tags(db, note_id, insights["tags"], source="ai")
+            await ks.update_tags(db, note_id, insights["tags"], source="ai")
 
         mark_task_log_done(task_log, item_count=1)
         await db.commit()
@@ -248,31 +273,40 @@ async def extract_insights(
 
     await ws_manager.send_to_workspace(
         str(workspace_id),
-        {"type": "note_updated", "note_id": str(note_id), "fields": ["insights", "tags"]},
+        {"type": "note_updated", "note_id": str(note_id), "fields": ["insights", "tags", "embedding_status"]},
+    )
+    await note_service._process_note_background(
+        note_id=note_id,
+        workspace_id=workspace_id,
+        content=note.content or "",
+        note_type=note.type,
+        title=normalize_note_title(note.title) or normalize_note_title(note.ai_title),
     )
     return insights
 
 
 @router.post("/{workspace_id}/notes/{note_id}/generate-title")
+@router.post("/{workspace_id}/knowledge/{note_id}/generate-title")
 async def generate_title(
     workspace_id: UUID, note_id: UUID, db: AsyncSession = Depends(get_db)
 ):
     from openforge.core.llm_gateway import llm_gateway
     from openforge.services.llm_service import llm_service
     from sqlalchemy import select
-    from openforge.db.models import Note
+    from openforge.db.models import Knowledge
     from openforge.api.websocket import ws_manager
 
-    result = await db.execute(select(Note).where(Note.id == note_id, Note.workspace_id == workspace_id))
+    result = await db.execute(select(Knowledge).where(Knowledge.id == note_id, Knowledge.workspace_id == workspace_id))
     note = result.scalar_one_or_none()
     if not note:
         from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Note not found")
+        raise HTTPException(status_code=404, detail="Knowledge not found")
 
     task_log = await start_task_log(
         db,
         task_type="generate_note_title",
         workspace_id=workspace_id,
+        target_link=f"/w/{workspace_id}/knowledge/{note_id}",
     )
 
     try:
@@ -281,7 +315,7 @@ async def generate_title(
 
         title_response = await llm_gateway.chat(
             messages=[
-                {"role": "system", "content": "Generate concise note titles. Return only the title text."},
+                {"role": "system", "content": "Generate concise knowledge titles. Return only the title text."},
                 {"role": "user", "content": prompt},
             ],
             provider_name=provider_name, api_key=api_key, model=model, base_url=base_url, max_tokens=30,
@@ -318,3 +352,33 @@ async def generate_title(
             or normalize_note_title(note.ai_title)
         )
     }
+
+
+@router.post("/{workspace_id}/notes/{note_id}/generate-intelligence")
+@router.post("/{workspace_id}/knowledge/{note_id}/generate-intelligence")
+async def generate_intelligence(
+    workspace_id: UUID, note_id: UUID, db: AsyncSession = Depends(get_db)
+):
+    # Ensure the knowledge exists and belongs to the workspace before kicking off the job.
+    await knowledge_service.get_knowledge(db, workspace_id, note_id)
+    result = await note_service.run_knowledge_intelligence_job(
+        note_id=note_id,
+        workspace_id=workspace_id,
+        audit_task_type="generate_knowledge_intelligence",
+    )
+    return result
+
+
+@router.post("/{workspace_id}/notes/{note_id}/extract-bookmark-content")
+@router.post("/{workspace_id}/knowledge/{note_id}/extract-bookmark-content")
+async def extract_bookmark_content(
+    workspace_id: UUID, note_id: UUID, db: AsyncSession = Depends(get_db)
+):
+    # Ensure the knowledge exists and belongs to the workspace before kicking off the job.
+    await knowledge_service.get_knowledge(db, workspace_id, note_id)
+    extracted = await note_service.run_bookmark_content_extraction_job(
+        note_id=note_id,
+        workspace_id=workspace_id,
+        audit_task_type="extract_bookmark_content",
+    )
+    return {"extracted": extracted}

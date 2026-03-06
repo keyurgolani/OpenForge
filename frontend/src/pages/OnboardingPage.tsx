@@ -119,9 +119,9 @@ export default function OnboardingPage() {
 
 function WelcomeStep({ onNext, loading }: { onNext: () => void; loading: boolean }) {
     const FEATURES = [
-        { Icon: FileText, text: 'Rich markdown notes with AI insights' },
+        { Icon: FileText, text: 'Rich markdown knowledge with AI insights' },
         { Icon: Search, text: 'Semantic search across all your content' },
-        { Icon: MessageSquare, text: 'Chat with your notes using any LLM' },
+        { Icon: MessageSquare, text: 'Chat with your knowledge using any LLM' },
         { Icon: Lock, text: '100% private — runs on your hardware' },
     ]
     return (

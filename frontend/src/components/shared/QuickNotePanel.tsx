@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { createNote, updateNote, deleteNote } from '@/lib/api'
+import { createKnowledge, updateKnowledge, deleteKnowledge } from '@/lib/api'
 import { isModKey, getModSymbol } from '@/lib/keyboard'
 import {
     X, Expand, Loader2, Tag, Save, FileText, Zap, Bookmark, Code2, Plus
@@ -70,15 +70,27 @@ export function QuickNotePanel({ open, defaultType = 'standard', onClose }: Prop
     const [saving, setSaving] = useState(false)
     const [noteId, setNoteId] = useState<string | null>(null) // draft note id
 
+    const urlRef = useRef<HTMLInputElement>(null)
     const titleRef = useRef<HTMLInputElement>(null)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const panelRef = useRef<HTMLDivElement>(null)
 
-    // Focus title on open
+    // Focus the most relevant field on open based on note type.
     useEffect(() => {
         if (open) {
             setType(defaultType)
-            setTimeout(() => titleRef.current?.focus(), 80)
+            const focusTimer = window.setTimeout(() => {
+                if (defaultType === 'bookmark') {
+                    urlRef.current?.focus()
+                    return
+                }
+                if (defaultType === 'fleeting') {
+                    textareaRef.current?.focus()
+                    return
+                }
+                titleRef.current?.focus()
+            }, 80)
+            return () => window.clearTimeout(focusTimer)
         }
         if (!open) {
             // reset state
@@ -86,6 +98,13 @@ export function QuickNotePanel({ open, defaultType = 'standard', onClose }: Prop
             setGistLang('TypeScript'); setNoteId(null)
         }
     }, [open, defaultType])
+
+    // If user switches to bookmark type while modal is open, focus URL input.
+    useEffect(() => {
+        if (!open || type !== 'bookmark') return
+        const focusTimer = window.setTimeout(() => urlRef.current?.focus(), 0)
+        return () => window.clearTimeout(focusTimer)
+    }, [open, type])
 
     const isEmpty = !title.trim() && !content.trim() && !url.trim()
 
@@ -100,11 +119,11 @@ export function QuickNotePanel({ open, defaultType = 'standard', onClose }: Prop
 
     const persistDraft = async (allowCreateWhenEmpty: boolean): Promise<string | null> => {
         if (noteId) {
-            await updateNote(workspaceId, noteId, buildPayload())
+            await updateKnowledge(workspaceId, noteId, buildPayload())
             return noteId
         }
         if (isEmpty && !allowCreateWhenEmpty) return null
-        const n = await createNote(workspaceId, buildPayload())
+        const n = await createKnowledge(workspaceId, buildPayload())
         setNoteId(n.id)
         qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
         return n.id
@@ -114,7 +133,7 @@ export function QuickNotePanel({ open, defaultType = 'standard', onClose }: Prop
     const handleClose = useCallback(async () => {
         if (noteId && isEmpty) {
             // a draft was created but user cleared it — delete it
-            await deleteNote(workspaceId, noteId).catch(() => { })
+            await deleteKnowledge(workspaceId, noteId).catch(() => { })
             qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
         }
         onClose()
@@ -152,7 +171,7 @@ export function QuickNotePanel({ open, defaultType = 'standard', onClose }: Prop
             qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
             onClose()
             const query = shouldDiscardIfUntouched ? '?draft=1' : ''
-            navigate(`/w/${workspaceId}/notes/${id}${query}`)
+            navigate(`/w/${workspaceId}/knowledge/${id}${query}`)
         } finally {
             setSaving(false)
         }
@@ -229,11 +248,11 @@ export function QuickNotePanel({ open, defaultType = 'standard', onClose }: Prop
                     {/* Bookmark URL field */}
                     {type === 'bookmark' && (
                         <input
+                            ref={urlRef}
                             className="input text-sm"
                             placeholder="https://… (required for bookmark)"
                             value={url}
                             onChange={e => setUrl(e.target.value)}
-                            autoFocus={type === 'bookmark'}
                         />
                     )}
 

@@ -148,7 +148,7 @@ type WorkspaceRow = {
     id: string; name: string; description: string | null
     icon: string | null; color: string | null
     llm_provider_id: string | null; llm_model: string | null
-    note_count: number; conversation_count: number
+    note_count: number; knowledge_count?: number; conversation_count: number
 }
 
 function WorkspacesSettings({
@@ -290,7 +290,7 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
                     <div className="flex items-center gap-2">
                         <span className="font-medium text-sm">{ws.name}</span>
                         {isActive && <span className="chip-accent text-[10px]">Current</span>}
-                        <span className="text-xs text-muted-foreground">{ws.note_count} notes · {ws.conversation_count} chats</span>
+                        <span className="text-xs text-muted-foreground">{ws.knowledge_count ?? ws.note_count} knowledge · {ws.conversation_count} chats</span>
                     </div>
                     <p className="text-xs text-muted-foreground truncate mt-0.5">
                         {ws.description || (ws.llm_provider_id ? `Provider override set` : 'Using global default provider')}
@@ -874,7 +874,7 @@ function PromptsTab() {
 
     const categories = ['notes', 'chat']
     const categoryLabels: Record<string, string> = {
-        notes: 'Note Intelligence',
+        notes: 'Knowledge Intelligence',
         chat: 'Chat & Retrieval',
     }
 
@@ -1006,6 +1006,9 @@ interface ScheduleEntry {
     default_interval_hours: number
     enabled: boolean
     interval_hours: number
+    supports_target_scope?: boolean
+    target_scope?: 'one' | 'remaining' | 'all' | null
+    knowledge_id?: string | null
     last_run: string | null
 }
 
@@ -1016,6 +1019,12 @@ const INTERVAL_OPTS = [
     { value: 24, label: 'Daily' },
     { value: 48, label: 'Every 2 days' },
     { value: 168, label: 'Weekly' },
+]
+
+const TARGET_SCOPE_OPTS = [
+    { value: 'remaining', label: 'Remaining targets' },
+    { value: 'all', label: 'All targets' },
+    { value: 'one', label: 'One target' },
 ]
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -1066,10 +1075,28 @@ function SchedulesTab() {
 
     const handleRunNow = async (s: ScheduleEntry) => {
         setRunning(r => ({ ...r, [s.id]: true }))
-        await runTaskNow(s.id)
+        const payload = s.supports_target_scope
+            ? {
+                target_scope: (s.target_scope || 'remaining') as 'one' | 'remaining' | 'all',
+                knowledge_id: s.target_scope === 'one' ? (s.knowledge_id || undefined) : undefined,
+            }
+            : undefined
+        await runTaskNow(s.id, payload)
         qc.invalidateQueries({ queryKey: ['task-schedules'] })
         qc.invalidateQueries({ queryKey: ['task-history'] })
         setTimeout(() => setRunning(r => ({ ...r, [s.id]: false })), 2000)
+    }
+
+    const handleTargetScope = async (s: ScheduleEntry, targetScope: 'one' | 'remaining' | 'all') => {
+        await updateSchedule(s.id, { target_scope: targetScope })
+        qc.invalidateQueries({ queryKey: ['task-schedules'] })
+    }
+
+    const handleKnowledgeTarget = async (s: ScheduleEntry, knowledgeId: string) => {
+        const trimmed = knowledgeId.trim()
+        if (!trimmed) return
+        await updateSchedule(s.id, { knowledge_id: trimmed })
+        qc.invalidateQueries({ queryKey: ['task-schedules'] })
     }
 
     const handleSaveRetention = async () => {
@@ -1162,7 +1189,7 @@ function SchedulesTab() {
                                                 <span className={`font-medium text-sm ${s.enabled ? 'text-foreground' : 'text-muted-foreground'}`}>{s.label}</span>
                                                 <button
                                                     className="btn-ghost text-xs py-1 px-2.5 gap-1 flex-shrink-0"
-                                                    disabled={running[s.id]}
+                                                    disabled={running[s.id] || (s.supports_target_scope && (s.target_scope ?? 'remaining') === 'one' && !s.knowledge_id)}
                                                     onClick={() => handleRunNow(s)}
                                                 >
                                                     {running[s.id] ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
@@ -1189,6 +1216,28 @@ function SchedulesTab() {
                                                         Last: {new Date(s.last_run).toLocaleString()}
                                                     </span>
                                                 )}
+
+                                                {s.supports_target_scope && (
+                                                    <select
+                                                        className="input text-xs py-1 pr-7 w-auto"
+                                                        value={s.target_scope ?? 'remaining'}
+                                                        disabled={!s.enabled}
+                                                        onChange={e => handleTargetScope(s, e.target.value as 'one' | 'remaining' | 'all')}
+                                                    >
+                                                        {TARGET_SCOPE_OPTS.map(o => (
+                                                            <option key={o.value} value={o.value}>{o.label}</option>
+                                                        ))}
+                                                    </select>
+                                                )}
+
+                                                {s.supports_target_scope && (s.target_scope ?? 'remaining') === 'one' && (
+                                                    <input
+                                                        className="input h-8 w-64 text-xs"
+                                                        placeholder="Knowledge ID for one-target runs"
+                                                        defaultValue={s.knowledge_id ?? ''}
+                                                        onBlur={e => { void handleKnowledgeTarget(s, e.target.value) }}
+                                                    />
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -1213,18 +1262,21 @@ interface TaskLogEntry {
     duration_ms: number | null
     item_count: number | null
     error_message: string | null
+    target_link: string | null
 }
 
 const TASK_LABELS: Record<string, string> = {
-    embed_notes: 'Embed Notes',
+    embed_notes: 'Embed Knowledge',
+    generate_knowledge_intelligence: 'Generate Knowledge Intelligence',
+    extract_bookmark_content: 'Extract Bookmark Content',
     generate_titles: 'Generate Titles',
     extract_insights: 'Extract Insights',
     scrape_bookmarks: 'Scrape Bookmarks',
     cleanup_embeddings: 'Clean Up Embeddings',
     purge_chat_trash: 'Purge Chat Trash',
-    summarize_note: 'Summarize Note',
-    extract_note_insights: 'Extract Note Insights',
-    generate_note_title: 'Generate Note Title',
+    summarize_note: 'Summarize Knowledge',
+    extract_note_insights: 'Extract Knowledge Insights',
+    generate_note_title: 'Generate Knowledge Title',
 }
 
 type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'unknown'
@@ -1323,6 +1375,7 @@ function JobHistorySubTab() {
         if (ms < 1000) return `${ms}ms`
         return `${(ms / 1000).toFixed(1)}s`
     }
+    const isExternalTarget = (value: string) => /^https?:\/\//i.test(value)
 
     return (
         <div className="space-y-5 animate-fade-in">
@@ -1384,6 +1437,20 @@ function JobHistorySubTab() {
                                     {log.duration_ms !== null && <span>Duration: {formatDuration(log.duration_ms)}</span>}
                                     {log.item_count !== null && <span>{log.item_count} items</span>}
                                 </div>
+                                {log.target_link && (
+                                    <div className="mt-1 text-[10px] text-muted-foreground">
+                                        <span className="mr-1">Target:</span>
+                                        <a
+                                            href={log.target_link}
+                                            target={isExternalTarget(log.target_link) ? '_blank' : undefined}
+                                            rel={isExternalTarget(log.target_link) ? 'noreferrer' : undefined}
+                                            className="text-accent hover:underline break-all"
+                                            title={log.target_link}
+                                        >
+                                            {log.target_link}
+                                        </a>
+                                    </div>
+                                )}
                                 {log.error_message && (
                                     <p className="text-[10px] text-red-400 mt-1 font-mono truncate" title={log.error_message}>
                                         {log.error_message}
@@ -1405,6 +1472,7 @@ function ContainerLogsSubTab({ workspaceId }: { workspaceId: string }) {
     const [logs, setLogs] = useState<ContainerLogLine[]>([])
     const [filter, setFilter] = useState('')
     const [levelFilter, setLevelFilter] = useState<'all' | LogLevel>('all')
+    const [containerFilter, setContainerFilter] = useState<string>('all')
     const [paused, setPaused] = useState(false)
     const logsEndRef = useRef<HTMLDivElement>(null)
 
@@ -1448,18 +1516,31 @@ function ContainerLogsSubTab({ workspaceId }: { workspaceId: string }) {
         }
     }, [logs, paused])
 
+    const containerOptions = useMemo(() => {
+        return Array.from(new Set(logs.map(log => log.container))).sort((a, b) => a.localeCompare(b))
+    }, [logs])
+
+    useEffect(() => {
+        if (containerFilter === 'all') return
+        if (!containerOptions.includes(containerFilter)) {
+            setContainerFilter('all')
+        }
+    }, [containerFilter, containerOptions])
+
     const filteredLogs = useMemo(() => {
         const normalizedFilter = filter.trim().toLowerCase()
         return logs.filter(log => {
             const matchesLevel = levelFilter === 'all' || log.level === levelFilter
             if (!matchesLevel) return false
+            const matchesContainer = containerFilter === 'all' || log.container === containerFilter
+            if (!matchesContainer) return false
             if (!normalizedFilter) return true
             return (
                 log.container.toLowerCase().includes(normalizedFilter) ||
                 stripAnsiCodes(log.data).toLowerCase().includes(normalizedFilter)
             )
         })
-    }, [logs, filter, levelFilter])
+    }, [logs, filter, levelFilter, containerFilter])
 
     return (
         <div className="animate-fade-in flex h-full min-h-0 flex-col gap-4">
@@ -1478,6 +1559,19 @@ function ContainerLogsSubTab({ workspaceId }: { workspaceId: string }) {
                         {LOG_LEVEL_OPTIONS.map(option => (
                             <option key={option.value} value={option.value}>
                                 {option.label}
+                            </option>
+                        ))}
+                    </select>
+                    <select
+                        className="input text-xs py-1.5 pr-7 min-w-[170px]"
+                        value={containerFilter}
+                        onChange={e => setContainerFilter(e.target.value)}
+                        aria-label="Filter container name"
+                    >
+                        <option value="all">All containers</option>
+                        {containerOptions.map(container => (
+                            <option key={container} value={container}>
+                                {container}
                             </option>
                         ))}
                     </select>
