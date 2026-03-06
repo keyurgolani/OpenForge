@@ -85,12 +85,7 @@ export default function AppShell() {
     const [defaultNoteType, setDefaultNoteType] = useState<'standard' | 'fleeting' | 'bookmark' | 'gist'>('standard')
     const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
     const [workspaceQuery, setWorkspaceQuery] = useState('')
-    const [collapsedInsightSections, setCollapsedInsightSections] = useState<Record<InsightSectionKey, boolean>>({
-        tasks: false,
-        timelines: true,
-        facts: true,
-        crucial_things: false,
-    })
+    const [activeInsightSection, setActiveInsightSection] = useState<InsightSectionKey | null>('tasks')
     const [isInsightsCollapsed, setIsInsightsCollapsed] = useState<boolean>(() => {
         if (typeof window === 'undefined') return false
         return window.localStorage.getItem(INSIGHTS_COLLAPSED_STORAGE_KEY) === '1'
@@ -197,14 +192,9 @@ export default function AppShell() {
         return ag
     }, [notes])
 
-    const visibleInsightSections = useMemo(
-        () => INSIGHT_SECTION_ORDER.filter(section => aggregatedInsights[section].length > 0),
-        [aggregatedInsights]
-    )
-    const hasInsights = visibleInsightSections.length > 0
     const totalInsightsCount = useMemo(
-        () => visibleInsightSections.reduce((count, section) => count + aggregatedInsights[section].length, 0),
-        [aggregatedInsights, visibleInsightSections]
+        () => INSIGHT_SECTION_ORDER.reduce((count, section) => count + aggregatedInsights[section].length, 0),
+        [aggregatedInsights]
     )
 
     // Keyboard shortcuts
@@ -260,10 +250,7 @@ export default function AppShell() {
     }, [workspaceId])
 
     const toggleInsightSection = useCallback((section: InsightSectionKey) => {
-        setCollapsedInsightSections(prev => ({
-            ...prev,
-            [section]: !prev[section],
-        }))
+        setActiveInsightSection(prev => (prev === section ? null : section))
     }, [])
 
     const toggleInsightsSidebar = useCallback(() => {
@@ -303,12 +290,12 @@ export default function AppShell() {
             <CommandPalette />
             {/* Sidebar */}
             <aside className={`${sidebarOpen ? 'w-72' : 'w-0'} flex-shrink-0 transition-[width] duration-300 overflow-hidden flex flex-col glass-card`}>
-                <div className="flex-shrink-0 p-4 pb-3">
+                <div className="flex-shrink-0">
                     {/* Workspace selector + switcher */}
-                    <div ref={workspaceMenuRef} className="relative mb-4">
+                    <div ref={workspaceMenuRef} className="relative">
                         <button
                             type="button"
-                            className="w-full rounded-xl border border-border/70 bg-card/45 px-3 py-2.5 text-left transition-colors hover:border-accent/35 hover:bg-card/60"
+                            className="w-full border-b border-border/60 bg-card/45 px-4 py-3 text-left transition-colors hover:bg-card/60"
                             onClick={() => setWorkspaceMenuOpen(prev => !prev)}
                             aria-expanded={workspaceMenuOpen}
                             aria-label="Choose workspace"
@@ -334,7 +321,7 @@ export default function AppShell() {
                         </button>
 
                         {workspaceMenuOpen && (
-                            <div className="absolute top-full left-0 right-0 mt-1 z-[180] glass-card p-2 rounded-xl">
+                            <div className="absolute top-full left-2 right-2 mt-2 z-[180] glass-card p-2 rounded-xl">
                                 <div className="relative mb-2">
                                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
                                     <input
@@ -399,21 +386,23 @@ export default function AppShell() {
                         )}
                     </div>
 
-                    {/* Nav */}
-                    <nav className="space-y-1">
-                        <Link to={`/w/${workspaceId}`} className={`sidebar-item ${location.pathname === `/w/${workspaceId}` ? 'active' : ''}`}>
-                            <Home className="w-4 h-4" /> Notes
-                        </Link>
-                        <Link to={`/w/${workspaceId}/search`} className={`sidebar-item ${isActive('/search') ? 'active' : ''}`}>
-                            <Search className="w-4 h-4" /> Search
-                        </Link>
-                        <Link to={`/w/${workspaceId}/chat`} className={`sidebar-item ${isActive('/chat') ? 'active' : ''}`}>
-                            <MessageSquare className="w-4 h-4" /> Chat
-                        </Link>
-                        <Link to={`/w/${workspaceId}/settings`} className={`sidebar-item ${isActive('/settings') ? 'active' : ''}`}>
-                            <Settings className="w-4 h-4" /> Settings
-                        </Link>
-                    </nav>
+                    <div className="px-4 pt-3 pb-3">
+                        {/* Nav */}
+                        <nav className="space-y-1">
+                            <Link to={`/w/${workspaceId}`} className={`sidebar-item ${location.pathname === `/w/${workspaceId}` ? 'active' : ''}`}>
+                                <Home className="w-4 h-4" /> Notes
+                            </Link>
+                            <Link to={`/w/${workspaceId}/search`} className={`sidebar-item ${isActive('/search') ? 'active' : ''}`}>
+                                <Search className="w-4 h-4" /> Search
+                            </Link>
+                            <Link to={`/w/${workspaceId}/chat`} className={`sidebar-item ${isActive('/chat') ? 'active' : ''}`}>
+                                <MessageSquare className="w-4 h-4" /> Chat
+                            </Link>
+                            <Link to={`/w/${workspaceId}/settings`} className={`sidebar-item ${isActive('/settings') ? 'active' : ''}`}>
+                                <Settings className="w-4 h-4" /> Settings
+                            </Link>
+                        </nav>
+                    </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-4">
@@ -551,6 +540,7 @@ export default function AppShell() {
 
                 <div className="relative z-0 flex-1 min-h-0 flex gap-3 p-3">
                     <main
+                        data-openforge-main-content="1"
                         className={`relative z-20 flex-1 min-h-0 overflow-auto ${(isWorkspaceHome || isSearchPage || isSettingsPage || isChatPage || isNotePage)
                             ? ''
                             : 'rounded-2xl border border-border/60 bg-card/25'}`}
@@ -558,9 +548,9 @@ export default function AppShell() {
                         <Outlet />
                     </main>
 
-                    {isWorkspaceHome && hasInsights && (
+                    {isWorkspaceHome && (
                         <aside
-                            className="hidden xl:block flex-shrink-0 rounded-2xl border border-border/60 py-4 overflow-y-auto relative z-10 bg-card/28 transition-[width] duration-200 ease-out"
+                            className="hidden xl:block flex-shrink-0 rounded-2xl border border-border/60 py-4 overflow-hidden relative z-10 bg-card/28 transition-[width] duration-200 ease-out"
                             style={{ width: isInsightsCollapsed ? '56px' : `${insightsWidth}px` }}
                         >
                             {!isInsightsCollapsed && (
@@ -594,8 +584,8 @@ export default function AppShell() {
                                     </span>
                                 </div>
                             ) : (
-                                <div className="px-4">
-                                    <div className="flex items-start justify-between gap-3 mb-4">
+                                <div className="flex h-full min-h-0 flex-col px-4">
+                                    <div className="mb-4 flex items-start justify-between gap-3">
                                         <div className="space-y-1">
                                             <div className="flex items-center gap-2">
                                                 <Brain className="w-4 h-4 text-accent" />
@@ -619,23 +609,26 @@ export default function AppShell() {
                                         </div>
                                     </div>
 
-                                    <div className="space-y-3 pr-1">
-                                        {visibleInsightSections.map(section => {
+                                    <div className="flex min-h-0 flex-1 flex-col gap-2 pr-1">
+                                        {INSIGHT_SECTION_ORDER.map(section => {
                                             const meta = INSIGHT_SECTION_META[section]
                                             const Icon = meta.icon
                                             const items = aggregatedInsights[section]
-                                            const isCollapsed = collapsedInsightSections[section]
+                                            const isExpanded = activeInsightSection === section
 
                                             return (
-                                                <section key={section} className="rounded-xl border border-border/70 bg-card/65 px-3 py-2.5 backdrop-blur-sm">
+                                                <section
+                                                    key={section}
+                                                    className={`rounded-xl border px-2.5 py-2 transition-colors ${isExpanded ? 'flex min-h-0 flex-1 flex-col border-accent/35 bg-card/50' : 'flex-shrink-0 border-border/55 bg-card/22'}`}
+                                                >
                                                     <button
                                                         type="button"
                                                         onClick={() => toggleInsightSection(section)}
                                                         className="w-full flex items-center justify-between gap-3 py-0.5 text-left"
-                                                        aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${meta.title}`}
+                                                        aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${meta.title}`}
                                                     >
                                                         <div className="flex items-center gap-2.5 min-w-0">
-                                                            <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isCollapsed ? '' : 'rotate-90'}`} />
+                                                            <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                                                             <div className={`w-6 h-6 rounded-md flex items-center justify-center ${meta.badgeClass}`}>
                                                                 <Icon className="w-3.5 h-3.5" />
                                                             </div>
@@ -651,26 +644,32 @@ export default function AppShell() {
                                                         </span>
                                                     </button>
 
-                                                    {!isCollapsed && (
-                                                        <ul className="mt-2.5 space-y-1.5 pl-[1.2rem]">
-                                                            {items.slice(0, meta.maxItems).map((item, i) => (
-                                                                <li key={i}>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => navigate(`/w/${workspaceId}/notes/${item.noteId}`)}
-                                                                        className="w-full flex items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-                                                                    >
-                                                                        <span className={`mt-1.5 h-1.5 w-1.5 rounded-full flex-shrink-0 ${meta.dotClass}`} />
-                                                                        <span
-                                                                            className="text-[13px] leading-5 text-foreground/90 line-clamp-3"
-                                                                            dangerouslySetInnerHTML={{
-                                                                                __html: insightsMd.renderInline(item.text || meta.emptyLabel),
-                                                                            }}
-                                                                        />
-                                                                    </button>
-                                                                </li>
-                                                            ))}
-                                                        </ul>
+                                                    {isExpanded && (
+                                                        <div className="mt-2 min-h-0 flex-1 overflow-y-auto pr-1">
+                                                            {items.length > 0 ? (
+                                                                <ul className="space-y-1.5 pl-[1.2rem]">
+                                                                    {items.map((item, i) => (
+                                                                        <li key={i}>
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => navigate(`/w/${workspaceId}/notes/${item.noteId}`)}
+                                                                                className="w-full flex items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                                                                            >
+                                                                                <span className={`mt-1.5 h-1.5 w-1.5 rounded-full flex-shrink-0 ${meta.dotClass}`} />
+                                                                                <span
+                                                                                    className="text-[13px] leading-5 text-foreground/90 break-words"
+                                                                                    dangerouslySetInnerHTML={{
+                                                                                        __html: insightsMd.renderInline(item.text || meta.emptyLabel),
+                                                                                    }}
+                                                                                />
+                                                                            </button>
+                                                                        </li>
+                                                                    ))}
+                                                                </ul>
+                                                            ) : (
+                                                                <p className="px-2 text-xs text-muted-foreground">{meta.emptyLabel}</p>
+                                                            )}
+                                                        </div>
                                                     )}
                                                 </section>
                                             )

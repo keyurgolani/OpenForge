@@ -73,6 +73,16 @@ _LOW_SIGNAL_CHAT_TOKENS = {
     "assistant",
 }
 
+_REQUEST_PREFIX_PATTERNS = (
+    re.compile(r"^(?:please\s+)?tell\s+me\s+", re.IGNORECASE),
+    re.compile(r"^(?:please\s+)?(?:can|could|would|will)\s+you\s+", re.IGNORECASE),
+    re.compile(
+        r"^(?:please\s+)?(?:write|generate|create|draft|make|give|show|explain|summarize|outline|describe|compose)\s+(?:me\s+)?",
+        re.IGNORECASE,
+    ),
+    re.compile(r"^(?:i\s+(?:need|want)\s+(?:you\s+to\s+)?)", re.IGNORECASE),
+)
+
 
 def _normalize_text(text: str | None) -> str:
     return re.sub(r"\s+", " ", str(text or "").strip())
@@ -80,6 +90,27 @@ def _normalize_text(text: str | None) -> str:
 
 def _tokenize_text(text: str) -> list[str]:
     return re.findall(r"[a-z0-9']+", text.lower())
+
+
+def _strip_request_framing(text: str | None) -> str:
+    candidate = _normalize_text(text)
+    if not candidate:
+        return ""
+
+    for _ in range(3):
+        changed = False
+        for pattern in _REQUEST_PREFIX_PATTERNS:
+            updated = pattern.sub("", candidate, count=1).strip(" .:-")
+            if updated and updated != candidate:
+                candidate = updated
+                changed = True
+                break
+        if not changed:
+            break
+
+    if candidate and candidate[0].islower():
+        candidate = candidate[0].upper() + candidate[1:]
+    return candidate
 
 
 def _nearest_substantive_assistant_turn(
@@ -198,6 +229,7 @@ def fallback_chat_title(first_message: str, max_words: int = 7, max_length: int 
     text = re.sub(r"^#{1,6}\s*", "", text)
     text = re.sub(r"`{1,3}", "", text)
     text = re.sub(r"\s+", " ", text).strip()
+    text = _strip_request_framing(text)
 
     words = text.split(" ")
     truncated = " ".join(words[:max_words]).strip()
@@ -206,6 +238,71 @@ def fallback_chat_title(first_message: str, max_words: int = 7, max_length: int 
 
 def derive_chat_title(raw_response: object, first_message: str) -> str | None:
     generated = normalize_generated_title(raw_response)
+    generated = _strip_request_framing(generated)
     if generated and not is_low_signal_chat_turn(generated):
         return generated[:120]
     return fallback_chat_title(first_message)
+
+
+def is_substantive_title_trigger_turn(text: str | None, min_words: int = 15) -> bool:
+    normalized = _normalize_text(text)
+    if not normalized:
+        return False
+    if is_low_signal_chat_turn(normalized):
+        return False
+    words = re.findall(r"\b[\w']+\b", normalized)
+    return len(words) >= min_words
+
+
+def build_running_title_summary(
+    messages: list[Mapping[str, object]],
+    *,
+    max_recent_user_context: int = 4,
+    max_chars: int = 1400,
+) -> str:
+    """
+    Build a compact running summary from recent substantive exchanges.
+    This avoids feeding full history into title generation.
+    """
+    seed = pick_weighted_title_seed_from_messages(
+        messages,
+        max_recent_user_context=max_recent_user_context,
+    ).strip()
+    if not seed:
+        return ""
+    return seed[:max_chars]
+
+
+def has_chat_topic_shift(
+    latest_user_turn: str | None,
+    running_summary: str | None,
+    current_title: str | None = None,
+) -> bool:
+    """
+    Lightweight client-side topic drift detector.
+    Returns True when newest substantive user turn has low lexical overlap
+    with existing conversation context/title.
+    """
+    latest = _normalize_text(latest_user_turn)
+    if not latest or is_low_signal_chat_turn(latest):
+        return False
+
+    latest_tokens = {
+        token
+        for token in _tokenize_text(latest)
+        if token not in _LOW_SIGNAL_CHAT_TOKENS and len(token) > 2
+    }
+    if len(latest_tokens) < 4:
+        return False
+
+    baseline = _normalize_text(f"{running_summary or ''} {current_title or ''}")
+    baseline_tokens = {
+        token
+        for token in _tokenize_text(baseline)
+        if token not in _LOW_SIGNAL_CHAT_TOKENS and len(token) > 2
+    }
+    if not baseline_tokens:
+        return True
+
+    overlap = len(latest_tokens & baseline_tokens) / len(latest_tokens)
+    return overlap < 0.24

@@ -360,10 +360,33 @@
   }
 
   .agent-generation-pill {
-    @apply inline-flex items-center gap-2 rounded-full border border-accent/25 bg-accent/10 px-3 py-1 text-[11px] uppercase tracking-wide text-accent/90;
+    @apply inline-flex items-center gap-2 rounded-full border border-accent/25 px-3 py-1 text-[11px] uppercase tracking-wide text-accent/90;
+    position: relative;
+    overflow: hidden;
+    background:
+      linear-gradient(110deg, hsla(var(--accent) / 0.14), hsla(var(--accent) / 0.08));
+  }
+
+  .agent-generation-pill::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      100deg,
+      transparent 12%,
+      hsla(193, 100%, 74%, 0.08) 36%,
+      hsla(193, 100%, 78%, 0.38) 50%,
+      hsla(193, 100%, 74%, 0.08) 64%,
+      transparent 88%
+    );
+    transform: translateX(-140%);
+    animation: of-agent-pill-sweep 1.35s linear infinite;
+    pointer-events: none;
   }
 
   .agent-generation-orb {
+    position: relative;
+    z-index: 1;
     width: 0.65rem;
     height: 0.65rem;
     border-radius: 9999px;
@@ -589,6 +612,34 @@
     }
   }
 
+  .markdown-content.note-intelligence-markdown {
+    @apply text-xs leading-relaxed;
+  }
+
+  .markdown-content.note-intelligence-markdown h1,
+  .markdown-content.note-intelligence-markdown h2,
+  .markdown-content.note-intelligence-markdown h3,
+  .markdown-content.note-intelligence-markdown h4,
+  .markdown-content.note-intelligence-markdown h5,
+  .markdown-content.note-intelligence-markdown h6 {
+    @apply mt-2 mb-1 text-sm font-semibold;
+  }
+
+  .markdown-content.note-intelligence-markdown h1 {
+    @apply text-base;
+  }
+
+  .markdown-content.note-intelligence-markdown h2 {
+    @apply text-sm;
+  }
+
+  .markdown-content.note-intelligence-markdown h3,
+  .markdown-content.note-intelligence-markdown h4,
+  .markdown-content.note-intelligence-markdown h5,
+  .markdown-content.note-intelligence-markdown h6 {
+    @apply text-xs;
+  }
+
   .cm-editor {
     @apply h-full;
   }
@@ -697,6 +748,16 @@
   100% {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes of-agent-pill-sweep {
+  0% {
+    transform: translateX(-140%);
+  }
+
+  100% {
+    transform: translateX(140%);
   }
 }
 

@@ -10,7 +10,7 @@
  *  - Keyboard shortcut: Escape closes
  *  - Click backdrop → closes
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getNote, togglePin, toggleArchive, deleteNote, summarizeNote, extractInsights, generateTitle } from '@/lib/api'
@@ -18,7 +18,7 @@ import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import {
     X, ExternalLink, Pin, PinOff, Archive, ArchiveX, Trash2, Sparkles,
     FileText, Bookmark, Code2, Zap, Clock, Tag, Hash, Loader2, CornerRightDown,
-    Brain, Star,
+    Brain, Star, ChevronRight, ChevronDown,
 } from 'lucide-react'
 import MarkdownIt from 'markdown-it'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -43,6 +43,8 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
     const qc = useQueryClient()
     const backdropRef = useRef<HTMLDivElement>(null)
     const [aiLoading, setAiLoading] = useState<string | null>(null)
+    const [aiIntelligenceOpen, setAiIntelligenceOpen] = useState(false)
+    const [sheetLayout, setSheetLayout] = useState<{ left: number; width: number } | null>(null)
     const { on } = useWorkspaceWebSocket(workspaceId)
 
     const { data: note, isLoading } = useQuery({
@@ -71,6 +73,41 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
             qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
         })
     }, [noteId, on, qc, workspaceId])
+
+    const syncSheetLayout = useCallback(() => {
+        const sheetAnchor = document.querySelector<HTMLElement>('[data-openforge-note-sheet-anchor="1"]')
+            ?? document.querySelector<HTMLElement>('[data-openforge-main-content="1"]')
+        if (!sheetAnchor) {
+            setSheetLayout(null)
+            return
+        }
+        const rect = sheetAnchor.getBoundingClientRect()
+        if (!rect.width) {
+            setSheetLayout(null)
+            return
+        }
+        setSheetLayout({
+            left: Math.max(0, Math.round(rect.left)),
+            width: Math.round(rect.width),
+        })
+    }, [])
+
+    useEffect(() => {
+        syncSheetLayout()
+        const sheetAnchor = document.querySelector<HTMLElement>('[data-openforge-note-sheet-anchor="1"]')
+            ?? document.querySelector<HTMLElement>('[data-openforge-main-content="1"]')
+        if (!sheetAnchor) return
+
+        const onResize = () => syncSheetLayout()
+        window.addEventListener('resize', onResize)
+        const observer = new ResizeObserver(onResize)
+        observer.observe(sheetAnchor)
+
+        return () => {
+            observer.disconnect()
+            window.removeEventListener('resize', onResize)
+        }
+    }, [syncSheetLayout])
 
     const handlePin = async () => {
         await togglePin(workspaceId, noteId)
@@ -142,6 +179,8 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
     const meta = note ? (TYPE_META[note.type] ?? TYPE_META.standard) : TYPE_META.standard
     const TypeIcon = meta.icon
     const displayTitle = note?.title?.trim() || note?.ai_title?.trim() || null
+    const hasInsights = !!note?.insights && Object.keys(note.insights).length > 0
+    const hasAiIntelligence = !!note?.ai_summary || hasInsights
     const noteAiActions = [
         { id: 'title', icon: Hash, label: 'Generate Title' },
         { id: 'keywords', icon: Tag, label: 'Generate Keywords' },
@@ -173,8 +212,12 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
                     stiffness: 300,
                     mass: 0.8
                 }}
-                className="fixed bottom-0 left-0 right-0 z-50 bg-card/90 backdrop-blur-3xl border-t border-white/10 rounded-t-[32px] shadow-glass-lg flex flex-col mx-auto max-w-4xl"
-                style={{ maxHeight: '88vh' }}
+                className="fixed bottom-0 z-50 bg-card/90 backdrop-blur-3xl border-t border-white/10 rounded-t-[32px] shadow-glass-lg flex flex-col"
+                style={{
+                    maxHeight: '88vh',
+                    left: sheetLayout ? `${sheetLayout.left}px` : '0px',
+                    width: sheetLayout ? `${sheetLayout.width}px` : '100vw',
+                }}
                 onClick={e => e.stopPropagation()}
             >
                 {/* Inner Glow Line */}
@@ -284,20 +327,6 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
                                 </a>
                             )}
 
-                            {/* AI summary */}
-                            {note.ai_summary && (
-                                <div className="glass-card p-4 border-accent/20 bg-accent/5">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <Brain className="w-3.5 h-3.5 text-accent" />
-                                        <span className="text-xs font-medium text-accent">AI Summary</span>
-                                    </div>
-                                    <div
-                                        className="prose prose-sm prose-invert max-w-none text-sm leading-relaxed text-muted-foreground"
-                                        dangerouslySetInnerHTML={{ __html: md.render(note.ai_summary) }}
-                                    />
-                                </div>
-                            )}
-
                             {/* Tags */}
                             {note.tags && note.tags.length > 0 && (
                                 <div className="flex items-center gap-2 flex-wrap">
@@ -307,65 +336,6 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
                                             <Hash className="w-2.5 h-2.5 inline mr-0.5" />{t}
                                         </span>
                                     ))}
-                                </div>
-                            )}
-
-                            {/* Insights */}
-                            {note.insights && Object.keys(note.insights).length > 0 && (
-                                <div className="glass-card p-4 space-y-3">
-                                    <div className="flex items-center gap-2">
-                                        <Star className="w-3.5 h-3.5 text-amber-400" />
-                                        <span className="text-xs font-medium">Insights</span>
-                                    </div>
-                                    {note.insights.tasks?.length > 0 && (
-                                        <div>
-                                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Tasks</p>
-                                            <ul className="space-y-0.5">
-                                                {note.insights.tasks.map((t: string, i: number) => (
-                                                    <li key={i} className="text-xs flex items-start gap-1.5">
-                                                        <span className="mt-0.5 w-3 h-3 rounded-sm border border-border/60 flex-shrink-0" />
-                                                        {t}
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    )}
-                                    {note.insights.timelines?.length > 0 && (
-                                        <div>
-                                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Timelines</p>
-                                            <ul className="space-y-0.5">
-                                                {note.insights.timelines.map((h: any, i: number) => (
-                                                    <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
-                                                        <span className="text-accent mt-0.5 font-bold">{h.date}</span> {h.event}
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    )}
-                                    {note.insights.facts?.length > 0 && (
-                                        <div>
-                                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Facts</p>
-                                            <ul className="space-y-0.5">
-                                                {note.insights.facts.map((h: string, i: number) => (
-                                                    <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
-                                                        <span className="text-accent mt-0.5">•</span> {h}
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    )}
-                                    {note.insights.crucial_things?.length > 0 && (
-                                        <div>
-                                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Crucial Things</p>
-                                            <ul className="space-y-0.5">
-                                                {note.insights.crucial_things.map((h: string, i: number) => (
-                                                    <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
-                                                        <span className="text-red-400 mt-0.5">!</span> {h}
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    )}
                                 </div>
                             )}
 
@@ -381,6 +351,104 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
                                     <p className="text-muted-foreground/50 italic text-sm">No content yet.</p>
                                 )}
                             </div>
+
+                            {/* AI intelligence (secondary to content) */}
+                            {hasAiIntelligence && (
+                                <div className="pt-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => setAiIntelligenceOpen(prev => !prev)}
+                                        className="w-full flex items-center justify-between rounded-lg border border-border/55 bg-card/20 px-3 py-2 text-left"
+                                        aria-expanded={aiIntelligenceOpen}
+                                        aria-label={aiIntelligenceOpen ? 'Collapse AI intelligence' : 'Expand AI intelligence'}
+                                    >
+                                        <span className="inline-flex items-center gap-2">
+                                            <Sparkles className="w-3.5 h-3.5 text-accent/80" />
+                                            <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">AI Intelligence</span>
+                                        </span>
+                                        {aiIntelligenceOpen ? (
+                                            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                                        ) : (
+                                            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                                        )}
+                                    </button>
+
+                                    {aiIntelligenceOpen && (
+                                        <div className="mt-3 space-y-3">
+                                            {note.ai_summary && (
+                                                <div className="rounded-xl border border-border/50 bg-card/35 p-3">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <Brain className="w-3.5 h-3.5 text-accent" />
+                                                        <span className="text-xs font-medium text-accent">Summary</span>
+                                                    </div>
+                                                    <div
+                                                        className="prose prose-sm prose-invert max-w-none text-sm leading-relaxed text-muted-foreground"
+                                                        dangerouslySetInnerHTML={{ __html: md.render(note.ai_summary) }}
+                                                    />
+                                                </div>
+                                            )}
+
+                                            {hasInsights && (
+                                                <div className="rounded-xl border border-border/50 bg-card/30 p-3 space-y-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <Star className="w-3.5 h-3.5 text-amber-400" />
+                                                        <span className="text-xs font-medium">Insights</span>
+                                                    </div>
+                                                    {note.insights.tasks?.length > 0 && (
+                                                        <div>
+                                                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Tasks</p>
+                                                            <ul className="space-y-0.5">
+                                                                {note.insights.tasks.map((t: string, i: number) => (
+                                                                    <li key={i} className="text-xs flex items-start gap-1.5">
+                                                                        <span className="mt-0.5 w-3 h-3 rounded-sm border border-border/60 flex-shrink-0" />
+                                                                        {t}
+                                                                    </li>
+                                                                ))}
+                                                            </ul>
+                                                        </div>
+                                                    )}
+                                                    {note.insights.timelines?.length > 0 && (
+                                                        <div>
+                                                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Timelines</p>
+                                                            <ul className="space-y-0.5">
+                                                                {note.insights.timelines.map((h: any, i: number) => (
+                                                                    <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                                                                        <span className="text-accent mt-0.5 font-bold">{h.date}</span> {h.event}
+                                                                    </li>
+                                                                ))}
+                                                            </ul>
+                                                        </div>
+                                                    )}
+                                                    {note.insights.facts?.length > 0 && (
+                                                        <div>
+                                                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Facts</p>
+                                                            <ul className="space-y-0.5">
+                                                                {note.insights.facts.map((h: string, i: number) => (
+                                                                    <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                                                                        <span className="text-accent mt-0.5">•</span> {h}
+                                                                    </li>
+                                                                ))}
+                                                            </ul>
+                                                        </div>
+                                                    )}
+                                                    {note.insights.crucial_things?.length > 0 && (
+                                                        <div>
+                                                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Crucial Things</p>
+                                                            <ul className="space-y-0.5">
+                                                                {note.insights.crucial_things.map((h: string, i: number) => (
+                                                                    <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                                                                        <span className="text-red-400 mt-0.5">!</span> {h}
+                                                                    </li>
+                                                                ))}
+                                                            </ul>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </>
                     )}
                 </div>

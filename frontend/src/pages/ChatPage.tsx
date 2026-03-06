@@ -6,7 +6,7 @@ import { useStreamingChat } from '@/hooks/useStreamingChat'
 import { useToast } from '@/components/shared/ToastProvider'
 import {
     Plus, Send, Loader2, MessageSquare, Trash2, Bot, User,
-    ChevronDown, ChevronRight, ChevronLeft, ExternalLink, Check, Pencil,
+    ChevronDown, ChevronRight, ChevronLeft, ChevronUp, ExternalLink, Check, Pencil,
     Paperclip, X, Copy, Search, Brain
 } from 'lucide-react'
 import {
@@ -22,6 +22,7 @@ const DEFAULT_CHAT_LIST_WIDTH = 320
 const CHAT_LIST_COLLAPSED_WIDTH = 56
 const CHAT_LIST_WIDTH_STORAGE_KEY = 'openforge.shell.chat.list.width'
 const CHAT_LIST_COLLAPSED_STORAGE_KEY = 'openforge.shell.chat.list.collapsed'
+const CHAT_STREAMING_SAFE_GAP = 24
 
 const clampChatListWidth = (value: number) =>
     Math.max(MIN_CHAT_LIST_WIDTH, Math.min(MAX_CHAT_LIST_WIDTH, value))
@@ -78,10 +79,12 @@ export default function ChatPage() {
     const [activeCid, setActiveCid] = useState(conversationId ?? null)
     const messagesContainerRef = useRef<HTMLDivElement>(null)
     const streamingMessageRef = useRef<HTMLDivElement>(null)
+    const streamingResponseViewportRef = useRef<HTMLDivElement>(null)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const composerShellRef = useRef<HTMLDivElement>(null)
     const [composerHeight, setComposerHeight] = useState(188)
+    const [messagesViewportHeight, setMessagesViewportHeight] = useState(0)
     const [chatListWidth, setChatListWidth] = useState<number>(() => {
         if (typeof window === 'undefined') return DEFAULT_CHAT_LIST_WIDTH
         const raw = window.localStorage.getItem(CHAT_LIST_WIDTH_STORAGE_KEY)
@@ -107,6 +110,8 @@ export default function ChatPage() {
     const [attachments, setAttachments] = useState<File[]>([])
     const [uploadingFiles, setUploadingFiles] = useState(false)
     const [streamThinkingExpanded, setStreamThinkingExpanded] = useState(true)
+    const [streamResponseExpanded, setStreamResponseExpanded] = useState(false)
+    const [streamResponseHasHiddenTop, setStreamResponseHasHiddenTop] = useState(false)
 
     const { data: workspace } = useQuery({
         queryKey: ['workspace', workspaceId],
@@ -224,11 +229,29 @@ export default function ChatPage() {
     }, [activeCid])
 
     useEffect(() => {
+        if (!isStreaming) {
+            setStreamResponseExpanded(false)
+            setStreamResponseHasHiddenTop(false)
+            return
+        }
+        if (!streamingContent) {
+            setStreamResponseHasHiddenTop(false)
+        }
+    }, [activeCid, isStreaming, streamingContent])
+
+    useEffect(() => {
         if (!stickToBottom) return
         const container = messagesContainerRef.current
         if (!container) return
-        container.scrollTo({ top: container.scrollHeight, behavior: streamingContent ? 'auto' : 'smooth' })
-    }, [messages.length, streamingContent, stickToBottom])
+        container.scrollTo({ top: container.scrollHeight, behavior: isStreaming ? 'auto' : 'smooth' })
+    }, [messages.length, streamingContent, streamingThinking, sources.length, isStreaming, stickToBottom])
+
+    useEffect(() => {
+        if (!stickToBottom) return
+        const container = messagesContainerRef.current
+        if (!container) return
+        container.scrollTo({ top: container.scrollHeight, behavior: 'auto' })
+    }, [composerHeight, stickToBottom])
 
     useEffect(() => {
         if (!modelPickerOpen) {
@@ -286,6 +309,32 @@ export default function ChatPage() {
         }
     }, [activeCid, attachments.length, lastError, isConnected, input, modelPickerOpen, uploadingFiles])
 
+    useEffect(() => {
+        if (!activeCid) return
+        const container = messagesContainerRef.current
+        if (!container) return
+
+        const updateHeight = () => {
+            const next = Math.max(0, Math.floor(container.clientHeight))
+            setMessagesViewportHeight(prev => (prev === next ? prev : next))
+        }
+
+        updateHeight()
+
+        if (typeof ResizeObserver === 'undefined') {
+            window.addEventListener('resize', updateHeight)
+            return () => window.removeEventListener('resize', updateHeight)
+        }
+
+        const observer = new ResizeObserver(updateHeight)
+        observer.observe(container)
+        window.addEventListener('resize', updateHeight)
+        return () => {
+            observer.disconnect()
+            window.removeEventListener('resize', updateHeight)
+        }
+    }, [activeCid, composerHeight])
+
     const focusComposer = () => {
         const textarea = textareaRef.current
         if (!textarea || textarea.disabled) return false
@@ -295,7 +344,7 @@ export default function ChatPage() {
         return true
     }
 
-    const ensureExpandedBlockVisible = useCallback((element: HTMLElement | null) => {
+    const ensureExpandedBlockVisible = useCallback((element: HTMLElement | null, behavior: ScrollBehavior = 'smooth') => {
         const container = messagesContainerRef.current
         if (!container || !element) return
 
@@ -308,7 +357,7 @@ export default function ChatPage() {
         if (hiddenAbove > 0) {
             container.scrollTo({
                 top: Math.max(0, container.scrollTop - hiddenAbove),
-                behavior: 'smooth',
+                behavior,
             })
             return
         }
@@ -317,10 +366,63 @@ export default function ChatPage() {
         if (hiddenBelow > 0) {
             container.scrollTo({
                 top: container.scrollTop + hiddenBelow,
-                behavior: 'smooth',
+                behavior,
             })
         }
     }, [])
+
+    useEffect(() => {
+        if (!isStreaming || !stickToBottom) return
+        const target = streamingMessageRef.current
+        if (!target) return
+
+        const keepVisible = () => ensureExpandedBlockVisible(target, 'auto')
+        keepVisible()
+
+        const raf1 = window.requestAnimationFrame(keepVisible)
+        const raf2 = window.requestAnimationFrame(() => {
+            window.requestAnimationFrame(keepVisible)
+        })
+        const timer = window.setTimeout(keepVisible, 180)
+
+        return () => {
+            window.cancelAnimationFrame(raf1)
+            window.cancelAnimationFrame(raf2)
+            window.clearTimeout(timer)
+        }
+    }, [
+        isStreaming,
+        stickToBottom,
+        sources.length,
+        streamingThinking,
+        streamingContent,
+        streamThinkingExpanded,
+        ensureExpandedBlockVisible,
+    ])
+
+    useEffect(() => {
+        if (!isStreaming || streamResponseExpanded) return
+        const viewport = streamingResponseViewportRef.current
+        if (!viewport) return
+
+        const stickToStreamEnd = () => {
+            viewport.scrollTop = viewport.scrollHeight
+            const hasOverflow = viewport.scrollHeight - viewport.clientHeight > 2
+            const hiddenTop = hasOverflow && viewport.scrollTop > 2
+            setStreamResponseHasHiddenTop(prev => (prev === hiddenTop ? prev : hiddenTop))
+        }
+
+        stickToStreamEnd()
+        const raf1 = window.requestAnimationFrame(stickToStreamEnd)
+        const raf2 = window.requestAnimationFrame(() => {
+            window.requestAnimationFrame(stickToStreamEnd)
+        })
+
+        return () => {
+            window.cancelAnimationFrame(raf1)
+            window.cancelAnimationFrame(raf2)
+        }
+    }, [isStreaming, streamingContent, streamResponseExpanded])
 
     useEffect(() => {
         if (!shouldRestoreTextareaFocusRef.current) return
@@ -381,6 +483,7 @@ export default function ChatPage() {
     const handleNewChat = async () => {
         const conv = await createConversation(workspaceId)
         qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
+        shouldRestoreTextareaFocusRef.current = true
         setActiveCid(conv.id)
         navigate(`/w/${workspaceId}/chat/${conv.id}`)
     }
@@ -529,6 +632,17 @@ export default function ChatPage() {
     }
 
     const hasStreamingPayload = Boolean(streamingThinking || streamingContent)
+    const streamingBubbleMaxHeight = useMemo(() => {
+        if (messagesViewportHeight <= 0) return 280
+        return Math.max(180, Math.floor(messagesViewportHeight * 0.5))
+    }, [messagesViewportHeight])
+    const handleStreamingBubbleScroll = (event: React.UIEvent<HTMLDivElement>) => {
+        if (streamResponseExpanded) return
+        const viewport = event.currentTarget
+        const hasOverflow = viewport.scrollHeight - viewport.clientHeight > 2
+        const hiddenTop = hasOverflow && viewport.scrollTop > 2
+        setStreamResponseHasHiddenTop(prev => (prev === hiddenTop ? prev : hiddenTop))
+    }
 
     return (
         <div className="flex h-full min-h-0 gap-3">
@@ -552,8 +666,8 @@ export default function ChatPage() {
                         <div className="relative flex-1 min-h-0">
                             <div
                                 ref={messagesContainerRef}
-                                className="absolute inset-0 overflow-y-auto px-6 pt-6 space-y-4"
-                                style={{ paddingBottom: `${composerHeight + 28}px` }}
+                                className="absolute inset-x-0 top-0 overflow-y-auto px-6 pt-6 pb-6 space-y-4"
+                                style={{ bottom: `${composerHeight + CHAT_STREAMING_SAFE_GAP}px` }}
                                 onScroll={handleMessagesScroll}
                             >
                                 {messages.map(msg => (
@@ -574,16 +688,8 @@ export default function ChatPage() {
                                         <div ref={streamingMessageRef} className="max-w-[92%] lg:max-w-[84%] xl:max-w-[78%] 2xl:max-w-[72%] space-y-2">
                                             <div className="agent-generation-pill">
                                                 <span className="agent-generation-orb" aria-hidden />
-                                                Agent generating response...
+                                                Agent Generating Response
                                             </div>
-                                            {!hasStreamingPayload && (
-                                                <div className="glass-card chat-section-reveal px-4 py-3 text-sm text-muted-foreground/90">
-                                                    <span className="inline-flex items-center gap-1.5">
-                                                        <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent/70" />
-                                                        Preparing the response
-                                                    </span>
-                                                </div>
-                                            )}
                                             {sources.length > 0 && (
                                                 <div className="glass-card chat-section-reveal px-4 py-3">
                                                     <div className="mb-2 text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -600,6 +706,14 @@ export default function ChatPage() {
                                                             </div>
                                                         ))}
                                                     </div>
+                                                </div>
+                                            )}
+                                            {!hasStreamingPayload && (
+                                                <div className="glass-card chat-section-reveal px-4 py-3 text-sm text-muted-foreground/90">
+                                                    <span className="inline-flex items-center gap-1.5">
+                                                        <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent/70" />
+                                                        Preparing Response
+                                                    </span>
                                                 </div>
                                             )}
                                             {streamingThinking && (
@@ -639,8 +753,39 @@ export default function ChatPage() {
                                                 </div>
                                             )}
                                             {streamingContent && (
-                                                <div className="chat-bubble-assistant chat-section-reveal px-4 py-3">
-                                                    <div className="markdown-content streaming-cursor" dangerouslySetInnerHTML={{ __html: md.render(streamingContent) }} />
+                                                <div className="chat-bubble-assistant chat-section-reveal relative px-4 py-3">
+                                                    {!streamResponseExpanded && streamResponseHasHiddenTop && (
+                                                        <>
+                                                            <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-10 rounded-t-2xl bg-gradient-to-b from-card/92 via-card/66 to-transparent" />
+                                                            <div className="pointer-events-none absolute left-4 top-1.5 z-[2] text-[10px] uppercase tracking-wide text-muted-foreground/85">
+                                                                Earlier streamed text folded above
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                    {!streamResponseExpanded && streamResponseHasHiddenTop && (
+                                                        <button
+                                                            type="button"
+                                                            className="absolute right-3 top-0 z-[3] -translate-y-1/2 rounded-full border border-accent/35 bg-card/95 p-1 text-accent hover:border-accent/60 hover:text-accent/90"
+                                                            onClick={() => {
+                                                                setStreamResponseExpanded(true)
+                                                                window.requestAnimationFrame(() => {
+                                                                    ensureExpandedBlockVisible(streamingMessageRef.current, 'auto')
+                                                                })
+                                                            }}
+                                                            aria-label="Expand streaming response"
+                                                            title="Show full response while streaming"
+                                                        >
+                                                            <ChevronUp className="h-3.5 w-3.5" />
+                                                        </button>
+                                                    )}
+                                                    <div
+                                                        ref={streamingResponseViewportRef}
+                                                        onScroll={handleStreamingBubbleScroll}
+                                                        className={`min-h-0 ${streamResponseExpanded ? 'overflow-visible' : 'overflow-y-auto'}`}
+                                                        style={streamResponseExpanded ? undefined : { maxHeight: `${streamingBubbleMaxHeight}px` }}
+                                                    >
+                                                        <div className="markdown-content streaming-cursor" dangerouslySetInnerHTML={{ __html: md.render(streamingContent) }} />
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>

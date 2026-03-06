@@ -11,7 +11,10 @@ from openforge.schemas.conversation import (
 )
 from openforge.services.config_service import config_service
 from openforge.utils.chat_title import (
+    build_running_title_summary,
     derive_chat_title,
+    has_chat_topic_shift,
+    is_low_signal_chat_turn,
     pick_weighted_title_seed_from_messages,
 )
 from fastapi import HTTPException
@@ -57,6 +60,26 @@ def _conv_to_response(conv: Conversation, last_preview: str | None = None) -> Co
 
 
 class ConversationService:
+    @staticmethod
+    def _preferred_title_model(provider_name: str | None, fallback_model: str | None) -> str:
+        provider = (provider_name or "").strip().lower()
+        fallback = (fallback_model or "").strip()
+        if provider in {"ollama", "custom-openai", "custom-anthropic"}:
+            return fallback
+        model_map = {
+            "openai": "gpt-4o-mini",
+            "anthropic": "claude-3-5-haiku-latest",
+            "gemini": "gemini-2.0-flash",
+            "groq": "llama-3.1-8b-instant",
+            "openrouter": "openai/gpt-4o-mini",
+            "deepseek": "deepseek-chat",
+            "mistral": "ministral-8b-latest",
+            "xai": "grok-2-mini",
+            "cohere": "command-r7b-12-2024",
+            "zhipuai": "glm-4-air",
+        }
+        return model_map.get(provider, fallback)
+
     async def _get_chat_trash_retention_days(self, db: AsyncSession) -> int:
         raw = await config_service.get_config_raw(db, CHAT_TRASH_RETENTION_DAYS_KEY)
         try:
@@ -274,16 +297,40 @@ class ConversationService:
         if not all_messages:
             return None
 
-        window = all_messages[-18:]
+        assistant_turn_count = sum(1 for m in all_messages if m.role == "assistant")
+        if assistant_turn_count <= 0:
+            return None
+
+        window = all_messages[-24:]
         first_user_text = next(
             ((m.content or "").strip() for m in all_messages if m.role == "user" and (m.content or "").strip()),
             "",
         )
+        latest_user_turn = next(
+            ((m.content or "").strip() for m in reversed(all_messages) if m.role == "user" and (m.content or "").strip()),
+            "",
+        )
+        latest_assistant_turn = next(
+            ((m.content or "").strip() for m in reversed(all_messages) if m.role == "assistant" and (m.content or "").strip()),
+            "",
+        )
+        is_first_title_generation = not (conv.title or "").strip()
+
+        recent_payload = [
+            {"role": m.role, "content": (m.content or "").strip()}
+            for m in window
+            if (m.content or "").strip()
+        ]
+        running_summary = build_running_title_summary(recent_payload)
+
+        topic_shift_detected = has_chat_topic_shift(
+            latest_user_turn,
+            running_summary,
+            conv.title or "",
+        )
+
         weighted_seed = pick_weighted_title_seed_from_messages(
-            [
-                {"role": m.role, "content": (m.content or "").strip()}
-                for m in all_messages[-24:]
-            ]
+            recent_payload
         )
         primary_seed = weighted_seed.splitlines()[0].strip() if weighted_seed else ""
         assistant_seed = ""
@@ -292,26 +339,20 @@ class ConversationService:
                 assistant_seed = line.removeprefix("Assistant context: ").strip()
                 break
 
-        transcript_lines: list[str] = []
-        message_count = len(window)
-        for index, message in enumerate(window):
-            role_label = "User" if message.role == "user" else "Assistant"
-            text = (message.content or "").strip()
-            if not text:
-                continue
-            if len(text) > 320:
-                text = f"{text[:320]}..."
-            recency_factor = (index + 1) / message_count
-            weight = 0.35 + (0.65 * recency_factor)
-            if primary_seed and message.role == "user" and text.startswith(primary_seed[:80]):
-                weight = min(1.0, weight + 0.1)
-            if assistant_seed and message.role == "assistant" and text.startswith(assistant_seed[:80]):
-                weight = min(1.0, weight + 0.08)
-            transcript_lines.append(f"[w={weight:.2f}] {role_label}: {text}")
+        latest_user_context = latest_user_turn or primary_seed or first_user_text
+        latest_assistant_context = latest_assistant_turn or assistant_seed
+        if not latest_user_context:
+            return conv.title if conv.title else None
 
-        transcript = "\n".join(transcript_lines).strip()
-        if not transcript:
-            return None
+        transcript_lines: list[str] = []
+        for payload in recent_payload[-12:]:
+            role = str(payload.get("role") or "").strip().lower()
+            content = str(payload.get("content") or "").strip()
+            if not content:
+                continue
+            label = "User" if role == "user" else "Assistant"
+            transcript_lines.append(f"{label}: {content[:420]}")
+        recent_transcript = "\n".join(transcript_lines)
 
         selected_provider_name = provider_name
         selected_api_key = api_key
@@ -324,28 +365,69 @@ class ConversationService:
                     db, workspace_id
                 )
 
-            raw_title = await llm_gateway.chat(
-                messages=[
-                    {
-                        "role": "user",
-                        "content": (
-                            "Generate a concise conversation title from weighted recent context. "
-                            "Give highest priority to the latest substantive exchange. "
-                            "Use both the user's intent and the assistant's response for context. "
-                            "If newest user turn is inconsequential (for example: continue/ok/thanks/praise-only), "
-                            "fall back to nearest earlier substantive exchange. "
-                            "Return ONLY title text.\n\n"
-                            f"Weighted seed context: {weighted_seed or first_user_text}\n\n"
-                            f"Conversation:\n{transcript[:5000]}"
-                        ),
-                    }
-                ],
-                provider_name=selected_provider_name,
-                api_key=selected_api_key or "",
-                model=selected_model,
-                base_url=selected_base_url,
-                max_tokens=20,
-            )
+            candidate_models = [
+                self._preferred_title_model(selected_provider_name, selected_model),
+                selected_model,
+            ]
+
+            attempted_models: list[str] = []
+            for candidate_model in candidate_models:
+                model_name = (candidate_model or "").strip()
+                if not model_name or model_name in attempted_models:
+                    continue
+                attempted_models.append(model_name)
+                try:
+                    raw_title = await llm_gateway.chat(
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": (
+                                    "You are a conversation title engine for chat threads. "
+                                    "Generate concise, topic-first titles that capture what is being discussed, "
+                                    "not how the user asked. "
+                                    "Avoid request framing like 'Tell me', 'Can you', or 'Please'. "
+                                    "Output only the final title text (or __KEEP__) with no quotes."
+                                ),
+                            },
+                            {
+                                "role": "user",
+                                "content": (
+                                    "Generate an updated conversation title.\n"
+                                    "Title philosophy:\n"
+                                    "- Capture the high-level crux and information content of the conversation.\n"
+                                    "- Use both user and assistant turns.\n"
+                                    "- Weight recent turns more, but keep continuity with the ongoing topic.\n"
+                                    "- Convert request phrasing into subject phrasing.\n"
+                                    "  Example: 'Tell me a long story about X' -> 'Long Story About X'.\n"
+                                    "- Ignore acknowledgements like thanks/ok/continue.\n"
+                                    "- Keep it 3-8 words, specific, and useful in a conversation list.\n"
+                                    "- If current title still fits and topic did not materially shift, output __KEEP__ exactly.\n"
+                                    "- Output only title text (or __KEEP__).\n\n"
+                                    f"Current title: {(conv.title or '').strip() or '(none)'}\n"
+                                    f"Topic shift signal: {'yes' if topic_shift_detected else 'no'}\n"
+                                    f"First user intent: {(first_user_text or latest_user_context)[:600]}\n"
+                                    f"Running summary: {(running_summary or weighted_seed or first_user_text)[:1400]}\n"
+                                    f"Latest user turn: {latest_user_context[:700]}\n"
+                                    f"Latest assistant turn: {latest_assistant_context[:900]}\n"
+                                    f"Recent transcript:\n{recent_transcript[:3200]}"
+                                ),
+                            },
+                        ],
+                        provider_name=selected_provider_name,
+                        api_key=selected_api_key or "",
+                        model=model_name,
+                        base_url=selected_base_url,
+                        max_tokens=28,
+                    )
+                    if raw_title:
+                        break
+                except Exception as model_error:
+                    logger.warning(
+                        "Conversation title generation failed for %s on model %s: %s",
+                        conversation_id,
+                        model_name,
+                        model_error,
+                    )
         except Exception as e:
             logger.warning(
                 "Conversation title generation failed for %s, using fallback: %s",
@@ -353,7 +435,16 @@ class ConversationService:
                 e,
             )
 
-        title = derive_chat_title(raw_title, primary_seed or first_user_text or transcript)
+        if (str(raw_title or "").strip().upper() == "__KEEP__") and conv.title:
+            return conv.title
+        if not str(raw_title or "").strip() and conv.title:
+            return conv.title
+
+        fallback_seed = primary_seed or latest_user_context or first_user_text or running_summary
+        title = derive_chat_title(raw_title, fallback_seed)
+        if title and not is_first_title_generation and not topic_shift_detected:
+            if is_low_signal_chat_turn(title):
+                return conv.title
         if not title:
             return None
 

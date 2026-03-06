@@ -247,7 +247,7 @@ export default function WorkspaceHome() {
 
     return (
         <div className="w-full p-6 lg:p-7" onClick={closeAllMenus}>
-            <div className="min-w-0 space-y-5">
+            <div data-openforge-note-sheet-anchor="1" className="min-w-0 space-y-5">
                 <section className="relative z-30 px-1">
                     <div className="flex flex-wrap items-center gap-2.5">
                         <div className="min-w-[240px] flex-1 relative">
