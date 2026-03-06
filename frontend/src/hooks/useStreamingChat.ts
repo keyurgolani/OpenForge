@@ -10,6 +10,12 @@ interface Source {
     score: number
 }
 
+interface StreamSnapshot {
+    content?: string
+    thinking?: string
+    sources?: Source[]
+}
+
 interface SendMessageOptions {
     provider_id?: string
     model_id?: string
@@ -41,6 +47,21 @@ export function useStreamingChat(conversationId: string | null) {
         if (!conversationId) return
 
         const unsubs = [
+            on('chat_stream_snapshot', (msg) => {
+                const m = msg as { conversation_id: string; data?: StreamSnapshot }
+                if (m.conversation_id !== conversationId) return
+                const snapshot = m.data ?? {}
+                const resumedContent = snapshot.content ?? ''
+                const resumedThinking = snapshot.thinking ?? ''
+                const resumedSources = Array.isArray(snapshot.sources) ? snapshot.sources : []
+
+                setStreamingContent(resumedContent)
+                setStreamingThinking(resumedThinking)
+                streamingThinkingRef.current = resumedThinking
+                setSources(resumedSources)
+                setIsStreaming(true)
+                setLastError(null)
+            }),
             on('chat_token', (msg) => {
                 const m = msg as { conversation_id: string; data: string }
                 if (m.conversation_id === conversationId) {
@@ -107,6 +128,11 @@ export function useStreamingChat(conversationId: string | null) {
         ]
         return () => unsubs.forEach(u => u())
     }, [conversationId, on, queryClient, workspaceId])
+
+    useEffect(() => {
+        if (!conversationId || !isConnected) return
+        send({ type: 'chat_stream_resume', conversation_id: conversationId })
+    }, [conversationId, isConnected, send])
 
     const sendMessage = useCallback((content: string, options?: SendMessageOptions, conversationOverride?: string) => {
         const targetConversationId = conversationOverride ?? conversationId

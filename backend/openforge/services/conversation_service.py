@@ -10,7 +10,10 @@ from openforge.schemas.conversation import (
     ConversationResponse, ConversationWithMessages, MessageResponse
 )
 from openforge.services.config_service import config_service
-from openforge.utils.chat_title import derive_chat_title
+from openforge.utils.chat_title import (
+    derive_chat_title,
+    pick_weighted_title_seed_from_messages,
+)
 from fastapi import HTTPException
 
 logger = logging.getLogger("openforge.conversation_service")
@@ -145,6 +148,10 @@ class ConversationService:
             raise HTTPException(status_code=404, detail="Conversation not found")
         if data.title is not None:
             conv.title = data.title
+            # Manual title edits lock the conversation title by default unless
+            # the caller explicitly overrides lock state in the same request.
+            if data.title_locked is None:
+                conv.title_locked = True
         if data.title_locked is not None:
             conv.title_locked = data.title_locked
         if data.is_pinned is not None:
@@ -200,6 +207,8 @@ class ConversationService:
         )
         db.add(msg)
 
+        auto_title_workspace_id: UUID | None = None
+        should_auto_title = False
         result = await db.execute(select(Conversation).where(Conversation.id == conversation_id))
         conv = result.scalar_one_or_none()
         if conv:
@@ -209,13 +218,19 @@ class ConversationService:
 
             # Auto-generate title after each assistant reply unless manually locked.
             if trigger_auto_title and role == "assistant" and not conv.title_locked:
-                import asyncio
-                asyncio.create_task(
-                    self._auto_title(conv.workspace_id, conversation_id)
-                )
+                should_auto_title = True
+                auto_title_workspace_id = conv.workspace_id
 
         await db.commit()
         await db.refresh(msg)
+
+        # Schedule title refresh only after commit so the latest assistant turn
+        # is visible to the background title-generation session.
+        if should_auto_title and auto_title_workspace_id is not None:
+            import asyncio
+            asyncio.create_task(
+                self._auto_title(auto_title_workspace_id, conversation_id)
+            )
         return msg
 
     async def get_recent_messages(
@@ -264,15 +279,35 @@ class ConversationService:
             ((m.content or "").strip() for m in all_messages if m.role == "user" and (m.content or "").strip()),
             "",
         )
+        weighted_seed = pick_weighted_title_seed_from_messages(
+            [
+                {"role": m.role, "content": (m.content or "").strip()}
+                for m in all_messages[-24:]
+            ]
+        )
+        primary_seed = weighted_seed.splitlines()[0].strip() if weighted_seed else ""
+        assistant_seed = ""
+        for line in weighted_seed.splitlines():
+            if line.startswith("Assistant context: "):
+                assistant_seed = line.removeprefix("Assistant context: ").strip()
+                break
+
         transcript_lines: list[str] = []
-        for message in window:
+        message_count = len(window)
+        for index, message in enumerate(window):
             role_label = "User" if message.role == "user" else "Assistant"
             text = (message.content or "").strip()
             if not text:
                 continue
             if len(text) > 320:
                 text = f"{text[:320]}..."
-            transcript_lines.append(f"{role_label}: {text}")
+            recency_factor = (index + 1) / message_count
+            weight = 0.35 + (0.65 * recency_factor)
+            if primary_seed and message.role == "user" and text.startswith(primary_seed[:80]):
+                weight = min(1.0, weight + 0.1)
+            if assistant_seed and message.role == "assistant" and text.startswith(assistant_seed[:80]):
+                weight = min(1.0, weight + 0.08)
+            transcript_lines.append(f"[w={weight:.2f}] {role_label}: {text}")
 
         transcript = "\n".join(transcript_lines).strip()
         if not transcript:
@@ -294,8 +329,13 @@ class ConversationService:
                     {
                         "role": "user",
                         "content": (
-                            "Generate a concise conversation title from this full conversation so far. "
+                            "Generate a concise conversation title from weighted recent context. "
+                            "Give highest priority to the latest substantive exchange. "
+                            "Use both the user's intent and the assistant's response for context. "
+                            "If newest user turn is inconsequential (for example: continue/ok/thanks/praise-only), "
+                            "fall back to nearest earlier substantive exchange. "
                             "Return ONLY title text.\n\n"
+                            f"Weighted seed context: {weighted_seed or first_user_text}\n\n"
                             f"Conversation:\n{transcript[:5000]}"
                         ),
                     }
@@ -313,7 +353,7 @@ class ConversationService:
                 e,
             )
 
-        title = derive_chat_title(raw_title, first_user_text or transcript)
+        title = derive_chat_title(raw_title, primary_seed or first_user_text or transcript)
         if not title:
             return None
 

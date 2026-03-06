@@ -14,7 +14,7 @@ from openforge.db.models import Note, NoteTag
 from openforge.db.qdrant_client import get_qdrant
 from openforge.schemas.note import NoteCreate, NoteUpdate, NoteResponse, NoteListItem, NoteListParams
 from openforge.config import get_settings
-from openforge.utils.text import count_words, truncate_text, strip_markdown
+from openforge.utils.text import count_words, normalize_word_count, truncate_text, strip_markdown
 from openforge.utils.note_title_generation import derive_note_title
 from openforge.utils.title import normalize_note_title
 from fastapi import HTTPException, BackgroundTasks
@@ -106,6 +106,21 @@ class NoteService:
             "www.github.com": self._extract_github_bookmark_content,
         }
 
+    async def _backfill_stale_word_counts(self, db: AsyncSession, notes: list[Note]) -> None:
+        changed = False
+        for note in notes:
+            normalized_count, is_stale = normalize_word_count(
+                stored_word_count=note.word_count,
+                text=note.content,
+                note_type=note.type,
+            )
+            if is_stale:
+                note.word_count = normalized_count
+                changed = True
+
+        if changed:
+            await db.commit()
+
     async def create_note(
         self,
         db: AsyncSession,
@@ -180,6 +195,7 @@ class NoteService:
         query = query.offset(offset).limit(params.page_size)
         result = await db.execute(query)
         notes = result.scalars().all()
+        await self._backfill_stale_word_counts(db, notes)
 
         return [_to_list_item(n) for n in notes], total
 
@@ -193,6 +209,7 @@ class NoteService:
         note = result.scalar_one_or_none()
         if not note:
             raise HTTPException(status_code=404, detail="Note not found")
+        await self._backfill_stale_word_counts(db, [note])
         return _to_response(note)
 
     async def update_note(

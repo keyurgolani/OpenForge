@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { listConversations, createConversation, getConversation, deleteConversation, updateConversation, listProviders, getWorkspace } from '@/lib/api'
@@ -77,8 +77,11 @@ export default function ChatPage() {
     const [input, setInput] = useState('')
     const [activeCid, setActiveCid] = useState(conversationId ?? null)
     const messagesContainerRef = useRef<HTMLDivElement>(null)
+    const streamingMessageRef = useRef<HTMLDivElement>(null)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
+    const composerShellRef = useRef<HTMLDivElement>(null)
+    const [composerHeight, setComposerHeight] = useState(188)
     const [chatListWidth, setChatListWidth] = useState<number>(() => {
         if (typeof window === 'undefined') return DEFAULT_CHAT_LIST_WIDTH
         const raw = window.localStorage.getItem(CHAT_LIST_WIDTH_STORAGE_KEY)
@@ -258,6 +261,31 @@ export default function ChatPage() {
         setStreamThinkingExpanded(false)
     }, [streamingThinking, streamingContent])
 
+    useEffect(() => {
+        if (!activeCid) return
+        const element = composerShellRef.current
+        if (!element) return
+
+        const updateHeight = () => {
+            setComposerHeight(Math.max(140, Math.ceil(element.getBoundingClientRect().height)))
+        }
+
+        updateHeight()
+
+        if (typeof ResizeObserver === 'undefined') {
+            window.addEventListener('resize', updateHeight)
+            return () => window.removeEventListener('resize', updateHeight)
+        }
+
+        const observer = new ResizeObserver(() => updateHeight())
+        observer.observe(element)
+        window.addEventListener('resize', updateHeight)
+        return () => {
+            observer.disconnect()
+            window.removeEventListener('resize', updateHeight)
+        }
+    }, [activeCid, attachments.length, lastError, isConnected, input, modelPickerOpen, uploadingFiles])
+
     const focusComposer = () => {
         const textarea = textareaRef.current
         if (!textarea || textarea.disabled) return false
@@ -266,6 +294,33 @@ export default function ChatPage() {
         textarea.setSelectionRange(caretPos, caretPos)
         return true
     }
+
+    const ensureExpandedBlockVisible = useCallback((element: HTMLElement | null) => {
+        const container = messagesContainerRef.current
+        if (!container || !element) return
+
+        const containerRect = container.getBoundingClientRect()
+        const elementRect = element.getBoundingClientRect()
+        const topPadding = 12
+        const bottomPadding = 16
+
+        const hiddenAbove = (containerRect.top + topPadding) - elementRect.top
+        if (hiddenAbove > 0) {
+            container.scrollTo({
+                top: Math.max(0, container.scrollTop - hiddenAbove),
+                behavior: 'smooth',
+            })
+            return
+        }
+
+        const hiddenBelow = elementRect.bottom - (containerRect.bottom - bottomPadding)
+        if (hiddenBelow > 0) {
+            container.scrollTo({
+                top: container.scrollTop + hiddenBelow,
+                behavior: 'smooth',
+            })
+        }
+    }, [])
 
     useEffect(() => {
         if (!shouldRestoreTextareaFocusRef.current) return
@@ -494,252 +549,271 @@ export default function ChatPage() {
                     </div>
                 ) : (
                     <>
-                        <div
-                            ref={messagesContainerRef}
-                            className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4"
-                            onScroll={handleMessagesScroll}
-                        >
-                            {messages.map(msg => (
-                                <ChatMessageCard
-                                    key={msg.id}
-                                    message={msg}
-                                    workspaceId={workspaceId}
-                                    thinking={thinkingByMessageId[msg.id] ?? msg.thinking ?? undefined}
-                                    providerDisplayByName={providerDisplayByName}
-                                />
-                            ))}
-                            {isStreaming && (
-                                <div className="flex gap-3">
-                                    <div className="w-7 h-7 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0 mt-1">
-                                        <Bot className="w-4 h-4 text-accent" />
-                                    </div>
-                                    <div className="max-w-[92%] lg:max-w-[84%] xl:max-w-[78%] 2xl:max-w-[72%] space-y-2">
-                                        <div className="agent-generation-pill">
-                                            <span className="agent-generation-orb" aria-hidden />
-                                            Agent generating response...
+                        <div className="relative flex-1 min-h-0">
+                            <div
+                                ref={messagesContainerRef}
+                                className="absolute inset-0 overflow-y-auto px-6 pt-6 space-y-4"
+                                style={{ paddingBottom: `${composerHeight + 28}px` }}
+                                onScroll={handleMessagesScroll}
+                            >
+                                {messages.map(msg => (
+                                    <ChatMessageCard
+                                        key={msg.id}
+                                        message={msg}
+                                        workspaceId={workspaceId}
+                                        thinking={thinkingByMessageId[msg.id] ?? msg.thinking ?? undefined}
+                                        providerDisplayByName={providerDisplayByName}
+                                        requestVisibility={ensureExpandedBlockVisible}
+                                    />
+                                ))}
+                                {isStreaming && (
+                                    <div className="flex gap-3">
+                                        <div className="w-7 h-7 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0 mt-1">
+                                            <Bot className="w-4 h-4 text-accent" />
                                         </div>
-                                        {!hasStreamingPayload && (
-                                            <div className="glass-card px-4 py-3 text-sm text-muted-foreground/90">
-                                                <span className="inline-flex items-center gap-1.5">
-                                                    <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent/70" />
-                                                    Preparing the response
-                                                </span>
+                                        <div ref={streamingMessageRef} className="max-w-[92%] lg:max-w-[84%] xl:max-w-[78%] 2xl:max-w-[72%] space-y-2">
+                                            <div className="agent-generation-pill">
+                                                <span className="agent-generation-orb" aria-hidden />
+                                                Agent generating response...
                                             </div>
-                                        )}
-                                        {sources.length > 0 && (
-                                            <div className="glass-card px-4 py-3">
-                                                <div className="mb-2 text-[11px] uppercase tracking-wide text-muted-foreground">
-                                                    Sources
+                                            {!hasStreamingPayload && (
+                                                <div className="glass-card chat-section-reveal px-4 py-3 text-sm text-muted-foreground/90">
+                                                    <span className="inline-flex items-center gap-1.5">
+                                                        <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent/70" />
+                                                        Preparing the response
+                                                    </span>
                                                 </div>
-                                                <div className="space-y-2">
-                                                    {sources.map(src => (
-                                                        <div key={src.note_id} className="rounded-lg border border-border/60 bg-muted/25 px-3 py-2">
-                                                            <div className="mb-1 flex items-center justify-between gap-2">
-                                                                <span className="truncate text-xs font-medium text-foreground/90">{src.title}</span>
-                                                                <span className="text-[10px] text-muted-foreground">{Math.round(src.score * 100)}%</span>
-                                                            </div>
-                                                            <p className="line-clamp-2 text-xs text-muted-foreground">{src.snippet}</p>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                        {streamingThinking && (
-                                            <div className="rounded-2xl border border-accent/25 bg-accent/8 px-4 py-3">
-                                                <button
-                                                    type="button"
-                                                    className="mb-1.5 flex w-full items-center gap-1.5 text-left text-[11px] uppercase tracking-wide text-accent/90"
-                                                    onClick={() => setStreamThinkingExpanded(prev => !prev)}
-                                                    aria-label={streamThinkingExpanded ? 'Collapse thinking' : 'Expand thinking'}
-                                                >
-                                                    {streamThinkingExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                                                    <Brain className="h-3.5 w-3.5" />
-                                                    Thinking
-                                                </button>
-                                                {streamThinkingExpanded && (
-                                                    <div className="text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap break-words">
-                                                        {streamingThinking}
+                                            )}
+                                            {sources.length > 0 && (
+                                                <div className="glass-card chat-section-reveal px-4 py-3">
+                                                    <div className="mb-2 text-[11px] uppercase tracking-wide text-muted-foreground">
+                                                        Sources
                                                     </div>
-                                                )}
-                                            </div>
-                                        )}
-                                        {streamingContent && (
-                                            <div className="glass-card px-4 py-3">
-                                                <div className="markdown-content streaming-cursor" dangerouslySetInnerHTML={{ __html: md.render(streamingContent) }} />
-                                            </div>
-                                        )}
+                                                    <div className="space-y-2">
+                                                        {sources.map(src => (
+                                                            <div key={src.note_id} className="rounded-lg border border-border/60 bg-muted/25 px-3 py-2">
+                                                                <div className="mb-1 flex items-center justify-between gap-2">
+                                                                    <span className="truncate text-xs font-medium text-foreground/90">{src.title}</span>
+                                                                    <span className="text-[10px] text-muted-foreground">{Math.round(src.score * 100)}%</span>
+                                                                </div>
+                                                                <p className="line-clamp-2 text-xs text-muted-foreground">{src.snippet}</p>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {streamingThinking && (
+                                                <div className="chat-section-reveal rounded-2xl border border-accent/25 bg-accent/8 px-4 py-3">
+                                                    <button
+                                                        type="button"
+                                                        className="mb-1.5 flex w-full items-center gap-1.5 text-left text-[11px] uppercase tracking-wide text-accent/90"
+                                                        onClick={() => {
+                                                            setStreamThinkingExpanded(prev => {
+                                                                const next = !prev
+                                                                if (next) {
+                                                                    window.requestAnimationFrame(() => {
+                                                                        window.requestAnimationFrame(() => {
+                                                                            ensureExpandedBlockVisible(streamingMessageRef.current)
+                                                                        })
+                                                                    })
+                                                                    window.setTimeout(() => {
+                                                                        ensureExpandedBlockVisible(streamingMessageRef.current)
+                                                                    }, 220)
+                                                                }
+                                                                return next
+                                                            })
+                                                        }}
+                                                        aria-label={streamThinkingExpanded ? 'Collapse thinking' : 'Expand thinking'}
+                                                    >
+                                                        {streamThinkingExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                                                        <Brain className="h-3.5 w-3.5" />
+                                                        Thinking
+                                                    </button>
+                                                    <div className={`chat-collapse ${streamThinkingExpanded ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
+                                                        <div className="chat-collapse-inner">
+                                                            <div className="text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap break-words">
+                                                                {streamingThinking}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {streamingContent && (
+                                                <div className="chat-bubble-assistant chat-section-reveal px-4 py-3">
+                                                    <div className="markdown-content streaming-cursor" dangerouslySetInnerHTML={{ __html: md.render(streamingContent) }} />
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Input area */}
-                        <div className="border-t border-border/45 px-4 py-4 md:px-6 md:py-5">
-                            {activeCid && !isConnected && (
-                                <p className="mb-2 flex items-center gap-1.5 text-xs text-amber-300">
-                                    <Loader2 className="h-3 w-3 animate-spin" /> Reconnecting to server…
-                                </p>
-                            )}
-                            {lastError && (
-                                <div className="mb-3 flex items-start justify-between gap-2 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-100">
-                                    <span className="leading-relaxed">{lastError}</span>
-                                    <button
-                                        type="button"
-                                        className="mt-0.5 rounded p-0.5 text-red-100/80 hover:bg-red-500/20 hover:text-red-50"
-                                        onClick={clearLastError}
-                                        aria-label="Dismiss chat error"
-                                    >
-                                        <X className="h-3 w-3" />
-                                    </button>
-                                </div>
-                            )}
-
-                            <div className="rounded-2xl border border-border/70 bg-[linear-gradient(160deg,hsla(222,35%,18%,0.62),hsla(223,35%,11%,0.78))] px-3 py-3 shadow-[0_14px_28px_hsla(225,65%,5%,0.34)] md:px-4">
-                                {attachments.length > 0 && (
-                                    <div className="mb-3 flex flex-wrap gap-2">
-                                        {attachments.map((file, index) => (
-                                            <div
-                                                key={`${file.name}-${index}`}
-                                                className="flex max-w-full items-center gap-2 rounded-lg border border-border/70 bg-muted/35 px-2.5 py-1.5 text-xs"
-                                            >
-                                                <Paperclip className="h-3.5 w-3.5 flex-shrink-0 text-accent/90" />
-                                                <span className="truncate max-w-[180px]">{file.name}</span>
-                                                <span className="text-muted-foreground">{formatFileSize(file.size)}</span>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => removeAttachment(index)}
-                                                    className="rounded p-0.5 text-muted-foreground hover:bg-red-500/15 hover:text-red-300"
-                                                    aria-label={`Remove ${file.name}`}
-                                                >
-                                                    <X className="h-3 w-3" />
-                                                </button>
-                                            </div>
-                                        ))}
+                                )}
+                            </div>
+                            <div ref={composerShellRef} className="chat-composer-shell pointer-events-none absolute inset-x-0 bottom-0 z-20 px-4 py-4 md:px-6 md:py-5">
+                                {activeCid && !isConnected && (
+                                    <p className="mb-2 flex items-center gap-1.5 text-xs text-amber-300 pointer-events-auto">
+                                        <Loader2 className="h-3 w-3 animate-spin" /> Reconnecting to server…
+                                    </p>
+                                )}
+                                {lastError && (
+                                    <div className="mb-3 flex items-start justify-between gap-2 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-100 pointer-events-auto">
+                                        <span className="leading-relaxed">{lastError}</span>
+                                        <button
+                                            type="button"
+                                            className="mt-0.5 rounded p-0.5 text-red-100/80 hover:bg-red-500/20 hover:text-red-50"
+                                            onClick={clearLastError}
+                                            aria-label="Dismiss chat error"
+                                        >
+                                            <X className="h-3 w-3" />
+                                        </button>
                                     </div>
                                 )}
 
-                                <textarea
-                                    ref={textareaRef}
-                                    className="w-full resize-none bg-transparent px-1 py-1 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/80"
-                                    rows={1}
-                                    placeholder="Ask a question about your notes..."
-                                    value={input}
-                                    onChange={handleTextareaChange}
-                                    onKeyDown={e => {
-                                        if (e.key === 'Enter' && !e.shiftKey) {
-                                            e.preventDefault()
-                                            handleSend()
-                                        }
-                                    }}
-                                    disabled={isStreaming || uploadingFiles}
-                                    style={{ maxHeight: '160px' }}
-                                />
-
-                                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        {modelOptions.length > 0 && (
-                                            <div ref={modelPickerRef} className="relative">
-                                                <button
-                                                    type="button"
-                                                    className="inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-muted/30 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-accent/35 hover:text-foreground"
-                                                    onClick={() => setModelPickerOpen(prev => !prev)}
-                                                    aria-expanded={modelPickerOpen}
+                                <div className="chat-composer-panel">
+                                    {attachments.length > 0 && (
+                                        <div className="mb-3 flex flex-wrap gap-2">
+                                            {attachments.map((file, index) => (
+                                                <div
+                                                    key={`${file.name}-${index}`}
+                                                    className="flex max-w-full items-center gap-2 rounded-lg border border-border/70 bg-muted/35 px-2.5 py-1.5 text-xs"
                                                 >
-                                                    <Bot className="h-3.5 w-3.5" />
-                                                    <span className="max-w-[220px] truncate">{selectedOption?.label ?? defaultLabel}</span>
-                                                    <ChevronDown className={`h-3 w-3 transition-transform ${modelPickerOpen ? 'rotate-180' : ''}`} />
-                                                </button>
-                                                {modelPickerOpen && (
-                                                    <div className="absolute bottom-full left-0 z-[180] mb-2 w-[min(30rem,84vw)] rounded-xl border border-border/80 bg-popover/95 shadow-2xl backdrop-blur-md">
-                                                        <div className="border-b border-border/60 p-2">
-                                                            <div className="relative">
-                                                                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
-                                                                <input
-                                                                    ref={modelPickerSearchRef}
-                                                                    className="input h-8 pl-7 text-xs"
-                                                                    placeholder="Search provider or model..."
-                                                                    value={modelPickerQuery}
-                                                                    onChange={e => setModelPickerQuery(e.target.value)}
-                                                                    onKeyDown={e => {
-                                                                        if (e.key === 'Escape') setModelPickerOpen(false)
+                                                    <Paperclip className="h-3.5 w-3.5 flex-shrink-0 text-accent/90" />
+                                                    <span className="truncate max-w-[180px]">{file.name}</span>
+                                                    <span className="text-muted-foreground">{formatFileSize(file.size)}</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => removeAttachment(index)}
+                                                        className="rounded p-0.5 text-muted-foreground hover:bg-red-500/15 hover:text-red-300"
+                                                        aria-label={`Remove ${file.name}`}
+                                                    >
+                                                        <X className="h-3 w-3" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    <textarea
+                                        ref={textareaRef}
+                                        className="chat-composer-textarea"
+                                        rows={1}
+                                        placeholder="Ask a question about your notes..."
+                                        value={input}
+                                        onChange={handleTextareaChange}
+                                        onKeyDown={e => {
+                                            if (e.key === 'Enter' && !e.shiftKey) {
+                                                e.preventDefault()
+                                                handleSend()
+                                            }
+                                        }}
+                                        disabled={isStreaming || uploadingFiles}
+                                        style={{ maxHeight: '160px' }}
+                                    />
+
+                                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            {modelOptions.length > 0 && (
+                                                <div ref={modelPickerRef} className="relative">
+                                                    <button
+                                                        type="button"
+                                                        className="chat-control-pill"
+                                                        onClick={() => setModelPickerOpen(prev => !prev)}
+                                                        aria-expanded={modelPickerOpen}
+                                                    >
+                                                        <Bot className="h-3.5 w-3.5" />
+                                                        <span className="max-w-[220px] truncate">{selectedOption?.label ?? defaultLabel}</span>
+                                                        <ChevronDown className={`h-3 w-3 transition-transform ${modelPickerOpen ? 'rotate-180' : ''}`} />
+                                                    </button>
+                                                    {modelPickerOpen && (
+                                                        <div className="absolute bottom-full left-0 z-[180] mb-2 w-[min(30rem,84vw)] rounded-xl border border-border/80 bg-popover/95 shadow-2xl backdrop-blur-md">
+                                                            <div className="border-b border-border/60 p-2">
+                                                                <div className="relative">
+                                                                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+                                                                    <input
+                                                                        ref={modelPickerSearchRef}
+                                                                        className="input h-8 pl-7 text-xs"
+                                                                        placeholder="Search provider or model..."
+                                                                        value={modelPickerQuery}
+                                                                        onChange={e => setModelPickerQuery(e.target.value)}
+                                                                        onKeyDown={e => {
+                                                                            if (e.key === 'Escape') setModelPickerOpen(false)
+                                                                        }}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            <div className="max-h-64 overflow-y-auto p-1.5">
+                                                                <button
+                                                                    type="button"
+                                                                    className={`mb-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-muted/35 ${!selectedModelKey ? 'bg-accent/10 text-accent' : 'text-muted-foreground'}`}
+                                                                    onClick={() => {
+                                                                        setSelectedModelKey('')
+                                                                        setModelPickerOpen(false)
                                                                     }}
-                                                                />
+                                                                >
+                                                                    {!selectedModelKey ? <Check className="h-3.5 w-3.5 flex-shrink-0" /> : <span className="w-3.5" />}
+                                                                    <span>Workspace default</span>
+                                                                </button>
+                                                                {filteredModelOptions.length === 0 ? (
+                                                                    <p className="px-2.5 py-2 text-xs text-muted-foreground">No models match your search.</p>
+                                                                ) : (
+                                                                    filteredModelOptions.map(opt => {
+                                                                        const isSelected = selectedModelKey === opt.key
+                                                                        return (
+                                                                            <button
+                                                                                key={opt.key}
+                                                                                type="button"
+                                                                                className={`mb-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-muted/35 ${isSelected ? 'bg-accent/10 text-accent' : 'text-foreground'}`}
+                                                                                onClick={() => {
+                                                                                    setSelectedModelKey(opt.key)
+                                                                                    setModelPickerOpen(false)
+                                                                                }}
+                                                                            >
+                                                                                {isSelected ? <Check className="h-3.5 w-3.5 flex-shrink-0" /> : <span className="w-3.5" />}
+                                                                                <span className="truncate">{opt.label}</span>
+                                                                            </button>
+                                                                        )
+                                                                    })
+                                                                )}
                                                             </div>
                                                         </div>
-                                                        <div className="max-h-64 overflow-y-auto p-1.5">
-                                                            <button
-                                                                type="button"
-                                                                className={`mb-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-muted/35 ${!selectedModelKey ? 'bg-accent/10 text-accent' : 'text-muted-foreground'}`}
-                                                                onClick={() => {
-                                                                    setSelectedModelKey('')
-                                                                    setModelPickerOpen(false)
-                                                                }}
-                                                            >
-                                                                {!selectedModelKey ? <Check className="h-3.5 w-3.5 flex-shrink-0" /> : <span className="w-3.5" />}
-                                                                <span>Workspace default</span>
-                                                            </button>
-                                                            {filteredModelOptions.length === 0 ? (
-                                                                <p className="px-2.5 py-2 text-xs text-muted-foreground">No models match your search.</p>
-                                                            ) : (
-                                                                filteredModelOptions.map(opt => {
-                                                                    const isSelected = selectedModelKey === opt.key
-                                                                    return (
-                                                                        <button
-                                                                            key={opt.key}
-                                                                            type="button"
-                                                                            className={`mb-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-muted/35 ${isSelected ? 'bg-accent/10 text-accent' : 'text-foreground'}`}
-                                                                            onClick={() => {
-                                                                                setSelectedModelKey(opt.key)
-                                                                                setModelPickerOpen(false)
-                                                                            }}
-                                                                        >
-                                                                            {isSelected ? <Check className="h-3.5 w-3.5 flex-shrink-0" /> : <span className="w-3.5" />}
-                                                                            <span className="truncate">{opt.label}</span>
-                                                                        </button>
-                                                                    )
-                                                                })
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
+                                                    )}
+                                                </div>
+                                            )}
 
-                                        <input
-                                            ref={fileInputRef}
-                                            type="file"
-                                            multiple
-                                            accept=".pdf,.txt,.md,.json,.csv,.xml,.yaml,.yml,.png,.jpg,.jpeg,.gif,.webp,image/*,text/*,application/pdf"
-                                            className="hidden"
-                                            onChange={handleFileSelect}
-                                        />
+                                            <input
+                                                ref={fileInputRef}
+                                                type="file"
+                                                multiple
+                                                accept=".pdf,.txt,.md,.json,.csv,.xml,.yaml,.yml,.png,.jpg,.jpeg,.gif,.webp,image/*,text/*,application/pdf"
+                                                className="hidden"
+                                                onChange={handleFileSelect}
+                                            />
+                                            <button
+                                                type="button"
+                                                className="chat-control-pill disabled:opacity-50"
+                                                onClick={() => fileInputRef.current?.click()}
+                                                disabled={isStreaming || uploadingFiles || attachments.length >= 5}
+                                                title="Attach files (PDF, images, text)"
+                                            >
+                                                <Paperclip className="h-3.5 w-3.5" />
+                                                Attach
+                                                {attachments.length > 0 && (
+                                                    <span className="rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent">{attachments.length}</span>
+                                                )}
+                                            </button>
+                                        </div>
+
                                         <button
                                             type="button"
-                                            className="inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-muted/30 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:border-accent/35 hover:text-foreground disabled:opacity-50"
-                                            onClick={() => fileInputRef.current?.click()}
-                                            disabled={isStreaming || uploadingFiles || attachments.length >= 5}
-                                            title="Attach files (PDF, images, text)"
+                                            className="chat-send-button disabled:cursor-not-allowed disabled:opacity-50"
+                                            onClick={handleSend}
+                                            disabled={isStreaming || uploadingFiles || !input.trim()}
                                         >
-                                            <Paperclip className="h-3.5 w-3.5" />
-                                            Attach
-                                            {attachments.length > 0 && (
-                                                <span className="rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent">{attachments.length}</span>
+                                            {uploadingFiles || isStreaming ? (
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                            ) : (
+                                                <Send className="h-4 w-4" />
                                             )}
                                         </button>
                                     </div>
-
-                                    <button
-                                        type="button"
-                                        className="inline-flex h-9 min-w-9 items-center justify-center rounded-xl border border-accent/45 bg-accent/90 px-3 text-accent-foreground shadow-[0_10px_24px_hsla(194,100%,44%,0.35)] transition-all hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-                                        onClick={handleSend}
-                                        disabled={isStreaming || uploadingFiles || !input.trim()}
-                                    >
-                                        {uploadingFiles || isStreaming ? (
-                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                        ) : (
-                                            <Send className="h-4 w-4" />
-                                        )}
-                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -825,7 +899,7 @@ export default function ChatPage() {
 
                         <div className="my-4 border-t border-border/50" />
 
-                        <div className="flex-1 overflow-y-auto px-2 pb-2">
+                        <div className="flex-1 overflow-y-auto px-3 pb-3 pt-1 space-y-1.5">
                             {(conversations as Conversation[]).length === 0 && (
                                 <p className="text-xs text-muted-foreground text-center py-8 px-4">No conversations yet. Start a new chat!</p>
                             )}
@@ -871,18 +945,18 @@ function ConversationRow({ conv, active, workspaceId, onSelect, onDelete, onRena
         <ContextMenu>
             <ContextMenuTrigger asChild>
                 <div
-                    className={`group flex items-center gap-2 rounded-xl border px-3 py-2.5 cursor-pointer transition-colors ${active
+                    className={`group flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 cursor-pointer transition-colors ${active
                         ? 'border-accent/35 bg-accent/12'
                         : 'border-transparent hover:border-border/60 hover:bg-muted/35'
                         }`}
                     onClick={onSelect}
                 >
-                    <MessageSquare className="w-3.5 h-3.5 flex-shrink-0 text-muted-foreground" />
+                    <MessageSquare className="w-3 h-3 flex-shrink-0 text-muted-foreground" />
                     <div className="flex-1 min-w-0">
                         {editing ? (
                             <input
                                 ref={inputRef}
-                                className="w-full text-xs bg-background border border-accent/40 rounded px-1 py-0.5 outline-none"
+                                className="w-full text-[11px] bg-background border border-accent/40 rounded px-1 py-0.5 outline-none"
                                 value={draft}
                                 onChange={e => setDraft(e.target.value)}
                                 onBlur={commitEdit}
@@ -890,16 +964,16 @@ function ConversationRow({ conv, active, workspaceId, onSelect, onDelete, onRena
                                 onClick={e => e.stopPropagation()}
                             />
                         ) : (
-                            <p className="text-xs font-medium truncate">{conv.title ?? 'New Chat'}</p>
+                            <p className="text-[11px] font-medium truncate leading-tight">{conv.title ?? 'New Chat'}</p>
                         )}
-                        <p className="text-xs text-muted-foreground">{conv.message_count} messages</p>
+                        <p className="text-[10px] text-muted-foreground/85 leading-tight">{conv.message_count} messages</p>
                     </div>
-                    <div className="opacity-0 group-hover:opacity-100 flex gap-0.5">
-                        <button className="btn-ghost p-1" onClick={startEdit} title="Rename">
-                            <Pencil className="w-3 h-3" />
+                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5">
+                        <button className="btn-ghost h-6 w-6 p-0 justify-center" onClick={startEdit} title="Rename">
+                            <Pencil className="w-2.5 h-2.5" />
                         </button>
-                        <button className="btn-ghost p-1" onClick={e => { e.stopPropagation(); onDelete() }}>
-                            <Trash2 className="w-3 h-3" />
+                        <button className="btn-ghost h-6 w-6 p-0 justify-center" onClick={e => { e.stopPropagation(); onDelete() }}>
+                            <Trash2 className="w-2.5 h-2.5" />
                         </button>
                     </div>
                 </div>
@@ -923,14 +997,18 @@ function ChatMessageCard({
     workspaceId,
     thinking,
     providerDisplayByName,
+    requestVisibility,
 }: {
     message: Message
     workspaceId: string
     thinking?: string
     providerDisplayByName?: Record<string, string>
+    requestVisibility?: (element: HTMLElement | null) => void
 }) {
     const [sourcesOpen, setSourcesOpen] = useState(false)
     const [thinkingOpen, setThinkingOpen] = useState(false)
+    const sourcesBlockRef = useRef<HTMLDivElement>(null)
+    const thinkingBlockRef = useRef<HTMLDivElement>(null)
     const navigate = useNavigate()
     const hasThinking = !!thinking?.trim()
     const generationSeconds = msg.generation_ms && msg.generation_ms > 0
@@ -948,68 +1026,106 @@ function ChatMessageCard({
         <ContextMenu>
             <ContextMenuTrigger asChild>
                 <div className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-1 ${msg.role === 'user' ? 'bg-accent/30' : 'bg-muted/60'}`}>
+                    <div className={`chat-avatar w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-1 ${msg.role === 'user' ? 'bg-accent/24 border-accent/35' : 'bg-muted/45 border-border/70'}`}>
                         {msg.role === 'user' ? <User className="w-4 h-4 text-accent" /> : <Bot className="w-4 h-4 text-muted-foreground" />}
                     </div>
-                    <div className={`flex flex-col gap-1 max-w-[92%] lg:max-w-[84%] xl:max-w-[78%] 2xl:max-w-[72%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                    <div className={`flex flex-col gap-1.5 max-w-[94%] lg:max-w-[86%] xl:max-w-[80%] 2xl:max-w-[76%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                         {msg.role === 'user' && (
-                            <div className="px-4 py-3 rounded-2xl bg-accent/20 border border-accent/30">
+                            <div className="chat-bubble-user px-4 py-3">
                                 <p className="text-sm">{msg.content}</p>
                             </div>
                         )}
                         {msg.role === 'assistant' && msg.context_sources && msg.context_sources.length > 0 && (
                             <button
-                                className="text-xs text-muted-foreground flex items-center gap-1 hover:text-foreground transition-colors"
-                                onClick={() => setSourcesOpen(p => !p)}
+                                className="chat-subsection-toggle"
+                                onClick={() => {
+                                    setSourcesOpen(prev => {
+                                        const next = !prev
+                                        if (next) {
+                                            window.requestAnimationFrame(() => {
+                                                window.requestAnimationFrame(() => {
+                                                    requestVisibility?.(sourcesBlockRef.current)
+                                                })
+                                            })
+                                            window.setTimeout(() => {
+                                                requestVisibility?.(sourcesBlockRef.current)
+                                            }, 220)
+                                        }
+                                        return next
+                                    })
+                                }}
                             >
                                 {sourcesOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                                 {msg.context_sources.length} source{msg.context_sources.length !== 1 ? 's' : ''} used
                             </button>
                         )}
-                        {sourcesOpen && msg.context_sources && (
-                            <div className="space-y-2 w-full">
-                                {msg.context_sources.map(src => (
-                                    <div key={src.note_id} className="glass-card p-3 text-xs group">
-                                        <div className="flex items-center justify-between mb-1">
-                                            <span className="font-medium text-foreground">{src.title}</span>
-                                            <button className="opacity-0 group-hover:opacity-100 text-accent" onClick={() => navigate(`/w/${workspaceId}/notes/${src.note_id}`)}>
-                                                <ExternalLink className="w-3 h-3" />
-                                            </button>
-                                        </div>
-                                        <p className="text-muted-foreground line-clamp-2">{src.snippet}</p>
-                                        <div className="mt-1.5 flex items-center gap-1">
-                                            <div className="flex-1 h-1 rounded bg-border overflow-hidden">
-                                                <div className="h-full bg-accent rounded" style={{ width: `${Math.round(src.score * 100)}%` }} />
+                        {msg.context_sources && msg.context_sources.length > 0 && (
+                            <div ref={sourcesBlockRef} className={`chat-collapse w-full ${sourcesOpen ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
+                                <div className="chat-collapse-inner">
+                                    <div className="chat-section-reveal space-y-2 w-full pt-0.5">
+                                        {msg.context_sources.map(src => (
+                                            <div key={src.note_id} className="glass-card p-3 text-xs group">
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <span className="font-medium text-foreground">{src.title}</span>
+                                                    <button className="opacity-0 group-hover:opacity-100 text-accent" onClick={() => navigate(`/w/${workspaceId}/notes/${src.note_id}`)}>
+                                                        <ExternalLink className="w-3 h-3" />
+                                                    </button>
+                                                </div>
+                                                <p className="text-muted-foreground line-clamp-2">{src.snippet}</p>
+                                                <div className="mt-1.5 flex items-center gap-1">
+                                                    <div className="flex-1 h-1 rounded bg-border overflow-hidden">
+                                                        <div className="h-full bg-accent rounded" style={{ width: `${Math.round(src.score * 100)}%` }} />
+                                                    </div>
+                                                    <span className="text-muted-foreground">{Math.round(src.score * 100)}%</span>
+                                                </div>
                                             </div>
-                                            <span className="text-muted-foreground">{Math.round(src.score * 100)}%</span>
-                                        </div>
+                                        ))}
                                     </div>
-                                ))}
+                                </div>
                             </div>
                         )}
                         {msg.role === 'assistant' && hasThinking && (
                             <button
-                                className="text-xs text-muted-foreground flex items-center gap-1 hover:text-foreground transition-colors"
-                                onClick={() => setThinkingOpen(p => !p)}
+                                className="chat-subsection-toggle"
+                                onClick={() => {
+                                    setThinkingOpen(prev => {
+                                        const next = !prev
+                                        if (next) {
+                                            window.requestAnimationFrame(() => {
+                                                window.requestAnimationFrame(() => {
+                                                    requestVisibility?.(thinkingBlockRef.current)
+                                                })
+                                            })
+                                            window.setTimeout(() => {
+                                                requestVisibility?.(thinkingBlockRef.current)
+                                            }, 220)
+                                        }
+                                        return next
+                                    })
+                                }}
                             >
                                 {thinkingOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                                 <Brain className="w-3 h-3" />
                                 Thinking
                             </button>
                         )}
-                        {msg.role === 'assistant' && hasThinking && thinkingOpen && (
-                            <div className="w-full rounded-2xl border border-accent/20 bg-accent/6 px-4 py-3">
-                                <div className="text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap break-words">
-                                    {thinking}
+                        {msg.role === 'assistant' && hasThinking && (
+                            <div ref={thinkingBlockRef} className={`chat-collapse w-full ${thinkingOpen ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
+                                <div className="chat-collapse-inner">
+                                    <div className="chat-section-reveal w-full rounded-2xl border border-accent/20 bg-accent/6 px-4 py-3">
+                                        <div className="text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap break-words">
+                                            {thinking}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         )}
                         {msg.role === 'assistant' && (
-                            <div className="px-4 py-3 rounded-2xl glass-card">
+                            <div className="chat-bubble-assistant chat-section-reveal px-4 py-3">
                                 <div className="markdown-content text-sm" dangerouslySetInnerHTML={{ __html: md.render(msg.content) }} />
                             </div>
                         )}
-                        <span className="text-xs text-muted-foreground">
+                        <span className="chat-message-meta">
                             {new Date(msg.created_at).toLocaleTimeString()}
                             {msg.role === 'assistant' && generationSeconds && ` · ${generationSeconds}s`}
                             {msg.role === 'assistant' && modelLabel && ` · ${modelLabel}`}

@@ -43,6 +43,20 @@ def count_words(text: str | None, note_type: str | None = None) -> int:
     return prose_words + code_token_total
 
 
+def normalize_word_count(
+    stored_word_count: int | None,
+    text: str | None,
+    note_type: str | None = None,
+) -> tuple[int, bool]:
+    """
+    Recompute current word count and report whether stored value is stale.
+    Returns: (normalized_count, changed)
+    """
+    normalized = count_words(text, note_type=note_type)
+    current = stored_word_count or 0
+    return normalized, normalized != current
+
+
 def truncate_text(text: str, max_chars: int, ellipsis: str = "...") -> str:
     """Truncate text to max_chars, preserving word boundaries."""
     if not text or len(text) <= max_chars:

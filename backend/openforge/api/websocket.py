@@ -89,7 +89,6 @@ async def workspace_websocket(websocket: WebSocket, workspace_id: str):
 
                 async with AsyncSessionLocal() as db:
                     await chat_service.handle_chat_message(
-                        websocket=websocket,
                         workspace_id=UUID(workspace_id),
                         conversation_id=UUID(conversation_id),
                         user_content=content,
@@ -98,6 +97,28 @@ async def workspace_websocket(websocket: WebSocket, workspace_id: str):
                         provider_id=provider_id,
                         model_id=model_id,
                     )
+
+            elif msg_type == "chat_stream_resume":
+                from uuid import UUID
+                from openforge.services.chat_service import chat_service
+
+                conversation_id = data.get("conversation_id")
+                target_conversation_id = None
+                if conversation_id:
+                    try:
+                        target_conversation_id = UUID(conversation_id)
+                    except Exception:
+                        await ws_manager.send_to_connection(websocket, {
+                            "type": "chat_error",
+                            "detail": "Invalid conversation_id",
+                        })
+                        continue
+
+                await chat_service.send_stream_snapshot(
+                    websocket=websocket,
+                    workspace_id=UUID(workspace_id),
+                    conversation_id=target_conversation_id,
+                )
 
             elif msg_type == "ping":
                 await ws_manager.send_to_connection(websocket, {"type": "pong"})

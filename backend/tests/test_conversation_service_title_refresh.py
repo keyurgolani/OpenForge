@@ -97,3 +97,64 @@ async def test_refresh_conversation_title_falls_back_when_llm_errors(monkeypatch
             },
         )
     ]
+
+
+@pytest.mark.asyncio
+async def test_refresh_conversation_title_ignores_low_signal_generated_title(monkeypatch):
+    workspace_id = uuid4()
+    conversation_id = uuid4()
+
+    conversation = SimpleNamespace(
+        id=conversation_id,
+        title=None,
+        title_locked=False,
+    )
+    messages = [
+        SimpleNamespace(role="user", content="Plan migration from docker compose to kubernetes with rollback"),
+        SimpleNamespace(role="assistant", content="We should phase this by risk and rollout windows."),
+        SimpleNamespace(role="user", content="thank you and you're great"),
+        SimpleNamespace(role="assistant", content="You're welcome!"),
+    ]
+
+    fake_db = _FakeDB(
+        [
+            _FakeResult(scalar=conversation),  # initial conversation lookup
+            _FakeResult(scalars=messages),  # message window
+            _FakeResult(scalar=conversation),  # lock/title re-check before write
+        ]
+    )
+
+    async def _fake_chat(*_args, **_kwargs):
+        return "Thank you and you're great"
+
+    sent_events = []
+
+    async def _fake_send_to_workspace(workspace: str, payload: dict):
+        sent_events.append((workspace, payload))
+
+    monkeypatch.setattr("openforge.core.llm_gateway.llm_gateway.chat", _fake_chat)
+    monkeypatch.setattr("openforge.api.websocket.ws_manager.send_to_workspace", _fake_send_to_workspace)
+
+    title = await conversation_service.refresh_conversation_title(
+        fake_db,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        provider_name="ollama",
+        api_key="",
+        model="gpt-oss:20b",
+        base_url="http://localhost:11434",
+    )
+
+    assert title == "Plan migration from docker compose to kubernetes"
+    assert conversation.title == "Plan migration from docker compose to kubernetes"
+    assert fake_db.commit_count == 1
+    assert sent_events == [
+        (
+            str(workspace_id),
+            {
+                "type": "conversation_updated",
+                "conversation_id": str(conversation_id),
+                "fields": ["title"],
+            },
+        )
+    ]

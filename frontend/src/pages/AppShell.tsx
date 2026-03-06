@@ -127,6 +127,7 @@ export default function AppShell() {
     const isSearchPage = location.pathname.includes('/search')
     const isSettingsPage = location.pathname.includes('/settings')
     const isChatPage = location.pathname.includes('/chat')
+    const isNotePage = location.pathname.includes('/notes/')
     const currentSectionMeta = useMemo(() => {
         if (location.pathname.includes('/chat')) {
             return {
@@ -550,7 +551,7 @@ export default function AppShell() {
 
                 <div className="relative z-0 flex-1 min-h-0 flex gap-3 p-3">
                     <main
-                        className={`relative z-20 flex-1 min-h-0 overflow-auto ${(isWorkspaceHome || isSearchPage || isSettingsPage || isChatPage)
+                        className={`relative z-20 flex-1 min-h-0 overflow-auto ${(isWorkspaceHome || isSearchPage || isSettingsPage || isChatPage || isNotePage)
                             ? ''
                             : 'rounded-2xl border border-border/60 bg-card/25'}`}
                     >

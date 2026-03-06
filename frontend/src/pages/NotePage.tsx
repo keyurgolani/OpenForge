@@ -18,6 +18,14 @@ import MarkdownIt from 'markdown-it'
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
 
+const MIN_NOTE_INTELLIGENCE_WIDTH = 280
+const MAX_NOTE_INTELLIGENCE_WIDTH = 620
+const DEFAULT_NOTE_INTELLIGENCE_WIDTH = 340
+const NOTE_INTELLIGENCE_WIDTH_STORAGE_KEY = 'openforge.note.intelligence.width'
+
+const clampNoteIntelligenceWidth = (value: number) =>
+    Math.max(MIN_NOTE_INTELLIGENCE_WIDTH, Math.min(MAX_NOTE_INTELLIGENCE_WIDTH, value))
+
 function useDebounce<T>(value: T, delay: number): T {
     const [debouncedValue, setDebouncedValue] = useState(value)
     useEffect(() => {
@@ -36,7 +44,13 @@ export default function NotePage() {
     const [mode, setMode] = useState<'edit' | 'preview' | 'split'>('split')
     const [content, setContent] = useState('')
     const [title, setTitle] = useState('')
-    const [showInsights, setShowInsights] = useState(false)
+    const [showInsights, setShowInsights] = useState(true)
+    const [noteIntelligenceWidth, setNoteIntelligenceWidth] = useState<number>(() => {
+        if (typeof window === 'undefined') return DEFAULT_NOTE_INTELLIGENCE_WIDTH
+        const raw = window.localStorage.getItem(NOTE_INTELLIGENCE_WIDTH_STORAGE_KEY)
+        const parsed = raw ? parseInt(raw, 10) : NaN
+        return Number.isFinite(parsed) ? clampNoteIntelligenceWidth(parsed) : DEFAULT_NOTE_INTELLIGENCE_WIDTH
+    })
     const [saving, setSaving] = useState(false)
     const [aiLoading, setAiLoading] = useState<string | null>(null)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -123,9 +137,9 @@ export default function NotePage() {
                 if (summary) {
                     qc.setQueryData(['note', noteId], (prev: any) => prev ? { ...prev, ai_summary: summary } : prev)
                 }
-            } else if (action === 'insights') {
+            } else if (action === 'insights' || action === 'keywords') {
                 const insights = await extractInsights(workspaceId, noteId)
-                setShowInsights(true)
+                if (action === 'insights') setShowInsights(true)
                 qc.setQueryData(['note', noteId], (prev: any) => {
                     if (!prev) return prev
                     const next: any = { ...prev, insights }
@@ -185,162 +199,280 @@ export default function NotePage() {
     }
 
     const previewTitle = title.trim() || note?.ai_title?.trim() || ''
+    const noteAiActions = [
+        { id: 'title', icon: Hash, label: 'Generate Title' },
+        { id: 'keywords', icon: Tag, label: 'Generate Keywords' },
+        { id: 'insights', icon: Brain, label: 'Extract Insights' },
+        { id: 'summarize', icon: CornerRightDown, label: 'Summarize' },
+    ] as const
+    const noteIntelligenceCanSplitCards = noteIntelligenceWidth >= 560
+    const noteIntelligenceWideContent = noteIntelligenceWidth >= 440
+
+    const handleNoteIntelligenceResizeStart = (e: React.MouseEvent<HTMLButtonElement>) => {
+        e.preventDefault()
+        const startX = e.clientX
+        const startWidth = noteIntelligenceWidth
+        let currentWidth = startWidth
+
+        const onMouseMove = (moveEvent: MouseEvent) => {
+            const delta = startX - moveEvent.clientX
+            currentWidth = clampNoteIntelligenceWidth(startWidth + delta)
+            setNoteIntelligenceWidth(currentWidth)
+        }
+
+        const onMouseUp = () => {
+            window.removeEventListener('mousemove', onMouseMove)
+            window.removeEventListener('mouseup', onMouseUp)
+            window.localStorage.setItem(NOTE_INTELLIGENCE_WIDTH_STORAGE_KEY, String(currentWidth))
+        }
+
+        window.addEventListener('mousemove', onMouseMove)
+        window.addEventListener('mouseup', onMouseUp)
+    }
 
     return (
-        <div className="flex h-full min-h-0 flex-col rounded-2xl bg-card/20 overflow-hidden">
-            {/* Toolbar */}
-            <div className="flex items-center gap-2 px-6 py-2.5 border-b border-border/50 flex-shrink-0 flex-wrap gap-y-2">
-                {/* View mode toggles */}
-                <div className="flex gap-0.5 glass-card p-0.5">
-                    {(['edit', 'split', 'preview'] as const).map(m => (
-                        <button key={m} onClick={() => setMode(m)} className={`px-2 py-1 text-xs rounded-md transition-all ${mode === m ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
-                            {m === 'edit' ? <Edit3 className="w-3.5 h-3.5" /> : m === 'preview' ? <Eye className="w-3.5 h-3.5" /> : <Split className="w-3.5 h-3.5" />}
-                        </button>
-                    ))}
-                </div>
-
-                {/* Format buttons */}
-                <div className="flex gap-0.5">
-                    {[
-                        { label: 'B', before: '**', after: '**' },
-                        { label: 'I', before: '*', after: '*' },
-                        { label: 'H', before: '## ' },
-                        { label: '`', before: '`', after: '`' },
-                    ].map(btn => (
-                        <button key={btn.label} onClick={() => insertMarkdown(btn.before, btn.after)} className="btn-ghost px-2 py-1 text-xs font-mono">{btn.label}</button>
-                    ))}
-                </div>
-
-                <div className="flex-1" />
-
-                {/* AI toolbar */}
-                <div className="flex gap-1">
-                    <CopyButton
-                        content={content}
-                        label="Copy"
-                        copiedLabel="Copied"
-                        className="btn-ghost text-xs py-1 px-2 gap-1"
-                    />
-                    {[
-                        { id: 'title', icon: <Hash className="w-3.5 h-3.5" />, label: 'Generate Title' },
-                        { id: 'summarize', icon: <CornerRightDown className="w-3.5 h-3.5" />, label: 'Summarize' },
-                        { id: 'insights', icon: <Brain className="w-3.5 h-3.5" />, label: 'Insights' },
-                    ].map(btn => (
-                        <button key={btn.id} onClick={() => handleAI(btn.id)} disabled={!!aiLoading} className="btn-ghost text-xs py-1 px-2 gap-1" title={btn.label}>
-                            {aiLoading === btn.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : btn.icon}
-                            <span className="hidden sm:inline">{btn.label}</span>
-                        </button>
-                    ))}
-                    <button onClick={() => setShowInsights(p => !p)} className={`btn-ghost text-xs py-1 px-2 ${showInsights ? 'text-accent' : ''}`}>
-                        <Sparkles className="w-3.5 h-3.5" />
-                    </button>
-                </div>
-
-                {/* Save indicator */}
-                {saving && <span className="text-xs text-muted-foreground flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Saving</span>}
-            </div>
-
-            {/* AI Summary */}
-            {note?.ai_summary && (
-                <div className="mx-6 mt-3 max-h-[30vh] flex-shrink-0 overflow-y-auto p-3 glass-card border-accent/20 bg-accent/5">
-                    <div className="flex items-center gap-2 font-medium text-accent text-xs mb-2">
-                        <Sparkles className="w-3.5 h-3.5" /> AI Summary
+        <div className="flex h-full min-h-0 gap-3">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/55 bg-card/20">
+                {/* Toolbar */}
+                <div className="flex items-center gap-2 px-5 py-2.5 border-b border-border/40 flex-shrink-0 flex-wrap gap-y-2">
+                    {/* View mode toggles */}
+                    <div className="flex gap-0.5 glass-card p-0.5">
+                        {(['edit', 'split', 'preview'] as const).map(m => (
+                            <button key={m} onClick={() => setMode(m)} className={`px-2 py-1 text-xs rounded-md transition-all ${mode === m ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+                                {m === 'edit' ? <Edit3 className="w-3.5 h-3.5" /> : m === 'preview' ? <Eye className="w-3.5 h-3.5" /> : <Split className="w-3.5 h-3.5" />}
+                            </button>
+                        ))}
                     </div>
-                    <div
-                        className="prose prose-sm prose-invert max-w-none text-sm leading-relaxed text-muted-foreground"
-                        dangerouslySetInnerHTML={{ __html: md.render(note.ai_summary) }}
-                    />
-                </div>
-            )}
 
-            {/* Editor area */}
-            <div className="flex flex-1 min-h-0 overflow-hidden">
-                {/* Editor pane */}
-                {(mode === 'edit' || mode === 'split') && (
-                    <div className={`flex min-h-0 flex-col ${mode === 'split' ? 'w-1/2 border-r border-border/50' : 'w-full'} overflow-hidden`}>
-                        <div className="px-6 py-3 border-b border-border/30">
-                            <input
-                                className="w-full text-xl font-bold bg-transparent border-none outline-none text-foreground placeholder-muted-foreground/50"
-                                placeholder={note?.ai_title ?? 'Untitled'}
-                                value={title}
+                    {/* Format buttons */}
+                    <div className="flex gap-0.5">
+                        {[
+                            { label: 'B', before: '**', after: '**' },
+                            { label: 'I', before: '*', after: '*' },
+                            { label: 'H', before: '## ' },
+                            { label: '`', before: '`', after: '`' },
+                        ].map(btn => (
+                            <button key={btn.label} onClick={() => insertMarkdown(btn.before, btn.after)} className="btn-ghost px-2 py-1 text-xs font-mono">{btn.label}</button>
+                        ))}
+                    </div>
+
+                    <div className="flex-1" />
+
+                    {/* AI toolbar */}
+                    <div className="flex gap-1">
+                        <CopyButton
+                            content={content}
+                            label="Copy"
+                            copiedLabel="Copied"
+                            className="btn-ghost text-xs py-1 px-2 gap-1"
+                        />
+                        {noteAiActions.map(btn => (
+                            <button key={btn.id} onClick={() => handleAI(btn.id)} disabled={!!aiLoading} className="btn-ghost text-xs py-1 px-2 gap-1" title={btn.label}>
+                                {aiLoading === btn.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <btn.icon className="w-3.5 h-3.5" />}
+                                <span className="hidden sm:inline">{btn.label}</span>
+                            </button>
+                        ))}
+                        <button onClick={() => setShowInsights(p => !p)} className={`btn-ghost text-xs py-1 px-2 ${showInsights ? 'text-accent' : ''}`} title={showInsights ? 'Hide AI side panel' : 'Show AI side panel'}>
+                            <Sparkles className="w-3.5 h-3.5" />
+                        </button>
+                    </div>
+
+                    {/* Save indicator */}
+                    {saving && <span className="text-xs text-muted-foreground flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Saving</span>}
+                </div>
+
+                <div className="flex flex-1 min-h-0 overflow-hidden">
+                    {/* Editor pane */}
+                    {(mode === 'edit' || mode === 'split') && (
+                        <div className={`flex min-h-0 flex-col ${mode === 'split' ? 'w-1/2 border-r border-border/35' : 'w-full'} overflow-hidden`}>
+                            <div className="px-6 pt-5 pb-3 border-b border-border/40 bg-muted/10">
+                                <div className="space-y-2">
+                                    <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/85">Title</p>
+                                    <input
+                                        className="w-full text-2xl font-bold bg-transparent border-none outline-none text-foreground placeholder-muted-foreground/50"
+                                        placeholder={note?.ai_title ?? 'Untitled'}
+                                        value={title}
+                                        onChange={e => {
+                                            if (e.target.value.trim().length > 0) hadMeaningfulInputRef.current = true
+                                            setTitle(e.target.value)
+                                        }}
+                                    />
+                                </div>
+                                <div className="mt-3 pt-3 border-t border-border/35">
+                                    <p className="mb-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/85">Tags</p>
+                                    {!!note?.tags?.length ? (
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {note.tags.map((tag: string) => (
+                                                <span key={tag} className="chip-accent text-xs">{tag}</span>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-xs text-muted-foreground/70">No tags yet.</p>
+                                    )}
+                                </div>
+                            </div>
+                            <textarea
+                                ref={textareaRef}
+                                className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4 bg-transparent border-none outline-none resize-none font-mono text-sm text-foreground leading-relaxed"
+                                placeholder="Start writing… (Markdown supported)"
+                                value={content}
                                 onChange={e => {
                                     if (e.target.value.trim().length > 0) hadMeaningfulInputRef.current = true
-                                    setTitle(e.target.value)
+                                    setContent(e.target.value)
                                 }}
+                                style={{ tabSize: 2 }}
                             />
                         </div>
-                        <textarea
-                            ref={textareaRef}
-                            className="min-h-0 flex-1 overflow-y-auto p-6 pt-4 bg-transparent border-none outline-none resize-none font-mono text-sm text-foreground leading-relaxed"
-                            placeholder="Start writing… (Markdown supported)"
-                            value={content}
-                            onChange={e => {
-                                if (e.target.value.trim().length > 0) hadMeaningfulInputRef.current = true
-                                setContent(e.target.value)
-                            }}
-                            style={{ tabSize: 2 }}
-                        />
-                    </div>
-                )}
+                    )}
 
-                {/* Preview pane */}
-                {(mode === 'preview' || mode === 'split') && (
-                    <ContextMenu>
-                        <ContextMenuTrigger asChild>
-                            <div className={`${mode === 'split' ? 'w-1/2' : 'w-full'} min-h-0 overflow-y-auto px-8 py-6`}>
-                                {previewTitle && (
-                                    <h1 className="text-2xl font-bold mb-4 text-foreground">{previewTitle}</h1>
-                                )}
-                                <div
-                                    className="markdown-content"
-                                    dangerouslySetInnerHTML={{ __html: md.render(content || '_Start writing to see preview…_') }}
-                                />
-                            </div>
-                        </ContextMenuTrigger>
-                        <ContextMenuContent className="w-56">
-                            <ContextMenuItem onClick={() => handleAI('title')} className="gap-2">
-                                <Hash className="w-4 h-4" /> Generate Title
-                            </ContextMenuItem>
-                            <ContextMenuItem onClick={() => handleAI('summarize')} className="gap-2">
-                                <CornerRightDown className="w-4 h-4" /> Summarize
-                            </ContextMenuItem>
-                            <ContextMenuItem onClick={() => { setShowInsights(true); handleAI('insights'); }} className="gap-2">
-                                <Brain className="w-4 h-4" /> Extract Insights
-                            </ContextMenuItem>
-                            <ContextMenuSeparator />
-                            <ContextMenuItem onClick={() => navigator.clipboard.writeText(content)} className="gap-2">
-                                <Copy className="w-4 h-4" /> Copy Content
-                            </ContextMenuItem>
-                        </ContextMenuContent>
-                    </ContextMenu>
-                )}
-
-                {/* Insights panel */}
-                {showInsights && (
-                    <div className="w-80 min-h-0 flex-shrink-0 border-l border-border/50 overflow-y-auto p-4">
-                        <div className="flex items-center justify-between mb-4">
-                            <span className="font-semibold text-sm flex items-center gap-2"><Brain className="w-4 h-4 text-accent" /> Insights</span>
-                            <button onClick={() => setShowInsights(false)} className="btn-ghost p-1"><X className="w-3.5 h-3.5" /></button>
-                        </div>
-                        {!note?.insights ? (
-                            <div className="text-center py-8">
-                                <p className="text-muted-foreground text-sm mb-3">Extract AI insights from this note.</p>
-                                <button className="btn-primary text-xs" onClick={() => handleAI('insights')} disabled={!!aiLoading}>
-                                    {aiLoading === 'insights' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Brain className="w-3.5 h-3.5" />}
-                                    Extract Insights
-                                </button>
-                            </div>
-                        ) : (
-                            <InsightsDisplay insights={note.insights} tags={note.tags ?? []} />
-                        )}
-                    </div>
-                )}
+                    {/* Preview pane */}
+                    {(mode === 'preview' || mode === 'split') && (
+                        <ContextMenu>
+                            <ContextMenuTrigger asChild>
+                                <div className={`${mode === 'split' ? 'w-1/2' : 'w-full'} min-h-0 overflow-y-auto px-7 py-6`}>
+                                    {previewTitle && (
+                                        <h1 className="text-2xl font-bold text-foreground">{previewTitle}</h1>
+                                    )}
+                                    {!!note?.tags?.length && (
+                                        <div className="mt-2 mb-4 flex flex-wrap gap-1.5">
+                                            {note.tags.map((tag: string) => (
+                                                <span key={tag} className="chip-accent text-xs">{tag}</span>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <div className="mt-4 mb-4 border-t border-border/45" />
+                                    <p className="mb-3 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/85">Content</p>
+                                    <div
+                                        className="markdown-content"
+                                        dangerouslySetInnerHTML={{ __html: md.render(content || '_Start writing to see preview…_') }}
+                                    />
+                                </div>
+                            </ContextMenuTrigger>
+                            <ContextMenuContent className="w-56">
+                                {noteAiActions.map(action => (
+                                    <ContextMenuItem
+                                        key={action.id}
+                                        onClick={() => {
+                                            if (action.id === 'insights') setShowInsights(true)
+                                            handleAI(action.id)
+                                        }}
+                                        className="gap-2"
+                                    >
+                                        <action.icon className="w-4 h-4" /> {action.label}
+                                    </ContextMenuItem>
+                                ))}
+                                <ContextMenuSeparator />
+                                <ContextMenuItem onClick={() => navigator.clipboard.writeText(content)} className="gap-2">
+                                    <Copy className="w-4 h-4" /> Copy Content
+                                </ContextMenuItem>
+                            </ContextMenuContent>
+                        </ContextMenu>
+                    )}
+                </div>
             </div>
+
+            {showInsights && (
+                <aside
+                    className="relative z-10 flex flex-shrink-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-card/28 py-4 transition-[width] duration-200 ease-out"
+                    style={{ width: `${noteIntelligenceWidth}px` }}
+                >
+                    <button
+                        type="button"
+                        onMouseDown={handleNoteIntelligenceResizeStart}
+                        className="absolute -left-1 top-0 h-full w-2 cursor-col-resize bg-transparent hover:bg-accent/25 active:bg-accent/35 transition-colors"
+                        aria-label="Resize note intelligence sidebar"
+                        title="Drag to resize"
+                    />
+                    <div className="px-4">
+                        <div className="mb-3 flex items-start justify-between gap-3">
+                            <div className="space-y-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                    <Brain className="w-4 h-4 text-accent" />
+                                    <h3 className="font-semibold text-sm tracking-tight">Note Intelligence</h3>
+                                </div>
+                                <p className="text-xs text-muted-foreground/90">Summary and extracted insights for this note.</p>
+                            </div>
+                            <button onClick={() => setShowInsights(false)} className="w-7 h-7 rounded-md border border-border/70 bg-card/60 flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-accent/50 transition-colors" aria-label="Hide note intelligence panel">
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                        <div
+                            className="grid gap-1.5"
+                            style={{ gridTemplateColumns: `repeat(auto-fit, minmax(${noteIntelligenceWideContent ? 130 : 116}px, 1fr))` }}
+                        >
+                            {noteAiActions.map(action => (
+                                <button
+                                    key={action.id}
+                                    className="btn-ghost w-full justify-start text-xs py-1.5 px-2.5 gap-1.5"
+                                    onClick={() => {
+                                        if (action.id === 'insights') setShowInsights(true)
+                                        handleAI(action.id)
+                                    }}
+                                    disabled={!!aiLoading}
+                                    title={action.label}
+                                >
+                                    {aiLoading === action.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <action.icon className="w-3.5 h-3.5" />}
+                                    {action.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="my-4 border-t border-border/50" />
+
+                    <div className={`flex-1 overflow-y-auto px-4 pb-2 ${noteIntelligenceCanSplitCards ? 'grid grid-cols-2 gap-3 auto-rows-min' : 'space-y-3'}`}>
+                        <div className={`glass-card p-3 ${noteIntelligenceCanSplitCards ? 'min-h-0' : ''}`}>
+                            <div className="mb-2 flex items-center gap-2 text-accent text-xs font-semibold">
+                                <Sparkles className="w-3.5 h-3.5" /> AI Summary
+                            </div>
+                            {note?.ai_summary ? (
+                                <div
+                                    className="markdown-content text-sm text-muted-foreground"
+                                    dangerouslySetInnerHTML={{ __html: md.render(note.ai_summary) }}
+                                />
+                            ) : (
+                                <div className="space-y-2">
+                                    <p className="text-xs text-muted-foreground">No summary yet. Generate one to get a concise view of this note.</p>
+                                    <button className="btn-primary text-xs py-1.5 px-2.5" onClick={() => handleAI('summarize')} disabled={!!aiLoading}>
+                                        {aiLoading === 'summarize' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                                        Generate Summary
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className={`glass-card p-3 ${noteIntelligenceCanSplitCards ? 'min-h-0' : ''}`}>
+                            <div className="mb-2 flex items-center gap-2 text-accent text-xs font-semibold">
+                                <Brain className="w-3.5 h-3.5" /> Insights
+                            </div>
+                            {!note?.insights ? (
+                                <div className="space-y-2">
+                                    <p className="text-xs text-muted-foreground">No insights extracted yet.</p>
+                                    <button className="btn-primary text-xs py-1.5 px-2.5" onClick={() => handleAI('insights')} disabled={!!aiLoading}>
+                                        {aiLoading === 'insights' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Brain className="w-3.5 h-3.5" />}
+                                        Extract Insights
+                                    </button>
+                                </div>
+                            ) : (
+                                <InsightsDisplay insights={note.insights} tags={note.tags ?? []} wideLayout={noteIntelligenceWideContent} />
+                            )}
+                        </div>
+                    </div>
+                </aside>
+            )}
         </div>
     )
 }
 
-function InsightsDisplay({ insights, tags }: { insights: Record<string, unknown[]>; tags: string[] }) {
+function InsightsDisplay({
+    insights,
+    tags,
+    wideLayout = false,
+}: {
+    insights: Record<string, unknown[]>
+    tags: string[]
+    wideLayout?: boolean
+}) {
     const sections = [
         { key: 'tasks', label: 'Tasks', icon: <CheckSquare className="w-3.5 h-3.5" /> },
         { key: 'timelines', label: 'Timelines', icon: <Calendar className="w-3.5 h-3.5" /> },
@@ -349,12 +481,12 @@ function InsightsDisplay({ insights, tags }: { insights: Record<string, unknown[
     ] as const
 
     return (
-        <div className="space-y-4">
+        <div className={wideLayout ? 'grid grid-cols-2 gap-3' : 'space-y-4'}>
             {sections.map(({ key, label, icon }) => {
                 const items = (insights[key] as string[]) ?? []
                 if (!items.length) return null
                 return (
-                    <div key={key} className="glass-card p-3">
+                    <div key={key} className="glass-card p-3 h-fit">
                         <div className="flex items-center gap-2 text-accent text-xs font-semibold mb-2">
                             {icon} {label}
                         </div>
@@ -376,7 +508,7 @@ function InsightsDisplay({ insights, tags }: { insights: Record<string, unknown[
                 )
             })}
             {tags.length > 0 && (
-                <div className="glass-card p-3">
+                <div className={`glass-card p-3 ${wideLayout ? 'col-span-2' : ''}`}>
                     <div className="flex items-center gap-2 text-accent text-xs font-semibold mb-2">
                         <Hash className="w-3.5 h-3.5" /> Tags
                     </div>

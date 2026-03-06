@@ -17,7 +17,7 @@ import { getNote, togglePin, toggleArchive, deleteNote, summarizeNote, extractIn
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import {
     X, ExternalLink, Pin, PinOff, Archive, ArchiveX, Trash2, Sparkles,
-    FileText, Bookmark, Code2, Zap, Clock, Tag, Hash, Loader2,
+    FileText, Bookmark, Code2, Zap, Clock, Tag, Hash, Loader2, CornerRightDown,
     Brain, Star,
 } from 'lucide-react'
 import MarkdownIt from 'markdown-it'
@@ -101,7 +101,7 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
                 if (summary) {
                     qc.setQueryData(['note', noteId], (prev: any) => prev ? { ...prev, ai_summary: summary } : prev)
                 }
-            } else if (action === 'insights') {
+            } else if (action === 'insights' || action === 'keywords') {
                 const insights = await extractInsights(workspaceId, noteId)
                 qc.setQueryData(['note', noteId], (prev: any) => {
                     if (!prev) return prev
@@ -142,6 +142,12 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
     const meta = note ? (TYPE_META[note.type] ?? TYPE_META.standard) : TYPE_META.standard
     const TypeIcon = meta.icon
     const displayTitle = note?.title?.trim() || note?.ai_title?.trim() || null
+    const noteAiActions = [
+        { id: 'title', icon: Hash, label: 'Generate Title' },
+        { id: 'keywords', icon: Tag, label: 'Generate Keywords' },
+        { id: 'insights', icon: Brain, label: 'Extract Insights' },
+        { id: 'summarize', icon: CornerRightDown, label: 'Summarize' },
+    ] as const
 
     return (
         <AnimatePresence>
@@ -380,39 +386,21 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
                 </div>
 
                 {/* Footer — AI quick actions */}
-                {!isLoading && note && note.type !== 'fleeting' && (
+                {!isLoading && note && (
                     <div className="flex items-center gap-2 px-5 py-3 border-t border-border/50 flex-shrink-0 flex-wrap">
                         <span className="text-[10px] text-muted-foreground uppercase tracking-wide">AI:</span>
-                        {!note.ai_summary && (
+                        {noteAiActions.map(action => (
                             <button
+                                key={action.id}
                                 className="btn-ghost text-xs py-1 px-2.5 gap-1.5"
-                                onClick={() => handleAI('summarize')}
+                                onClick={() => handleAI(action.id)}
                                 disabled={!!aiLoading}
+                                title={action.label}
                             >
-                                {aiLoading === 'summarize' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Brain className="w-3 h-3" />}
-                                Summarize
+                                {aiLoading === action.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <action.icon className="w-3 h-3" />}
+                                {action.label}
                             </button>
-                        )}
-                        {(!note.insights || Object.keys(note.insights).length === 0) && (
-                            <button
-                                className="btn-ghost text-xs py-1 px-2.5 gap-1.5"
-                                onClick={() => handleAI('insights')}
-                                disabled={!!aiLoading}
-                            >
-                                {aiLoading === 'insights' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-                                Extract insights
-                            </button>
-                        )}
-                        {!note.title && (
-                            <button
-                                className="btn-ghost text-xs py-1 px-2.5 gap-1.5"
-                                onClick={() => handleAI('title')}
-                                disabled={!!aiLoading}
-                            >
-                                {aiLoading === 'title' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Star className="w-3 h-3" />}
-                                Generate title
-                            </button>
-                        )}
+                        ))}
                     </div>
                 )}
             </motion.div>
