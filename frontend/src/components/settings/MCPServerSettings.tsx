@@ -33,9 +33,9 @@ export function MCPServerSettings({ className = '' }: MCPServerSettingsProps) {
     const [showAuthValue, setShowAuthValue] = useState(false)
 
     // Fetch MCP servers
-    const { data: serversData, isLoading } = useQuery({
+    const { data: serversData, isLoading } = useQuery<{ servers: any[] }>({
         queryKey: ['mcp-servers'],
-        queryFn: listMCPServers,
+        queryFn: () => listMCPServers(),
     })
 
     // Create server mutation

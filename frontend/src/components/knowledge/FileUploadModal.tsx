@@ -10,7 +10,7 @@ import { Upload, X, Loader2, FileIcon, Image, Music, FileText } from 'lucide-rea
 import { uploadKnowledgeFile } from '@/lib/api'
 import { useToast } from '@/components/shared/ToastProvider'
 
-type FileUploadType = 'image' | 'audio' | 'pdf'
+export type FileUploadType = 'image' | 'audio' | 'pdf'
 
 interface FileUploadModalProps {
     open: boolean
@@ -255,7 +255,7 @@ export function FileUploadModal({ open, type, onClose, onSuccess }: FileUploadMo
                                      text-white rounded-lg text-sm font-medium transition-colors"
                     >
                         {uploading && <Loader2 className="w-4 h-4 animate-spin" />}
-                        {upload ? 'Uploading...' : 'Upload'}
+                        {uploading ? 'Uploading...' : 'Upload'}
                     </button>
                 </div>
             </div>

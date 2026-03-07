@@ -13,14 +13,14 @@ import { useToast } from '@/components/shared/ToastProvider'
 import {
     Split, Eye, Edit3, Sparkles, Brain, Tag, Loader2,
     ChevronRight, ChevronLeft, CheckSquare, Calendar, Star,
-    Copy, FileText
+    Copy, FileText, Keyboard
 } from 'lucide-react'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem,
     ContextMenuSeparator
 } from '@/components/ui/context-menu'
 import { CopyButton } from '@/components/shared/CopyButton'
-import { isModKey } from '@/lib/keyboard'
+import MarkdownEditor from '@/components/editor/MarkdownEditor'
 import MarkdownIt from 'markdown-it'
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
@@ -86,7 +86,11 @@ export default function KnowledgePage() {
     const [splitRatio, setSplitRatio] = useState(0.5)
     const [saving, setSaving] = useState(false)
     const [aiLoading, setAiLoading] = useState<string | null>(null)
-    const textareaRef = useRef<HTMLTextAreaElement>(null)
+    const [vimMode, setVimMode] = useState(() => {
+        if (typeof window === 'undefined') return false
+        return window.localStorage.getItem('openforge.editor.vimMode') === '1'
+    })
+    const editorContainerRef = useRef<HTMLDivElement>(null)
     const splitContainerRef = useRef<HTMLDivElement>(null)
     const undoContentStackRef = useRef<string[]>([])
     const redoContentStackRef = useRef<string[]>([])
@@ -126,14 +130,6 @@ export default function KnowledgePage() {
     const applyContentFromHistory = useCallback((nextValue: string) => {
         setContent(nextValue)
         contentMirrorRef.current = nextValue
-        window.requestAnimationFrame(() => {
-            const ta = textareaRef.current
-            if (!ta) return
-            ta.focus()
-            const caretPos = nextValue.length
-            ta.selectionStart = caretPos
-            ta.selectionEnd = caretPos
-        })
     }, [])
 
     const resetContentHistory = useCallback((currentValue: string) => {
@@ -326,46 +322,24 @@ export default function KnowledgePage() {
         }
     }
 
-    const insertMarkdown = (before: string, after: string = '') => {
-        const ta = textareaRef.current
-        if (!ta) return
-        const start = ta.selectionStart
-        const end = ta.selectionEnd
-        const selected = content.substring(start, end)
-        const newContent = content.substring(0, start) + before + selected + after + content.substring(end)
-        pushUndoSnapshot(content)
-        redoContentStackRef.current = []
-        setContent(newContent)
-        contentMirrorRef.current = newContent
-        setTimeout(() => {
-            ta.selectionStart = start + before.length
-            ta.selectionEnd = start + before.length + selected.length
-            ta.focus()
-        }, 0)
-    }
-
-    const handleEditorKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (!isModKey(e)) return
-        const key = e.key.toLowerCase()
-        const isUndo = key === 'z' && !e.shiftKey
-        const isRedo = key === 'y' || (key === 'z' && e.shiftKey)
-        if (!isUndo && !isRedo) return
-
-        e.preventDefault()
-
-        if (isUndo) {
-            const previousValue = undoContentStackRef.current.pop()
-            if (previousValue === undefined) return
-            pushRedoSnapshot(content)
-            applyContentFromHistory(previousValue)
-            return
+    const insertMarkdown = useCallback((before: string, after: string = '') => {
+        const editor = editorContainerRef.current as HTMLDivElement & { insertMarkdown: (before: string, after: string) => void } | null
+        if (editor?.insertMarkdown) {
+            editor.insertMarkdown(before, after)
         }
+    }, [])
 
-        const nextValue = redoContentStackRef.current.pop()
-        if (nextValue === undefined) return
-        pushUndoSnapshot(content)
-        applyContentFromHistory(nextValue)
-    }, [content, applyContentFromHistory, pushRedoSnapshot, pushUndoSnapshot])
+    const toggleVimMode = useCallback(() => {
+        setVimMode(prev => {
+            const next = !prev
+            if (typeof window !== 'undefined') {
+                window.localStorage.setItem('openforge.editor.vimMode', next ? '1' : '0')
+            }
+            const editor = editorContainerRef.current as HTMLDivElement & { toggleVimMode: () => void } | null
+            editor?.toggleVimMode?.()
+            return next
+        })
+    }, [])
 
     const previewTitle = title.trim() || knowledgeRecord?.ai_title?.trim() || ''
     const knowledgeAiAction = { id: 'intelligence', icon: Brain, label: 'Generate Intelligence' } as const
@@ -549,6 +523,14 @@ export default function KnowledgePage() {
                             className="btn-ghost text-xs py-1 px-2 gap-1"
                         />
                         <button
+                            onClick={toggleVimMode}
+                            className={`btn-ghost text-xs py-1 px-2 gap-1 ${vimMode ? 'text-accent' : ''}`}
+                            title={vimMode ? 'Disable Vim mode' : 'Enable Vim mode'}
+                        >
+                            <Keyboard className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">{vimMode ? 'Vim' : 'Vim'}</span>
+                        </button>
+                        <button
                             onClick={handleGenerateIntelligence}
                             disabled={!!aiLoading}
                             className="btn-ghost text-xs py-1 px-2 gap-1"
@@ -597,23 +579,19 @@ export default function KnowledgePage() {
                                 </div>
                             </div>
                             <p className="px-6 pb-2 pt-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/85">Content</p>
-                            <textarea
-                                ref={textareaRef}
-                                className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-1 bg-transparent border-none outline-none resize-none font-mono text-sm text-foreground leading-relaxed"
-                                placeholder="Start writing… (Markdown supported)"
-                                value={content}
-                                onKeyDown={handleEditorKeyDown}
-                                onChange={e => {
-                                    const nextValue = e.target.value
-                                    if (nextValue === content) return
-                                    pushUndoSnapshot(content)
-                                    redoContentStackRef.current = []
-                                    if (nextValue.trim().length > 0) hadMeaningfulInputRef.current = true
-                                    setContent(nextValue)
-                                    contentMirrorRef.current = nextValue
-                                }}
-                                style={{ tabSize: 2 }}
-                            />
+                            <div ref={editorContainerRef} className="min-h-0 flex-1 overflow-hidden px-6 pb-6">
+                                <MarkdownEditor
+                                    value={content}
+                                    onChange={(nextValue) => {
+                                        if (nextValue === content) return
+                                        if (nextValue.trim().length > 0) hadMeaningfulInputRef.current = true
+                                        setContent(nextValue)
+                                        contentMirrorRef.current = nextValue
+                                    }}
+                                    placeholder="Start writing… (Markdown supported)"
+                                    vimMode={vimMode}
+                                />
+                            </div>
                         </div>
                     )}
 
