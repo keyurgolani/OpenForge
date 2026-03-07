@@ -41,6 +41,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Qdrant initialization failed (continuing): {e}")
 
+    # Initialize Redis connection
+    try:
+        from openforge.db.redis_client import get_redis, start_redis_listener
+        await get_redis()
+        await start_redis_listener()
+        logger.info("Redis connection established.")
+    except Exception as e:
+        logger.warning(f"Redis initialization failed (continuing): {e}")
+
     # Pre-load embedding model
     try:
         from openforge.core.embedding import get_embedding_model
@@ -54,6 +63,14 @@ async def lifespan(app: FastAPI):
 
     logger.info("OpenForge shutting down...")
     await task_scheduler.stop()
+
+    # Close Redis connection
+    try:
+        from openforge.db.redis_client import close_redis
+        await close_redis()
+    except Exception:
+        pass
+
     try:
         from openforge.db.postgres import engine
         await engine.dispose()

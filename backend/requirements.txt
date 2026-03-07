@@ -18,3 +18,5 @@ markdown-it-py==3.0.0
 aiodocker==0.22.2
 aiofiles==24.1.0
 PyMuPDF==1.25.1
+redis[hiredis]==5.2.1
+celery[redis]==5.4.0

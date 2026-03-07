@@ -1,0 +1,37 @@
+# ── Celery Worker for OpenForge v2 ──
+# Runs agent loops and background tasks
+FROM python:3.11-slim
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy backend code
+COPY backend/ ./backend/
+
+# Set Python path
+ENV PYTHONPATH=/app/backend
+ENV PYTHONUNBUFFERED=1
+
+# HuggingFace model cache
+ENV HF_HOME=/models
+ENV SENTENCE_TRANSFORMERS_HOME=/models
+
+# Create model cache directory
+RUN mkdir -p /models
+
+# Health check via celery inspect
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD celery -A openforge.worker.celery_app inspect ping -d celery@$HOSTNAME || exit 1
+
+# Run Celery worker
+CMD ["celery", "-A", "openforge.worker.celery_app", "worker", \
+     "--loglevel=info", "--concurrency=4", "-Q", "agent_tasks,knowledge_processing"]

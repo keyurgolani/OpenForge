@@ -1,0 +1,37 @@
+# ── Tool Server for OpenForge v2 ──
+# Provides built-in tools (filesystem, git, http, shell, language, etc.)
+# Exposes REST API for Celery workers and MCP server for external clients
+FROM python:3.11-slim
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    git \
+    curl \
+    tesseract-ocr \
+    ffmpeg \
+    poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY tool-server/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy tool server code
+COPY tool-server/ ./tool_server/
+
+# Set Python path
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+# Create workspace directory
+RUN mkdir -p /workspace
+
+EXPOSE 3001 3002
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:3001/tools/health || exit 1
+
+# Run REST API server (MCP server will be added later)
+CMD ["uvicorn", "tool_server.main:app", "--host", "0.0.0.0", "--port", "3001"]

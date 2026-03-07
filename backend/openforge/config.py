@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = "openforge_knowledge"
 
+    # Redis
+    redis_url: str = "redis://localhost:6379/0"
+
+    # Tool Server
+    tool_server_url: str = "http://tool-server:3001"
+
     # Workspace
     workspace_root: str = "/workspace"
     uploads_root: str = "/uploads"
