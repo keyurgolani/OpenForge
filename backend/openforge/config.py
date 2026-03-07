@@ -1,8 +1,14 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
     # Database
     database_url: str = "postgresql+asyncpg://openforge:changeme@localhost:5432/openforge"
 
@@ -25,11 +31,6 @@ class Settings(BaseSettings):
 
     # Encryption key for API keys (generated on first run if not set)
     encryption_key: str = ""
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-
 
 @lru_cache()
 def get_settings() -> Settings:

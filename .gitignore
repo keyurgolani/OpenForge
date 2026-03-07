@@ -10,6 +10,9 @@ data/
 .venv/
 venv/
 *.tsbuildinfo
+.coverage
+coverage.xml
+htmlcov/
 
 # SDLC scratch space (planning docs, temp scripts, summaries, reports)
 sdlc/

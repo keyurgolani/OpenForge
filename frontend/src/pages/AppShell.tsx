@@ -9,6 +9,7 @@ import { getShortcutDisplay } from '@/lib/keyboard'
 import { onQuickKnowledgeOpen, type QuickKnowledgeType } from '@/lib/quick-knowledge'
 import CommandPalette from '@/components/shared/CommandPalette'
 import { QuickKnowledgePanel } from '@/components/shared/QuickKnowledgePanel'
+import { ModeToggle } from '@/components/mode-toggle'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator,
 } from '@/components/ui/context-menu'
@@ -607,6 +608,8 @@ export default function AppShell() {
                     >
                         <span className="text-muted-foreground font-mono">{shortcutDisplay.commandPalette}</span>
                     </button>
+
+                    <ModeToggle />
 
                     <div className="relative group inline-flex h-8 shadow-sm rounded-md">
                         <button

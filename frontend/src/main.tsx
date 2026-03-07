@@ -7,6 +7,7 @@ import ErrorBoundary from '@/components/shared/ErrorBoundary'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import SpatialBackdrop from '@/components/shared/SpatialBackdrop'
 import api from '@/lib/api'
+import { ThemeProvider } from '@/components/theme-provider'
 import './index.css'
 
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage'))
@@ -66,11 +67,12 @@ function AxiosInterceptorSetup() {
 ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
         <QueryClientProvider client={queryClient}>
-            <ToastProvider>
-                <SpatialBackdrop />
-                <AxiosInterceptorSetup />
-                <BrowserRouter>
-                    <Suspense fallback={<PageLoader />}>
+            <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+                <ToastProvider>
+                    <SpatialBackdrop />
+                    <AxiosInterceptorSetup />
+                    <BrowserRouter>
+                        <Suspense fallback={<PageLoader />}>
                         <Routes>
                             <Route path="/onboarding" element={
                                 <ErrorBoundary>
@@ -118,6 +120,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                     </Suspense>
                 </BrowserRouter>
             </ToastProvider>
+            </ThemeProvider>
         </QueryClientProvider>
     </React.StrictMode>,
 )

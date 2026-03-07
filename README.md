@@ -82,6 +82,24 @@ npm run dev   # → http://localhost:5173 (proxies /api to port 3000)
 
 ---
 
+## Testing
+
+Backend tests include unit tests plus API integration tests, with a coverage gate.
+
+```bash
+cd backend
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
+PYTHONPATH=backend python3 -m pytest
+```
+
+The backend pytest configuration enforces:
+- strict pytest config/markers
+- coverage reporting for key API/service/schema/utility modules
+- minimum coverage threshold: **70%**
+
+---
+
 ## Architecture
 
 ```
