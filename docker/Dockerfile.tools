@@ -15,11 +15,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-COPY tool-server/requirements.txt .
+COPY tool_server/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy tool server code
-COPY tool-server/ ./tool_server/
+COPY tool_server/ ./tool_server/
 
 # Set Python path
 ENV PYTHONPATH=/app
