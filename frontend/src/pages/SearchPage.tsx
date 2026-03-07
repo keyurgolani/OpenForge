@@ -2,9 +2,9 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import type { ReactElement } from 'react'
-import { searchNotes } from '@/lib/api'
+import { searchKnowledge } from '@/lib/api'
 import { Search, Loader2, FileText, Bookmark, Code2, Zap, ExternalLink, Copy, SearchX } from 'lucide-react'
-import { NoteModal } from '@/components/shared/NoteModal'
+import { KnowledgeModal } from '@/components/shared/KnowledgeModal'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem
 } from '@/components/ui/context-menu'
@@ -28,12 +28,12 @@ const TYPE_META: Record<string, { label: string; color: string }> = {
     gist: { label: 'Gist', color: 'text-green-400' },
 }
 
-const NOTE_TYPES = ['', 'standard', 'fleeting', 'bookmark', 'gist']
+const KNOWLEDGE_TYPES = ['', 'standard', 'fleeting', 'bookmark', 'gist']
 
 interface SearchResult {
-    note_id: string
+    knowledge_id: string
     title: string
-    note_type: string
+    knowledge_type: string
     chunk_text: string
     header_path: string
     tags: string[]
@@ -51,7 +51,7 @@ export default function SearchPage() {
     const [searchParams, setSearchParams] = useSearchParams()
     const [query, setQuery] = useState(searchParams.get('q') ?? '')
     const [typeFilter, setTypeFilter] = useState('')
-    const [modalNoteId, setModalNoteId] = useState<string | null>(null)
+    const [modalKnowledgeId, setModalKnowledgeId] = useState<string | null>(null)
     const searchLayoutRef = useRef<HTMLDivElement | null>(null)
 
     // Debounce the query
@@ -75,24 +75,24 @@ export default function SearchPage() {
 
     const { data, isFetching } = useQuery({
         queryKey: ['search', workspaceId, debouncedQuery, typeFilter],
-        queryFn: () => searchNotes(workspaceId, debouncedQuery, { note_type: typeFilter || undefined, limit: 30 }),
+        queryFn: () => searchKnowledge(workspaceId, debouncedQuery, { knowledge_type: typeFilter || undefined, limit: 30 }),
         enabled: !!debouncedQuery.trim() && !!workspaceId,
     })
 
     const results: SearchResult[] = data?.results ?? []
 
-    // Group by note
+    // Group by knowledge item
     const grouped = useMemo(() => {
         return results.reduce<Record<string, SearchResult[]>>((acc, r) => {
-            if (!acc[r.note_id]) acc[r.note_id] = []
-            acc[r.note_id].push(r)
+            if (!acc[r.knowledge_id]) acc[r.knowledge_id] = []
+            acc[r.knowledge_id].push(r)
             return acc
         }, {})
     }, [results])
 
     return (
         <div className="h-full w-full p-6 lg:p-7">
-            <div ref={searchLayoutRef} data-openforge-note-sheet-anchor="1" className="flex h-full min-h-0 flex-col gap-4">
+            <div ref={searchLayoutRef} data-openforge-knowledge-sheet-anchor="1" className="flex h-full min-h-0 flex-col gap-4">
                 {/* Search bar */}
                 <div className="relative">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground pointer-events-none" />
@@ -108,7 +108,7 @@ export default function SearchPage() {
 
                 {/* Filters */}
                 <div className="flex gap-2 flex-wrap">
-                    {NOTE_TYPES.map(t => (
+                    {KNOWLEDGE_TYPES.map(t => (
                         <button
                             key={t}
                             onClick={() => setTypeFilter(t)}
@@ -156,18 +156,18 @@ export default function SearchPage() {
                         <div className="space-y-4">
                             <p className="text-xs text-muted-foreground">{results.length} result{results.length !== 1 ? 's' : ''}</p>
                             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
-                                {Object.entries(grouped).map(([noteId, chunks]) => {
+                                {Object.entries(grouped).map(([knowledgeId, chunks]) => {
                                     const first = chunks[0]
-                                    const typeKey = first.note_type in TYPE_META ? first.note_type : 'standard'
+                                    const typeKey = first.knowledge_type in TYPE_META ? first.knowledge_type : 'standard'
                                     const typeMeta = TYPE_META[typeKey]
                                     const typeIcon = TYPE_ICONS[typeKey] ?? TYPE_ICONS.standard
                                     const hasTitle = !!first.title?.trim()
                                     return (
-                                        <ContextMenu key={noteId}>
+                                        <ContextMenu key={knowledgeId}>
                                             <ContextMenuTrigger asChild>
                                                 <div
                                                     className="glass-card-hover h-fit rounded-2xl p-4 cursor-pointer animate-fade-in space-y-3"
-                                                    onClick={() => setModalNoteId(noteId)}
+                                                    onClick={() => setModalKnowledgeId(knowledgeId)}
                                                 >
                                                     <div className="flex items-start justify-between gap-3">
                                                         <div className="min-w-0 space-y-2">
@@ -211,7 +211,7 @@ export default function SearchPage() {
                                                 </div>
                                             </ContextMenuTrigger>
                                             <ContextMenuContent className="w-48">
-                                                <ContextMenuItem onClick={() => navigate(`/w/${workspaceId}/knowledge/${noteId}`)} className="gap-2">
+                                                <ContextMenuItem onClick={() => navigate(`/w/${workspaceId}/knowledge/${knowledgeId}`)} className="gap-2">
                                                     <ExternalLink className="w-4 h-4" /> Open Knowledge
                                                 </ContextMenuItem>
                                                 <ContextMenuItem onClick={() => navigator.clipboard.writeText(first.title || first.chunk_text || '')} className="gap-2">
@@ -227,11 +227,11 @@ export default function SearchPage() {
                 </div>
             </div>
 
-            {modalNoteId && (
-                <NoteModal
-                    noteId={modalNoteId}
+            {modalKnowledgeId && (
+                <KnowledgeModal
+                    knowledgeId={modalKnowledgeId}
                     workspaceId={workspaceId}
-                    onClose={() => setModalNoteId(null)}
+                    onClose={() => setModalKnowledgeId(null)}
                 />
             )}
         </div>

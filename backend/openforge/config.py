@@ -8,7 +8,7 @@ class Settings(BaseSettings):
 
     # Qdrant
     qdrant_url: str = "http://localhost:6333"
-    qdrant_collection: str = "openforge_notes"
+    qdrant_collection: str = "openforge_knowledge"
 
     # Workspace
     workspace_root: str = "/workspace"

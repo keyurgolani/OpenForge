@@ -67,17 +67,6 @@ export const generateKnowledgeIntelligence = (wid: string, nid: string): Promise
 export const extractBookmarkContent = (wid: string, nid: string): Promise<any> =>
     api.post(`/workspaces/${wid}/knowledge/${nid}/extract-bookmark-content`).then(r => r.data)
 
-// Backward-compatible aliases
-export const listNotes = listKnowledge
-export const createNote = createKnowledge
-export const getNote = getKnowledge
-export const updateNote = updateKnowledge
-export const deleteNote = deleteKnowledge
-export const updateNoteTags = updateKnowledgeTags
-export const summarizeNote = summarizeKnowledge
-export const extractInsights = extractKnowledgeInsights
-export const generateTitle = generateKnowledgeTitle
-
 // ── Conversations ──
 export const listConversations = (
     wid: string,
@@ -91,9 +80,11 @@ export const updateConversation = (wid: string, cid: string, data: object): Prom
     api.put(`/workspaces/${wid}/conversations/${cid}`, data).then(r => r.data)
 export const deleteConversation = (wid: string, cid: string) =>
     api.delete(`/workspaces/${wid}/conversations/${cid}`)
+export const permanentlyDeleteConversation = (wid: string, cid: string) =>
+    api.delete(`/workspaces/${wid}/conversations/${cid}/permanent`)
 
 // ── Search ──
-export const searchNotes = (wid: string, q: string, params?: object): Promise<any> =>
+export const searchKnowledge = (wid: string, q: string, params?: object): Promise<any> =>
     api.get(`/workspaces/${wid}/search`, { params: { q, ...params } }).then(r => r.data)
 
 // ── Prompts ──

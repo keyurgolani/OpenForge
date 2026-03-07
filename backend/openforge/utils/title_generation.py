@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 
-from openforge.utils.title import normalize_note_title
+from openforge.utils.title import normalize_knowledge_title
 
 
 def normalize_generated_title(raw_response: object) -> str | None:
@@ -39,4 +39,4 @@ def normalize_generated_title(raw_response: object) -> str | None:
 
     first_line = next((line.strip() for line in raw_title.splitlines() if line.strip()), "")
     cleaned = first_line.strip().strip('"\'')
-    return normalize_note_title(cleaned)
+    return normalize_knowledge_title(cleaned)

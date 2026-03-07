@@ -1,10 +1,10 @@
 from uuid import uuid4, UUID
 from openforge.core.embedding import embed_texts
-from openforge.core.embedding_document import build_note_embedding_document
+from openforge.core.embedding_document import build_knowledge_embedding_document
 from openforge.core.markdown_utils import chunk_markdown
 from openforge.db.qdrant_client import get_qdrant
 from openforge.config import get_settings
-from openforge.utils.title import normalize_note_title
+from openforge.utils.title import normalize_knowledge_title
 from qdrant_client.models import PointStruct, Filter, FieldCondition, MatchValue
 import logging
 from datetime import datetime, timezone
@@ -12,19 +12,19 @@ from datetime import datetime, timezone
 logger = logging.getLogger("openforge.processor")
 
 
-class NoteProcessor:
-    async def process_note(
+class KnowledgeProcessor:
+    async def process_knowledge(
         self,
-        note_id: UUID,
+        knowledge_id: UUID,
         workspace_id: UUID,
         content: str,
-        note_type: str,
+        knowledge_type: str,
         title: str | None,
         tags: list[str],
         ai_summary: str | None = None,
         insights: dict | None = None,
     ):
-        """Full embedding pipeline for a note."""
+        """Full embedding pipeline for a knowledge item."""
         settings = get_settings()
         client = get_qdrant()
         collection = settings.qdrant_collection
@@ -33,17 +33,17 @@ class NoteProcessor:
         client.delete(
             collection_name=collection,
             points_selector=Filter(
-                must=[FieldCondition(key="note_id", match=MatchValue(value=str(note_id)))]
+                must=[FieldCondition(key="knowledge_id", match=MatchValue(value=str(knowledge_id)))]
             ),
         )
 
-        embedding_document = build_note_embedding_document(
+        embedding_document = build_knowledge_embedding_document(
             content=content,
             ai_summary=ai_summary,
             insights=insights if isinstance(insights, dict) else None,
         )
         if not embedding_document or len(embedding_document.strip()) < 20:
-            logger.info(f"Note {note_id} too short to embed, skipping.")
+            logger.info(f"Knowledge {knowledge_id} too short to embed, skipping.")
             return
 
         # Step 2: Chunk
@@ -57,16 +57,16 @@ class NoteProcessor:
 
         # Step 4: Upsert
         now_str = datetime.now(timezone.utc).isoformat()
-        normalized_title = normalize_note_title(title) or ""
+        normalized_title = normalize_knowledge_title(title) or ""
         points = []
         for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
             points.append(PointStruct(
                 id=str(uuid4()),
                 vector=embedding,
                 payload={
-                    "note_id": str(note_id),
+                    "knowledge_id": str(knowledge_id),
                     "workspace_id": str(workspace_id),
-                    "note_type": note_type,
+                    "knowledge_type": knowledge_type,
                     "chunk_index": i,
                     "chunk_text": chunk["text"],
                     "header_path": chunk.get("header_path") or "",
@@ -78,15 +78,15 @@ class NoteProcessor:
             ))
 
         client.upsert(collection_name=collection, points=points)
-        logger.info(f"Embedded note {note_id}: {len(points)} chunks")
+        logger.info(f"Embedded knowledge {knowledge_id}: {len(points)} chunks")
 
-    async def delete_note_vectors(self, note_id: UUID):
+    async def delete_knowledge_vectors(self, knowledge_id: UUID):
         settings = get_settings()
         client = get_qdrant()
         client.delete(
             collection_name=settings.qdrant_collection,
             points_selector=Filter(
-                must=[FieldCondition(key="note_id", match=MatchValue(value=str(note_id)))]
+                must=[FieldCondition(key="knowledge_id", match=MatchValue(value=str(knowledge_id)))]
             ),
         )
 
@@ -100,5 +100,4 @@ class NoteProcessor:
             ),
         )
 
-
-note_processor = NoteProcessor()
+knowledge_processor = KnowledgeProcessor()

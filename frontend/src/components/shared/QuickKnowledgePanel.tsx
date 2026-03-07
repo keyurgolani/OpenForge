@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { createKnowledge, updateKnowledge, deleteKnowledge } from '@/lib/api'
@@ -8,9 +8,9 @@ import {
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
-type NoteType = 'standard' | 'fleeting' | 'bookmark' | 'gist'
+type KnowledgeType = 'standard' | 'fleeting' | 'bookmark' | 'gist'
 
-const TYPE_CONFIG: Record<NoteType, {
+const TYPE_CONFIG: Record<KnowledgeType, {
     label: string
     Icon: React.ComponentType<{ className?: string }>
     color: string
@@ -36,7 +36,7 @@ const TYPE_CONFIG: Record<NoteType, {
         Icon: Bookmark,
         color: 'text-purple-400',
         titlePlaceholder: 'Bookmark title…',
-        contentPlaceholder: 'Notes about this link…',
+        contentPlaceholder: 'Knowledge about this link…',
     },
     gist: {
         label: 'Gist',
@@ -51,16 +51,16 @@ const GIST_LANGUAGES = ['TypeScript', 'JavaScript', 'Python', 'Go', 'Rust', 'SQL
 
 interface Props {
     open: boolean
-    defaultType?: NoteType
+    defaultType?: KnowledgeType
     onClose: () => void
 }
 
-export function QuickNotePanel({ open, defaultType = 'standard', onClose }: Props) {
+export function QuickKnowledgePanel({ open, defaultType = 'standard', onClose }: Props) {
     const { workspaceId = '' } = useParams<{ workspaceId: string }>()
     const navigate = useNavigate()
     const qc = useQueryClient()
 
-    const [type, setType] = useState<NoteType>(defaultType)
+    const [type, setType] = useState<KnowledgeType>(defaultType)
     const [title, setTitle] = useState('')
     const [content, setContent] = useState('')
     const [url, setUrl] = useState('')
@@ -68,36 +68,48 @@ export function QuickNotePanel({ open, defaultType = 'standard', onClose }: Prop
     const [tagInput, setTagInput] = useState('')
     const [tags, setTags] = useState<string[]>([])
     const [saving, setSaving] = useState(false)
-    const [noteId, setNoteId] = useState<string | null>(null) // draft note id
+    const [knowledgeId, setKnowledgeId] = useState<string | null>(null) // Draft knowledge ID.
 
     const urlRef = useRef<HTMLInputElement>(null)
     const titleRef = useRef<HTMLInputElement>(null)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const panelRef = useRef<HTMLDivElement>(null)
 
-    // Focus the most relevant field on open based on note type.
+    // Set the selected type before paint when opening to avoid transient stale UI state.
+    useLayoutEffect(() => {
+        if (open) setType(defaultType)
+    }, [open, defaultType])
+
+    // Reset draft state after close.
     useEffect(() => {
-        if (open) {
-            setType(defaultType)
-            const focusTimer = window.setTimeout(() => {
-                if (defaultType === 'bookmark') {
-                    urlRef.current?.focus()
-                    return
-                }
-                if (defaultType === 'fleeting') {
-                    textareaRef.current?.focus()
-                    return
-                }
-                titleRef.current?.focus()
-            }, 80)
-            return () => window.clearTimeout(focusTimer)
-        }
         if (!open) {
-            // reset state
-            setTitle(''); setContent(''); setUrl(''); setTagInput(''); setTags([])
-            setGistLang('TypeScript'); setNoteId(null)
+            setTitle('')
+            setContent('')
+            setUrl('')
+            setTagInput('')
+            setTags([])
+            setGistLang('TypeScript')
+            setKnowledgeId(null)
+            setType(defaultType)
         }
     }, [open, defaultType])
+
+    // Focus the most relevant field when the modal is open.
+    useEffect(() => {
+        if (!open) return
+        const focusTimer = window.setTimeout(() => {
+            if (type === 'bookmark') {
+                urlRef.current?.focus()
+                return
+            }
+            if (type === 'fleeting') {
+                textareaRef.current?.focus()
+                return
+            }
+            titleRef.current?.focus()
+        }, 0)
+        return () => window.clearTimeout(focusTimer)
+    }, [open, type])
 
     // If user switches to bookmark type while modal is open, focus URL input.
     useEffect(() => {
@@ -108,36 +120,50 @@ export function QuickNotePanel({ open, defaultType = 'standard', onClose }: Prop
 
     const isEmpty = !title.trim() && !content.trim() && !url.trim()
 
-    const buildPayload = () => ({
-        type,
-        title: title.trim() || null,
-        content: content.trim() ? content : '',
-        url: url.trim() || null,
-        tags,
-        gist_language: type === 'gist' ? gistLang : undefined,
-    })
+    const buildPayload = () => {
+        const currentTitle = titleRef.current?.value ?? title
+        const currentContent = textareaRef.current?.value ?? content
+        const currentUrl = urlRef.current?.value ?? url
 
-    const persistDraft = async (allowCreateWhenEmpty: boolean): Promise<string | null> => {
-        if (noteId) {
-            await updateKnowledge(workspaceId, noteId, buildPayload())
-            return noteId
+        return {
+            type,
+            // Fleeting knowledge does not persist a title field.
+            title: type === 'fleeting' ? null : (currentTitle.trim() || null),
+            content: currentContent.trim() ? currentContent : '',
+            url: currentUrl.trim() || null,
+            tags,
+            gist_language: type === 'gist' ? gistLang : undefined,
         }
-        if (isEmpty && !allowCreateWhenEmpty) return null
-        const n = await createKnowledge(workspaceId, buildPayload())
-        setNoteId(n.id)
-        qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
-        return n.id
     }
 
-    // Close: if empty discard draft; if has content and no noteId yet — don't save (user explicitly closed)
+    const isPayloadEmpty = (payload: ReturnType<typeof buildPayload>) =>
+        !((payload.title ?? '').trim()) && !payload.content.trim() && !((payload.url ?? '').trim())
+
+    const persistDraft = async (
+        allowCreateWhenEmpty: boolean,
+        payload: ReturnType<typeof buildPayload> = buildPayload(),
+    ): Promise<string | null> => {
+        if (knowledgeId) {
+            await updateKnowledge(workspaceId, knowledgeId, payload)
+            return knowledgeId
+        }
+        if (isPayloadEmpty(payload) && !allowCreateWhenEmpty) return null
+        const createdKnowledge = await createKnowledge(workspaceId, payload)
+        setKnowledgeId(createdKnowledge.id)
+        qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
+        return createdKnowledge.id
+    }
+
+    // Close: if empty discard draft; if has content and no knowledgeId yet — don't save (user explicitly closed)
     const handleClose = useCallback(async () => {
-        if (noteId && isEmpty) {
+        const payload = buildPayload()
+        if (knowledgeId && isPayloadEmpty(payload)) {
             // a draft was created but user cleared it — delete it
-            await deleteKnowledge(workspaceId, noteId).catch(() => { })
-            qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
+            await deleteKnowledge(workspaceId, knowledgeId).catch(() => { })
+            qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
         }
         onClose()
-    }, [noteId, isEmpty, workspaceId, qc, onClose])
+    }, [knowledgeId, workspaceId, qc, onClose, title, content, url, type, tags, gistLang])
 
     // Keyboard shortcuts
     useEffect(() => {
@@ -151,11 +177,12 @@ export function QuickNotePanel({ open, defaultType = 'standard', onClose }: Prop
     }, [open, handleClose]) // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleSave = async () => {
-        if (isEmpty) { handleClose(); return }
+        const payload = buildPayload()
+        if (isPayloadEmpty(payload)) { handleClose(); return }
         setSaving(true)
         try {
-            await persistDraft(false)
-            qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
+            await persistDraft(false, payload)
+            qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
             handleClose()
         } finally {
             setSaving(false)
@@ -163,12 +190,13 @@ export function QuickNotePanel({ open, defaultType = 'standard', onClose }: Prop
     }
 
     const handleExpand = async () => {
+        const payload = buildPayload()
         setSaving(true)
         try {
-            const shouldDiscardIfUntouched = isEmpty
-            const id = await persistDraft(true)
+            const shouldDiscardIfUntouched = isPayloadEmpty(payload)
+            const id = await persistDraft(true, payload)
             if (!id) return
-            qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
+            qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
             onClose()
             const query = shouldDiscardIfUntouched ? '?draft=1' : ''
             navigate(`/w/${workspaceId}/knowledge/${id}${query}`)
@@ -220,7 +248,7 @@ export function QuickNotePanel({ open, defaultType = 'standard', onClose }: Prop
                 <div className="flex items-center gap-2 px-4 py-3 border-b border-border/50">
                     {/* Type selector */}
                     <div className="flex gap-1">
-                        {(Object.entries(TYPE_CONFIG) as [NoteType, typeof TYPE_CONFIG[NoteType]][]).map(([t, c]) => (
+                        {(Object.entries(TYPE_CONFIG) as [KnowledgeType, typeof TYPE_CONFIG[KnowledgeType]][]).map(([t, c]) => (
                             <button
                                 key={t}
                                 onClick={() => setType(t)}
@@ -276,7 +304,7 @@ export function QuickNotePanel({ open, defaultType = 'standard', onClose }: Prop
 
                     {/* Content */}
                     <textarea
-                        ref={type === 'fleeting' ? textareaRef : undefined}
+                        ref={textareaRef}
                         className={`w-full bg-transparent text-sm placeholder-muted-foreground/50 outline-none resize-none leading-relaxed ${type === 'gist' ? 'font-mono text-xs' : ''
                             }`}
                         placeholder={cfg.contentPlaceholder}

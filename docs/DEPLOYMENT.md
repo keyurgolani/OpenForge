@@ -109,7 +109,7 @@ docker compose exec postgres pg_dump -U openforge openforge > backup_$(date +%Y%
 
 **Qdrant vectors:**
 ```bash
-# Vectors are regenerated from notes on demand — just back up PostgreSQL
+# Vectors are regenerated from knowledge on demand — just back up PostgreSQL
 # But if you want to back up qdrant storage:
 cp -r ./data/qdrant ./data/qdrant_backup_$(date +%Y%m%d)
 ```
@@ -129,7 +129,7 @@ tar -czf workspace_backup_$(date +%Y%m%d).tar.gz ./data/workspace
 | Slow first response | Embedding model loading | Wait 60s on first start |
 | `decryption failed` error | `ENCRYPTION_KEY` changed | Restore original key from backup |
 | WebSocket disconnects | Nginx `proxy_read_timeout` too low | Set to 3600s (see nginx config above) |
-| High memory usage | Large notes being embedded | Normal — bge-small needs ~300MB RAM |
+| High memory usage | Large knowledge being embedded | Normal — bge-small needs ~300MB RAM |
 
 ---
 
@@ -137,6 +137,6 @@ tar -czf workspace_backup_$(date +%Y%m%d).tar.gz ./data/workspace
 
 | Workload | Minimum RAM | Recommended |
 |---|---|---|
-| Personal (1-5k notes) | 2 GB | 4 GB |
-| Team (5-50k notes) | 4 GB | 8 GB |
-| Large (50k+ notes) | 8 GB | 16 GB + SSD |
+| Personal (1-5k knowledge) | 2 GB | 4 GB |
+| Team (5-50k knowledge) | 4 GB | 8 GB |
+| Large (50k+ knowledge) | 8 GB | 16 GB + SSD |

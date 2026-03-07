@@ -11,95 +11,101 @@ import json
 from html import unescape
 from urllib.parse import urlparse, quote, unquote
 
-from openforge.db.models import Note, NoteTag
+from openforge.db.models import Knowledge, KnowledgeTag
 from openforge.db.qdrant_client import get_qdrant
-from openforge.schemas.note import NoteCreate, NoteUpdate, NoteResponse, NoteListItem, NoteListParams
+from openforge.schemas.knowledge import KnowledgeCreate, KnowledgeUpdate, KnowledgeResponse, KnowledgeListItem, KnowledgeListParams
 from openforge.config import get_settings
-from openforge.utils.text import count_words, normalize_word_count, truncate_text, strip_markdown
-from openforge.utils.note_title_generation import derive_note_title
-from openforge.utils.title import normalize_note_title
+from openforge.utils.text import count_words, normalize_word_count, truncate_text
+from openforge.utils.knowledge_title_generation import derive_knowledge_title
+from openforge.utils.title import normalize_knowledge_title
 from openforge.utils.insights import normalize_insights_payload
 from openforge.utils.task_audit import start_task_log, mark_task_log_done, mark_task_log_failed
+from openforge.services.automation_config import (
+    is_auto_bookmark_content_extraction_enabled,
+    is_auto_knowledge_intelligence_enabled,
+)
 from fastapi import HTTPException, BackgroundTasks
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 
-logger = logging.getLogger("openforge.note_service")
+logger = logging.getLogger("openforge.knowledge_service")
 
 
-def _tags_from_note(note: Note) -> list[str]:
-    return [t.tag for t in note.tags]
+def _tags_from_knowledge(knowledge: Knowledge) -> list[str]:
+    return [t.tag for t in knowledge.tags]
 
 
-def _to_response(note: Note) -> NoteResponse:
-    return NoteResponse(
-        id=note.id,
-        workspace_id=note.workspace_id,
-        type=note.type,
-        title=normalize_note_title(note.title),
-        content=note.content,
-        url=note.url,
-        url_title=note.url_title,
-        url_description=note.url_description,
-        gist_language=note.gist_language,
-        is_pinned=note.is_pinned,
-        is_archived=note.is_archived,
-        insights=note.insights,
-        ai_title=note.ai_title,
-        ai_summary=note.ai_summary,
-        embedding_status=note.embedding_status,
-        word_count=note.word_count,
-        tags=_tags_from_note(note),
-        created_at=note.created_at,
-        updated_at=note.updated_at,
+def _to_response(knowledge: Knowledge) -> KnowledgeResponse:
+    return KnowledgeResponse(
+        id=knowledge.id,
+        workspace_id=knowledge.workspace_id,
+        type=knowledge.type,
+        title=normalize_knowledge_title(knowledge.title),
+        content=knowledge.content,
+        url=knowledge.url,
+        url_title=knowledge.url_title,
+        url_description=knowledge.url_description,
+        gist_language=knowledge.gist_language,
+        is_pinned=knowledge.is_pinned,
+        is_archived=knowledge.is_archived,
+        insights=knowledge.insights,
+        ai_title=knowledge.ai_title,
+        ai_summary=knowledge.ai_summary,
+        embedding_status=knowledge.embedding_status,
+        word_count=knowledge.word_count,
+        tags=_tags_from_knowledge(knowledge),
+        created_at=knowledge.created_at,
+        updated_at=knowledge.updated_at,
     )
 
 
-def _to_list_item(note: Note) -> NoteListItem:
-    preview = truncate_text(note.content, 200)
+def _to_list_item(knowledge: Knowledge) -> KnowledgeListItem:
+    preview = truncate_text(knowledge.content, 200)
     insights_count = None
-    if note.insights:
+    if knowledge.insights:
         count = 0
         for k in [
             "tasks",
             "timelines",
             "facts",
             "crucial_things",
-            # legacy keys (kept for backward compatibility)
+            # Legacy keys retained for parsing older insights payloads
             "todos",
             "reminders",
             "deadlines",
             "highlights",
         ]:
-            value = note.insights.get(k, [])
+            value = knowledge.insights.get(k, [])
             if isinstance(value, list):
                 count += len(value)
         insights_count = count
 
-    return NoteListItem(
-        id=note.id,
-        workspace_id=note.workspace_id,
-        type=note.type,
-        title=normalize_note_title(note.title),
+    return KnowledgeListItem(
+        id=knowledge.id,
+        workspace_id=knowledge.workspace_id,
+        type=knowledge.type,
+        title=normalize_knowledge_title(knowledge.title),
         content_preview=preview,
-        tags=_tags_from_note(note),
-        is_pinned=note.is_pinned,
-        is_archived=note.is_archived,
-        word_count=note.word_count,
-        embedding_status=note.embedding_status,
-        insights=note.insights,
+        tags=_tags_from_knowledge(knowledge),
+        is_pinned=knowledge.is_pinned,
+        is_archived=knowledge.is_archived,
+        word_count=knowledge.word_count,
+        embedding_status=knowledge.embedding_status,
+        insights=knowledge.insights,
         insights_count=insights_count,
-        ai_title=note.ai_title,
-        url=note.url,
-        url_title=note.url_title,
-        gist_language=note.gist_language,
-        created_at=note.created_at,
-        updated_at=note.updated_at,
+        ai_title=knowledge.ai_title,
+        url=knowledge.url,
+        url_title=knowledge.url_title,
+        gist_language=knowledge.gist_language,
+        created_at=knowledge.created_at,
+        updated_at=knowledge.updated_at,
     )
 
 
-class NoteService:
+class KnowledgeProcessingService:
     _BOOKMARK_CONTENT_MAX_CHARS = 8000
     _CHROME_BINARIES = ("google-chrome", "chromium-browser", "chromium")
+    _JINA_READER_TIMEOUT_SECONDS = 30
+    _MARKDOWN_FILE_EXTENSIONS = (".md", ".markdown", ".mdown", ".mkd")
 
     def __init__(self) -> None:
         # Domain-level content extractors for bookmark scraping.
@@ -150,7 +156,7 @@ class NoteService:
     async def run_bookmark_content_extraction_job(
         self,
         *,
-        note_id: UUID,
+        knowledge_id: UUID,
         workspace_id: UUID,
         audit_task_type: str | None = "extract_bookmark_content",
         trigger_intelligence_after_extract: bool = False,
@@ -164,7 +170,7 @@ class NoteService:
                     db,
                     task_type=audit_task_type,
                     workspace_id=workspace_id,
-                    target_link=f"/w/{workspace_id}/knowledge/{note_id}",
+                    target_link=f"/w/{workspace_id}/knowledge/{knowledge_id}",
                 )
                 await db.commit()
                 log_id = task_log.id
@@ -172,46 +178,48 @@ class NoteService:
         try:
             async with AsyncSessionLocal() as db:
                 result = await db.execute(
-                    select(Note).where(Note.id == note_id, Note.workspace_id == workspace_id)
+                    select(Knowledge).where(Knowledge.id == knowledge_id, Knowledge.workspace_id == workspace_id)
                 )
-                note = result.scalar_one_or_none()
-                if not note:
+                knowledge_record = result.scalar_one_or_none()
+                if not knowledge_record:
                     raise RuntimeError("Knowledge not found")
-                if note.type != "bookmark":
+                if knowledge_record.type != "bookmark":
                     raise RuntimeError("Knowledge is not a bookmark")
-                if not (note.url or "").strip():
+                if not (knowledge_record.url or "").strip():
                     raise RuntimeError("Bookmark URL is empty")
-                content_before = bool((note.content or "").strip())
-                url = note.url
+                content_before = bool((knowledge_record.content or "").strip())
+                url = knowledge_record.url
 
-            await self._fetch_url_metadata(note_id=note_id, url=url, workspace_id=workspace_id)
+            await self._fetch_url_metadata(knowledge_id=knowledge_id, url=url, workspace_id=workspace_id)
 
             async with AsyncSessionLocal() as db:
                 result = await db.execute(
-                    select(Note).where(Note.id == note_id, Note.workspace_id == workspace_id)
+                    select(Knowledge).where(Knowledge.id == knowledge_id, Knowledge.workspace_id == workspace_id)
                 )
-                note_after = result.scalar_one_or_none()
-                has_content_after = bool((note_after.content or "").strip()) if note_after else False
+                updated_knowledge = result.scalar_one_or_none()
+                has_content_after = bool((updated_knowledge.content or "").strip()) if updated_knowledge else False
                 if not has_content_after and not content_before:
+                    message = "Bookmark content extraction completed without extracted content"
                     logger.warning(
-                        "Bookmark extraction produced no content for note %s in workspace %s",
-                        note_id,
+                        "%s for knowledge %s in workspace %s",
+                        message,
+                        knowledge_id,
                         workspace_id,
                     )
-                    await self._finalize_task_log(log_id, item_count=0)
+                    await self._finalize_task_log(log_id, error=message)
                     return False
 
             if trigger_intelligence_after_extract:
                 try:
                     await self.run_knowledge_intelligence_job(
-                        note_id=note_id,
+                        knowledge_id=knowledge_id,
                         workspace_id=workspace_id,
                         audit_task_type="generate_knowledge_intelligence",
                     )
                 except Exception as intelligence_error:
                     logger.warning(
                         "Post-bookmark intelligence generation failed for %s: %s",
-                        note_id,
+                        knowledge_id,
                         intelligence_error,
                     )
 
@@ -224,7 +232,7 @@ class NoteService:
     async def run_knowledge_intelligence_job(
         self,
         *,
-        note_id: UUID,
+        knowledge_id: UUID,
         workspace_id: UUID,
         audit_task_type: str | None = "generate_knowledge_intelligence",
     ) -> dict:
@@ -241,7 +249,7 @@ class NoteService:
                     db,
                     task_type=audit_task_type,
                     workspace_id=workspace_id,
-                    target_link=f"/w/{workspace_id}/knowledge/{note_id}",
+                    target_link=f"/w/{workspace_id}/knowledge/{knowledge_id}",
                 )
                 await db.commit()
                 log_id = task_log.id
@@ -251,37 +259,45 @@ class NoteService:
 
             async with AsyncSessionLocal() as db:
                 result = await db.execute(
-                    select(Note)
-                    .options(selectinload(Note.tags))
-                    .where(Note.id == note_id, Note.workspace_id == workspace_id)
+                    select(Knowledge)
+                    .options(selectinload(Knowledge.tags))
+                    .where(Knowledge.id == knowledge_id, Knowledge.workspace_id == workspace_id)
                 )
-                note = result.scalar_one_or_none()
-                if not note:
+                knowledge_record = result.scalar_one_or_none()
+                if not knowledge_record:
                     raise RuntimeError("Knowledge not found")
-                if note.type == "bookmark" and not (note.content or "").strip() and (note.url or "").strip():
+                if (
+                    knowledge_record.type == "bookmark"
+                    and not (knowledge_record.content or "").strip()
+                    and (knowledge_record.url or "").strip()
+                ):
                     await db.commit()
                     await self.run_bookmark_content_extraction_job(
-                        note_id=note_id,
+                        knowledge_id=knowledge_id,
                         workspace_id=workspace_id,
                         audit_task_type="extract_bookmark_content" if audit_task_type else None,
                     )
 
             async with AsyncSessionLocal() as db:
                 result = await db.execute(
-                    select(Note)
-                    .options(selectinload(Note.tags))
-                    .where(Note.id == note_id, Note.workspace_id == workspace_id)
+                    select(Knowledge)
+                    .options(selectinload(Knowledge.tags))
+                    .where(Knowledge.id == knowledge_id, Knowledge.workspace_id == workspace_id)
                 )
-                note = result.scalar_one_or_none()
-                if not note:
+                knowledge_record = result.scalar_one_or_none()
+                if not knowledge_record:
                     raise RuntimeError("Knowledge not found after bookmark extraction")
-                if not (note.content or "").strip():
+                if not (knowledge_record.content or "").strip():
                     raise RuntimeError("Knowledge content is empty; intelligence generation skipped")
 
                 provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
-                tags_str = ", ".join([t.tag for t in note.tags])
+                tags_str = ", ".join([t.tag for t in knowledge_record.tags])
 
-                title_prompt = await self._get_prompt_text(db, "generate_title", note_content=note.content[:2000])
+                title_prompt = await self._get_prompt_text(
+                    db,
+                    "generate_title",
+                    knowledge_content=knowledge_record.content[:2000],
+                )
                 title_response = await llm_gateway.chat(
                     messages=[
                         {"role": "system", "content": "Generate concise knowledge titles. Return only the title text."},
@@ -293,19 +309,19 @@ class NoteService:
                     base_url=base_url,
                     max_tokens=30,
                 )
-                normalized_title = derive_note_title(title_response, note.content or "")
+                normalized_title = derive_knowledge_title(title_response, knowledge_record.content or "")
                 title_was_empty = False
                 if normalized_title:
-                    note.ai_title = normalized_title
-                    title_was_empty = not normalize_note_title(note.title)
+                    knowledge_record.ai_title = normalized_title
+                    title_was_empty = not normalize_knowledge_title(knowledge_record.title)
                     if title_was_empty:
-                        note.title = normalized_title
+                        knowledge_record.title = normalized_title
 
                 insights_prompt = await self._get_prompt_text(
                     db,
                     "extract_insights",
-                    note_content=note.content[:8000],
-                    note_title=normalize_note_title(note.title) or "Untitled",
+                    knowledge_content=knowledge_record.content[:8000],
+                    knowledge_title=normalize_knowledge_title(knowledge_record.title) or "Untitled",
                     tags=tags_str,
                 )
                 insights_response = await llm_gateway.chat(
@@ -322,15 +338,15 @@ class NoteService:
                     parsed = json.loads(json_match.group()) if json_match else {}
                 except Exception:
                     parsed = {}
-                insights_payload = normalize_insights_payload(parsed, note.content or "")
-                note.insights = insights_payload
+                insights_payload = normalize_insights_payload(parsed, knowledge_record.content or "")
+                knowledge_record.insights = insights_payload
 
                 summary_prompt = await self._get_prompt_text(
                     db,
-                    "summarize_note",
-                    note_content=note.content[:8000],
-                    note_title=normalize_note_title(note.title) or "Untitled",
-                    note_type=note.type,
+                    "summarize_knowledge",
+                    knowledge_content=knowledge_record.content[:8000],
+                    knowledge_title=normalize_knowledge_title(knowledge_record.title) or "Untitled",
+                    knowledge_type=knowledge_record.type,
                     tags=tags_str,
                 )
                 summary = await llm_gateway.chat(
@@ -342,46 +358,46 @@ class NoteService:
                     model=model,
                     base_url=base_url,
                 )
-                note.ai_summary = summary
+                knowledge_record.ai_summary = summary
 
                 await db.execute(
-                    delete(NoteTag).where(NoteTag.note_id == note_id, NoteTag.source == "ai")
+                    delete(KnowledgeTag).where(KnowledgeTag.knowledge_id == knowledge_id, KnowledgeTag.source == "ai")
                 )
                 for tag in insights_payload.get("tags", []):
                     normalized_tag = str(tag).strip().lower()
                     if normalized_tag:
-                        db.add(NoteTag(note_id=note_id, tag=normalized_tag, source="ai"))
+                        db.add(KnowledgeTag(knowledge_id=knowledge_id, tag=normalized_tag, source="ai"))
 
-                note.embedding_status = "pending"
-                embed_content_for_refresh = note.content or ""
-                embed_note_type_for_refresh = note.type
+                knowledge_record.embedding_status = "pending"
+                embed_content_for_refresh = knowledge_record.content or ""
+                embed_knowledge_type_for_refresh = knowledge_record.type
                 embed_title_for_refresh = (
-                    normalize_note_title(note.title)
-                    or normalize_note_title(note.ai_title)
+                    normalize_knowledge_title(knowledge_record.title)
+                    or normalize_knowledge_title(knowledge_record.ai_title)
                 )
                 await db.commit()
                 result_payload = {
-                    "title": normalize_note_title(note.title),
-                    "ai_title": note.ai_title,
-                    "summary": note.ai_summary,
-                    "insights": note.insights or {},
+                    "title": normalize_knowledge_title(knowledge_record.title),
+                    "ai_title": knowledge_record.ai_title,
+                    "summary": knowledge_record.ai_summary,
+                    "insights": knowledge_record.insights or {},
                     "tags": [str(tag).strip().lower() for tag in insights_payload.get("tags", []) if str(tag).strip()],
-                    "embedding_status": note.embedding_status,
+                    "embedding_status": knowledge_record.embedding_status,
                 }
 
             await ws_manager.send_to_workspace(
                 str(workspace_id),
                 {
-                    "type": "note_updated",
-                    "note_id": str(note_id),
+                    "type": "knowledge_updated",
+                    "knowledge_id": str(knowledge_id),
                     "fields": ["ai_title", "title", "insights", "tags", "ai_summary", "embedding_status"],
                 },
             )
-            await self._process_note_background(
-                note_id=note_id,
+            await self._process_knowledge_background(
+                knowledge_id=knowledge_id,
                 workspace_id=workspace_id,
                 content=embed_content_for_refresh,
-                note_type=embed_note_type_for_refresh,
+                knowledge_type=embed_knowledge_type_for_refresh,
                 title=embed_title_for_refresh,
             )
             await self._finalize_task_log(log_id, item_count=1)
@@ -390,29 +406,31 @@ class NoteService:
             await self._finalize_task_log(log_id, error=exc)
             raise
 
-    async def _backfill_stale_word_counts(self, db: AsyncSession, notes: list[Note]) -> None:
+    async def _backfill_stale_word_counts(self, db: AsyncSession, knowledge_items: list[Knowledge]) -> None:
         changed = False
-        for note in notes:
+        for knowledge in knowledge_items:
             normalized_count, is_stale = normalize_word_count(
-                stored_word_count=note.word_count,
-                text=note.content,
-                note_type=note.type,
+                stored_word_count=knowledge.word_count,
+                text=knowledge.content,
+                knowledge_type=knowledge.type,
             )
             if is_stale:
-                note.word_count = normalized_count
+                knowledge.word_count = normalized_count
                 changed = True
 
         if changed:
             await db.commit()
 
-    async def create_note(
+    async def create_knowledge(
         self,
         db: AsyncSession,
         workspace_id: UUID,
-        data: NoteCreate,
+        data: KnowledgeCreate,
         background_tasks: BackgroundTasks,
-    ) -> NoteResponse:
-        normalized_title = normalize_note_title(data.title)
+    ) -> KnowledgeResponse:
+        auto_intelligence_enabled = await is_auto_knowledge_intelligence_enabled(db)
+        auto_bookmark_extraction_enabled = await is_auto_bookmark_content_extraction_enabled(db)
+        normalized_title = normalize_knowledge_title(data.title)
         has_initial_content = bool((data.content or "").strip())
         has_bookmark_url = bool((data.url or "").strip())
         initial_embedding_status = (
@@ -421,75 +439,75 @@ class NoteService:
             else "pending"
         )
 
-        note = Note(
+        knowledge_record = Knowledge(
             workspace_id=workspace_id,
             type=data.type,
             title=normalized_title,
             content=data.content,
             url=data.url,
             gist_language=data.gist_language,
-            word_count=count_words(data.content, note_type=data.type),
+            word_count=count_words(data.content, knowledge_type=data.type),
             embedding_status=initial_embedding_status,
         )
-        db.add(note)
+        db.add(knowledge_record)
         await db.commit()
-        await db.refresh(note, ["tags"])
+        await db.refresh(knowledge_record, ["tags"])
 
         # Schedule background embedding
         if has_initial_content and data.content and len(data.content.strip()) > 20:
             background_tasks.add_task(
-                self._process_note_background,
-                note_id=note.id,
+                self._process_knowledge_background,
+                knowledge_id=knowledge_record.id,
                 workspace_id=workspace_id,
                 content=data.content,
-                note_type=data.type,
+                knowledge_type=data.type,
                 title=normalized_title,
             )
 
         # Schedule intelligence generation for newly created knowledge with initial content.
-        if has_initial_content:
+        if has_initial_content and auto_intelligence_enabled:
             background_tasks.add_task(
                 self.run_knowledge_intelligence_job,
-                note_id=note.id,
+                knowledge_id=knowledge_record.id,
                 workspace_id=workspace_id,
                 audit_task_type="generate_knowledge_intelligence",
             )
 
-        if data.type == "bookmark" and data.url:
+        if data.type == "bookmark" and data.url and auto_bookmark_extraction_enabled:
             background_tasks.add_task(
                 self.run_bookmark_content_extraction_job,
-                note_id=note.id,
+                knowledge_id=knowledge_record.id,
                 workspace_id=workspace_id,
                 audit_task_type="extract_bookmark_content",
-                trigger_intelligence_after_extract=not has_initial_content,
+                trigger_intelligence_after_extract=auto_intelligence_enabled and not has_initial_content,
             )
 
-        return _to_response(note)
+        return _to_response(knowledge_record)
 
-    async def list_notes(
-        self, db: AsyncSession, workspace_id: UUID, params: NoteListParams
-    ) -> tuple[list[NoteListItem], int]:
+    async def list_knowledge(
+        self, db: AsyncSession, workspace_id: UUID, params: KnowledgeListParams
+    ) -> tuple[list[KnowledgeListItem], int]:
         from sqlalchemy.orm import selectinload
 
-        query = select(Note).options(selectinload(Note.tags)).where(
-            Note.workspace_id == workspace_id,
-            Note.is_archived == params.is_archived,
+        query = select(Knowledge).options(selectinload(Knowledge.tags)).where(
+            Knowledge.workspace_id == workspace_id,
+            Knowledge.is_archived == params.is_archived,
         )
 
         if params.type:
-            query = query.where(Note.type == params.type)
+            query = query.where(Knowledge.type == params.type)
         if params.is_pinned is not None:
-            query = query.where(Note.is_pinned == params.is_pinned)
+            query = query.where(Knowledge.is_pinned == params.is_pinned)
         if params.tag:
-            tag_subq = select(NoteTag.note_id).where(NoteTag.tag == params.tag)
-            query = query.where(Note.id.in_(tag_subq))
+            tag_subq = select(KnowledgeTag.knowledge_id).where(KnowledgeTag.tag == params.tag)
+            query = query.where(Knowledge.id.in_(tag_subq))
 
         # Sort
-        sort_col = getattr(Note, params.sort_by, Note.updated_at)
+        sort_col = getattr(Knowledge, params.sort_by, Knowledge.updated_at)
         if params.sort_order == "asc":
-            query = query.order_by(Note.is_pinned.desc(), sort_col.asc())
+            query = query.order_by(Knowledge.is_pinned.desc(), sort_col.asc())
         else:
-            query = query.order_by(Note.is_pinned.desc(), sort_col.desc())
+            query = query.order_by(Knowledge.is_pinned.desc(), sort_col.desc())
 
         # Count total
         count_query = select(func.count()).select_from(query.subquery())
@@ -500,85 +518,85 @@ class NoteService:
         offset = (params.page - 1) * params.page_size
         query = query.offset(offset).limit(params.page_size)
         result = await db.execute(query)
-        notes = result.scalars().all()
-        await self._backfill_stale_word_counts(db, notes)
+        knowledge_items = result.scalars().all()
+        await self._backfill_stale_word_counts(db, knowledge_items)
 
-        return [_to_list_item(n) for n in notes], total
+        return [_to_list_item(n) for n in knowledge_items], total
 
-    async def get_note(self, db: AsyncSession, workspace_id: UUID, note_id: UUID) -> NoteResponse:
+    async def get_knowledge(self, db: AsyncSession, workspace_id: UUID, knowledge_id: UUID) -> KnowledgeResponse:
         from sqlalchemy.orm import selectinload
         result = await db.execute(
-            select(Note).options(selectinload(Note.tags)).where(
-                Note.id == note_id, Note.workspace_id == workspace_id
+            select(Knowledge).options(selectinload(Knowledge.tags)).where(
+                Knowledge.id == knowledge_id, Knowledge.workspace_id == workspace_id
             )
         )
-        note = result.scalar_one_or_none()
-        if not note:
-            raise HTTPException(status_code=404, detail="Note not found")
-        await self._backfill_stale_word_counts(db, [note])
-        return _to_response(note)
+        knowledge_record = result.scalar_one_or_none()
+        if not knowledge_record:
+            raise HTTPException(status_code=404, detail="Knowledge not found")
+        await self._backfill_stale_word_counts(db, [knowledge_record])
+        return _to_response(knowledge_record)
 
-    async def update_note(
+    async def update_knowledge(
         self,
         db: AsyncSession,
         workspace_id: UUID,
-        note_id: UUID,
-        data: NoteUpdate,
+        knowledge_id: UUID,
+        data: KnowledgeUpdate,
         background_tasks: BackgroundTasks,
-    ) -> NoteResponse:
+    ) -> KnowledgeResponse:
         from sqlalchemy.orm import selectinload
         result = await db.execute(
-            select(Note).options(selectinload(Note.tags)).where(
-                Note.id == note_id, Note.workspace_id == workspace_id
+            select(Knowledge).options(selectinload(Knowledge.tags)).where(
+                Knowledge.id == knowledge_id, Knowledge.workspace_id == workspace_id
             )
         )
-        note = result.scalar_one_or_none()
-        if not note:
-            raise HTTPException(status_code=404, detail="Note not found")
+        knowledge_record = result.scalar_one_or_none()
+        if not knowledge_record:
+            raise HTTPException(status_code=404, detail="Knowledge not found")
 
         content_changed = False
         if data.title is not None:
-            note.title = normalize_note_title(data.title)
-        if data.content is not None and data.content != note.content:
-            note.content = data.content
-            note.word_count = count_words(data.content, note_type=note.type)
-            note.embedding_status = "pending"
+            knowledge_record.title = normalize_knowledge_title(data.title)
+        if data.content is not None and data.content != knowledge_record.content:
+            knowledge_record.content = data.content
+            knowledge_record.word_count = count_words(data.content, knowledge_type=knowledge_record.type)
+            knowledge_record.embedding_status = "pending"
             content_changed = True
         if data.url is not None:
-            note.url = data.url
+            knowledge_record.url = data.url
         if data.gist_language is not None:
-            note.gist_language = data.gist_language
+            knowledge_record.gist_language = data.gist_language
         if data.is_pinned is not None:
-            note.is_pinned = data.is_pinned
+            knowledge_record.is_pinned = data.is_pinned
         if data.is_archived is not None:
-            note.is_archived = data.is_archived
+            knowledge_record.is_archived = data.is_archived
 
-        note.updated_at = datetime.now(timezone.utc)
+        knowledge_record.updated_at = datetime.now(timezone.utc)
         await db.commit()
-        await db.refresh(note, ["tags"])
+        await db.refresh(knowledge_record, ["tags"])
 
-        if content_changed and note.content and len(note.content.strip()) > 20:
+        if content_changed and knowledge_record.content and len(knowledge_record.content.strip()) > 20:
             background_tasks.add_task(
-                self._process_note_background,
-                note_id=note.id,
+                self._process_knowledge_background,
+                knowledge_id=knowledge_record.id,
                 workspace_id=workspace_id,
-                content=note.content,
-                note_type=note.type,
-                title=normalize_note_title(note.title),
+                content=knowledge_record.content,
+                knowledge_type=knowledge_record.type,
+                title=normalize_knowledge_title(knowledge_record.title),
             )
 
-        return _to_response(note)
+        return _to_response(knowledge_record)
 
-    async def delete_note(self, db: AsyncSession, workspace_id: UUID, note_id: UUID):
+    async def delete_knowledge(self, db: AsyncSession, workspace_id: UUID, knowledge_id: UUID):
         settings = get_settings()
         result = await db.execute(
-            select(Note).where(Note.id == note_id, Note.workspace_id == workspace_id)
+            select(Knowledge).where(Knowledge.id == knowledge_id, Knowledge.workspace_id == workspace_id)
         )
-        note = result.scalar_one_or_none()
-        if not note:
-            raise HTTPException(status_code=404, detail="Note not found")
+        knowledge_record = result.scalar_one_or_none()
+        if not knowledge_record:
+            raise HTTPException(status_code=404, detail="Knowledge not found")
 
-        await db.delete(note)
+        await db.delete(knowledge_record)
         await db.commit()
 
         # Remove Qdrant vectors
@@ -587,101 +605,101 @@ class NoteService:
             client.delete(
                 collection_name=settings.qdrant_collection,
                 points_selector=Filter(
-                    must=[FieldCondition(key="note_id", match=MatchValue(value=str(note_id)))]
+                    must=[FieldCondition(key="knowledge_id", match=MatchValue(value=str(knowledge_id)))]
                 ),
             )
         except Exception as e:
-            logger.warning(f"Failed to delete Qdrant vectors for note {note_id}: {e}")
+            logger.warning(f"Failed to delete Qdrant vectors for knowledge {knowledge_id}: {e}")
 
     async def update_tags(
-        self, db: AsyncSession, note_id: UUID, tags: list[str], source: str = "user"
-    ) -> NoteResponse:
+        self, db: AsyncSession, knowledge_id: UUID, tags: list[str], source: str = "user"
+    ) -> KnowledgeResponse:
         from sqlalchemy.orm import selectinload
         # Delete existing tags for this source
         await db.execute(
-            delete(NoteTag).where(NoteTag.note_id == note_id, NoteTag.source == source)
+            delete(KnowledgeTag).where(KnowledgeTag.knowledge_id == knowledge_id, KnowledgeTag.source == source)
         )
         # Add new tags
         for tag in tags:
-            db.add(NoteTag(note_id=note_id, tag=tag.lower().strip(), source=source))
+            db.add(KnowledgeTag(knowledge_id=knowledge_id, tag=tag.lower().strip(), source=source))
         await db.commit()
 
         result = await db.execute(
-            select(Note).options(selectinload(Note.tags)).where(Note.id == note_id)
+            select(Knowledge).options(selectinload(Knowledge.tags)).where(Knowledge.id == knowledge_id)
         )
-        note = result.scalar_one_or_none()
-        if not note:
-            raise HTTPException(status_code=404, detail="Note not found")
-        return _to_response(note)
+        knowledge_record = result.scalar_one_or_none()
+        if not knowledge_record:
+            raise HTTPException(status_code=404, detail="Knowledge not found")
+        return _to_response(knowledge_record)
 
-    async def toggle_pin(self, db: AsyncSession, note_id: UUID) -> NoteResponse:
+    async def toggle_pin(self, db: AsyncSession, knowledge_id: UUID) -> KnowledgeResponse:
         from sqlalchemy.orm import selectinload
-        result = await db.execute(select(Note).options(selectinload(Note.tags)).where(Note.id == note_id))
-        note = result.scalar_one_or_none()
-        if not note:
-            raise HTTPException(status_code=404, detail="Note not found")
-        note.is_pinned = not note.is_pinned
+        result = await db.execute(select(Knowledge).options(selectinload(Knowledge.tags)).where(Knowledge.id == knowledge_id))
+        knowledge_record = result.scalar_one_or_none()
+        if not knowledge_record:
+            raise HTTPException(status_code=404, detail="Knowledge not found")
+        knowledge_record.is_pinned = not knowledge_record.is_pinned
         await db.commit()
-        await db.refresh(note, ["tags"])
-        return _to_response(note)
+        await db.refresh(knowledge_record, ["tags"])
+        return _to_response(knowledge_record)
 
-    async def toggle_archive(self, db: AsyncSession, note_id: UUID) -> NoteResponse:
+    async def toggle_archive(self, db: AsyncSession, knowledge_id: UUID) -> KnowledgeResponse:
         from sqlalchemy.orm import selectinload
-        result = await db.execute(select(Note).options(selectinload(Note.tags)).where(Note.id == note_id))
-        note = result.scalar_one_or_none()
-        if not note:
-            raise HTTPException(status_code=404, detail="Note not found")
-        note.is_archived = not note.is_archived
+        result = await db.execute(select(Knowledge).options(selectinload(Knowledge.tags)).where(Knowledge.id == knowledge_id))
+        knowledge_record = result.scalar_one_or_none()
+        if not knowledge_record:
+            raise HTTPException(status_code=404, detail="Knowledge not found")
+        knowledge_record.is_archived = not knowledge_record.is_archived
         await db.commit()
-        await db.refresh(note, ["tags"])
-        return _to_response(note)
+        await db.refresh(knowledge_record, ["tags"])
+        return _to_response(knowledge_record)
 
-    async def _process_note_background(
+    async def _process_knowledge_background(
         self,
-        note_id: UUID,
+        knowledge_id: UUID,
         workspace_id: UUID,
         content: str,
-        note_type: str,
+        knowledge_type: str,
         title: str | None,
     ):
-        """Background task: embed note, generate AI title, update status."""
+        """Background task: embed knowledge and update generated title/status."""
         from openforge.db.postgres import AsyncSessionLocal
         from openforge.api.websocket import ws_manager
 
         embedding_status = "done"
 
         try:
-            from openforge.core.note_processor import note_processor
+            from openforge.core.knowledge_processor import knowledge_processor
 
             tags = []
             embed_content = content
-            embed_note_type = note_type
+            embed_knowledge_type = knowledge_type
             embed_title = title
             embed_summary = None
             embed_insights = None
             async with AsyncSessionLocal() as db:
-                note_result = await db.execute(
-                    select(Note).where(Note.id == note_id, Note.workspace_id == workspace_id)
+                knowledge_result = await db.execute(
+                    select(Knowledge).where(Knowledge.id == knowledge_id, Knowledge.workspace_id == workspace_id)
                 )
-                current_note = note_result.scalar_one_or_none()
-                if current_note:
-                    embed_content = current_note.content or content
-                    embed_note_type = current_note.type or note_type
+                current_knowledge = knowledge_result.scalar_one_or_none()
+                if current_knowledge:
+                    embed_content = current_knowledge.content or content
+                    embed_knowledge_type = current_knowledge.type or knowledge_type
                     embed_title = (
-                        normalize_note_title(current_note.title)
-                        or normalize_note_title(current_note.ai_title)
+                        normalize_knowledge_title(current_knowledge.title)
+                        or normalize_knowledge_title(current_knowledge.ai_title)
                         or title
                     )
-                    embed_summary = current_note.ai_summary
-                    embed_insights = current_note.insights if isinstance(current_note.insights, dict) else None
-                result = await db.execute(select(NoteTag).where(NoteTag.note_id == note_id))
+                    embed_summary = current_knowledge.ai_summary
+                    embed_insights = current_knowledge.insights if isinstance(current_knowledge.insights, dict) else None
+                result = await db.execute(select(KnowledgeTag).where(KnowledgeTag.knowledge_id == knowledge_id))
                 tags = [t.tag for t in result.scalars().all()]
 
-            await note_processor.process_note(
-                note_id=note_id,
+            await knowledge_processor.process_knowledge(
+                knowledge_id=knowledge_id,
                 workspace_id=workspace_id,
                 content=embed_content,
-                note_type=embed_note_type,
+                knowledge_type=embed_knowledge_type,
                 title=embed_title,
                 tags=tags,
                 ai_summary=embed_summary,
@@ -689,18 +707,18 @@ class NoteService:
             )
         except Exception as e:
             embedding_status = "failed"
-            logger.error(f"Embedding pipeline failed for note {note_id}: {e}")
+            logger.error(f"Embedding pipeline failed for knowledge {knowledge_id}: {e}")
 
         # Always persist latest embedding status even if title generation fails later.
         try:
             async with AsyncSessionLocal() as db:
-                result = await db.execute(select(Note).where(Note.id == note_id))
-                note = result.scalar_one_or_none()
-                if note:
-                    note.embedding_status = embedding_status
+                result = await db.execute(select(Knowledge).where(Knowledge.id == knowledge_id))
+                knowledge_record = result.scalar_one_or_none()
+                if knowledge_record:
+                    knowledge_record.embedding_status = embedding_status
                     await db.commit()
         except Exception as e:
-            logger.warning(f"Failed to update embedding status for note {note_id}: {e}")
+            logger.warning(f"Failed to update embedding status for knowledge {knowledge_id}: {e}")
 
         # Auto-generate AI title even if embedding fails.
         if not title and content and len(content.strip()) > 50:
@@ -717,26 +735,26 @@ class NoteService:
                         provider_name=provider_name, api_key=api_key, model=model, base_url=base_url, max_tokens=30,
                     )
 
-                    result = await db.execute(select(Note).where(Note.id == note_id))
-                    note = result.scalar_one_or_none()
-                    normalized = derive_note_title(generated, content)
-                    if note and normalized:
-                        note.ai_title = normalized
-                        if not normalize_note_title(note.title):
-                            note.title = normalized
+                    result = await db.execute(select(Knowledge).where(Knowledge.id == knowledge_id))
+                    knowledge_record = result.scalar_one_or_none()
+                    normalized = derive_knowledge_title(generated, content)
+                    if knowledge_record and normalized:
+                        knowledge_record.ai_title = normalized
+                        if not normalize_knowledge_title(knowledge_record.title):
+                            knowledge_record.title = normalized
                         await db.commit()
             except Exception as e:
-                logger.warning(f"Auto-title generation failed for note {note_id}: {e}")
+                logger.warning(f"Auto-title generation failed for knowledge {knowledge_id}: {e}")
 
         try:
             await ws_manager.send_to_workspace(
                 str(workspace_id),
-                {"type": "note_updated", "note_id": str(note_id), "fields": ["embedding_status", "ai_title", "title"]},
+                {"type": "knowledge_updated", "knowledge_id": str(knowledge_id), "fields": ["embedding_status", "ai_title", "title"]},
             )
         except Exception as e:
-            logger.warning(f"Failed to emit workspace update for note {note_id}: {e}")
+            logger.warning(f"Failed to emit workspace update for knowledge {knowledge_id}: {e}")
 
-    async def _fetch_url_metadata(self, note_id: UUID, url: str, workspace_id: UUID | None = None):
+    async def _fetch_url_metadata(self, knowledge_id: UUID, url: str, workspace_id: UUID | None = None):
         """Background task: fetch URL title, description, and readable content for bookmarks."""
         try:
             import httpx
@@ -747,23 +765,29 @@ class NoteService:
             if workspace_id:
                 try:
                     async with AsyncSessionLocal() as db:
-                        result = await db.execute(select(Note).where(Note.id == note_id))
-                        note = result.scalar_one_or_none()
-                        if note and note.type == "bookmark" and not (note.content or "").strip():
-                            if note.embedding_status != "scraping":
-                                note.embedding_status = "scraping"
+                        result = await db.execute(select(Knowledge).where(Knowledge.id == knowledge_id))
+                        knowledge_record = result.scalar_one_or_none()
+                        if (
+                            knowledge_record
+                            and knowledge_record.type == "bookmark"
+                            and not (knowledge_record.content or "").strip()
+                        ):
+                            if knowledge_record.embedding_status != "scraping":
+                                knowledge_record.embedding_status = "scraping"
                                 await db.commit()
                     await ws_manager.send_to_workspace(
                         str(workspace_id),
-                        {"type": "note_updated", "note_id": str(note_id), "fields": ["embedding_status"]},
+                        {"type": "knowledge_updated", "knowledge_id": str(knowledge_id), "fields": ["embedding_status"]},
                     )
                 except Exception as e:
-                    logger.warning(f"Failed to emit bookmark scraping start for note {note_id}: {e}")
+                    logger.warning(f"Failed to emit bookmark scraping start for knowledge {knowledge_id}: {e}")
 
             domain_override_strategy = "none"
             domain_override_content = ""
+            raw_markdown_file = ""
             cloudflare_markdown = ""
             raw_html = ""
+            jina_reader_markdown = ""
 
             async with httpx.AsyncClient(
                 timeout=15.0,
@@ -771,17 +795,36 @@ class NoteService:
                 headers={"User-Agent": "Mozilla/5.0 (compatible; OpenForge/1.0; +https://github.com/openforge)"},
             ) as client:
                 domain_override_strategy, domain_override_content = await self._try_fetch_domain_override_bookmark_content(client, url)
+                raw_markdown_file = await self._try_fetch_raw_markdown_file(client, url)
                 cloudflare_markdown = await self._try_fetch_cloudflare_markdown(client, url)
                 raw_html = await self._try_fetch_html(client, url)
 
             title, description = self._extract_metadata_from_html(raw_html)
             markdown_from_html = self._convert_html_to_markdown(raw_html)
+            if self._looks_like_bot_challenge_text(markdown_from_html):
+                logger.info("Bookmark %s HTML conversion looked like a bot challenge page", knowledge_id)
+                markdown_from_html = ""
+
+            if (
+                not domain_override_content.strip()
+                and not raw_markdown_file.strip()
+                and not cloudflare_markdown.strip()
+                and not markdown_from_html.strip()
+            ):
+                async with httpx.AsyncClient(
+                    timeout=self._JINA_READER_TIMEOUT_SECONDS,
+                    follow_redirects=True,
+                    headers={"User-Agent": "Mozilla/5.0 (compatible; OpenForge/1.0; +https://github.com/openforge)"},
+                ) as client:
+                    jina_reader_markdown = await self._try_fetch_jina_reader_markdown(client, url)
 
             chrome_fallback_text = ""
             if (
                 not domain_override_content.strip()
+                and not raw_markdown_file.strip()
                 and not cloudflare_markdown.strip()
                 and not markdown_from_html.strip()
+                and not jina_reader_markdown.strip()
             ):
                 rendered_html = await self._try_fetch_rendered_html_with_chrome(url)
                 if rendered_html:
@@ -795,38 +838,40 @@ class NoteService:
             if domain_override_content.strip():
                 candidates.append((domain_override_strategy, domain_override_content))
             candidates.extend([
+                ("raw_markdown_file", raw_markdown_file),
                 ("cloudflare_markdown", cloudflare_markdown),
                 ("html_to_markdown", markdown_from_html),
+                ("jina_reader_markdown", jina_reader_markdown),
                 ("chrome_readable_text", chrome_fallback_text),
                 ("metadata_fallback", metadata_fallback_text),
             ])
             strategy, readable_text = self._pick_bookmark_content(candidates)
             if readable_text:
                 readable_text = readable_text[:self._BOOKMARK_CONTENT_MAX_CHARS]
-                logger.info("Bookmark %s scraped via %s", note_id, strategy)
+                logger.info("Bookmark %s scraped via %s", knowledge_id, strategy)
             else:
-                logger.warning("Bookmark %s scraping produced empty content", note_id)
+                logger.warning("Bookmark %s scraping produced empty content", knowledge_id)
 
             changed_fields: list[str] = []
             async with AsyncSessionLocal() as db:
-                result = await db.execute(select(Note).where(Note.id == note_id))
-                note = result.scalar_one_or_none()
-                if note:
+                result = await db.execute(select(Knowledge).where(Knowledge.id == knowledge_id))
+                knowledge_record = result.scalar_one_or_none()
+                if knowledge_record:
                     if title:
-                        note.url_title = title[:500]
+                        knowledge_record.url_title = title[:500]
                         changed_fields.append("url_title")
                     if description:
-                        note.url_description = description[:1000]
+                        knowledge_record.url_description = description[:1000]
                         changed_fields.append("url_description")
-                    # Populate note content from scraped text if note has no user-set content
-                    if readable_text and not note.content:
-                        note.content = readable_text
-                        note.word_count = count_words(readable_text, note_type=note.type)
-                        note.embedding_status = "pending"
+                    # Populate content only if the user has not provided content.
+                    if readable_text and not knowledge_record.content:
+                        knowledge_record.content = readable_text
+                        knowledge_record.word_count = count_words(readable_text, knowledge_type=knowledge_record.type)
+                        knowledge_record.embedding_status = "pending"
                         changed_fields.extend(["content", "word_count", "embedding_status"])
-                    elif not readable_text and note.embedding_status == "scraping":
+                    elif not readable_text and knowledge_record.embedding_status == "scraping":
                         # Scraping completed but we could not extract usable content.
-                        note.embedding_status = "failed"
+                        knowledge_record.embedding_status = "failed"
                         changed_fields.append("embedding_status")
                     await db.commit()
 
@@ -835,48 +880,48 @@ class NoteService:
                     await ws_manager.send_to_workspace(
                         str(workspace_id),
                         {
-                            "type": "note_updated",
-                            "note_id": str(note_id),
+                            "type": "knowledge_updated",
+                            "knowledge_id": str(knowledge_id),
                             "fields": sorted(set(changed_fields)),
                         },
                     )
                 except Exception as e:
-                    logger.warning(f"Failed to emit bookmark scraping completion for note {note_id}: {e}")
+                    logger.warning(f"Failed to emit bookmark scraping completion for knowledge {knowledge_id}: {e}")
 
             # Trigger embedding + AI title for the scraped content
             if readable_text and workspace_id:
                 from openforge.db.postgres import AsyncSessionLocal as ASL
                 async with ASL() as db:
-                    result = await db.execute(select(Note).where(Note.id == note_id))
-                    note = result.scalar_one_or_none()
-                    if note and note.content:
+                    result = await db.execute(select(Knowledge).where(Knowledge.id == knowledge_id))
+                    knowledge_record = result.scalar_one_or_none()
+                    if knowledge_record and knowledge_record.content:
                         # Directly await instead of create_task to avoid greenlet/event loop issues
-                        await self._process_note_background(
-                            note_id=note_id,
+                        await self._process_knowledge_background(
+                            knowledge_id=knowledge_id,
                             workspace_id=workspace_id,
-                            content=note.content,
-                            note_type="bookmark",
-                            title=note.title,
+                            content=knowledge_record.content,
+                            knowledge_type="bookmark",
+                            title=knowledge_record.title,
                         )
         except Exception as e:
-            logger.warning(f"Failed to fetch URL metadata for note {note_id}: {e}")
+            logger.warning(f"Failed to fetch URL metadata for knowledge {knowledge_id}: {e}")
             if workspace_id:
                 try:
                     from openforge.db.postgres import AsyncSessionLocal
                     from openforge.api.websocket import ws_manager
 
                     async with AsyncSessionLocal() as db:
-                        result = await db.execute(select(Note).where(Note.id == note_id))
-                        note = result.scalar_one_or_none()
-                        if note and note.embedding_status == "scraping":
-                            note.embedding_status = "failed"
+                        result = await db.execute(select(Knowledge).where(Knowledge.id == knowledge_id))
+                        knowledge_record = result.scalar_one_or_none()
+                        if knowledge_record and knowledge_record.embedding_status == "scraping":
+                            knowledge_record.embedding_status = "failed"
                             await db.commit()
                     await ws_manager.send_to_workspace(
                         str(workspace_id),
-                        {"type": "note_updated", "note_id": str(note_id), "fields": ["embedding_status"]},
+                        {"type": "knowledge_updated", "knowledge_id": str(knowledge_id), "fields": ["embedding_status"]},
                     )
                 except Exception as emit_error:
-                    logger.warning(f"Failed to emit bookmark scraping failure for note {note_id}: {emit_error}")
+                    logger.warning(f"Failed to emit bookmark scraping failure for knowledge {knowledge_id}: {emit_error}")
 
     def _extract_metadata_from_html(self, html_doc: str) -> tuple[str | None, str | None]:
         if not html_doc:
@@ -999,6 +1044,23 @@ class NoteService:
             return True
         return any(token in snippet for token in ("<body", "<head", "<div", "<script"))
 
+    def _looks_like_bot_challenge_text(self, text: str) -> bool:
+        snippet = (text or "").strip().lower()
+        if not snippet:
+            return False
+        challenge_markers = (
+            "security checkpoint",
+            "checking your browser",
+            "verify you are human",
+            "attention required",
+            "please stand by",
+            "just a moment",
+            "enable javascript",
+            "human verification",
+            "bot verification",
+        )
+        return any(marker in snippet for marker in challenge_markers)
+
     async def _try_fetch_cloudflare_markdown(self, client, url: str) -> str:
         """Try Cloudflare's markdown content negotiation first."""
         try:
@@ -1091,6 +1153,34 @@ class NoteService:
         # Other GitHub pages (issues, pulls, blob, etc.) use default extraction.
         return None
 
+    def _parse_github_blob_file(self, url: str) -> tuple[str, str, str, str] | None:
+        parsed = urlparse(url)
+        parts = [unquote(part) for part in parsed.path.split("/") if part]
+        if len(parts) < 5:
+            return None
+
+        owner, repo = parts[0], parts[1]
+        if repo.endswith(".git"):
+            repo = repo[:-4]
+        if parts[2] != "blob":
+            return None
+
+        ref = parts[3]
+        file_path = "/".join(parts[4:])
+        if not owner or not repo or not ref or not file_path:
+            return None
+        return owner, repo, ref, file_path
+
+    def _is_markdown_readme_path(self, path: str | None) -> bool:
+        if not path:
+            return False
+        filename = (path.split("/")[-1] or "").strip().lower()
+        if not filename:
+            return False
+        if not filename.startswith("readme"):
+            return False
+        return filename.endswith(self._MARKDOWN_FILE_EXTENSIONS)
+
     def _extract_github_readme_text(self, response) -> str:
         text = (response.text or "").strip()
         if not text:
@@ -1153,45 +1243,167 @@ class NoteService:
             return ""
         return self._extract_github_readme_text(response)
 
+    async def _try_fetch_github_file_text(
+        self,
+        client,
+        owner: str,
+        repo: str,
+        *,
+        file_path: str,
+        ref: str | None,
+    ) -> str:
+        owner_quoted = quote(owner, safe="")
+        repo_quoted = quote(repo, safe="")
+        path_quoted = "/".join(quote(seg, safe="") for seg in file_path.split("/") if seg)
+        if not path_quoted:
+            return ""
+
+        endpoint = f"https://api.github.com/repos/{owner_quoted}/{repo_quoted}/contents/{path_quoted}"
+        params = {"ref": ref} if ref else None
+        headers = {
+            "Accept": "application/vnd.github.raw+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+
+        response = await client.get(endpoint, headers=headers, params=params)
+        if response.status_code == 404:
+            return ""
+        if response.status_code >= 400:
+            logger.info(
+                "GitHub file fetch failed for %s/%s (%s, ref=%s): %s",
+                owner,
+                repo,
+                file_path,
+                ref or "default",
+                response.status_code,
+            )
+            return ""
+        return self._extract_github_readme_text(response)
+
+    def _directory_fallback_chain(self, path: str | None) -> list[str | None]:
+        if not path:
+            return [None]
+        segments = [seg for seg in path.split("/") if seg]
+        chain: list[str | None] = ["/".join(segments[:idx]) for idx in range(len(segments), 0, -1)]
+        chain.append(None)
+        return chain
+
     async def _extract_github_bookmark_content(self, client, url: str) -> tuple[str, str]:
+        blob = self._parse_github_blob_file(url)
+        if blob:
+            owner, repo, ref, file_path = blob
+            if self._is_markdown_readme_path(file_path):
+                raw_markdown = await self._try_fetch_github_file_text(
+                    client,
+                    owner,
+                    repo,
+                    file_path=file_path,
+                    ref=ref,
+                )
+                if raw_markdown.strip():
+                    return "github_blob_readme_markdown", raw_markdown
+
         parsed = self._parse_github_repo_or_directory(url)
         if not parsed:
             return "none", ""
 
         owner, repo, ref, directory_path = parsed
 
-        if directory_path:
+        for candidate_directory in self._directory_fallback_chain(directory_path):
             directory_readme = await self._try_fetch_github_readme(
                 client,
                 owner,
                 repo,
-                directory_path=directory_path,
+                directory_path=candidate_directory,
                 ref=ref,
             )
             if directory_readme.strip():
-                return "github_directory_readme", directory_readme
+                if candidate_directory is None:
+                    return "github_repository_root_readme", directory_readme
+                if candidate_directory == directory_path:
+                    return "github_directory_readme", directory_readme
+                return "github_parent_directory_readme", directory_readme
 
-        root_readme = await self._try_fetch_github_readme(
-            client,
-            owner,
-            repo,
-            directory_path=None,
-            ref=ref,
-        )
-        if not root_readme.strip() and ref:
-            # If the branch-specific README is missing, fall back to default branch root README.
-            root_readme = await self._try_fetch_github_readme(
-                client,
-                owner,
-                repo,
-                directory_path=None,
-                ref=None,
-            )
-
-        if root_readme.strip():
-            return "github_repository_root_readme", root_readme
+        if ref:
+            # Branch-specific lookup failed. Fall back to default branch while preserving
+            # the same innermost-directory-first search order.
+            for candidate_directory in self._directory_fallback_chain(directory_path):
+                directory_readme = await self._try_fetch_github_readme(
+                    client,
+                    owner,
+                    repo,
+                    directory_path=candidate_directory,
+                    ref=None,
+                )
+                if directory_readme.strip():
+                    if candidate_directory is None:
+                        return "github_repository_root_readme", directory_readme
+                    if candidate_directory == directory_path:
+                        return "github_directory_readme", directory_readme
+                    return "github_parent_directory_readme", directory_readme
 
         return "none", ""
+
+    def _looks_like_markdown_file_url(self, url: str) -> bool:
+        path = (urlparse(url).path or "").strip().lower()
+        if not path:
+            return False
+        return any(path.endswith(ext) for ext in self._MARKDOWN_FILE_EXTENSIONS)
+
+    async def _try_fetch_raw_markdown_file(self, client, url: str) -> str:
+        if not self._looks_like_markdown_file_url(url):
+            return ""
+        try:
+            response = await client.get(url, headers={"Accept": "text/markdown, text/plain;q=0.9"})
+            if response.status_code >= 400:
+                return ""
+            text = (response.text or "").strip()
+            if not text or self._looks_like_html_response(text):
+                return ""
+            return text[:self._BOOKMARK_CONTENT_MAX_CHARS]
+        except Exception as e:
+            logger.warning(f"Raw markdown fetch failed for {url}: {e}")
+            return ""
+
+    def _extract_jina_markdown_body(self, text: str) -> str:
+        body = (text or "").strip()
+        if not body:
+            return ""
+        marker = "Markdown Content:"
+        index = body.find(marker)
+        if index >= 0:
+            candidate = body[index + len(marker):].strip()
+            if candidate:
+                return candidate
+        return body
+
+    async def _try_fetch_jina_reader_markdown(self, client, url: str) -> str:
+        candidates: list[str] = []
+        normalized = (url or "").strip()
+        if normalized:
+            candidates.append(f"https://r.jina.ai/{normalized}")
+            if normalized.startswith("https://"):
+                candidates.append(f"https://r.jina.ai/http://{normalized.removeprefix('https://')}")
+            elif normalized.startswith("http://"):
+                candidates.append(f"https://r.jina.ai/{normalized}")
+
+        seen: set[str] = set()
+        for reader_url in candidates:
+            if not reader_url or reader_url in seen:
+                continue
+            seen.add(reader_url)
+            try:
+                response = await client.get(reader_url)
+                if response.status_code >= 400:
+                    continue
+                text = self._extract_jina_markdown_body(response.text)
+                if not text or self._looks_like_html_response(text):
+                    continue
+                return text[:self._BOOKMARK_CONTENT_MAX_CHARS]
+            except Exception as e:
+                logger.warning(f"Jina reader fetch failed for {url} via {reader_url}: {e}")
+                continue
+        return ""
 
     def _pick_bookmark_content(
         self,
@@ -1203,5 +1415,4 @@ class NoteService:
                 return strategy, text
         return "none", ""
 
-
-note_service = NoteService()
+knowledge_processing_service = KnowledgeProcessingService()

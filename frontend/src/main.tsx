@@ -12,7 +12,7 @@ import './index.css'
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage'))
 const AppShell = lazy(() => import('./pages/AppShell'))
 const WorkspaceHome = lazy(() => import('./pages/WorkspaceHome'))
-const NotePage = lazy(() => import('./pages/NotePage'))
+const KnowledgePage = lazy(() => import('./pages/KnowledgePage'))
 const ChatPage = lazy(() => import('./pages/ChatPage'))
 const SearchPage = lazy(() => import('./pages/SearchPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
@@ -87,14 +87,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                         <WorkspaceHome />
                                     </ErrorBoundary>
                                 } />
-                                <Route path="notes/:noteId" element={
+                                <Route path="knowledge/:knowledgeId" element={
                                     <ErrorBoundary>
-                                        <NotePage />
-                                    </ErrorBoundary>
-                                } />
-                                <Route path="knowledge/:noteId" element={
-                                    <ErrorBoundary>
-                                        <NotePage />
+                                        <KnowledgePage />
                                     </ErrorBoundary>
                                 } />
                                 <Route path="chat" element={

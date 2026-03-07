@@ -10,7 +10,7 @@ from openforge.utils.task_audit import (
 
 def test_mark_task_log_done_sets_status_and_duration() -> None:
     started_at = datetime.now(timezone.utc) - timedelta(seconds=2)
-    log = TaskLog(task_type="summarize_note", status="running", started_at=started_at)
+    log = TaskLog(task_type="summarize_knowledge", status="running", started_at=started_at)
 
     mark_task_log_done(log, item_count=1)
 
@@ -23,7 +23,7 @@ def test_mark_task_log_done_sets_status_and_duration() -> None:
 
 def test_mark_task_log_failed_truncates_error_message() -> None:
     started_at = datetime.now(timezone.utc) - timedelta(milliseconds=500)
-    log = TaskLog(task_type="extract_note_insights", status="running", started_at=started_at)
+    log = TaskLog(task_type="extract_knowledge_insights", status="running", started_at=started_at)
     long_message = "x" * (MAX_TASK_ERROR_LENGTH + 25)
 
     mark_task_log_failed(log, RuntimeError(long_message))

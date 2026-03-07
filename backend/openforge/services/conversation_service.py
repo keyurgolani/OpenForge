@@ -1,15 +1,17 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
+from sqlalchemy.orm import selectinload
 from uuid import UUID
 from datetime import datetime, timezone, timedelta
 import logging
 
-from openforge.db.models import Conversation, Message
+from openforge.db.models import Conversation, Message, MessageAttachment
 from openforge.schemas.conversation import (
     ConversationCreate, ConversationUpdate,
     ConversationResponse, ConversationWithMessages, MessageResponse
 )
 from openforge.services.config_service import config_service
+from openforge.services.attachment_pipeline import resolve_attachment_pipeline
 from openforge.utils.chat_title import (
     build_running_title_summary,
     derive_chat_title,
@@ -26,6 +28,32 @@ MIN_CHAT_TRASH_RETENTION_DAYS = 1
 MAX_CHAT_TRASH_RETENTION_DAYS = 365
 
 
+def _attachment_to_processed_summary(attachment: MessageAttachment) -> dict:
+    pipeline = resolve_attachment_pipeline(
+        content_type=attachment.content_type,
+        filename=attachment.filename,
+    )
+    status = "deferred"
+    details = "Pipeline not available yet for this file type"
+
+    if pipeline == "text":
+        extracted_text = (attachment.extracted_text or "").strip()
+        if extracted_text:
+            status = "processed"
+            details = f"Extracted text ({len(extracted_text)} chars)"
+        else:
+            status = "empty"
+            details = "No text extracted from attachment"
+
+    return {
+        "id": str(attachment.id),
+        "filename": attachment.filename,
+        "status": status,
+        "pipeline": pipeline,
+        "details": details,
+    }
+
+
 def _msg_to_response(m: Message) -> MessageResponse:
     return MessageResponse(
         id=m.id,
@@ -38,6 +66,7 @@ def _msg_to_response(m: Message) -> MessageResponse:
         token_count=m.token_count,
         generation_ms=m.generation_ms,
         context_sources=m.context_sources,
+        attachments_processed=[_attachment_to_processed_summary(att) for att in (m.attachments or [])],
         created_at=m.created_at,
     )
 
@@ -139,16 +168,30 @@ class ConversationService:
         return [_conv_to_response(c) for c in convs]
 
     async def get_conversation_with_messages(
-        self, db: AsyncSession, conversation_id: UUID, limit: int = 50, before_id: UUID | None = None
+        self,
+        db: AsyncSession,
+        conversation_id: UUID,
+        limit: int = 50,
+        before_id: UUID | None = None,
+        *,
+        workspace_id: UUID | None = None,
+        include_archived: bool = False,
     ) -> ConversationWithMessages:
-        result = await db.execute(select(Conversation).where(Conversation.id == conversation_id))
+        query = select(Conversation).where(Conversation.id == conversation_id)
+        if workspace_id is not None:
+            query = query.where(Conversation.workspace_id == workspace_id)
+        result = await db.execute(query)
         conv = result.scalar_one_or_none()
         if not conv:
             raise HTTPException(status_code=404, detail="Conversation not found")
-        if conv.is_archived:
+        if conv.is_archived and not include_archived:
             raise HTTPException(status_code=404, detail="Conversation not found")
 
-        msg_query = select(Message).where(Message.conversation_id == conversation_id)
+        msg_query = (
+            select(Message)
+            .options(selectinload(Message.attachments))
+            .where(Message.conversation_id == conversation_id)
+        )
         if before_id:
             before_result = await db.execute(select(Message).where(Message.id == before_id))
             before_msg = before_result.scalar_one_or_none()
@@ -201,6 +244,30 @@ class ConversationService:
         conv.is_archived = True
         conv.archived_at = datetime.now(timezone.utc)
         conv.updated_at = datetime.now(timezone.utc)
+        await db.commit()
+
+    async def permanently_delete_conversation(
+        self,
+        db: AsyncSession,
+        workspace_id: UUID,
+        conversation_id: UUID,
+    ):
+        await self.purge_expired_archived_conversations(db, workspace_id=workspace_id)
+        result = await db.execute(
+            select(Conversation).where(
+                Conversation.id == conversation_id,
+                Conversation.workspace_id == workspace_id,
+            )
+        )
+        conv = result.scalar_one_or_none()
+        if not conv:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        if not conv.is_archived:
+            raise HTTPException(
+                status_code=400,
+                detail="Only chats in Trash can be permanently deleted",
+            )
+        await db.delete(conv)
         await db.commit()
 
     async def add_message(

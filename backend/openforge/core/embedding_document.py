@@ -24,7 +24,7 @@ def _format_insight_items(items: Any, *, is_timeline: bool = False) -> list[str]
     return out
 
 
-def build_note_embedding_document(
+def build_knowledge_embedding_document(
     *,
     content: str,
     ai_summary: str | None = None,

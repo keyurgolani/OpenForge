@@ -84,12 +84,12 @@ class Workspace(Base):
     )
 
     llm_provider: Mapped[Optional["LLMProvider"]] = relationship(back_populates="workspaces")
-    notes: Mapped[list["Knowledge"]] = relationship(back_populates="workspace", cascade="all, delete-orphan")
+    knowledge: Mapped[list["Knowledge"]] = relationship(back_populates="workspace", cascade="all, delete-orphan")
     conversations: Mapped[list["Conversation"]] = relationship(back_populates="workspace", cascade="all, delete-orphan")
 
 
 class Knowledge(Base):
-    __tablename__ = "notes"
+    __tablename__ = "knowledge"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -118,46 +118,32 @@ class Knowledge(Base):
         DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc
     )
 
-    workspace: Mapped["Workspace"] = relationship(back_populates="notes")
+    workspace: Mapped["Workspace"] = relationship(back_populates="knowledge")
     tags: Mapped[list["KnowledgeTag"]] = relationship(back_populates="knowledge", cascade="all, delete-orphan")
 
     __table_args__ = (
-        Index("idx_notes_workspace", "workspace_id"),
-        Index("idx_notes_type", "workspace_id", "type"),
-        Index("idx_notes_updated", "workspace_id", "updated_at"),
-        Index("idx_notes_archived", "workspace_id", "is_archived"),
+        Index("idx_knowledge_workspace", "workspace_id"),
+        Index("idx_knowledge_type", "workspace_id", "type"),
+        Index("idx_knowledge_updated", "workspace_id", "updated_at"),
+        Index("idx_knowledge_archived", "workspace_id", "is_archived"),
     )
 
 
 class KnowledgeTag(Base):
-    __tablename__ = "note_tags"
+    __tablename__ = "knowledge_tags"
 
-    note_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("notes.id", ondelete="CASCADE"), primary_key=True
+    knowledge_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("knowledge.id", ondelete="CASCADE"), primary_key=True
     )
     tag: Mapped[str] = mapped_column(String(100), primary_key=True)
     source: Mapped[str] = mapped_column(String(10), nullable=False, default="ai")
 
     knowledge: Mapped["Knowledge"] = relationship(back_populates="tags")
 
-    @property
-    def note(self) -> "Knowledge":
-        # Backward compatibility for legacy naming.
-        return self.knowledge
-
-    @note.setter
-    def note(self, value: "Knowledge") -> None:
-        self.knowledge = value
-
     __table_args__ = (
-        Index("idx_note_tags_tag", "tag"),
-        Index("idx_note_tags_note", "note_id"),
+        Index("idx_knowledge_tags_tag", "tag"),
+        Index("idx_knowledge_tags_knowledge", "knowledge_id"),
     )
-
-
-# Backward compatibility aliases for legacy naming.
-Note = Knowledge
-NoteTag = KnowledgeTag
 
 
 class Conversation(Base):
@@ -227,8 +213,8 @@ class MessageAttachment(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    message_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("messages.id", ondelete="CASCADE"), nullable=False
+    message_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("messages.id", ondelete="CASCADE"), nullable=True
     )
     filename: Mapped[str] = mapped_column(String(500), nullable=False)
     content_type: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -239,7 +225,7 @@ class MessageAttachment(Base):
         DateTime(timezone=True), nullable=False, default=now_utc
     )
 
-    message: Mapped["Message"] = relationship(back_populates="attachments")
+    message: Mapped[Optional["Message"]] = relationship(back_populates="attachments")
 
     __table_args__ = (
         Index("idx_message_attachments_message", "message_id"),

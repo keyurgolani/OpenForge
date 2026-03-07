@@ -9,9 +9,11 @@ import logging
 logger = logging.getLogger("openforge.onboarding")
 
 VALID_TRANSITIONS = {
-    "welcome": "llm_setup",
-    "llm_setup": "workspace_create",
-    "workspace_create": "complete",
+    "welcome": {"llm_setup"},
+    "llm_setup": {"workspace_create"},
+    # Allow "complete" for older onboarding clients that skip automation preferences.
+    "workspace_create": {"automation_preferences", "complete"},
+    "automation_preferences": {"complete"},
 }
 
 
@@ -37,11 +39,12 @@ class OnboardingService:
             row = Onboarding(id=1)
             db.add(row)
 
-        expected_next = VALID_TRANSITIONS.get(row.current_step)
-        if step != expected_next:
+        allowed_next = VALID_TRANSITIONS.get(row.current_step, set())
+        if step not in allowed_next:
+            expected = ", ".join(sorted(allowed_next)) if allowed_next else "none"
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid step transition. Expected '{expected_next}', got '{step}'.",
+                detail=f"Invalid step transition. Expected one of [{expected}], got '{step}'.",
             )
 
         row.current_step = step

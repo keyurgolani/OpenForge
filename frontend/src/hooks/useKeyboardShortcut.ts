@@ -73,7 +73,7 @@ export function useKeyboardShortcut(
  * 
  * @example
  * useKeyboardShortcuts([
- *   { key: 'n', withModKey: true, handler: () => createNote() },
+ *   { key: 'n', withModKey: true, handler: () => createKnowledge() },
  *   { key: '/', withModKey: false, handler: () => focusSearch() },
  * ])
  */

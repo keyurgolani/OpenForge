@@ -16,9 +16,14 @@ from openforge.services.chat_retrieval import (
     build_context_sources,
     select_relevant_rag_results,
 )
+from openforge.services.automation_config import is_auto_bookmark_content_extraction_enabled
+from openforge.services.attachment_pipeline import (
+    extract_http_urls,
+    resolve_attachment_pipeline,
+)
 from openforge.services.chat_stream_registry import ChatStreamRegistry
 from openforge.api.websocket import ws_manager
-from openforge.db.models import MessageAttachment, Conversation
+from openforge.db.models import Conversation, Knowledge, MessageAttachment
 
 logger = logging.getLogger("openforge.chat")
 
@@ -28,6 +33,159 @@ context_assembler = ContextAssembler()
 class ChatService:
     def __init__(self) -> None:
         self.stream_registry = ChatStreamRegistry()
+
+    async def _process_message_attachments(
+        self,
+        db: AsyncSession,
+        *,
+        user_message_id: UUID,
+        attachment_ids: Optional[List[str]],
+    ) -> tuple[str, list[dict]]:
+        if not attachment_ids:
+            return "", []
+
+        from openforge.api.attachments import extract_text_from_text_file
+
+        context_blocks: list[str] = []
+        processed: list[dict] = []
+        db_updated = False
+
+        for raw_attachment_id in dict.fromkeys(attachment_ids):
+            try:
+                attachment_id = UUID(str(raw_attachment_id))
+            except Exception:
+                processed.append({
+                    "id": str(raw_attachment_id),
+                    "filename": "unknown",
+                    "status": "failed",
+                    "pipeline": "unknown",
+                    "details": "Invalid attachment id",
+                })
+                continue
+
+            result = await db.execute(
+                select(MessageAttachment).where(MessageAttachment.id == attachment_id)
+            )
+            attachment = result.scalar_one_or_none()
+            if not attachment:
+                processed.append({
+                    "id": str(attachment_id),
+                    "filename": "unknown",
+                    "status": "missing",
+                    "pipeline": "unknown",
+                    "details": "Attachment record not found",
+                })
+                continue
+
+            pipeline = resolve_attachment_pipeline(
+                content_type=attachment.content_type,
+                filename=attachment.filename,
+            )
+            attachment_status = "deferred"
+            details = "Pipeline not available yet for this file type"
+
+            if attachment.message_id is None:
+                attachment.message_id = user_message_id
+                db_updated = True
+
+            if pipeline == "text":
+                if not (attachment.extracted_text or "").strip():
+                    extracted = await extract_text_from_text_file(attachment.file_path)
+                    attachment.extracted_text = extracted or None
+                    db_updated = True
+
+                extracted_text = (attachment.extracted_text or "").strip()
+                if extracted_text:
+                    attachment_status = "processed"
+                    details = f"Extracted text ({len(extracted_text)} chars)"
+                    context_blocks.append(
+                        (
+                            f"\n--- Content from {attachment.filename} ---\n"
+                            f"{extracted_text}\n"
+                            f"--- End of {attachment.filename} ---\n"
+                        )
+                    )
+                else:
+                    attachment_status = "empty"
+                    details = "No text extracted from attachment"
+
+            processed.append({
+                "id": str(attachment.id),
+                "filename": attachment.filename,
+                "status": attachment_status,
+                "pipeline": pipeline,
+                "details": details,
+            })
+
+        if db_updated:
+            await db.commit()
+
+        if not context_blocks:
+            return "", processed
+        return (
+            "\n\nThe user has attached the following files:\n" + "\n".join(context_blocks),
+            processed,
+        )
+
+    async def _trigger_bookmark_extraction_for_links(
+        self,
+        *,
+        workspace_id: UUID,
+        urls: list[str],
+    ) -> None:
+        if not urls:
+            return
+
+        from openforge.db.postgres import AsyncSessionLocal
+        from openforge.services.knowledge_service import knowledge_service
+
+        try:
+            targets: list[tuple[UUID, UUID]] = []
+            auto_extraction_enabled = True
+            async with AsyncSessionLocal() as db:
+                auto_extraction_enabled = await is_auto_bookmark_content_extraction_enabled(db)
+                for url in urls:
+                    result = await db.execute(
+                        select(Knowledge).where(
+                            Knowledge.workspace_id == workspace_id,
+                            Knowledge.type == "bookmark",
+                            Knowledge.url == url,
+                        )
+                    )
+                    bookmark = result.scalar_one_or_none()
+                    if not bookmark:
+                        bookmark = Knowledge(
+                            workspace_id=workspace_id,
+                            type="bookmark",
+                            content="",
+                            url=url,
+                            embedding_status="pending",
+                            word_count=0,
+                        )
+                        db.add(bookmark)
+                        await db.flush()
+                    targets.append((bookmark.id, bookmark.workspace_id))
+                await db.commit()
+
+            if not auto_extraction_enabled:
+                return
+
+            for knowledge_id, knowledge_workspace_id in targets:
+                try:
+                    await knowledge_service.run_bookmark_content_extraction_job(
+                        knowledge_id=knowledge_id,
+                        workspace_id=knowledge_workspace_id,
+                        audit_task_type="extract_bookmark_content",
+                    )
+                except Exception as extraction_error:
+                    logger.warning(
+                        "Chat URL bookmark extraction failed for %s in workspace %s: %s",
+                        knowledge_id,
+                        knowledge_workspace_id,
+                        extraction_error,
+                    )
+        except Exception as e:
+            logger.warning("Failed to trigger bookmark extraction for chat links: %s", e)
 
     async def send_stream_snapshot(
         self,
@@ -74,34 +232,41 @@ class ChatService:
             })
             return
 
-        attachment_context = ""
-
-        if attachment_ids:
-            attachment_texts = []
-            for att_id in attachment_ids:
-                try:
-                    result = await db.execute(
-                        select(MessageAttachment).where(MessageAttachment.id == UUID(att_id))
-                    )
-                    attachment = result.scalar_one_or_none()
-                    if attachment and attachment.extracted_text:
-                        attachment_texts.append(
-                            f"\n--- Content from {attachment.filename} ---\n{attachment.extracted_text}\n--- End of {attachment.filename} ---\n"
-                        )
-                except Exception as e:
-                    logger.warning(f"Failed to load attachment {att_id}: {e}")
-
-            if attachment_texts:
-                attachment_context = "\n\nThe user has attached the following files:\n" + "\n".join(attachment_texts)
-
         # 1. Save user message
-        await conversation_service.add_message(
+        user_message = await conversation_service.add_message(
             db, conversation_id, role="user", content=user_content
         )
         self.stream_registry.start(workspace_id=workspace_id, conversation_id=conversation_id)
 
         try:
-            # 2. RAG context retrieval (use enhanced content if attachments present)
+            # 2. Process attachments and surface their pipeline status before retrieval.
+            attachment_context, attachments_processed = await self._process_message_attachments(
+                db,
+                user_message_id=user_message.id,
+                attachment_ids=attachment_ids,
+            )
+            if attachments_processed:
+                self.stream_registry.set_attachments_processed(
+                    conversation_id=conversation_id,
+                    attachments=attachments_processed,
+                )
+                await ws_manager.send_to_workspace(workspace_key, {
+                    "type": "chat_attachments_processed",
+                    "conversation_id": str(conversation_id),
+                    "data": attachments_processed,
+                })
+
+            # 3. Trigger bookmark extraction for HTTP links mentioned in chat.
+            chat_urls = extract_http_urls(user_content)
+            if chat_urls:
+                asyncio.create_task(
+                    self._trigger_bookmark_extraction_for_links(
+                        workspace_id=workspace_id,
+                        urls=chat_urls,
+                    )
+                )
+
+            # 4. RAG context retrieval (use enhanced content if attachments present)
             rag_query = user_content
             if attachment_context:
                 rag_query = f"{user_content}\n{attachment_context}"
@@ -125,7 +290,7 @@ class ChatService:
                     "data": context_sources,
                 })
 
-            # 3. Assemble prompt
+            # 5. Assemble prompt
             history = await conversation_service.get_recent_messages(db, conversation_id, limit=20)
             system_prompt = (
                 "You are a helpful AI assistant integrated into OpenForge, a self-hosted knowledge management workspace. "
@@ -134,8 +299,12 @@ class ChatService:
                 "If the knowledge does not contain relevant information, answer from your general knowledge and say so clearly. "
                 "Write naturally and conversationally. Do NOT begin responses with formulaic phrases like "
                 "\"Based on the provided context,\" \"According to the context,\" or similar variants. "
-                "When referencing source material, mention it naturally (for example: \"In your note <title>...\") "
-                "instead of using robotic preambles. "
+                "Never call the retrieved material \"provided context\" or \"the context above.\" "
+                "When referencing retrieved material, refer to it as \"Workspace Knowledge\" and/or \"Referenced Sources\" naturally "
+                "(for example: \"In your Workspace Knowledge, <title> says...\" or "
+                "\"One of the Referenced Sources notes...\"). "
+                "When source material is irrelevant or insufficient, state that you did not find enough in Workspace Knowledge or Referenced Sources, "
+                "then continue helpfully from general knowledge if appropriate. "
                 "Be concise, clear, and helpful."
             )
 
@@ -146,7 +315,7 @@ class ChatService:
                 extra_context=attachment_context if attachment_context else None,
             )
 
-            # 4. Get provider and stream response
+            # 6. Get provider and stream response
             try:
                 provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(
                     db, workspace_id, provider_id=provider_id, model_override=model_id
@@ -201,7 +370,7 @@ class ChatService:
                 })
                 return
 
-            # 5. Save assistant message
+            # 7. Save assistant message
             generation_ms = int((time.perf_counter() - generation_started) * 1000)
             has_runtime_override = bool(provider_id or model_id)
 
@@ -219,7 +388,7 @@ class ChatService:
                 trigger_auto_title=not has_runtime_override,
             )
 
-            # 6. Notify completion
+            # 8. Notify completion
             await ws_manager.send_to_workspace(workspace_key, {
                 "type": "chat_done",
                 "conversation_id": str(conversation_id),

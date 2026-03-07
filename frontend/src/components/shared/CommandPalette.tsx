@@ -5,7 +5,7 @@ import { Command } from 'cmdk'
 import { listWorkspaces, listKnowledge } from '@/lib/api'
 import { useUIStore } from '@/stores/uiStore'
 import { isModKey, getShortcutDisplay } from '@/lib/keyboard'
-import { openQuickNote, type QuickNoteType } from '@/lib/quick-note'
+import { openQuickKnowledge, type QuickKnowledgeType } from '@/lib/quick-knowledge'
 import {
     Search, FileText, MessageSquare, Settings, Plus, Bookmark,
     Code2, Zap, Home, ArrowRight, FolderOpen
@@ -27,13 +27,13 @@ export default function CommandPalette() {
         enabled: commandPaletteOpen,
     })
 
-    const { data: notesData } = useQuery({
-        queryKey: ['notes', workspaceId, 'palette'],
+    const { data: knowledgeData } = useQuery({
+        queryKey: ['knowledge', workspaceId, 'palette'],
         queryFn: () => listKnowledge(workspaceId, { page_size: 50 }),
         enabled: commandPaletteOpen && !!workspaceId,
     })
 
-    const notes = notesData?.knowledge ?? notesData?.notes ?? []
+    const knowledgeItems = knowledgeData?.knowledge ?? []
 
     // Cmd+K / Ctrl+K to open
     useEffect(() => {
@@ -54,9 +54,9 @@ export default function CommandPalette() {
         close()
     }, [close])
 
-    const handleCreateNote = (type: QuickNoteType = 'standard') => {
+    const handleCreateKnowledge = (type: QuickKnowledgeType = 'standard') => {
         if (!workspaceId) return
-        openQuickNote(type)
+        openQuickKnowledge(type)
         close()
     }
 
@@ -114,10 +114,10 @@ export default function CommandPalette() {
                             <Command.Group heading="Actions" className={GROUP_CLASS}>
                                 {workspaceId && (
                                     <>
-                                        <PaletteItem icon={<Plus className="w-4 h-4" />} onSelect={() => handleCreateNote('standard')}>New Knowledge</PaletteItem>
-                                        <PaletteItem icon={<Zap className="w-4 h-4" />} onSelect={() => handleCreateNote('fleeting')}>New Fleeting Note</PaletteItem>
-                                        <PaletteItem icon={<Bookmark className="w-4 h-4" />} onSelect={() => handleCreateNote('bookmark')}>New Bookmark</PaletteItem>
-                                        <PaletteItem icon={<Code2 className="w-4 h-4" />} onSelect={() => handleCreateNote('gist')}>New Code Gist</PaletteItem>
+                                        <PaletteItem icon={<Plus className="w-4 h-4" />} onSelect={() => handleCreateKnowledge('standard')}>New Knowledge</PaletteItem>
+                                        <PaletteItem icon={<Zap className="w-4 h-4" />} onSelect={() => handleCreateKnowledge('fleeting')}>New Fleeting Note</PaletteItem>
+                                        <PaletteItem icon={<Bookmark className="w-4 h-4" />} onSelect={() => handleCreateKnowledge('bookmark')}>New Bookmark</PaletteItem>
+                                        <PaletteItem icon={<Code2 className="w-4 h-4" />} onSelect={() => handleCreateKnowledge('gist')}>New Code Gist</PaletteItem>
                                         <PaletteItem
                                             icon={<MessageSquare className="w-4 h-4" />}
                                             onSelect={() => run(() => navigate(`/w/${workspaceId}/chat`))}
@@ -150,9 +150,9 @@ export default function CommandPalette() {
                             )}
 
                             {/* Knowledge search */}
-                            {notes.length > 0 && (
+                            {knowledgeItems.length > 0 && (
                                 <Command.Group heading="Knowledge" className={`mt-2 pt-2 border-t border-border/40 ${GROUP_CLASS}`}>
-                                    {(notes as { id: string; title: string; ai_title: string; type: string }[]).map(n => (
+                                    {(knowledgeItems as { id: string; title: string; ai_title: string; type: string }[]).map(n => (
                                         <PaletteItem
                                             key={n.id}
                                             icon={<FileText className="w-4 h-4" />}

@@ -3,11 +3,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
     getOnboarding, advanceOnboarding, createProvider, updateProvider,
-    testConnection, listModels, createWorkspace, listProviders
+    testConnection, listModels, createWorkspace, listProviders,
+    listSettings, updateSetting, listSchedules, updateSchedule,
 } from '@/lib/api'
 import { Play, FileText, Bookmark, Code2, Globe2, Eye, EyeOff, Loader2, Link, Bot, Star, X, Check, Search, CheckCircle2, XCircle, Sliders, Sparkles, ArrowRight, Plus, Trash2, MessageSquare, Lock, Brain, Folder, Briefcase, Microscope, BookOpen, Target, Globe, Lightbulb, Wrench, Palette, BarChart3, Rocket, Shield, FlaskConical, Leaf, Key, Settings2, PenLine, Database, Sprout } from 'lucide-react'
 import { ProviderIcon } from '@/components/shared/ProviderIcon'
 import { ModelOverrideSelect } from '@/components/shared/ModelOverrideSelect'
+import { isLocalProvider, sanitizeProviderDisplayName } from '@/lib/provider-display'
 
 const PROVIDERS = [
     { id: 'openai', name: 'OpenAI', color: 'from-emerald-500/20 border-emerald-500/30', needsKey: true, needsUrl: false },
@@ -21,12 +23,14 @@ const PROVIDERS = [
     { id: 'cohere', name: 'Cohere', color: 'from-teal-500/20 border-teal-500/30', needsKey: true, needsUrl: false },
     { id: 'zhipuai', name: 'Z.AI (ZhipuAI)', color: 'from-indigo-500/20 border-indigo-500/30', needsKey: true, needsUrl: false },
     { id: 'huggingface', name: 'HuggingFace', color: 'from-orange-400/20 border-orange-400/30', needsKey: true, needsUrl: false },
-    { id: 'ollama', name: 'Ollama (Local)', color: 'from-lime-500/20 border-lime-500/30', needsKey: false, needsUrl: true },
+    { id: 'ollama', name: 'Ollama', color: 'from-lime-500/20 border-lime-500/30', needsKey: false, needsUrl: true },
     { id: 'custom-openai', name: 'Custom OpenAI-compatible', color: 'from-violet-500/20 border-violet-500/30', needsKey: false, needsUrl: true },
     { id: 'custom-anthropic', name: 'Custom Anthropic-compat.', color: 'from-rose-500/20 border-rose-500/30', needsKey: false, needsUrl: true },
 ]
 
-const STEPS = ['welcome', 'llm_setup', 'workspace_create']
+const STEPS = ['welcome', 'llm_setup', 'workspace_create', 'automation_preferences']
+const AUTO_KNOWLEDGE_INTELLIGENCE_KEY = 'automation.auto_knowledge_intelligence_enabled'
+const AUTO_BOOKMARK_EXTRACTION_KEY = 'automation.auto_bookmark_content_extraction_enabled'
 
 export default function OnboardingPage() {
     const navigate = useNavigate()
@@ -101,16 +105,21 @@ export default function OnboardingPage() {
                     <LLMSetupStep onNext={() => advance.mutate('workspace_create')} loading={advance.isPending} />
                 )}
                 {step === 'workspace_create' && (
-                    <WorkspaceCreateStep onNext={() => {
-                        advance.mutateAsync('complete').then(() => {
-                            qc.fetchQuery({
-                                queryKey: ['workspaces'],
-                                queryFn: () => import('@/lib/api').then(a => a.listWorkspaces()),
-                            }).then((ws: { id: string }[]) => {
-                                if (ws.length > 0) navigate(`/w/${ws[0].id}`)
-                            })
-                        })
+                    <WorkspaceCreateStep onNext={async () => {
+                        await advance.mutateAsync('automation_preferences')
+                        qc.invalidateQueries({ queryKey: ['onboarding'] })
                     }} />
+                )}
+                {step === 'automation_preferences' && (
+                    <AutomationPreferencesStep onNext={async () => {
+                        await advance.mutateAsync('complete')
+                        qc.fetchQuery({
+                            queryKey: ['workspaces'],
+                            queryFn: () => import('@/lib/api').then(a => a.listWorkspaces()),
+                        }).then((ws: { id: string }[]) => {
+                            if (ws.length > 0) navigate(`/w/${ws[0].id}`)
+                        })
+                    }} loading={advance.isPending} />
                 )}
             </div>
         </div>
@@ -270,7 +279,7 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
                     default_model: modelsToAdd[0],
                     enabled_models: enabledList,
                 })
-                setConfigured(c => [...c, { id: createdProviderId, name: displayName || provider?.name || selected! }])
+                setConfigured(c => [...c, { id: createdProviderId, name: sanitizeProviderDisplayName(displayName || provider?.name || selected!) }])
             } else {
                 const saved = await createProvider({
                     provider_name: selected!,
@@ -280,7 +289,7 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
                     default_model: modelsToAdd[0],
                     enabled_models: enabledList,
                 })
-                setConfigured(c => [...c, { id: saved.id, name: saved.display_name }])
+                setConfigured(c => [...c, { id: saved.id, name: sanitizeProviderDisplayName(saved.display_name) }])
             }
             resetForm()
         } catch (e: unknown) {
@@ -332,6 +341,9 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
                                     <ProviderIcon providerId={p.id} className="w-4 h-4" />
                                 </div>
                                 <div className="text-[10px] leading-tight font-medium truncate">{p.name}</div>
+                                {isLocalProvider(p.id) && (
+                                    <div className="mt-1 text-[9px] text-lime-300/90 font-medium">Local</div>
+                                )}
                             </button>
                         ))}
                     </div>
@@ -342,6 +354,9 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
                         {/* Step 2 — Credentials */}
                         <div className="space-y-2">
                             <label className="text-xs text-muted-foreground font-medium block">2. Enter credentials</label>
+                            {isLocalProvider(selected) && (
+                                <p className="text-[10px] text-lime-300/90">Local provider (runs on this machine)</p>
+                            )}
                             <input className="input text-sm" placeholder={`Display name (default: ${provider?.name})`} value={displayName} onChange={e => setDisplayName(e.target.value)} />
 
                             {provider?.needsUrl ? (
@@ -455,6 +470,185 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
                 <ArrowRight className="w-4 h-4" />
             </button>
         </div>
+    )
+}
+
+const parseBooleanSetting = (value: unknown, fallback: boolean) => {
+    if (typeof value === 'boolean') return value
+    if (typeof value === 'number') return value !== 0
+    if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase()
+        if (['1', 'true', 'yes', 'on', 'enabled'].includes(normalized)) return true
+        if (['0', 'false', 'no', 'off', 'disabled'].includes(normalized)) return false
+    }
+    return fallback
+}
+
+function AutomationPreferencesStep({ onNext, loading }: { onNext: () => void | Promise<void>; loading: boolean }) {
+    const qc = useQueryClient()
+    const [saving, setSaving] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+    const [autoIntelligenceEnabled, setAutoIntelligenceEnabled] = useState(true)
+    const [autoBookmarkExtractionEnabled, setAutoBookmarkExtractionEnabled] = useState(true)
+    const [scheduledJobsEnabled, setScheduledJobsEnabled] = useState(true)
+    const [initialized, setInitialized] = useState(false)
+
+    const { data: settings = [] } = useQuery<Array<{ key: string; value: unknown }>>({
+        queryKey: ['app-settings'],
+        queryFn: listSettings,
+    })
+    const { data: schedules = [] } = useQuery<Array<{ id: string; enabled: boolean; default_enabled: boolean }>>({
+        queryKey: ['task-schedules'],
+        queryFn: listSchedules,
+    })
+
+    useEffect(() => {
+        if (initialized) return
+        const autoIntelligenceSetting = settings.find(item => item.key === AUTO_KNOWLEDGE_INTELLIGENCE_KEY)
+        const autoBookmarkSetting = settings.find(item => item.key === AUTO_BOOKMARK_EXTRACTION_KEY)
+        const hasEnabledSchedule = schedules.some(schedule => schedule.enabled)
+
+        if (autoIntelligenceSetting) {
+            setAutoIntelligenceEnabled(parseBooleanSetting(autoIntelligenceSetting.value, true))
+        }
+        if (autoBookmarkSetting) {
+            setAutoBookmarkExtractionEnabled(parseBooleanSetting(autoBookmarkSetting.value, true))
+        }
+        if (schedules.length > 0) {
+            setScheduledJobsEnabled(hasEnabledSchedule)
+        }
+        if (settings.length > 0 || schedules.length > 0) {
+            setInitialized(true)
+        }
+    }, [initialized, schedules, settings])
+
+    const apply = async () => {
+        setSaving(true)
+        setError(null)
+        try {
+            await Promise.all([
+                updateSetting(AUTO_KNOWLEDGE_INTELLIGENCE_KEY, {
+                    value: autoIntelligenceEnabled,
+                    category: 'automation',
+                    sensitive: false,
+                }),
+                updateSetting(AUTO_BOOKMARK_EXTRACTION_KEY, {
+                    value: autoBookmarkExtractionEnabled,
+                    category: 'automation',
+                    sensitive: false,
+                }),
+            ])
+
+            if (schedules.length > 0) {
+                await Promise.all(
+                    schedules.map(schedule =>
+                        updateSchedule(schedule.id, {
+                            enabled: scheduledJobsEnabled ? !!schedule.default_enabled : false,
+                        }),
+                    ),
+                )
+            }
+
+            qc.invalidateQueries({ queryKey: ['app-settings'] })
+            qc.invalidateQueries({ queryKey: ['task-schedules'] })
+            await onNext()
+        } catch (reason: unknown) {
+            const err = reason as { response?: { data?: { detail?: string } }; message?: string }
+            setError(err?.response?.data?.detail ?? err?.message ?? 'Failed to save automation preferences')
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    return (
+        <div className="glass-card shadow-glass-lg border border-accent/20 p-8 space-y-6 animate-slide-up">
+            <div>
+                <h2 className="text-xl font-bold mb-1">Automation Preferences</h2>
+                <p className="text-muted-foreground text-sm leading-relaxed">
+                    Choose which background automations run by default. You can fine-tune schedule timing later in Settings.
+                </p>
+            </div>
+
+            <div className="space-y-3">
+                <button
+                    type="button"
+                    className="w-full rounded-xl border border-border/60 bg-muted/20 p-4 text-left"
+                    onClick={() => setAutoIntelligenceEnabled(prev => !prev)}
+                >
+                    <div className="flex items-start gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-accent/15 border border-accent/30 flex items-center justify-center text-accent">
+                            <Star className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium">Automatic Intelligence Generation</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                Auto-generate AI title, summary, tags, and insights when new knowledge is created.
+                            </p>
+                        </div>
+                        <TogglePill checked={autoIntelligenceEnabled} />
+                    </div>
+                </button>
+
+                <button
+                    type="button"
+                    className="w-full rounded-xl border border-border/60 bg-muted/20 p-4 text-left"
+                    onClick={() => setAutoBookmarkExtractionEnabled(prev => !prev)}
+                >
+                    <div className="flex items-start gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-blue-500/15 border border-blue-400/30 flex items-center justify-center text-blue-300">
+                            <Link className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium">Automatic Bookmark Content Extraction</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                Auto-extract readable content when bookmark knowledge is created or discovered in chat links.
+                            </p>
+                        </div>
+                        <TogglePill checked={autoBookmarkExtractionEnabled} />
+                    </div>
+                </button>
+
+                <button
+                    type="button"
+                    className="w-full rounded-xl border border-border/60 bg-muted/20 p-4 text-left"
+                    onClick={() => setScheduledJobsEnabled(prev => !prev)}
+                >
+                    <div className="flex items-start gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center text-emerald-300">
+                            <Play className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium">Scheduled Jobs</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                Keep periodic jobs active. You can change intervals and per-job scheduling from Settings.
+                            </p>
+                        </div>
+                        <TogglePill checked={scheduledJobsEnabled} />
+                    </div>
+                </button>
+            </div>
+
+            {error && (
+                <p className="text-xs text-red-400">{error}</p>
+            )}
+
+            <button className="btn-primary w-full justify-center py-3" onClick={apply} disabled={saving || loading}>
+                {(saving || loading) ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                Save Preferences & Launch
+                <ArrowRight className="w-4 h-4" />
+            </button>
+        </div>
+    )
+}
+
+function TogglePill({ checked }: { checked: boolean }) {
+    return (
+        <span
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${checked ? 'bg-accent' : 'bg-muted/70'}`}
+            aria-hidden
+        >
+            <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-5' : 'translate-x-0.5'}`} />
+        </span>
     )
 }
 
@@ -642,7 +836,7 @@ function WorkspaceDraftCard({ ws, idx, iconNames, iconComponents, providers, onC
                             <option value="">Use global default</option>
                             {providers.map(p => (
                                 <option key={p.id} value={p.id}>
-                                    {p.display_name}
+                                    {sanitizeProviderDisplayName(p.display_name)}
                                 </option>
                             ))}
                         </select>

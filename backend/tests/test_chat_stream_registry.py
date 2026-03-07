@@ -11,7 +11,19 @@ def test_snapshot_contains_partial_stream_payload() -> None:
     registry.start(workspace_id=workspace_id, conversation_id=conversation_id)
     registry.set_sources(
         conversation_id=conversation_id,
-        sources=[{"note_id": "n1", "title": "Source A", "snippet": "Snippet", "score": 0.77}],
+        sources=[{"knowledge_id": "n1", "title": "Source A", "snippet": "Snippet", "score": 0.77}],
+    )
+    registry.set_attachments_processed(
+        conversation_id=conversation_id,
+        attachments=[
+            {
+                "id": "att-1",
+                "filename": "guide.txt",
+                "status": "processed",
+                "pipeline": "text",
+                "details": "Extracted text (123 chars)",
+            }
+        ],
     )
     registry.append_thinking(conversation_id=conversation_id, chunk="Plan")
     registry.append_content(conversation_id=conversation_id, chunk="Answer")
@@ -23,7 +35,16 @@ def test_snapshot_contains_partial_stream_payload() -> None:
     assert snapshot["conversation_id"] == str(conversation_id)
     assert snapshot["data"]["thinking"] == "Plan"
     assert snapshot["data"]["content"] == "Answer"
-    assert snapshot["data"]["sources"] == [{"note_id": "n1", "title": "Source A", "snippet": "Snippet", "score": 0.77}]
+    assert snapshot["data"]["sources"] == [{"knowledge_id": "n1", "title": "Source A", "snippet": "Snippet", "score": 0.77}]
+    assert snapshot["data"]["attachments_processed"] == [
+        {
+            "id": "att-1",
+            "filename": "guide.txt",
+            "status": "processed",
+            "pipeline": "text",
+            "details": "Extracted text (123 chars)",
+        }
+    ]
     assert snapshot["data"]["started_at"]
     assert snapshot["data"]["updated_at"]
 
@@ -58,4 +79,3 @@ def test_snapshot_filters_by_workspace_and_conversation() -> None:
 
     assert registry.snapshot_for_conversation(workspace_a, conversation_a)["data"]["content"] == "A"
     assert registry.snapshot_for_conversation(workspace_a, conversation_b) is None
-

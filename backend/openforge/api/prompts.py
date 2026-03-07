@@ -15,11 +15,11 @@ router = APIRouter()
 
 # ── Default prompts catalogue ──────────────────────────────────────────────
 # Variables available:
-#   {note_title}      - Knowledge title (or AI-generated title)
-#   {note_content}    - Full note content (up to 8000 chars)
-#   {note_type}       - Knowledge type (standard, fleeting, bookmark, gist)
+#   {knowledge_title}  - Knowledge title (or AI-generated title)
+#   {knowledge_content} - Full knowledge content (up to 8000 chars)
+#   {knowledge_type}   - Knowledge type (standard, fleeting, bookmark, gist)
 #   {url}             - Bookmark URL
-#   {tags}            - Comma-separated note tags
+#   {tags}            - Comma-separated knowledge tags
 #   {language}        - Gist programming language
 #   {conversation_history} - Previous messages in the chat (chat prompts only)
 #   {query}           - User's search query or chat message
@@ -30,38 +30,38 @@ PROMPT_CATALOGUE = [
         "id": "generate_title",
         "label": "Generate Knowledge Title",
         "description": "Used to auto-generate a concise title for a knowledge item when it has no user-set title.",
-        "category": "notes",
+        "category": "knowledge",
         "role": "system",
-        "variables": ["{note_content}"],
+        "variables": ["{knowledge_content}"],
         "default": (
-            "Generate a concise, descriptive title (max 60 chars) for the following note content. "
+            "Generate a concise, descriptive title (max 60 chars) for the following knowledge content. "
             "Return ONLY the title — no quotes, markdown, or extra explanation.\n\n"
-            "Knowledge Content:\n{note_content}"
+            "Knowledge Content:\n{knowledge_content}"
         ),
     },
     {
-        "id": "summarize_note",
+        "id": "summarize_knowledge",
         "label": "Summarize Knowledge",
         "description": "Used when the user clicks 'Summarize' on a knowledge item. Produces a structured summary.",
-        "category": "notes",
+        "category": "knowledge",
         "role": "system",
-        "variables": ["{note_title}", "{note_content}", "{note_type}", "{tags}"],
+        "variables": ["{knowledge_title}", "{knowledge_content}", "{knowledge_type}", "{tags}"],
         "default": (
-            "Summarize the following note concisely and clearly. "
+            "Summarize the following knowledge item concisely and clearly. "
             "Preserve the key ideas, facts, and any action items. "
             "Use structured markdown with short paragraphs or bullet points.\n\n"
-            "Title: {note_title}\n"
+            "Title: {knowledge_title}\n"
             "Tags: {tags}\n\n"
-            "Knowledge Content:\n{note_content}"
+            "Knowledge Content:\n{knowledge_content}"
         ),
     },
     {
         "id": "extract_insights",
         "label": "Extract Insights",
         "description": "Extracts structured insights (tasks, timeline dates, facts, crucial points, tags) from a knowledge item.",
-        "category": "notes",
+        "category": "knowledge",
         "role": "system",
-        "variables": ["{note_title}", "{note_content}", "{tags}"],
+        "variables": ["{knowledge_title}", "{knowledge_content}", "{tags}"],
         "default": (
             "Extract structured insights from this knowledge item. Return ONLY valid JSON with this exact structure:\n"
             "{\n"
@@ -77,8 +77,8 @@ PROMPT_CATALOGUE = [
             "- If year is missing, infer from context if possible.\n"
             "- Do not invent dates.\n"
             "Return empty arrays if none found. Tags should be lowercase single words or hyphenated phrases.\n\n"
-            "Title: {note_title}\n\n"
-            "Knowledge Content:\n{note_content}"
+            "Title: {knowledge_title}\n\n"
+            "Knowledge Content:\n{knowledge_content}"
         ),
     },
     {
@@ -91,8 +91,9 @@ PROMPT_CATALOGUE = [
         "default": (
             "You are a helpful AI assistant integrated into OpenForge, a self-hosted knowledge management workspace. "
             "Answer the user's questions clearly and concisely. "
-            "When you use information from the user's knowledge, cite the source by name naturally in the sentence. "
-            "Do not start responses with robotic preambles like 'Based on the provided context'. "
+            "When you use retrieved information, refer to it naturally as Workspace Knowledge and/or Referenced Sources. "
+            "Do not start responses with robotic preambles like 'Based on the provided context' or 'According to the context'. "
+            "Never call retrieved material simply 'provided context'. "
             "Format responses in clear markdown when helpful."
         ),
     },
@@ -104,21 +105,21 @@ PROMPT_CATALOGUE = [
         "role": "user",
         "variables": ["{query}"],
         "default": (
-            "Use the following knowledge from the user's workspace as context to answer the question. "
-            "Only use information from this knowledge if it is relevant.\n\n"
-            "Relevant knowledge:\n"
+            "Use the following Workspace Knowledge / Referenced Sources to answer the question. "
+            "Only use this material when it is relevant.\n\n"
+            "Workspace Knowledge / Referenced Sources:\n"
         ),
     },
     {
         "id": "bookmark_title",
         "label": "Bookmark Title Generation",
         "description": "Generates a clean title for a bookmark when the HTML <title> tag is missing or poor quality.",
-        "category": "notes",
+        "category": "knowledge",
         "role": "system",
-        "variables": ["{url}", "{note_content}"],
+        "variables": ["{url}", "{knowledge_content}"],
         "default": (
             "Given the following web page content from {url}, generate a concise, descriptive title (max 80 chars). "
-            "Return ONLY the title.\n\nContent:\n{note_content}"
+            "Return ONLY the title.\n\nContent:\n{knowledge_content}"
         ),
     },
 ]

@@ -1,12 +1,12 @@
 /**
- * NoteModal — slide-up sheet preview for a single note.
- * Opening: triggered by clicking a note card.
+ * KnowledgeModal — slide-up sheet preview for a single knowledgeRecord.
+ * Opening: triggered by clicking a knowledgeRecord card.
  * Features:
- *  - Note title, type badge, tags, word count, dates
+ *  - Title, type badge, tags, word count, dates
  *  - Read-only markdown preview of full content
  *  - AI summary / insights panel (if available)
  *  - Quick actions: Pin, Archive, Delete
- *  - "Open note" button → navigates to full NotePage editor
+ *  - "Open knowledgeRecord" button → navigates to full KnowledgePage editor
  *  - Keyboard shortcut: Escape closes
  *  - Click backdrop → closes
  */
@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import MarkdownIt from 'markdown-it'
 import { motion, AnimatePresence } from 'framer-motion'
+import { CopyButton } from '@/components/shared/CopyButton'
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
 
@@ -39,13 +40,13 @@ const TYPE_META: Record<string, { icon: React.ComponentType<{ className?: string
     gist: { icon: Code2, label: 'Gist', color: 'text-green-400' },
 }
 
-interface NoteModalProps {
-    noteId: string
+interface KnowledgeModalProps {
+    knowledgeId: string
     workspaceId: string
     onClose: () => void
 }
 
-export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
+export function KnowledgeModal({ knowledgeId, workspaceId, onClose }: KnowledgeModalProps) {
     const navigate = useNavigate()
     const qc = useQueryClient()
     const backdropRef = useRef<HTMLDivElement>(null)
@@ -53,10 +54,11 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
     const [aiIntelligenceOpen, setAiIntelligenceOpen] = useState(false)
     const { on } = useWorkspaceWebSocket(workspaceId)
 
-    const { data: note, isLoading } = useQuery({
-        queryKey: ['note', noteId],
-        queryFn: () => getKnowledge(workspaceId, noteId),
-        enabled: !!noteId,
+    const { data: knowledgeRecord, isLoading } = useQuery({
+        queryKey: ['knowledge-item', knowledgeId],
+        queryFn: () => getKnowledge(workspaceId, knowledgeId),
+        enabled: !!knowledgeId,
+        refetchOnMount: 'always',
     })
 
     // Close on Escape
@@ -73,29 +75,29 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
     }, [])
 
     useEffect(() => {
-        return on('note_updated', (msg: Record<string, unknown>) => {
-            if (msg.note_id !== noteId) return
-            qc.invalidateQueries({ queryKey: ['note', noteId] })
-            qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
+        return on('knowledge_updated', (msg: Record<string, unknown>) => {
+            if (msg.knowledge_id !== knowledgeId) return
+            qc.invalidateQueries({ queryKey: ['knowledge-item', knowledgeId] })
+            qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
         })
-    }, [noteId, on, qc, workspaceId])
+    }, [knowledgeId, on, qc, workspaceId])
 
     const handlePin = async () => {
-        await togglePin(workspaceId, noteId)
-        qc.invalidateQueries({ queryKey: ['note', noteId] })
-        qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
+        await togglePin(workspaceId, knowledgeId)
+        qc.invalidateQueries({ queryKey: ['knowledge-item', knowledgeId] })
+        qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
     }
 
     const handleArchive = async () => {
-        await toggleArchive(workspaceId, noteId)
-        qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
+        await toggleArchive(workspaceId, knowledgeId)
+        qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
         onClose()
     }
 
     const handleDelete = async () => {
         if (!confirm('Delete this knowledge item?')) return
-        await deleteKnowledge(workspaceId, noteId)
-        qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
+        await deleteKnowledge(workspaceId, knowledgeId)
+        qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
         onClose()
     }
 
@@ -103,8 +105,8 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
         if (aiLoading) return
         setAiLoading('intelligence')
         try {
-            const result = await generateKnowledgeIntelligence(workspaceId, noteId)
-            qc.setQueryData(['note', noteId], (prev: any) => {
+            const result = await generateKnowledgeIntelligence(workspaceId, knowledgeId)
+            qc.setQueryData(['knowledge-item', knowledgeId], (prev: any) => {
                 if (!prev) return prev
                 const next: any = { ...prev }
                 const generatedTitle = (result?.ai_title ?? result?.title ?? '').trim()
@@ -128,24 +130,31 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
                 return next
             })
             setAiIntelligenceOpen(true)
-            qc.invalidateQueries({ queryKey: ['note', noteId] })
-            qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
+            qc.invalidateQueries({ queryKey: ['knowledge-item', knowledgeId] })
+            qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
         } finally {
             setAiLoading(null)
         }
     }
 
     const openKnowledge = () => {
-        navigate(`/w/${workspaceId}/knowledge/${noteId}`)
+        navigate(`/w/${workspaceId}/knowledge/${knowledgeId}`)
         onClose()
     }
 
-    const meta = note ? (TYPE_META[note.type] ?? TYPE_META.standard) : TYPE_META.standard
+    const meta = knowledgeRecord ? (TYPE_META[knowledgeRecord.type] ?? TYPE_META.standard) : TYPE_META.standard
     const TypeIcon = meta.icon
-    const displayTitle = note?.title?.trim() || note?.ai_title?.trim() || null
-    const hasInsights = !!note?.insights && Object.keys(note.insights).length > 0
-    const hasAiIntelligence = !!note?.ai_summary || hasInsights
-    const noteAiAction = { id: 'intelligence', icon: Brain, label: 'Generate Intelligence' } as const
+    const displayTitle = knowledgeRecord?.title?.trim() || knowledgeRecord?.ai_title?.trim() || null
+    const hasInsights = !!knowledgeRecord?.insights && Object.keys(knowledgeRecord.insights).length > 0
+    const hasAiIntelligence = !!knowledgeRecord?.ai_summary || hasInsights
+    const knowledgeAiAction = { id: 'intelligence', icon: Brain, label: 'Generate Intelligence' } as const
+    const renderedKnowledgeContent = knowledgeRecord
+        ? knowledgeRecord.type === 'gist'
+            ? md.render(
+                `\`\`\`${knowledgeRecord.gist_language ?? ''}\n${knowledgeRecord.content ?? ''}\n\`\`\``,
+            )
+            : md.render(knowledgeRecord.content ?? '')
+        : ''
 
     const modalContent = (
         <AnimatePresence>
@@ -193,14 +202,14 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
                                 <div className="flex items-center gap-2 mb-1 flex-wrap">
                                     <span className={`flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide ${meta.color}`}>
                                         <TypeIcon className="w-3 h-3" />
-                                        {note?.type === 'fleeting' && <Clock className="w-3 h-3" />}
+                                        {knowledgeRecord?.type === 'fleeting' && <Clock className="w-3 h-3" />}
                                         {meta.label}
                                     </span>
-                                    {note?.is_pinned && <Pin className="w-3 h-3 text-amber-400" />}
-                                    {note?.embedding_status === 'done' && <Sparkles className="w-3 h-3 text-accent/60" />}
-                                    {note?.gist_language && (
+                                    {knowledgeRecord?.is_pinned && <Pin className="w-3 h-3 text-amber-400" />}
+                                    {knowledgeRecord?.embedding_status === 'done' && <Sparkles className="w-3 h-3 text-accent/60" />}
+                                    {knowledgeRecord?.gist_language && (
                                         <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 border border-green-500/20">
-                                            {note.gist_language}
+                                            {knowledgeRecord.gist_language}
                                         </span>
                                     )}
                                 </div>
@@ -208,9 +217,9 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
                                     {displayTitle ?? 'Untitled'}
                                 </h2>
                                 <div className="flex items-center gap-3 mt-1 text-[10px] text-muted-foreground">
-                                    <span>{note?.word_count ?? 0} words</span>
-                                    <span>Updated {note ? new Date(note.updated_at).toLocaleDateString() : '—'}</span>
-                                    <span>Created {note ? new Date(note.created_at).toLocaleDateString() : '—'}</span>
+                                    <span>{knowledgeRecord?.word_count ?? 0} words</span>
+                                    <span>Updated {knowledgeRecord ? new Date(knowledgeRecord.updated_at).toLocaleDateString() : '—'}</span>
+                                    <span>Created {knowledgeRecord ? new Date(knowledgeRecord.created_at).toLocaleDateString() : '—'}</span>
                                 </div>
                             </>
                         )}
@@ -218,30 +227,30 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
 
                     {/* Actions */}
                     <div className="flex items-center gap-1 flex-shrink-0">
-                        {note && (
+                        {knowledgeRecord && (
                             <>
                                 <button
                                     className="btn-ghost text-xs py-1.5 px-2.5 gap-1.5"
                                     onClick={handleGenerateIntelligence}
                                     disabled={!!aiLoading}
-                                    title={noteAiAction.label}
+                                    title={knowledgeAiAction.label}
                                 >
-                                    {aiLoading === noteAiAction.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <noteAiAction.icon className="w-3 h-3" />}
-                                    {noteAiAction.label}
+                                    {aiLoading === knowledgeAiAction.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <knowledgeAiAction.icon className="w-3 h-3" />}
+                                    {knowledgeAiAction.label}
                                 </button>
                                 <button
                                     className="btn-ghost p-1.5"
                                     onClick={handlePin}
-                                    title={note.is_pinned ? 'Unpin' : 'Pin'}
+                                    title={knowledgeRecord.is_pinned ? 'Unpin' : 'Pin'}
                                 >
-                                    {note.is_pinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
+                                    {knowledgeRecord.is_pinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
                                 </button>
                                 <button
                                     className="btn-ghost p-1.5"
                                     onClick={handleArchive}
-                                    title={note.is_archived ? 'Unarchive' : 'Archive'}
+                                    title={knowledgeRecord.is_archived ? 'Unarchive' : 'Archive'}
                                 >
-                                    {note.is_archived ? <ArchiveX className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
+                                    {knowledgeRecord.is_archived ? <ArchiveX className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
                                 </button>
                                 <button
                                     className="btn-ghost p-1.5 text-red-400 hover:bg-red-500/10"
@@ -276,27 +285,36 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
                         </div>
                     )}
 
-                    {!isLoading && note && (
+                    {!isLoading && knowledgeRecord && (
                         <>
                             {/* Bookmark URL bar */}
-                            {note.type === 'bookmark' && note.url && (
-                                <a
-                                    href={note.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/20 border border-border/40 rounded-lg px-3 py-2 hover:bg-muted/40 hover:text-foreground transition-colors"
-                                    onClick={e => e.stopPropagation()}
-                                >
-                                    <ExternalLink className="w-3 h-3 flex-shrink-0" />
-                                    <span className="truncate">{note.url}</span>
-                                </a>
+                            {knowledgeRecord.type === 'bookmark' && knowledgeRecord.url && (
+                                <div className="flex items-center gap-2">
+                                    <a
+                                        href={knowledgeRecord.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="min-w-0 flex-1 flex items-center gap-2 text-xs text-muted-foreground bg-muted/20 border border-border/40 rounded-lg px-3 py-2 hover:bg-muted/40 hover:text-foreground transition-colors"
+                                        onClick={e => e.stopPropagation()}
+                                    >
+                                        <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                                        <span className="truncate">{knowledgeRecord.url}</span>
+                                    </a>
+                                    <CopyButton
+                                        content={knowledgeRecord.url}
+                                        label="Copy URL"
+                                        copiedLabel="Copied"
+                                        iconOnly
+                                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/50 bg-muted/25 text-foreground/85 hover:bg-muted/45 hover:border-border transition-colors"
+                                    />
+                                </div>
                             )}
 
                             {/* Tags */}
-                            {note.tags && note.tags.length > 0 && (
+                            {knowledgeRecord.tags && knowledgeRecord.tags.length > 0 && (
                                 <div className="flex items-center gap-2 flex-wrap">
                                     <Tag className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                                    {note.tags.map((t: string) => (
+                                    {knowledgeRecord.tags.map((t: string) => (
                                         <span key={t} className="chip-accent text-xs">
                                             <Hash className="w-2.5 h-2.5 inline mr-0.5" />{t}
                                         </span>
@@ -307,10 +325,10 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
                             {/* Content preview */}
                             <div>
                                 <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2">Content</p>
-                                {note.content ? (
+                                {knowledgeRecord.content ? (
                                     <div
-                                        className={`prose prose-sm prose-invert max-w-none text-sm leading-relaxed ${note.type === 'gist' ? 'font-mono' : ''}`}
-                                        dangerouslySetInnerHTML={{ __html: md.render(note.content) }}
+                                        className={`markdown-content max-w-none text-sm leading-relaxed ${knowledgeRecord.type === 'gist' ? '[&_pre]:text-[12px] [&_code]:text-[12px]' : ''}`}
+                                        dangerouslySetInnerHTML={{ __html: renderedKnowledgeContent }}
                                     />
                                 ) : (
                                     <p className="text-muted-foreground/50 italic text-sm">No content yet.</p>
@@ -322,7 +340,7 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
                 </div>
 
                 {/* Sticky AI intelligence strip (stays at bottom when collapsed) */}
-                {!isLoading && note && hasAiIntelligence && (
+                {!isLoading && knowledgeRecord && hasAiIntelligence && (
                     <div className="sticky bottom-0 z-10 px-5 pt-2 pb-3 border-t border-border/50 bg-card/90 backdrop-blur-md flex-shrink-0">
                         <button
                             type="button"
@@ -344,7 +362,7 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
 
                         {aiIntelligenceOpen && (
                             <div className="mt-3 max-h-[28vh] overflow-y-auto pr-1 space-y-3">
-                                {note.ai_summary && (
+                                {knowledgeRecord.ai_summary && (
                                     <div className="rounded-xl border border-border/50 bg-card/35 p-3">
                                         <div className="flex items-center gap-2 mb-2">
                                             <Brain className="w-3.5 h-3.5 text-accent" />
@@ -352,7 +370,7 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
                                         </div>
                                         <div
                                             className="prose prose-sm prose-invert max-w-none text-sm leading-relaxed text-muted-foreground"
-                                            dangerouslySetInnerHTML={{ __html: md.render(note.ai_summary) }}
+                                            dangerouslySetInnerHTML={{ __html: md.render(knowledgeRecord.ai_summary) }}
                                         />
                                     </div>
                                 )}
@@ -363,11 +381,11 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
                                             <Star className="w-3.5 h-3.5 text-amber-400" />
                                             <span className="text-xs font-medium">Insights</span>
                                         </div>
-                                        {note.insights.tasks?.length > 0 && (
+                                        {knowledgeRecord.insights.tasks?.length > 0 && (
                                             <div>
                                                 <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Tasks</p>
                                                 <ul className="space-y-0.5">
-                                                    {note.insights.tasks.map((t: string, i: number) => (
+                                                    {knowledgeRecord.insights.tasks.map((t: string, i: number) => (
                                                         <li key={i} className="text-xs flex items-start gap-1.5">
                                                             <span className="mt-0.5 w-3 h-3 rounded-sm border border-border/60 flex-shrink-0" />
                                                             {t}
@@ -376,11 +394,11 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
                                                 </ul>
                                             </div>
                                         )}
-                                        {note.insights.timelines?.length > 0 && (
+                                        {knowledgeRecord.insights.timelines?.length > 0 && (
                                             <div>
                                                 <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Timelines</p>
                                                 <ul className="space-y-0.5">
-                                                    {note.insights.timelines.map((h: any, i: number) => (
+                                                    {knowledgeRecord.insights.timelines.map((h: any, i: number) => (
                                                         <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
                                                             <span className="text-accent mt-0.5 font-bold">{h.date}</span> {h.event}
                                                         </li>
@@ -388,11 +406,11 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
                                                 </ul>
                                             </div>
                                         )}
-                                        {note.insights.facts?.length > 0 && (
+                                        {knowledgeRecord.insights.facts?.length > 0 && (
                                             <div>
                                                 <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Facts</p>
                                                 <ul className="space-y-0.5">
-                                                    {note.insights.facts.map((h: string, i: number) => (
+                                                    {knowledgeRecord.insights.facts.map((h: string, i: number) => (
                                                         <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
                                                             <span className="text-accent mt-0.5">•</span> {h}
                                                         </li>
@@ -400,11 +418,11 @@ export function NoteModal({ noteId, workspaceId, onClose }: NoteModalProps) {
                                                 </ul>
                                             </div>
                                         )}
-                                        {note.insights.crucial_things?.length > 0 && (
+                                        {knowledgeRecord.insights.crucial_things?.length > 0 && (
                                             <div>
                                                 <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Crucial Things</p>
                                                 <ul className="space-y-0.5">
-                                                    {note.insights.crucial_things.map((h: string, i: number) => (
+                                                    {knowledgeRecord.insights.crucial_things.map((h: string, i: number) => (
                                                         <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
                                                             <span className="text-red-400 mt-0.5">!</span> {h}
                                                         </li>

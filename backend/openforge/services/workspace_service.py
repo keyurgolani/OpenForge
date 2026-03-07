@@ -25,7 +25,6 @@ def _to_response(workspace: Workspace, knowledge_count: int = 0, conv_count: int
         llm_provider_id=workspace.llm_provider_id,
         llm_model=workspace.llm_model,
         sort_order=workspace.sort_order,
-        note_count=knowledge_count,
         knowledge_count=knowledge_count,
         conversation_count=conv_count,
         created_at=workspace.created_at,

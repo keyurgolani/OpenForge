@@ -5,8 +5,8 @@ import re
 from openforge.utils.title_generation import normalize_generated_title
 
 
-def fallback_note_title(note_content: str, max_words: int = 8, max_length: int = 120) -> str | None:
-    text = str(note_content or "").strip()
+def fallback_knowledge_title(knowledge_content: str, max_words: int = 8, max_length: int = 120) -> str | None:
+    text = str(knowledge_content or "").strip()
     if not text:
         return None
 
@@ -19,8 +19,8 @@ def fallback_note_title(note_content: str, max_words: int = 8, max_length: int =
     return truncated[:max_length] if truncated else None
 
 
-def derive_note_title(raw_response: object, note_content: str, max_words: int = 8) -> str | None:
+def derive_knowledge_title(raw_response: object, knowledge_content: str, max_words: int = 8) -> str | None:
     generated = normalize_generated_title(raw_response)
     if generated:
         return generated[:120]
-    return fallback_note_title(note_content, max_words=max_words)
+    return fallback_knowledge_title(knowledge_content, max_words=max_words)

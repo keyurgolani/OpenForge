@@ -34,9 +34,17 @@ async def get_conversation(
     conversation_id: UUID,
     limit: int = 50,
     before_id: Optional[UUID] = None,
+    include_archived: bool = Query(False),
     db: AsyncSession = Depends(get_db),
 ):
-    return await conversation_service.get_conversation_with_messages(db, conversation_id, limit, before_id)
+    return await conversation_service.get_conversation_with_messages(
+        db,
+        conversation_id,
+        limit,
+        before_id,
+        workspace_id=workspace_id,
+        include_archived=include_archived,
+    )
 
 
 @router.put("/{workspace_id}/conversations/{conversation_id}", response_model=ConversationResponse)
@@ -54,3 +62,12 @@ async def delete_conversation(
     workspace_id: UUID, conversation_id: UUID, db: AsyncSession = Depends(get_db)
 ):
     await conversation_service.delete_conversation(db, workspace_id, conversation_id)
+
+
+@router.delete("/{workspace_id}/conversations/{conversation_id}/permanent", status_code=204)
+async def permanently_delete_conversation(
+    workspace_id: UUID,
+    conversation_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    await conversation_service.permanently_delete_conversation(db, workspace_id, conversation_id)

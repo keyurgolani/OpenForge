@@ -2,9 +2,9 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { listKnowledge, deleteKnowledge, togglePin, toggleArchive, extractBookmarkContent } from '@/lib/api'
-import { NoteModal } from '@/components/shared/NoteModal'
+import { KnowledgeModal } from '@/components/shared/KnowledgeModal'
 import { CopyButton } from '@/components/shared/CopyButton'
-import { openQuickNote, type QuickNoteType } from '@/lib/quick-note'
+import { openQuickKnowledge, type QuickKnowledgeType } from '@/lib/quick-knowledge'
 import { getShortcutDisplay } from '@/lib/keyboard'
 import {
     Search, FileText, Bookmark, Code2, Zap, Pin, Archive,
@@ -20,13 +20,13 @@ import MarkdownIt from 'markdown-it'
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
 
-/// Preview renderer: links are displayed but not clickable (prevents navigation when clicking note card)
+/// Preview renderer: links are displayed but not clickable (prevents navigation when clicking knowledge card)
 const mdPreview = new MarkdownIt({ html: false, linkify: false, typographer: true, breaks: true })
 // Disable link rendering - show as plain text instead
 mdPreview.renderer.rules.link_open = () => ''
 mdPreview.renderer.rules.link_close = () => ''
 
-interface NoteListItem {
+interface KnowledgeListItem {
     id: string
     type: string
     title: string | null
@@ -68,16 +68,16 @@ const TYPE_META: Record<string, { icon: React.ComponentType<{ className?: string
 }
 
 const MASONRY_GAP_PX = 20
-const NOTE_CARD_BASE_MIN_WIDTH = 400
-const NOTE_CARD_MIN_WIDTH_MOBILE = 220
-const NOTE_CARD_MAX_HEIGHT_PX = 350
+const KNOWLEDGE_CARD_BASE_MIN_WIDTH = 400
+const KNOWLEDGE_CARD_MIN_WIDTH_MOBILE = 220
+const KNOWLEDGE_CARD_MAX_HEIGHT_PX = 350
 const TAG_CHIP_GAP_PX = 6
 
 function getResponsiveCardMinWidth(containerWidth: number): number {
     // Desktop baseline uses 400px. On narrower viewports, relax min width to prevent overflow.
-    if (containerWidth < 520) return Math.max(NOTE_CARD_MIN_WIDTH_MOBILE, containerWidth - 24)
+    if (containerWidth < 520) return Math.max(KNOWLEDGE_CARD_MIN_WIDTH_MOBILE, containerWidth - 24)
     if (containerWidth < 900) return 340
-    return NOTE_CARD_BASE_MIN_WIDTH
+    return KNOWLEDGE_CARD_BASE_MIN_WIDTH
 }
 
 export default function WorkspaceHome() {
@@ -86,14 +86,14 @@ export default function WorkspaceHome() {
 
     const [filterText, setFilterText] = useState('')
     const [typeFilter, setTypeFilter] = useState('')
+    const [showArchived, setShowArchived] = useState(false)
     const [sortBy, setSortBy] = useState('updated_at')
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
     const [showTypeMenu, setShowTypeMenu] = useState(false)
     const [showSortMenu, setShowSortMenu] = useState(false)
-    const [modalNoteId, setModalNoteId] = useState<string | null>(null)
-    const notesLayoutRef = useRef<HTMLDivElement | null>(null)
-    const [bulkBarLeft, setBulkBarLeft] = useState<number | null>(null)
-    const [noteCardMinWidth, setNoteCardMinWidth] = useState(() =>
+    const [modalKnowledgeId, setModalKnowledgeId] = useState<string | null>(null)
+    const knowledgeLayoutRef = useRef<HTMLDivElement | null>(null)
+    const [knowledgeCardMinWidth, setKnowledgeCardMinWidth] = useState(() =>
         typeof window !== 'undefined' ? getResponsiveCardMinWidth(window.innerWidth) : 400
     )
     const [masonryColumnCount, setMasonryColumnCount] = useState(1)
@@ -103,58 +103,69 @@ export default function WorkspaceHome() {
     const hasSelection = selected.size > 0
 
     const { data, isLoading } = useQuery({
-        queryKey: ['notes', workspaceId, typeFilter, sortBy, sortOrder],
+        queryKey: ['knowledge', workspaceId, typeFilter, sortBy, sortOrder, showArchived],
         queryFn: () => listKnowledge(workspaceId, {
             type: typeFilter || undefined,
+            is_archived: showArchived,
             sort_by: sortBy,
             sort_order: sortOrder,
             page_size: 200,
         }),
         enabled: !!workspaceId,
     })
+    const { data: archivedKnowledgeStats } = useQuery({
+        queryKey: ['knowledge', workspaceId, 'archived-total'],
+        queryFn: () =>
+            listKnowledge(workspaceId, {
+                is_archived: true,
+                page: 1,
+                page_size: 1,
+            }),
+        enabled: !!workspaceId,
+    })
 
-    const handleCreate = (type: QuickNoteType = 'standard') => {
-        openQuickNote(type)
+    const handleCreate = (type: QuickKnowledgeType = 'standard') => {
+        openQuickKnowledge(type)
     }
 
-    const handleDelete = async (noteId: string) => {
-        await deleteKnowledge(workspaceId, noteId)
-        qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
-        setSelected(s => { const n = new Set(s); n.delete(noteId); return n })
+    const handleDelete = async (knowledgeId: string) => {
+        await deleteKnowledge(workspaceId, knowledgeId)
+        qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
+        setSelected(s => { const n = new Set(s); n.delete(knowledgeId); return n })
     }
 
-    const handlePin = async (noteId: string) => {
-        await togglePin(workspaceId, noteId)
-        qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
+    const handlePin = async (knowledgeId: string) => {
+        await togglePin(workspaceId, knowledgeId)
+        qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
     }
 
-    const handleArchive = async (noteId: string) => {
-        await toggleArchive(workspaceId, noteId)
-        qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
-        setSelected(s => { const n = new Set(s); n.delete(noteId); return n })
+    const handleArchive = async (knowledgeId: string) => {
+        await toggleArchive(workspaceId, knowledgeId)
+        qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
+        setSelected(s => { const n = new Set(s); n.delete(knowledgeId); return n })
     }
 
-    const handleExtractBookmarkContent = async (noteId: string) => {
-        await extractBookmarkContent(workspaceId, noteId)
-        qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
-        qc.invalidateQueries({ queryKey: ['note', noteId] })
+    const handleExtractBookmarkContent = async (knowledgeId: string) => {
+        await extractBookmarkContent(workspaceId, knowledgeId)
+        qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
+        qc.invalidateQueries({ queryKey: ['knowledge-item', knowledgeId] })
     }
 
     const handleBulkDelete = async () => {
         await Promise.all([...selected].map(id => deleteKnowledge(workspaceId, id)))
-        qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
+        qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
         setSelected(new Set())
     }
 
     const handleBulkArchive = async () => {
         await Promise.all([...selected].map(id => toggleArchive(workspaceId, id)))
-        qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
+        qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
         setSelected(new Set())
     }
 
     const handleBulkPin = async () => {
         await Promise.all([...selected].map(id => togglePin(workspaceId, id)))
-        qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
+        qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
         setSelected(new Set())
     }
 
@@ -163,11 +174,11 @@ export default function WorkspaceHome() {
         setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
     }
 
-    const notes: NoteListItem[] = useMemo(() => {
-        const allNotes = data?.knowledge ?? data?.notes ?? []
-        if (!filterText) return allNotes
+    const knowledgeItems: KnowledgeListItem[] = useMemo(() => {
+        const allKnowledgeItems = data?.knowledge ??  []
+        if (!filterText) return allKnowledgeItems
         const q = filterText.toLowerCase()
-        return allNotes.filter((n: NoteListItem) =>
+        return allKnowledgeItems.filter((n: KnowledgeListItem) =>
             (n.title ?? '').toLowerCase().includes(q) ||
             (n.ai_title ?? '').toLowerCase().includes(q) ||
             n.content_preview.toLowerCase().includes(q) ||
@@ -175,19 +186,19 @@ export default function WorkspaceHome() {
         )
     }, [data, filterText])
 
-    const selectAll = () => setSelected(new Set(notes.map(n => n.id)))
+    const selectAll = () => setSelected(new Set(knowledgeItems.map(n => n.id)))
     const clearSelection = () => setSelected(new Set())
 
     const closeAllMenus = () => { setShowTypeMenu(false); setShowSortMenu(false) }
 
     const typeMeta = TYPE_OPTS.find(o => o.id === typeFilter)
     const sortMeta = SORT_OPTS.find(o => o.id === sortBy)
-    const allNotes = data?.knowledge ?? data?.notes ?? []
-    const pinnedCount = allNotes.filter((n: NoteListItem) => n.is_pinned).length
-    const archivedCount = allNotes.filter((n: NoteListItem) => n.is_archived).length
+    const allKnowledgeItems = data?.knowledge ?? []
+    const pinnedCount = allKnowledgeItems.filter((n: KnowledgeListItem) => n.is_pinned).length
+    const archivedCount = archivedKnowledgeStats?.total ?? 0
 
     useEffect(() => {
-        const node = notesLayoutRef.current
+        const node = knowledgeLayoutRef.current
         if (!node) return
 
         const recalculateMasonry = () => {
@@ -195,7 +206,7 @@ export default function WorkspaceHome() {
             if (!containerWidth) return
             const minWidth = getResponsiveCardMinWidth(containerWidth)
             const columns = Math.max(1, Math.floor((containerWidth + MASONRY_GAP_PX) / (minWidth + MASONRY_GAP_PX)))
-            setNoteCardMinWidth(minWidth)
+            setKnowledgeCardMinWidth(minWidth)
             setMasonryColumnCount(columns)
         }
 
@@ -209,51 +220,20 @@ export default function WorkspaceHome() {
         }
     }, [])
 
-    const recalculateBulkBarPosition = useCallback(() => {
-        const node = notesLayoutRef.current
-        if (!node) return
-        const rect = node.getBoundingClientRect()
-        setBulkBarLeft(Math.round(rect.left + rect.width / 2))
-    }, [])
-
-    useEffect(() => {
-        const node = notesLayoutRef.current
-        if (!node) return
-
-        const sync = () => {
-            window.requestAnimationFrame(recalculateBulkBarPosition)
-        }
-
-        sync()
-        const observer = new ResizeObserver(sync)
-        observer.observe(node)
-        window.addEventListener('resize', sync)
-
-        return () => {
-            observer.disconnect()
-            window.removeEventListener('resize', sync)
-        }
-    }, [recalculateBulkBarPosition])
-
-    useEffect(() => {
-        if (!hasSelection) return
-        window.requestAnimationFrame(recalculateBulkBarPosition)
-    }, [hasSelection, recalculateBulkBarPosition])
-
-    const notesByColumn = useMemo(() => {
-        const columns: Array<Array<{ note: NoteListItem; index: number }>> = Array.from(
+    const knowledgeByColumn = useMemo(() => {
+        const columns: Array<Array<{ knowledgeRecord: KnowledgeListItem; index: number }>> = Array.from(
             { length: masonryColumnCount },
             () => []
         )
-        notes.forEach((note, index) => {
-            columns[index % masonryColumnCount].push({ note, index })
+        knowledgeItems.forEach((knowledgeRecord, index) => {
+            columns[index % masonryColumnCount].push({ knowledgeRecord, index })
         })
         return columns
-    }, [notes, masonryColumnCount])
+    }, [knowledgeItems, masonryColumnCount])
 
     return (
         <div className="w-full p-6 lg:p-7" onClick={closeAllMenus}>
-            <div data-openforge-note-sheet-anchor="1" className="min-w-0 space-y-5">
+            <div data-openforge-knowledge-sheet-anchor="1" className="min-w-0 space-y-5">
                 <section className="relative z-30 px-1">
                     <div className="flex flex-wrap items-center gap-2.5">
                         <div className="min-w-[240px] flex-1 relative">
@@ -327,7 +307,19 @@ export default function WorkspaceHome() {
                             )}
                         </div>
 
-                        {notes.length > 0 && (
+                        <button
+                            className={`inline-flex h-10 items-center gap-1.5 px-3 rounded-lg border text-sm transition-colors ${showArchived
+                                ? 'border-accent/50 text-accent bg-accent/10'
+                                : 'border-border/70 text-muted-foreground hover:text-foreground hover:border-border'
+                                }`}
+                            onClick={() => setShowArchived(prev => !prev)}
+                            title={showArchived ? 'Show active knowledge' : 'Show archived knowledge'}
+                        >
+                            {showArchived ? <ArchiveX className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+                            {showArchived ? 'Archived View' : 'Archived'}
+                        </button>
+
+                        {knowledgeItems.length > 0 && (
                             <button
                                 className="inline-flex h-10 items-center gap-1.5 px-3 rounded-lg border border-border/70 text-muted-foreground hover:text-foreground hover:border-border text-sm transition-colors"
                                 onClick={hasSelection ? clearSelection : selectAll}
@@ -340,7 +332,7 @@ export default function WorkspaceHome() {
                         <div className="sm:ml-auto flex flex-wrap items-center gap-2">
                             <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs text-foreground/90">
                                 <FileText className="w-3.5 h-3.5" />
-                                {allNotes.length} total
+                                {allKnowledgeItems.length} {showArchived ? 'archived shown' : 'shown'}
                             </span>
                             <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs text-foreground/90">
                                 <Pin className="w-3.5 h-3.5 text-amber-300" />
@@ -354,7 +346,7 @@ export default function WorkspaceHome() {
                     </div>
                 </section>
 
-                <div ref={notesLayoutRef} className="w-full">
+                <div ref={knowledgeLayoutRef} className="w-full">
                     {/* Loading skeletons */}
                     {isLoading && (
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
@@ -365,7 +357,7 @@ export default function WorkspaceHome() {
                     )}
 
                     {/* Empty state */}
-                    {!isLoading && notes.length === 0 && (
+                    {!isLoading && knowledgeItems.length === 0 && (
                         <div className="text-center py-20">
                             <Inbox className="w-14 h-14 mx-auto mb-4 text-muted-foreground/30" />
                             <h3 className="text-lg font-semibold mb-2">
@@ -385,7 +377,7 @@ export default function WorkspaceHome() {
                                         <button
                                             type="button"
                                             key={t.type}
-                                            onClick={() => handleCreate(t.type as QuickNoteType)}
+                                            onClick={() => handleCreate(t.type as QuickKnowledgeType)}
                                             className="glass-card-hover px-4 py-3 text-left cursor-pointer flex items-start gap-3"
                                         >
                                             <t.Icon className="w-4 h-4 mt-0.5 text-accent flex-shrink-0" />
@@ -400,26 +392,26 @@ export default function WorkspaceHome() {
                         </div>
                     )}
 
-                    {/* Note grid */}
-                    {!isLoading && notes.length > 0 && (
+                    {/* Knowledge grid */}
+                    {!isLoading && knowledgeItems.length > 0 && (
                         <div className="flex items-start gap-5">
-                            {notesByColumn.map((column, columnIndex) => (
+                            {knowledgeByColumn.map((column, columnIndex) => (
                                 <div key={columnIndex} className="flex-1 min-w-0 space-y-5">
-                                    {column.map(({ note, index }) => (
-                                        <NoteCard
-                                            key={note.id}
-                                            note={note}
+                                    {column.map(({ knowledgeRecord, index }) => (
+                                        <KnowledgeCard
+                                            key={knowledgeRecord.id}
+                                            knowledgeRecord={knowledgeRecord}
                                             index={index}
-                                            minWidthPx={noteCardMinWidth}
-                                            maxHeightPx={NOTE_CARD_MAX_HEIGHT_PX}
-                                            isSelected={selected.has(note.id)}
+                                            minWidthPx={knowledgeCardMinWidth}
+                                            maxHeightPx={KNOWLEDGE_CARD_MAX_HEIGHT_PX}
+                                            isSelected={selected.has(knowledgeRecord.id)}
                                             anySelected={hasSelection}
                                             onSelect={toggleSelect}
-                                            onClick={() => setModalNoteId(note.id)}
-                                            onPin={() => handlePin(note.id)}
-                                            onArchive={() => handleArchive(note.id)}
-                                            onExtractBookmarkContent={() => handleExtractBookmarkContent(note.id)}
-                                            onDelete={() => handleDelete(note.id)}
+                                            onClick={() => setModalKnowledgeId(knowledgeRecord.id)}
+                                            onPin={() => handlePin(knowledgeRecord.id)}
+                                            onArchive={() => handleArchive(knowledgeRecord.id)}
+                                            onExtractBookmarkContent={() => handleExtractBookmarkContent(knowledgeRecord.id)}
+                                            onDelete={() => handleDelete(knowledgeRecord.id)}
                                         />
                                     ))}
                                 </div>
@@ -432,7 +424,6 @@ export default function WorkspaceHome() {
                 {hasSelection && (
                     <div
                         className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-card border border-accent/30 rounded-2xl px-4 py-2.5 flex items-center gap-3 shadow-2xl shadow-black/40 animate-slide-up"
-                        style={bulkBarLeft !== null ? { left: `${bulkBarLeft}px` } : undefined}
                     >
                         <span className="text-sm font-medium text-accent">{selected.size} selected</span>
                         <div className="w-px h-4 bg-border" />
@@ -440,7 +431,8 @@ export default function WorkspaceHome() {
                             <Pin className="w-3.5 h-3.5" /> Pin
                         </button>
                         <button className="btn-ghost text-xs gap-1.5 py-1.5 px-2.5" onClick={handleBulkArchive}>
-                            <Archive className="w-3.5 h-3.5" /> Archive
+                            {showArchived ? <ArchiveX className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+                            {showArchived ? 'Unarchive' : 'Archive'}
                         </button>
                         <button className="btn-ghost text-xs gap-1.5 py-1.5 px-2.5 text-red-400 hover:bg-destructive/10" onClick={handleBulkDelete}>
                             <Trash2 className="w-3.5 h-3.5" /> Delete
@@ -451,12 +443,12 @@ export default function WorkspaceHome() {
                     </div>
                 )}
 
-                {/* Note modal */}
-                {modalNoteId && (
-                    <NoteModal
-                        noteId={modalNoteId}
+                {/* Knowledge modal */}
+                {modalKnowledgeId && (
+                    <KnowledgeModal
+                        knowledgeId={modalKnowledgeId}
                         workspaceId={workspaceId}
-                        onClose={() => setModalNoteId(null)}
+                        onClose={() => setModalKnowledgeId(null)}
                     />
                 )}
             </div>
@@ -465,7 +457,7 @@ export default function WorkspaceHome() {
     )
 }
 
-// ── NoteCard ────────────────────────────────────────────────────────────────
+// ── KnowledgeCard ────────────────────────────────────────────────────────────────
 function FittedTagRow({ tags }: { tags: string[] }) {
     const containerRef = useRef<HTMLDivElement | null>(null)
     const overflowMeasureRef = useRef<HTMLSpanElement | null>(null)
@@ -578,11 +570,11 @@ function FittedTagRow({ tags }: { tags: string[] }) {
     )
 }
 
-function NoteCard({
-    note, index, isSelected, anySelected, onSelect, onClick,
+function KnowledgeCard({
+    knowledgeRecord, index, isSelected, anySelected, onSelect, onClick,
     onPin, onArchive, onExtractBookmarkContent, onDelete, minWidthPx, maxHeightPx,
 }: {
-    note: NoteListItem
+    knowledgeRecord: KnowledgeListItem
     index: number
     minWidthPx: number
     maxHeightPx: number
@@ -595,24 +587,24 @@ function NoteCard({
     onExtractBookmarkContent: () => void
     onDelete: () => void
 }) {
-    const meta = TYPE_META[note.type] ?? TYPE_META.standard
+    const meta = TYPE_META[knowledgeRecord.type] ?? TYPE_META.standard
     const TypeIcon = meta.icon
-    const displayTitle = note.title?.trim() || note.ai_title?.trim() || null
+    const displayTitle = knowledgeRecord.title?.trim() || knowledgeRecord.ai_title?.trim() || null
     const isBookmarkScraping =
-        note.type === 'bookmark'
-        && note.embedding_status === 'scraping'
+        knowledgeRecord.type === 'bookmark'
+        && knowledgeRecord.embedding_status === 'scraping'
     const isBookmarkContentMissing =
-        note.type === 'bookmark'
-        && !note.content_preview?.trim()
-        && !note.url_title?.trim()
+        knowledgeRecord.type === 'bookmark'
+        && !knowledgeRecord.content_preview?.trim()
+        && !knowledgeRecord.url_title?.trim()
     const bookmarkHost = (() => {
-        if (note.type !== 'bookmark' || !note.url) return null
-        try { return new URL(note.url).hostname } catch { return note.url }
+        if (knowledgeRecord.type !== 'bookmark' || !knowledgeRecord.url) return null
+        try { return new URL(knowledgeRecord.url).hostname } catch { return knowledgeRecord.url }
     })()
 
     const handleOpenUrl = (e: React.MouseEvent) => {
         e.stopPropagation()
-        if (note.url) window.open(note.url, '_blank', 'noopener')
+        if (knowledgeRecord.url) window.open(knowledgeRecord.url, '_blank', 'noopener')
     }
     const runAction = (e: React.MouseEvent, action: () => void) => {
         e.stopPropagation()
@@ -639,7 +631,7 @@ function NoteCard({
                 >
                     <button
                         className={`absolute top-0 right-0 z-20 h-8 w-8 rounded-tr-2xl rounded-bl-xl border flex items-center justify-center transition-colors ${selectClass}`}
-                        onClick={e => onSelect(note.id, e)}
+                        onClick={e => onSelect(knowledgeRecord.id, e)}
                         aria-label={isSelected ? 'Deselect knowledge' : 'Select knowledge'}
                     >
                         {isSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
@@ -649,7 +641,7 @@ function NoteCard({
                         <div className="min-w-0 flex items-center gap-1.5 flex-wrap">
                             <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border border-border/60 bg-muted/40 ${meta.color}`}>
                                 <TypeIcon className="w-3 h-3" />
-                                {note.type === 'fleeting' && <Clock className="w-3 h-3" />}
+                                {knowledgeRecord.type === 'fleeting' && <Clock className="w-3 h-3" />}
                                 {meta.label}
                             </span>
                             {bookmarkHost && (
@@ -657,16 +649,16 @@ function NoteCard({
                                     {bookmarkHost}
                                 </span>
                             )}
-                            {note.type === 'gist' && note.gist_language && (
+                            {knowledgeRecord.type === 'gist' && knowledgeRecord.gist_language && (
                                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-green-500/10 text-green-300 border border-green-500/30">
-                                    {note.gist_language}
+                                    {knowledgeRecord.gist_language}
                                 </span>
                             )}
                         </div>
                         <div className="flex items-center gap-1.5">
-                            {note.is_pinned && <Pin className="w-3.5 h-3.5 text-amber-300" />}
+                            {knowledgeRecord.is_pinned && <Pin className="w-3.5 h-3.5 text-amber-300" />}
                             {isBookmarkScraping && <Loader2 className="w-3.5 h-3.5 text-accent animate-spin" />}
-                            {note.embedding_status === 'done' && <Sparkles className="w-3.5 h-3.5 text-accent" />}
+                            {knowledgeRecord.embedding_status === 'done' && <Sparkles className="w-3.5 h-3.5 text-accent" />}
                         </div>
                     </div>
 
@@ -682,28 +674,28 @@ function NoteCard({
                                 <Loader2 className="w-3 h-3 animate-spin text-accent" />
                                 Scraping bookmark content...
                             </div>
-                        ) : note.type === 'gist' ? (
+                        ) : knowledgeRecord.type === 'gist' ? (
                             <div className="text-[11px] font-mono whitespace-pre-wrap line-clamp-7 text-foreground/84">
-                                {note.content_preview || note.title || ''}
+                                {knowledgeRecord.content_preview || knowledgeRecord.title || ''}
                             </div>
                         ) : (
                             <div
                                 className="text-[13px] text-foreground/88 line-clamp-7 leading-[1.45] prose prose-invert prose-p:my-0 prose-headings:my-0 prose-li:my-0 prose-ul:my-0 focus:outline-none max-w-none"
-                                dangerouslySetInnerHTML={{ __html: mdPreview.render(note.content_preview || (note.url_title ?? '')) }}
+                                dangerouslySetInnerHTML={{ __html: mdPreview.render(knowledgeRecord.content_preview || (knowledgeRecord.url_title ?? '')) }}
                             />
                         )}
                     </div>
 
                     <div className="mt-3 pt-2 border-t border-border/45 space-y-1.5">
-                        <FittedTagRow tags={note.tags} />
+                        <FittedTagRow tags={knowledgeRecord.tags} />
 
                         <div className="flex items-end justify-between gap-2">
                             <p className="min-w-0 flex-1 text-[10px] text-muted-foreground/90 truncate">
-                                Updated {new Date(note.updated_at).toLocaleDateString()} · {note.word_count} words · {note.insights_count ?? 0} insights
+                                Updated {new Date(knowledgeRecord.updated_at).toLocaleDateString()} · {knowledgeRecord.word_count} words · {knowledgeRecord.insights_count ?? 0} insights
                             </p>
 
                             <div className="flex flex-shrink-0 items-center gap-1 self-end">
-                                {note.type === 'bookmark' && note.url && (
+                                {knowledgeRecord.type === 'bookmark' && knowledgeRecord.url && (
                                     <button
                                         className={actionBtnClass}
                                         onClick={e => runAction(e, onExtractBookmarkContent)}
@@ -713,7 +705,7 @@ function NoteCard({
                                         <RefreshCw className="w-3.5 h-3.5" />
                                     </button>
                                 )}
-                                {note.type === 'bookmark' && note.url && (
+                                {knowledgeRecord.type === 'bookmark' && knowledgeRecord.url && (
                                     <button
                                         className={actionBtnClass}
                                         onClick={handleOpenUrl}
@@ -723,9 +715,19 @@ function NoteCard({
                                         <ExternalLink className="w-3.5 h-3.5" />
                                     </button>
                                 )}
-                                {note.type === 'gist' && (
+                                {knowledgeRecord.type === 'bookmark' && knowledgeRecord.url && (
                                     <CopyButton
-                                        content={note.content_preview}
+                                        content={knowledgeRecord.url}
+                                        label="Copy URL"
+                                        copiedLabel="Copied"
+                                        iconOnly
+                                        stopPropagation
+                                        className={actionBtnClass}
+                                    />
+                                )}
+                                {knowledgeRecord.type === 'gist' && (
+                                    <CopyButton
+                                        content={knowledgeRecord.content_preview}
                                         label="Copy"
                                         copiedLabel="Done"
                                         iconOnly
@@ -736,18 +738,18 @@ function NoteCard({
                                 <button
                                     className={actionBtnClass}
                                     onClick={e => runAction(e, onPin)}
-                                    title={note.is_pinned ? 'Unpin knowledge' : 'Pin knowledge'}
-                                    aria-label={note.is_pinned ? 'Unpin knowledge' : 'Pin knowledge'}
+                                    title={knowledgeRecord.is_pinned ? 'Unpin knowledge' : 'Pin knowledge'}
+                                    aria-label={knowledgeRecord.is_pinned ? 'Unpin knowledge' : 'Pin knowledge'}
                                 >
-                                    {note.is_pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+                                    {knowledgeRecord.is_pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
                                 </button>
                                 <button
                                     className={actionBtnClass}
                                     onClick={e => runAction(e, onArchive)}
-                                    title={note.is_archived ? 'Restore knowledge' : 'Archive knowledge'}
-                                    aria-label={note.is_archived ? 'Restore knowledge' : 'Archive knowledge'}
+                                    title={knowledgeRecord.is_archived ? 'Restore knowledge' : 'Archive knowledge'}
+                                    aria-label={knowledgeRecord.is_archived ? 'Restore knowledge' : 'Archive knowledge'}
                                 >
-                                    {note.is_archived ? <ArchiveX className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+                                    {knowledgeRecord.is_archived ? <ArchiveX className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
                                 </button>
                                 <button
                                     className={`${actionBtnClass} text-red-300 border-red-400/25 hover:bg-red-500/10`}
@@ -767,15 +769,15 @@ function NoteCard({
                             className="btn-ghost"
                             onClick={e => runAction(e, onPin)}
                         >
-                            {note.is_pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
-                            {note.is_pinned ? 'Unpin' : 'Pin'}
+                            {knowledgeRecord.is_pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+                            {knowledgeRecord.is_pinned ? 'Unpin' : 'Pin'}
                         </button>
                         <button
                             className="btn-ghost"
                             onClick={e => runAction(e, onArchive)}
                         >
-                            {note.is_archived ? <ArchiveX className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
-                            {note.is_archived ? 'Restore' : 'Archive'}
+                            {knowledgeRecord.is_archived ? <ArchiveX className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+                            {knowledgeRecord.is_archived ? 'Restore' : 'Archive'}
                         </button>
                         <button
                             className="btn-ghost"
@@ -789,22 +791,28 @@ function NoteCard({
             </ContextMenuTrigger>
             <ContextMenuContent className="w-48">
                 <ContextMenuItem onClick={onPin} className="gap-2">
-                    {note.is_pinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
-                    <span>{note.is_pinned ? 'Unpin Knowledge' : 'Pin Knowledge'}</span>
+                    {knowledgeRecord.is_pinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
+                    <span>{knowledgeRecord.is_pinned ? 'Unpin Knowledge' : 'Pin Knowledge'}</span>
                 </ContextMenuItem>
                 <ContextMenuItem onClick={onArchive} className="gap-2">
-                    {note.is_archived ? <ArchiveX className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
-                    <span>{note.is_archived ? 'Unarchive' : 'Archive'}</span>
-                    <ContextMenuShortcut>{getShortcutDisplay('archiveNote')}</ContextMenuShortcut>
+                    {knowledgeRecord.is_archived ? <ArchiveX className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
+                    <span>{knowledgeRecord.is_archived ? 'Unarchive' : 'Archive'}</span>
+                    <ContextMenuShortcut>{getShortcutDisplay('archiveKnowledge')}</ContextMenuShortcut>
                 </ContextMenuItem>
-                {note.type === 'bookmark' && note.url && (
-                    <ContextMenuItem onClick={() => window.open(note.url!, '_blank')} className="gap-2">
+                {knowledgeRecord.type === 'bookmark' && knowledgeRecord.url && (
+                    <ContextMenuItem onClick={() => window.open(knowledgeRecord.url!, '_blank')} className="gap-2">
                         <ExternalLink className="w-4 h-4" />
                         <span>Open Link</span>
                     </ContextMenuItem>
                 )}
-                {note.type === 'gist' && (
-                    <ContextMenuItem onClick={() => navigator.clipboard.writeText(note.content_preview)} className="gap-2">
+                {knowledgeRecord.type === 'bookmark' && knowledgeRecord.url && (
+                    <ContextMenuItem onClick={() => navigator.clipboard.writeText(knowledgeRecord.url!)} className="gap-2">
+                        <Copy className="w-4 h-4" />
+                        <span>Copy Link Address</span>
+                    </ContextMenuItem>
+                )}
+                {knowledgeRecord.type === 'gist' && (
+                    <ContextMenuItem onClick={() => navigator.clipboard.writeText(knowledgeRecord.content_preview)} className="gap-2">
                         <Copy className="w-4 h-4" />
                         <span>Copy Code</span>
                     </ContextMenuItem>
@@ -813,7 +821,7 @@ function NoteCard({
                 <ContextMenuItem onClick={onDelete} className="gap-2 text-red-500 focus:text-red-400 focus:bg-red-500/10">
                     <Trash2 className="w-4 h-4" />
                     <span>Delete Knowledge</span>
-                    <ContextMenuShortcut>{getShortcutDisplay('deleteNote')}</ContextMenuShortcut>
+                    <ContextMenuShortcut>{getShortcutDisplay('deleteKnowledge')}</ContextMenuShortcut>
                 </ContextMenuItem>
             </ContextMenuContent>
         </ContextMenu>

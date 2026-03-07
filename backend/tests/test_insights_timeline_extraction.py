@@ -9,7 +9,7 @@ def test_normalize_insights_extracts_timelines_from_legacy_fields() -> None:
         "tags": ["Project Alpha", "Q2 review"],
     }
 
-    normalized = normalize_insights_payload(raw, note_content="")
+    normalized = normalize_insights_payload(raw, knowledge_content="")
 
     assert normalized["tasks"] == ["Finalize budget by 2026-04-15"]
     assert normalized["facts"] == ["Revenue increased in Q1"]
@@ -21,13 +21,13 @@ def test_normalize_insights_extracts_timelines_from_legacy_fields() -> None:
     assert any(t["date"] == "2026-05-01" and "Submit Q2 plan" in t["event"] for t in timelines)
 
 
-def test_normalize_insights_extracts_timelines_from_note_content() -> None:
+def test_normalize_insights_extracts_timelines_from_knowledge_content() -> None:
     content = """
 Kickoff on March 10, 2026 with product and design.
 Leadership review 04/12/2026: confirm launch checklist.
 """
 
-    normalized = normalize_insights_payload({}, note_content=content)
+    normalized = normalize_insights_payload({}, knowledge_content=content)
     timelines = normalized["timelines"]
 
     assert len(timelines) == 2

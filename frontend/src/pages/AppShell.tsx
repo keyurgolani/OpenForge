@@ -1,19 +1,22 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Outlet, useNavigate, useParams, Link, useLocation } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { listWorkspaces, listKnowledge, listConversations } from '@/lib/api'
+import { listWorkspaces, listKnowledge, listConversations, updateConversation, deleteConversation } from '@/lib/api'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import { useUIStore } from '@/stores/uiStore'
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
 import { getShortcutDisplay } from '@/lib/keyboard'
-import { onQuickNoteOpen, type QuickNoteType } from '@/lib/quick-note'
+import { onQuickKnowledgeOpen, type QuickKnowledgeType } from '@/lib/quick-knowledge'
 import CommandPalette from '@/components/shared/CommandPalette'
-import { QuickNotePanel } from '@/components/shared/QuickNotePanel'
+import { QuickKnowledgePanel } from '@/components/shared/QuickKnowledgePanel'
+import {
+    ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator,
+} from '@/components/ui/context-menu'
 import MarkdownIt from 'markdown-it'
 import {
     Home, MessageSquare, Search, Settings, Plus, Folder,
     FileText, Pin, Archive, Bookmark, Code2, Zap, WifiOff,
-    PanelLeft, ChevronDown, ChevronLeft, ChevronRight, Brain, CheckSquare, Calendar, Star
+    PanelLeft, ChevronDown, ChevronLeft, ChevronRight, Brain, CheckSquare, Calendar, Star, Pencil, Trash2
 } from 'lucide-react'
 import { getWorkspaceIcon } from '@/pages/SettingsPage'
 
@@ -23,7 +26,7 @@ const DEFAULT_INSIGHTS_WIDTH = 320
 const INSIGHTS_WIDTH_STORAGE_KEY = 'openforge.shell.insights.width'
 const INSIGHTS_COLLAPSED_STORAGE_KEY = 'openforge.shell.insights.collapsed'
 type InsightSectionKey = 'tasks' | 'timelines' | 'facts' | 'crucial_things'
-type InsightItem = { noteId: string, text: string }
+type InsightItem = { knowledgeId: string, text: string }
 type InsightSections = Record<InsightSectionKey, InsightItem[]>
 
 const INSIGHT_SECTION_ORDER: InsightSectionKey[] = ['tasks', 'timelines', 'facts', 'crucial_things']
@@ -75,17 +78,20 @@ const clampInsightsWidth = (value: number) =>
 const insightsMd = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
 insightsMd.renderer.rules.link_open = () => ''
 insightsMd.renderer.rules.link_close = () => ''
+type SidebarConversation = { id: string; title: string | null; message_count?: number }
 
 export default function AppShell() {
     const { workspaceId = '' } = useParams<{ workspaceId: string }>()
     const navigate = useNavigate()
     const location = useLocation()
     const [sidebarOpen, setSidebarOpen] = useState(true)
-    const [showQuickNote, setShowQuickNote] = useState(false)
-    const [defaultNoteType, setDefaultNoteType] = useState<'standard' | 'fleeting' | 'bookmark' | 'gist'>('standard')
+    const [showQuickKnowledge, setShowQuickKnowledge] = useState(false)
+    const [defaultKnowledgeType, setDefaultKnowledgeType] = useState<'standard' | 'fleeting' | 'bookmark' | 'gist'>('standard')
     const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
     const [workspaceQuery, setWorkspaceQuery] = useState('')
     const [activeInsightSection, setActiveInsightSection] = useState<InsightSectionKey | null>('tasks')
+    const [renamingConversationId, setRenamingConversationId] = useState<string | null>(null)
+    const [renamingConversationDraft, setRenamingConversationDraft] = useState('')
     const [isInsightsCollapsed, setIsInsightsCollapsed] = useState<boolean>(() => {
         if (typeof window === 'undefined') return false
         return window.localStorage.getItem(INSIGHTS_COLLAPSED_STORAGE_KEY) === '1'
@@ -101,8 +107,8 @@ export default function AppShell() {
     const qc = useQueryClient()
 
     const { data: workspaces = [] } = useQuery({ queryKey: ['workspaces'], queryFn: listWorkspaces })
-    const { data: notesData } = useQuery({
-        queryKey: ['notes', workspaceId],
+    const { data: knowledgeData } = useQuery({
+        queryKey: ['knowledge', workspaceId],
         queryFn: () => listKnowledge(workspaceId, { page_size: 200 }),
         enabled: !!workspaceId,
     })
@@ -115,14 +121,16 @@ export default function AppShell() {
     const ws = (workspaces as { id: string; name: string; icon: string; color: string }[])
         .find(w => w.id === workspaceId)
     const workspaceList = workspaces as { id: string; name: string; icon: string; color: string }[]
+    const recentConversations = conversations as SidebarConversation[]
     const workspaceMenuRef = useRef<HTMLDivElement | null>(null)
-    const notes = notesData?.knowledge ?? notesData?.notes ?? []
-    const pinnedNotes = notes.filter((n: { is_pinned: boolean }) => n.is_pinned)
+    const conversationRenameInputRef = useRef<HTMLInputElement | null>(null)
+    const knowledgeItems = knowledgeData?.knowledge ?? []
+    const pinnedKnowledgeItems = knowledgeItems.filter((n: { is_pinned: boolean }) => n.is_pinned)
     const isWorkspaceHome = location.pathname === `/w/${workspaceId}`
     const isSearchPage = location.pathname.includes('/search')
     const isSettingsPage = location.pathname.includes('/settings')
     const isChatPage = location.pathname.includes('/chat')
-    const isNotePage = location.pathname.includes('/notes/') || location.pathname.includes('/knowledge/')
+    const isKnowledgePage = location.pathname.includes('/knowledge/') || location.pathname.includes('/knowledge/')
     const currentSectionMeta = useMemo(() => {
         if (location.pathname.includes('/chat')) {
             return {
@@ -142,7 +150,7 @@ export default function AppShell() {
                 description: 'Manage workspace configuration, providers, and defaults.',
             }
         }
-        if (location.pathname.includes('/notes/') || location.pathname.includes('/knowledge/')) {
+        if (location.pathname.includes('/knowledge/') || location.pathname.includes('/knowledge/')) {
             return {
                 title: 'Knowledge Details',
                 description: 'Review and edit a single knowledge item in full detail.',
@@ -170,27 +178,27 @@ export default function AppShell() {
             facts: [],
             crucial_things: [],
         }
-        notes.forEach((n: { id: string, insights?: any }) => {
+        knowledgeItems.forEach((n: { id: string, insights?: any }) => {
             if (!n.insights) return
-            if (n.insights.tasks) n.insights.tasks.forEach((t: string) => ag.tasks.push({ noteId: n.id, text: t }))
+            if (n.insights.tasks) n.insights.tasks.forEach((t: string) => ag.tasks.push({ knowledgeId: n.id, text: t }))
             if (n.insights.timelines) {
                 n.insights.timelines.forEach((t: any) => {
                     if (typeof t === 'string') {
-                        ag.timelines.push({ noteId: n.id, text: t })
+                        ag.timelines.push({ knowledgeId: n.id, text: t })
                         return
                     }
                     const date = typeof t?.date === 'string' ? t.date.trim() : ''
                     const event = typeof t?.event === 'string' ? t.event.trim() : ''
-                    if (date && event) ag.timelines.push({ noteId: n.id, text: `**${date}**: ${event}` })
-                    else if (date) ag.timelines.push({ noteId: n.id, text: `**${date}**` })
-                    else if (event) ag.timelines.push({ noteId: n.id, text: event })
+                    if (date && event) ag.timelines.push({ knowledgeId: n.id, text: `**${date}**: ${event}` })
+                    else if (date) ag.timelines.push({ knowledgeId: n.id, text: `**${date}**` })
+                    else if (event) ag.timelines.push({ knowledgeId: n.id, text: event })
                 })
             }
-            if (n.insights.facts) n.insights.facts.forEach((t: string) => ag.facts.push({ noteId: n.id, text: t }))
-            if (n.insights.crucial_things) n.insights.crucial_things.forEach((t: string) => ag.crucial_things.push({ noteId: n.id, text: t }))
+            if (n.insights.facts) n.insights.facts.forEach((t: string) => ag.facts.push({ knowledgeId: n.id, text: t }))
+            if (n.insights.crucial_things) n.insights.crucial_things.forEach((t: string) => ag.crucial_things.push({ knowledgeId: n.id, text: t }))
         })
         return ag
-    }, [notes])
+    }, [knowledgeItems])
 
     const totalInsightsCount = useMemo(
         () => INSIGHT_SECTION_ORDER.reduce((count, section) => count + aggregatedInsights[section].length, 0),
@@ -198,31 +206,31 @@ export default function AppShell() {
     )
 
     // Keyboard shortcuts
-    const openQuickPanel = useCallback((type: QuickNoteType = 'standard') => {
-        setDefaultNoteType(type)
-        setShowQuickNote(true)
+    const openQuickPanel = useCallback((type: QuickKnowledgeType = 'standard') => {
+        setDefaultKnowledgeType(type)
+        setShowQuickKnowledge(true)
     }, [])
 
-    const handleNewNote = useCallback(() => {
+    const handleNewKnowledge = useCallback(() => {
         openQuickPanel('fleeting')
     }, [openQuickPanel])
 
     useKeyboardShortcut('b', true, () => setSidebarOpen(p => !p), { ignoreInputs: false })
-    useKeyboardShortcut('n', true, handleNewNote)
+    useKeyboardShortcut('n', true, handleNewKnowledge)
 
     const shortcutDisplay = useMemo(() => ({
         commandPalette: getShortcutDisplay('commandPalette'),
         toggleSidebar: getShortcutDisplay('toggleSidebar'),
-        newNote: getShortcutDisplay('newNote'),
+        newKnowledge: getShortcutDisplay('newKnowledge'),
     }), [])
 
-    useEffect(() => onQuickNoteOpen(openQuickPanel), [openQuickPanel])
+    useEffect(() => onQuickKnowledgeOpen(openQuickPanel), [openQuickPanel])
     useEffect(() => {
-        return on('note_updated', (msg: Record<string, unknown>) => {
-            const updatedNoteId = typeof msg.note_id === 'string' ? msg.note_id : null
-            qc.invalidateQueries({ queryKey: ['notes', workspaceId] })
-            if (updatedNoteId) {
-                qc.invalidateQueries({ queryKey: ['note', updatedNoteId] })
+        return on('knowledge_updated', (msg: Record<string, unknown>) => {
+            const updatedKnowledgeId = typeof msg.knowledge_id === 'string' ? msg.knowledge_id : null
+            qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
+            if (updatedKnowledgeId) {
+                qc.invalidateQueries({ queryKey: ['knowledge-item', updatedKnowledgeId] })
             }
         })
     }, [on, qc, workspaceId])
@@ -247,11 +255,65 @@ export default function AppShell() {
     useEffect(() => {
         setWorkspaceMenuOpen(false)
         setWorkspaceQuery('')
+        setRenamingConversationId(null)
+        setRenamingConversationDraft('')
     }, [workspaceId])
+
+    useEffect(() => {
+        if (!renamingConversationId) return
+        const rafId = window.requestAnimationFrame(() => {
+            conversationRenameInputRef.current?.focus()
+            conversationRenameInputRef.current?.select()
+        })
+        return () => window.cancelAnimationFrame(rafId)
+    }, [renamingConversationId])
 
     const toggleInsightSection = useCallback((section: InsightSectionKey) => {
         setActiveInsightSection(prev => (prev === section ? null : section))
     }, [])
+
+    const beginRenameConversation = useCallback((conversationId: string, currentTitle: string | null) => {
+        setRenamingConversationId(conversationId)
+        setRenamingConversationDraft(currentTitle ?? '')
+    }, [])
+
+    const cancelRenameConversation = useCallback(() => {
+        setRenamingConversationId(null)
+        setRenamingConversationDraft('')
+    }, [])
+
+    const commitRenameConversation = useCallback(async () => {
+        if (!renamingConversationId) return
+        const currentTitle = recentConversations.find(c => c.id === renamingConversationId)?.title ?? ''
+        const trimmed = renamingConversationDraft.trim()
+        if (!trimmed || trimmed === currentTitle) {
+            cancelRenameConversation()
+            return
+        }
+        try {
+            await updateConversation(workspaceId, renamingConversationId, { title: trimmed, title_locked: true })
+            qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
+            qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'archived'] })
+            qc.invalidateQueries({ queryKey: ['conversation', renamingConversationId] })
+        } catch (error) {
+            console.error('Failed to rename conversation from sidebar:', error)
+        } finally {
+            cancelRenameConversation()
+        }
+    }, [cancelRenameConversation, qc, recentConversations, renamingConversationDraft, renamingConversationId, workspaceId])
+
+    const handleTrashConversation = useCallback(async (conversationId: string) => {
+        try {
+            await deleteConversation(workspaceId, conversationId)
+            qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
+            qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'archived'] })
+            if (location.pathname.includes(`/chat/${conversationId}`)) {
+                navigate(`/w/${workspaceId}/chat`)
+            }
+        } catch (error) {
+            console.error('Failed to move conversation to trash from sidebar:', error)
+        }
+    }, [location.pathname, navigate, qc, workspaceId])
 
     const toggleInsightsSidebar = useCallback(() => {
         setIsInsightsCollapsed(prev => {
@@ -406,20 +468,20 @@ export default function AppShell() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-4">
-                    {/* Pinned notes */}
-                    {pinnedNotes.length > 0 && (
+                    {/* Pinned knowledge */}
+                    {pinnedKnowledgeItems.length > 0 && (
                         <div>
                             <div className="flex items-center gap-1 px-2 mb-1">
                                 <Pin className="w-3 h-3 text-muted-foreground" />
                                 <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Pinned</span>
                             </div>
-                            {pinnedNotes.slice(0, 5).map((n: { id: string; title: string; ai_title: string; type: string }) => (
+                            {pinnedKnowledgeItems.slice(0, 5).map((n: { id: string; title: string; ai_title: string; type: string }) => (
                                 <Link
                                     key={n.id}
                                     to={`/w/${workspaceId}/knowledge/${n.id}`}
-                                    className={`sidebar-item text-xs ${(isActive(`/knowledge/${n.id}`) || isActive(`/notes/${n.id}`)) ? 'active' : ''}`}
+                                    className={`sidebar-item text-xs ${(isActive(`/knowledge/${n.id}`) || isActive(`/knowledge/${n.id}`)) ? 'active' : ''}`}
                                 >
-                                    <NoteTypeIcon type={n.type} />
+                                    <KnowledgeTypeIcon type={n.type} />
                                     <span className="truncate">{n.title || n.ai_title || 'Untitled'}</span>
                                 </Link>
                             ))}
@@ -427,18 +489,71 @@ export default function AppShell() {
                     )}
 
                     {/* Recent conversations */}
-                    {(conversations as { id: string; title: string }[]).length > 0 && (
+                    {recentConversations.length > 0 && (
                         <div>
                             <div className="flex items-center gap-1 px-2 mb-1">
                                 <MessageSquare className="w-3 h-3 text-muted-foreground" />
                                 <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Recent Chats</span>
                             </div>
-                            {(conversations as { id: string; title: string }[]).slice(0, 5).map(c => (
-                                <Link key={c.id} to={`/w/${workspaceId}/chat/${c.id}`} className={`sidebar-item text-xs ${isActive(`/chat/${c.id}`) ? 'active' : ''}`}>
-                                    <MessageSquare className="w-3 h-3" />
-                                    <span className="truncate">{c.title ?? 'New Chat'}</span>
-                                </Link>
-                            ))}
+                            {recentConversations.slice(0, 5).map(c => {
+                                const isRenaming = renamingConversationId === c.id
+                                return (
+                                <ContextMenu key={c.id}>
+                                    <ContextMenuTrigger asChild>
+                                        {isRenaming ? (
+                                            <div className={`sidebar-item text-xs ${isActive(`/chat/${c.id}`) ? 'active' : ''}`}>
+                                                <MessageSquare className="w-3 h-3" />
+                                                <input
+                                                    ref={conversationRenameInputRef}
+                                                    className="w-full bg-transparent text-xs outline-none border-b border-accent/45"
+                                                    value={renamingConversationDraft}
+                                                    onChange={(event) => setRenamingConversationDraft(event.target.value)}
+                                                    onBlur={() => { void commitRenameConversation() }}
+                                                    onKeyDown={(event) => {
+                                                        if (event.key === 'Enter') {
+                                                            event.preventDefault()
+                                                            void commitRenameConversation()
+                                                            return
+                                                        }
+                                                        if (event.key === 'Escape') {
+                                                            event.preventDefault()
+                                                            cancelRenameConversation()
+                                                        }
+                                                    }}
+                                                    onClick={(event) => event.stopPropagation()}
+                                                />
+                                            </div>
+                                        ) : (
+                                            <Link to={`/w/${workspaceId}/chat/${c.id}`} className={`sidebar-item text-xs ${isActive(`/chat/${c.id}`) ? 'active' : ''}`}>
+                                                <MessageSquare className="w-3 h-3" />
+                                                <span className="truncate">{c.title ?? 'New Chat'}</span>
+                                            </Link>
+                                        )}
+                                    </ContextMenuTrigger>
+                                    <ContextMenuContent className="w-48">
+                                        <ContextMenuItem
+                                            onSelect={(event) => {
+                                                event.preventDefault()
+                                                beginRenameConversation(c.id, c.title ?? null)
+                                            }}
+                                            className="gap-2"
+                                        >
+                                            <Pencil className="w-4 h-4" /> Rename Chat
+                                        </ContextMenuItem>
+                                        <ContextMenuSeparator />
+                                        <ContextMenuItem
+                                            onSelect={(event) => {
+                                                event.preventDefault()
+                                                void handleTrashConversation(c.id)
+                                            }}
+                                            className="gap-2 text-red-500 focus:text-red-400 focus:bg-red-500/10"
+                                        >
+                                            <Trash2 className="w-4 h-4" /> Move to Trash
+                                        </ContextMenuItem>
+                                    </ContextMenuContent>
+                                </ContextMenu>
+                                )
+                            })}
                         </div>
                     )}
                 </div>
@@ -496,8 +611,8 @@ export default function AppShell() {
                     <div className="relative group inline-flex h-8 shadow-sm rounded-md">
                         <button
                             className="bg-accent text-accent-foreground hover:bg-accent/90 px-3.5 py-1.5 rounded-l-md text-xs font-semibold flex items-center gap-1.5 border-r border-accent-foreground/20 transition-colors"
-                            onClick={handleNewNote}
-                            title={`New note (${shortcutDisplay.newNote})`}
+                            onClick={handleNewKnowledge}
+                            title={`New knowledge (${shortcutDisplay.newKnowledge})`}
                         >
                             <Plus className="w-3.5 h-3.5" /> New Knowledge
                         </button>
@@ -536,16 +651,16 @@ export default function AppShell() {
                     </div>
                 </header>
 
-                <QuickNotePanel
-                    open={showQuickNote}
-                    defaultType={defaultNoteType}
-                    onClose={() => setShowQuickNote(false)}
+                <QuickKnowledgePanel
+                    open={showQuickKnowledge}
+                    defaultType={defaultKnowledgeType}
+                    onClose={() => setShowQuickKnowledge(false)}
                 />
 
                 <div className="relative z-0 flex-1 min-h-0 flex gap-3 p-3">
                     <main
                         data-openforge-main-content="1"
-                        className={`relative z-20 flex-1 min-h-0 overflow-auto ${(isWorkspaceHome || isSearchPage || isSettingsPage || isChatPage || isNotePage)
+                        className={`relative z-20 flex-1 min-h-0 overflow-auto ${(isWorkspaceHome || isSearchPage || isSettingsPage || isChatPage || isKnowledgePage)
                             ? ''
                             : 'rounded-2xl border border-border/60 bg-card/25'}`}
                     >
@@ -639,7 +754,7 @@ export default function AppShell() {
                                                             <div className="min-w-0">
                                                                 <div className="text-sm font-semibold text-foreground truncate">{meta.title}</div>
                                                                 <div className="text-xs text-muted-foreground/90 leading-5">
-                                                                    {items.length} note excerpt{items.length === 1 ? '' : 's'}
+                                                                    {items.length} knowledge excerpt{items.length === 1 ? '' : 's'}
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -656,7 +771,7 @@ export default function AppShell() {
                                                                         <li key={i}>
                                                                             <button
                                                                                 type="button"
-                                                                                onClick={() => navigate(`/w/${workspaceId}/knowledge/${item.noteId}`)}
+                                                                                onClick={() => navigate(`/w/${workspaceId}/knowledge/${item.knowledgeId}`)}
                                                                                 className="w-full flex items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
                                                                             >
                                                                                 <span className={`mt-1.5 h-1.5 w-1.5 rounded-full flex-shrink-0 ${meta.dotClass}`} />
@@ -689,7 +804,7 @@ export default function AppShell() {
     )
 }
 
-function NoteTypeIcon({ type }: { type: string }) {
+function KnowledgeTypeIcon({ type }: { type: string }) {
     switch (type) {
         case 'bookmark': return <Bookmark className="w-3 h-3 flex-shrink-0" />
         case 'gist': return <Code2 className="w-3 h-3 flex-shrink-0" />

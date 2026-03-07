@@ -132,19 +132,16 @@ async def upload_file(
     async with aiofiles.open(file_path, 'wb') as f:
         await f.write(content)
 
-    # Extract text based on file type
+    # Extract text based on file type (text attachments only for now).
+    # PDF/image and other richer pipelines will be wired separately.
     extracted_text = ""
-    if content_type == "application/pdf" or ext == ".pdf":
-        extracted_text = await extract_text_from_pdf(file_path)
-    elif content_type.startswith("image/"):
-        extracted_text = await extract_text_from_image(file_path)
-    elif content_type.startswith("text/") or ext in [".txt", ".md", ".json", ".csv", ".xml", ".yaml", ".yml"]:
+    if content_type.startswith("text/") or ext in [".txt", ".md", ".json", ".csv", ".xml", ".yaml", ".yml"]:
         extracted_text = await extract_text_from_text_file(file_path)
 
-    # Create attachment record (not linked to a message yet)
+    # Persist attachment record; it will be linked to a message when chat is sent.
     attachment = MessageAttachment(
         id=file_id,
-        message_id=uuid.uuid4(),  # Placeholder, will be updated when message is sent
+        message_id=None,
         filename=file.filename or "unknown",
         content_type=content_type,
         file_size=len(content),
@@ -152,8 +149,9 @@ async def upload_file(
         extracted_text=extracted_text or None,
     )
 
-    # Store temporarily - we'll return the ID for the frontend to use when sending the message
-    # For now, we return the info without persisting to DB (message not created yet)
+    db.add(attachment)
+    await db.commit()
+    await db.refresh(attachment)
 
     return AttachmentOut(
         id=str(file_id),

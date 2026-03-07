@@ -12,9 +12,9 @@ interface UIState {
     activeWorkspaceId: string | null
     setActiveWorkspaceId: (id: string | null) => void
 
-    /** Last visited note ID per workspace */
-    lastNoteId: Record<string, string>
-    setLastNoteId: (workspaceId: string, noteId: string) => void
+    /** Last visited knowledge ID per workspace */
+    lastKnowledgeId: Record<string, string>
+    setLastKnowledgeId: (workspaceId: string, knowledgeId: string) => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -29,7 +29,7 @@ export const useUIStore = create<UIState>((set) => ({
     activeWorkspaceId: null,
     setActiveWorkspaceId: (id) => set({ activeWorkspaceId: id }),
 
-    lastNoteId: {},
-    setLastNoteId: (workspaceId, noteId) =>
-        set((s) => ({ lastNoteId: { ...s.lastNoteId, [workspaceId]: noteId } })),
+    lastKnowledgeId: {},
+    setLastKnowledgeId: (workspaceId, knowledgeId) =>
+        set((s) => ({ lastKnowledgeId: { ...s.lastKnowledgeId, [workspaceId]: knowledgeId } })),
 }))

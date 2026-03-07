@@ -4,9 +4,9 @@ from uuid import UUID
 
 
 class SearchResult(BaseModel):
-    note_id: UUID
+    knowledge_id: UUID
     title: str
-    note_type: str
+    knowledge_type: str
     chunk_text: str
     header_path: Optional[str] = None
     tags: list[str] = []
@@ -24,6 +24,6 @@ class SearchResponse(BaseModel):
 class SearchParams(BaseModel):
     q: str
     mode: Literal["search", "chat"] = "search"
-    note_type: Optional[str] = None
+    knowledge_type: Optional[str] = None
     tag: Optional[str] = None
     limit: int = 20

@@ -15,7 +15,7 @@ async def search(
     workspace_id: UUID,
     q: str,
     mode: Literal["search", "chat"] = "search",
-    note_type: Optional[str] = None,
+    knowledge_type: Optional[str] = None,
     tag: Optional[str] = None,
     limit: int = 20,
     db: AsyncSession = Depends(get_db),
@@ -24,7 +24,7 @@ async def search(
         query=q,
         workspace_id=str(workspace_id),
         limit=limit,
-        note_type=note_type,
+        knowledge_type=knowledge_type,
         tag=tag,
     )
 
@@ -32,9 +32,9 @@ async def search(
     for r in raw_results:
         highlighted = highlight_query_terms(r["chunk_text"], q)
         results.append(SearchResult(
-            note_id=r["note_id"],
+            knowledge_id=r["knowledge_id"],
             title=r["title"],
-            note_type=r["note_type"],
+            knowledge_type=r["knowledge_type"],
             chunk_text=r["chunk_text"],
             header_path=r.get("header_path"),
             tags=r.get("tags", []),

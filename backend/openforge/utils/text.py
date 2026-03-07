@@ -10,7 +10,7 @@ def _count_code_tokens(text: str) -> int:
     return len(_CODE_TOKEN_RE.findall(text))
 
 
-def count_words(text: str | None, note_type: str | None = None) -> int:
+def count_words(text: str | None, knowledge_type: str | None = None) -> int:
     """
     Count words for knowledge cards.
 
@@ -21,7 +21,7 @@ def count_words(text: str | None, note_type: str | None = None) -> int:
     if not text:
         return 0
 
-    if note_type == "gist":
+    if knowledge_type == "gist":
         return _count_code_tokens(text)
 
     code_token_total = 0
@@ -46,13 +46,13 @@ def count_words(text: str | None, note_type: str | None = None) -> int:
 def normalize_word_count(
     stored_word_count: int | None,
     text: str | None,
-    note_type: str | None = None,
+    knowledge_type: str | None = None,
 ) -> tuple[int, bool]:
     """
     Recompute current word count and report whether stored value is stale.
     Returns: (normalized_count, changed)
     """
-    normalized = count_words(text, note_type=note_type)
+    normalized = count_words(text, knowledge_type=knowledge_type)
     current = stored_word_count or 0
     return normalized, normalized != current
 

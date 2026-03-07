@@ -20,6 +20,7 @@ import {
 import { ProviderIcon } from '@/components/shared/ProviderIcon'
 import { ModelOverrideSelect } from '@/components/shared/ModelOverrideSelect'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
+import { isLocalProvider, sanitizeProviderDisplayName } from '@/lib/provider-display'
 
 // ── Provider registry ────────────────────────────────────────────────────────
 const PROVIDER_META: Record<string, {
@@ -37,7 +38,7 @@ const PROVIDER_META: Record<string, {
     cohere: { name: 'Cohere', color: 'bg-teal-500/10 border-teal-500/20 text-teal-300', needsKey: true, needsUrl: false, placeholder: 'API key…' },
     zhipuai: { name: 'Z.AI (ZhipuAI)', color: 'bg-indigo-500/10 border-indigo-500/20 text-indigo-300', needsKey: true, needsUrl: false, placeholder: 'API key…' },
     huggingface: { name: 'HuggingFace', color: 'bg-orange-400/10 border-orange-400/20 text-orange-200', needsKey: true, needsUrl: false, placeholder: 'hf_…' },
-    ollama: { name: 'Ollama (Local)', color: 'bg-lime-500/10 border-lime-500/20 text-lime-300', needsKey: false, needsUrl: true, placeholder: 'Token (optional)', urlPlaceholder: 'http://localhost:11434' },
+    ollama: { name: 'Ollama', color: 'bg-lime-500/10 border-lime-500/20 text-lime-300', needsKey: false, needsUrl: true, placeholder: 'Token (optional)', urlPlaceholder: 'http://localhost:11434' },
     'custom-openai': { name: 'Custom OpenAI-compatible', color: 'bg-violet-500/10 border-violet-500/20 text-violet-300', needsKey: false, needsUrl: true, placeholder: 'Token (optional)', urlPlaceholder: 'https://your-api.com' },
     'custom-anthropic': { name: 'Custom Anthropic-compat.', color: 'bg-rose-500/10 border-rose-500/20 text-rose-300', needsKey: false, needsUrl: true, placeholder: 'Token (optional)', urlPlaceholder: 'https://your-api.com' },
 }
@@ -61,10 +62,12 @@ export function getWorkspaceIcon(iconName: string | null): React.ReactNode {
     return <IconComponent className="w-4 h-4" />
 }
 
-type SettingsTab = 'workspaces' | 'llm' | 'prompts' | 'schedules' | 'audit'
-const SETTINGS_TABS: SettingsTab[] = ['workspaces', 'llm', 'prompts', 'schedules', 'audit']
-const toSettingsTab = (value: string | null): SettingsTab =>
-    SETTINGS_TABS.includes(value as SettingsTab) ? (value as SettingsTab) : 'workspaces'
+type SettingsTab = 'workspaces' | 'llm' | 'prompts' | 'jobs' | 'audit'
+const SETTINGS_TABS: SettingsTab[] = ['workspaces', 'llm', 'prompts', 'jobs', 'audit']
+const toSettingsTab = (value: string | null): SettingsTab => {
+    const normalized = value === 'schedules' ? 'jobs' : value
+    return SETTINGS_TABS.includes(normalized as SettingsTab) ? (normalized as SettingsTab) : 'workspaces'
+}
 
 // ── Root component ────────────────────────────────────────────────────────────
 export default function SettingsPage() {
@@ -88,7 +91,7 @@ export default function SettingsPage() {
         { id: 'workspaces' as const, label: 'Workspaces', Icon: FolderOpen },
         { id: 'llm' as const, label: 'AI Providers', Icon: Bot },
         { id: 'prompts' as const, label: 'Prompts', Icon: Sliders },
-        { id: 'schedules' as const, label: 'Schedules', Icon: Timer },
+        { id: 'jobs' as const, label: 'Jobs', Icon: Timer },
         { id: 'audit' as const, label: 'Audit', Icon: History },
     ]
 
@@ -133,7 +136,7 @@ export default function SettingsPage() {
             )}
             {activeTab === 'llm' && <LLMSettings />}
             {activeTab === 'prompts' && <PromptsTab />}
-            {activeTab === 'schedules' && <SchedulesTab />}
+            {activeTab === 'jobs' && <JobsTab />}
             {activeTab === 'audit' && (
                 <div className="min-h-0 flex-1">
                     <AuditTab workspaceId={workspaceId} />
@@ -148,7 +151,8 @@ type WorkspaceRow = {
     id: string; name: string; description: string | null
     icon: string | null; color: string | null
     llm_provider_id: string | null; llm_model: string | null
-    note_count: number; knowledge_count?: number; conversation_count: number
+    knowledge_count: number
+    conversation_count: number
 }
 
 function WorkspacesSettings({
@@ -290,7 +294,7 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
                     <div className="flex items-center gap-2">
                         <span className="font-medium text-sm">{ws.name}</span>
                         {isActive && <span className="chip-accent text-[10px]">Current</span>}
-                        <span className="text-xs text-muted-foreground">{ws.knowledge_count ?? ws.note_count} knowledge · {ws.conversation_count} chats</span>
+                        <span className="text-xs text-muted-foreground">{ws.knowledge_count} knowledge · {ws.conversation_count} chats</span>
                     </div>
                     <p className="text-xs text-muted-foreground truncate mt-0.5">
                         {ws.description || (ws.llm_provider_id ? `Provider override set` : 'Using global default provider')}
@@ -371,7 +375,7 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
                                 <select className="input text-sm" value={providerId} onChange={e => { setProviderId(e.target.value); setModel('') }}>
                                     <option value="">Use global default</option>
                                     {providers.map(p => (
-                                        <option key={p.id} value={p.id}>{p.display_name}</option>
+                                        <option key={p.id} value={p.id}>{sanitizeProviderDisplayName(p.display_name)}</option>
                                     ))}
                                 </select>
                             </div>
@@ -591,6 +595,9 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
                                     <ProviderIcon providerId={id} className="w-4 h-4" />
                                 </div>
                                 <div className="text-[10px] leading-tight font-medium truncate">{m.name}</div>
+                                {isLocalProvider(id) && (
+                                    <div className="mt-1 text-[9px] text-lime-300/90 font-medium">Local</div>
+                                )}
                             </button>
                         )
                     })}
@@ -600,6 +607,9 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
             {/* Step 2 — Credentials */}
             <div className="space-y-2">
                 <label className="text-xs text-muted-foreground font-medium block">2. Enter credentials</label>
+                {isLocalProvider(providerName) && (
+                    <p className="text-[10px] text-lime-300/90">Local provider (runs on this machine)</p>
+                )}
                 <input className="input text-sm" placeholder={`Display name (default: ${meta?.name})`} value={displayName} onChange={e => setDisplayName(e.target.value)} />
 
                 {meta?.needsUrl ? (
@@ -746,8 +756,9 @@ function ProviderCard({ provider, expanded, onToggle, onDelete, onSetDefault }: 
                 </div>
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-sm">{provider.display_name}</span>
+                        <span className="font-medium text-sm">{sanitizeProviderDisplayName(provider.display_name) || provider.provider_name}</span>
                         <span className="chip-muted text-[10px]">{provider.provider_name}</span>
+                        {isLocalProvider(provider.provider_name) && <span className="chip-muted text-[10px]">Local provider</span>}
                         {provider.is_system_default && <span className="chip-accent text-[10px]"><Star className="w-2.5 h-2.5 mr-0.5 inline" />Default</span>}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5 truncate">
@@ -872,9 +883,9 @@ function PromptsTab() {
         setDrafts(d => ({ ...d, [promptId]: (d[promptId] ?? '') + variable }))
     }
 
-    const categories = ['notes', 'chat']
+    const categories = ['knowledge', 'chat']
     const categoryLabels: Record<string, string> = {
-        notes: 'Knowledge Intelligence',
+        knowledge: 'Knowledge Intelligence',
         chat: 'Chat & Retrieval',
     }
 
@@ -904,7 +915,7 @@ function PromptsTab() {
             {categories.map(cat => {
                 const catPrompts = (prompts as PromptEntry[]).filter(p => p.category === cat)
                 if (!catPrompts.length) return null
-                const CatIcon = cat === 'notes' ? FileText : MessageSquare
+                const CatIcon = cat === 'knowledge' ? FileText : MessageSquare
                 return (
                     <div key={cat}>
                         <div className="flex items-center gap-2 mb-4">
@@ -996,6 +1007,43 @@ function PromptsTab() {
     )
 }
 
+// ── Jobs Tab ──────────────────────────────────────────────────────────────────
+type JobsSubTab = 'schedules' | 'automated-triggers'
+
+function JobsTab() {
+    const [activeSubTab, setActiveSubTab] = useState<JobsSubTab>('schedules')
+
+    const tabs: Array<{ id: JobsSubTab; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+        { id: 'schedules', label: 'Schedules', icon: Timer },
+        { id: 'automated-triggers', label: 'Automated Triggers', icon: Zap },
+    ]
+
+    return (
+        <div className="space-y-5">
+            <div className="flex shrink-0 gap-2 p-1.5 glass-card w-fit rounded-2xl overflow-x-auto min-h-[48px]">
+                {tabs.map(tab => {
+                    const Icon = tab.icon
+                    return (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveSubTab(tab.id)}
+                            className={`flex min-h-8 items-center justify-center gap-2 px-4 py-1.5 text-sm font-medium rounded-xl transition-all duration-300 whitespace-nowrap ${activeSubTab === tab.id
+                                ? 'bg-accent/20 text-accent shadow-glass-inset ring-1 ring-accent/30'
+                                : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
+                                }`}
+                        >
+                            <Icon className="w-4 h-4" />
+                            {tab.label}
+                        </button>
+                    )
+                })}
+            </div>
+
+            {activeSubTab === 'schedules' ? <SchedulesTab /> : <AutomatedTriggersTab />}
+        </div>
+    )
+}
+
 // ── Schedules Tab ─────────────────────────────────────────────────────────────
 interface ScheduleEntry {
     id: string
@@ -1033,10 +1081,133 @@ const CATEGORY_LABELS: Record<string, string> = {
     maintenance: 'Maintenance',
 }
 
+const AUTO_KNOWLEDGE_INTELLIGENCE_KEY = 'automation.auto_knowledge_intelligence_enabled'
+const AUTO_BOOKMARK_EXTRACTION_KEY = 'automation.auto_bookmark_content_extraction_enabled'
+
 const CHAT_TRASH_RETENTION_KEY = 'chat.trash_retention_days'
 const DEFAULT_CHAT_TRASH_RETENTION_DAYS = 30
 const MIN_CHAT_TRASH_RETENTION_DAYS = 1
 const MAX_CHAT_TRASH_RETENTION_DAYS = 365
+
+function parseBoolSetting(value: unknown, fallback: boolean): boolean {
+    if (typeof value === 'boolean') return value
+    if (typeof value === 'number') return value !== 0
+    if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase()
+        if (['true', '1', 'yes', 'on'].includes(normalized)) return true
+        if (['false', '0', 'no', 'off'].includes(normalized)) return false
+    }
+    return fallback
+}
+
+function TogglePill({ checked }: { checked: boolean }) {
+    return (
+        <span
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${checked ? 'bg-accent' : 'bg-muted/70'}`}
+            aria-hidden
+        >
+            <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-5' : 'translate-x-0.5'}`} />
+        </span>
+    )
+}
+
+function AutomatedTriggersTab() {
+    const qc = useQueryClient()
+    const { data: settings = [], isLoading } = useQuery<Array<{ key: string; value: unknown; category: string }>>({
+        queryKey: ['app-settings'],
+        queryFn: listSettings,
+    })
+    const [savingKey, setSavingKey] = useState<string | null>(null)
+
+    const autoKnowledgeEnabled = useMemo(() => {
+        const raw = settings.find(item => item.key === AUTO_KNOWLEDGE_INTELLIGENCE_KEY)?.value
+        return parseBoolSetting(raw, true)
+    }, [settings])
+
+    const autoBookmarkEnabled = useMemo(() => {
+        const raw = settings.find(item => item.key === AUTO_BOOKMARK_EXTRACTION_KEY)?.value
+        return parseBoolSetting(raw, true)
+    }, [settings])
+
+    const toggleSetting = async (key: string, currentValue: boolean) => {
+        setSavingKey(key)
+        await updateSetting(key, {
+            value: !currentValue,
+            category: 'automation',
+            sensitive: false,
+        })
+        qc.invalidateQueries({ queryKey: ['app-settings'] })
+        setSavingKey(null)
+    }
+
+    if (isLoading) return (
+        <div className="flex items-center justify-center py-20">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </div>
+    )
+
+    return (
+        <div className="space-y-4">
+            <div className="glass-card p-4 border-accent/20 bg-accent/5">
+                <div className="flex items-start gap-3">
+                    <Zap className="w-4 h-4 text-accent mt-0.5 flex-shrink-0" />
+                    <div className="text-sm flex-1 min-w-0">
+                        <p className="font-medium mb-1">Automated Triggers</p>
+                        <p className="text-muted-foreground text-xs leading-relaxed">
+                            Control which job triggers run automatically when new knowledge is created.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <button
+                type="button"
+                className="w-full rounded-xl border border-border/60 bg-muted/20 p-4 text-left hover:bg-muted/30 transition-colors disabled:opacity-70"
+                onClick={() => { void toggleSetting(AUTO_KNOWLEDGE_INTELLIGENCE_KEY, autoKnowledgeEnabled) }}
+                disabled={savingKey === AUTO_KNOWLEDGE_INTELLIGENCE_KEY}
+            >
+                <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-accent/15 border border-accent/30 flex items-center justify-center text-accent">
+                        <Star className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">Knowledge Intelligence On Create</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                            Auto-generate title, keywords, summary, and insights when new Note knowledge is created.
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        {savingKey === AUTO_KNOWLEDGE_INTELLIGENCE_KEY && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
+                        <TogglePill checked={autoKnowledgeEnabled} />
+                    </div>
+                </div>
+            </button>
+
+            <button
+                type="button"
+                className="w-full rounded-xl border border-border/60 bg-muted/20 p-4 text-left hover:bg-muted/30 transition-colors disabled:opacity-70"
+                onClick={() => { void toggleSetting(AUTO_BOOKMARK_EXTRACTION_KEY, autoBookmarkEnabled) }}
+                disabled={savingKey === AUTO_BOOKMARK_EXTRACTION_KEY}
+            >
+                <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-blue-500/15 border border-blue-400/30 flex items-center justify-center text-blue-300">
+                        <Globe2 className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">Bookmark Content Extraction On Create</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                            Auto-run bookmark extraction when bookmark knowledge is created or link-based knowledge is discovered.
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        {savingKey === AUTO_BOOKMARK_EXTRACTION_KEY && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
+                        <TogglePill checked={autoBookmarkEnabled} />
+                    </div>
+                </div>
+            </button>
+        </div>
+    )
+}
 
 function SchedulesTab() {
     const qc = useQueryClient()
@@ -1266,7 +1437,7 @@ interface TaskLogEntry {
 }
 
 const TASK_LABELS: Record<string, string> = {
-    embed_notes: 'Embed Knowledge',
+    embed_knowledge: 'Embed Knowledge',
     generate_knowledge_intelligence: 'Generate Knowledge Intelligence',
     extract_bookmark_content: 'Extract Bookmark Content',
     generate_titles: 'Generate Titles',
@@ -1274,9 +1445,9 @@ const TASK_LABELS: Record<string, string> = {
     scrape_bookmarks: 'Scrape Bookmarks',
     cleanup_embeddings: 'Clean Up Embeddings',
     purge_chat_trash: 'Purge Chat Trash',
-    summarize_note: 'Summarize Knowledge',
-    extract_note_insights: 'Extract Knowledge Insights',
-    generate_note_title: 'Generate Knowledge Title',
+    summarize_knowledge: 'Summarize Knowledge',
+    extract_knowledge_insights: 'Extract Knowledge Insights',
+    generate_knowledge_title: 'Generate Knowledge Title',
 }
 
 type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'unknown'
@@ -1549,56 +1720,57 @@ function ContainerLogsSubTab({ workspaceId }: { workspaceId: string }) {
                     <h3 className="font-semibold text-sm">Real-time Stack Logs</h3>
                     {!isConnected && <span className="text-xs text-amber-400 animate-pulse">(Connecting...)</span>}
                 </div>
-                <div className="flex items-center gap-2 flex-wrap justify-end">
-                    <select
-                        className="input text-xs py-1.5 pr-7 w-auto"
-                        value={levelFilter}
-                        onChange={e => setLevelFilter(e.target.value as 'all' | LogLevel)}
-                        aria-label="Filter log level"
-                    >
-                        {LOG_LEVEL_OPTIONS.map(option => (
-                            <option key={option.value} value={option.value}>
-                                {option.label}
-                            </option>
-                        ))}
-                    </select>
-                    <select
-                        className="input text-xs py-1.5 pr-7 min-w-[170px]"
-                        value={containerFilter}
-                        onChange={e => setContainerFilter(e.target.value)}
-                        aria-label="Filter container name"
-                    >
-                        <option value="all">All containers</option>
-                        {containerOptions.map(container => (
-                            <option key={container} value={container}>
-                                {container}
-                            </option>
-                        ))}
-                    </select>
-                    <div className="relative">
-                        <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                        <input
-                            type="text"
-                            placeholder="Search logs..."
-                            className="input text-xs py-1.5 pl-8 pr-3 w-40"
-                            value={filter}
-                            onChange={e => setFilter(e.target.value)}
-                        />
-                    </div>
-                    <button
-                        className={`btn-ghost text-xs py-1.5 px-2.5 gap-1.5 ${paused ? 'text-accent bg-accent/10' : ''}`}
-                        onClick={() => setPaused(p => !p)}
-                    >
-                        {paused ? <Play className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
-                        {paused ? 'Resume' : 'Pause'}
-                    </button>
-                    <button
-                        className="btn-ghost text-xs py-1.5 px-2.5 gap-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/20"
-                        onClick={() => setLogs([])}
-                    >
-                        <Trash2 className="w-3.5 h-3.5" /> Clear
-                    </button>
+            </div>
+
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div className="relative shrink-0">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                        type="text"
+                        placeholder="Search logs..."
+                        className="input text-xs py-1.5 pl-8 pr-3 w-48"
+                        value={filter}
+                        onChange={e => setFilter(e.target.value)}
+                    />
                 </div>
+                <select
+                    className="input text-xs py-1.5 pr-7 w-auto shrink-0"
+                    value={levelFilter}
+                    onChange={e => setLevelFilter(e.target.value as 'all' | LogLevel)}
+                    aria-label="Filter log level"
+                >
+                    {LOG_LEVEL_OPTIONS.map(option => (
+                        <option key={option.value} value={option.value}>
+                            {option.label}
+                        </option>
+                    ))}
+                </select>
+                <select
+                    className="input text-xs py-1.5 pr-7 min-w-[170px] shrink-0"
+                    value={containerFilter}
+                    onChange={e => setContainerFilter(e.target.value)}
+                    aria-label="Filter container name"
+                >
+                    <option value="all">All containers</option>
+                    {containerOptions.map(container => (
+                        <option key={container} value={container}>
+                            {container}
+                        </option>
+                    ))}
+                </select>
+                <button
+                    className={`btn-ghost text-xs py-1.5 px-2.5 gap-1.5 shrink-0 ${paused ? 'text-accent bg-accent/10' : ''}`}
+                    onClick={() => setPaused(p => !p)}
+                >
+                    {paused ? <Play className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
+                    {paused ? 'Resume' : 'Pause'}
+                </button>
+                <button
+                    className="btn-ghost text-xs py-1.5 px-2.5 gap-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/20 shrink-0"
+                    onClick={() => setLogs([])}
+                >
+                    <Trash2 className="w-3.5 h-3.5" /> Clear
+                </button>
             </div>
 
             <div className="min-h-0 flex-1 glass-card border border-border/50 rounded-xl overflow-y-auto p-4 font-mono text-xs bg-black/40 text-gray-300 flex flex-col gap-1 relative">

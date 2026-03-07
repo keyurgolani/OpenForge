@@ -9,6 +9,7 @@ data/
 .pytest_cache/
 .venv/
 venv/
+*.tsbuildinfo
 
 # SDLC scratch space (planning docs, temp scripts, summaries, reports)
 sdlc/

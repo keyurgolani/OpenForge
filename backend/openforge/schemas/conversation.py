@@ -26,6 +26,7 @@ class MessageResponse(BaseModel):
     token_count: Optional[int] = None
     generation_ms: Optional[int] = None
     context_sources: Optional[list] = None
+    attachments_processed: Optional[list] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

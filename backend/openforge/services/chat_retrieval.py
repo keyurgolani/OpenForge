@@ -19,7 +19,7 @@ def select_relevant_rag_results(
     Keep only clearly relevant RAG hits for chat:
     - Require a strong top hit (>= min_score), otherwise return no context.
     - Keep only results close to the top score (within max_score_gap).
-    - Deduplicate by note_id to avoid repeated chunks from one note.
+    - Deduplicate by knowledge_id to avoid repeated chunks from one knowledge item.
     """
     if not rag_results:
         return []
@@ -32,11 +32,11 @@ def select_relevant_rag_results(
     score_cutoff = max(min_score, top_score - max_score_gap)
 
     selected: list[dict[str, Any]] = []
-    seen_note_ids: set[str] = set()
+    seen_knowledge_ids: set[str] = set()
 
     for result in sorted_results:
-        note_id = str(result.get("note_id", "")).strip()
-        if not note_id or note_id in seen_note_ids:
+        knowledge_id = str(result.get("knowledge_id", "")).strip()
+        if not knowledge_id or knowledge_id in seen_knowledge_ids:
             continue
 
         score = _score_of(result)
@@ -44,7 +44,7 @@ def select_relevant_rag_results(
             continue
 
         selected.append(result)
-        seen_note_ids.add(note_id)
+        seen_knowledge_ids.add(knowledge_id)
         if len(selected) >= limit:
             break
 
@@ -58,7 +58,7 @@ def build_context_sources(rag_results: list[dict[str, Any]], snippet_len: int = 
         chunk_text = str(result.get("chunk_text", ""))
         sources.append(
             {
-                "note_id": result.get("note_id"),
+                "knowledge_id": result.get("knowledge_id"),
                 "title": result.get("title") or "",
                 "snippet": chunk_text[:snippet_len],
                 "score": _score_of(result),

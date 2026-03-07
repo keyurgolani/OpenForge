@@ -1,7 +1,7 @@
 from openforge.core.embedding import embed_text
 from openforge.db.qdrant_client import get_qdrant
 from openforge.config import get_settings
-from openforge.utils.title import normalize_note_title
+from openforge.utils.title import normalize_knowledge_title
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 from typing import Optional
 import logging
@@ -15,7 +15,7 @@ class SearchEngine:
         query: str,
         workspace_id: str,
         limit: int = 20,
-        note_type: Optional[str] = None,
+        knowledge_type: Optional[str] = None,
         tag: Optional[str] = None,
         score_threshold: float = 0.3,
     ) -> list[dict]:
@@ -29,9 +29,9 @@ class SearchEngine:
         must_conditions = [
             FieldCondition(key="workspace_id", match=MatchValue(value=workspace_id))
         ]
-        if note_type:
+        if knowledge_type:
             must_conditions.append(
-                FieldCondition(key="note_type", match=MatchValue(value=note_type))
+                FieldCondition(key="knowledge_type", match=MatchValue(value=knowledge_type))
             )
         if tag:
             must_conditions.append(
@@ -56,9 +56,9 @@ class SearchEngine:
 
         return [
             {
-                "note_id": hit.payload["note_id"],
-                "title": normalize_note_title(hit.payload.get("title")) or "",
-                "note_type": hit.payload.get("note_type", "standard"),
+                "knowledge_id": hit.payload["knowledge_id"],
+                "title": normalize_knowledge_title(hit.payload.get("title")) or "",
+                "knowledge_type": hit.payload.get("knowledge_type", "standard"),
                 "chunk_text": hit.payload.get("chunk_text", ""),
                 "header_path": hit.payload.get("header_path", ""),
                 "tags": hit.payload.get("tags", []),
@@ -73,16 +73,16 @@ class SearchEngine:
         query: str,
         workspace_id: str,
         limit: int = 20,
-        note_type: Optional[str] = None,
+        knowledge_type: Optional[str] = None,
         tag: Optional[str] = None,
     ) -> list[dict]:
-        """Search and deduplicate: keep highest-scoring chunk per note."""
-        raw = self.search(query, workspace_id, limit * 3, note_type, tag)
+        """Search and deduplicate: keep highest-scoring chunk per knowledge item."""
+        raw = self.search(query, workspace_id, limit * 3, knowledge_type, tag)
         seen: dict[str, dict] = {}
         for r in raw:
-            note_id = r["note_id"]
-            if note_id not in seen or r["score"] > seen[note_id]["score"]:
-                seen[note_id] = r
+            knowledge_id = r["knowledge_id"]
+            if knowledge_id not in seen or r["score"] > seen[knowledge_id]["score"]:
+                seen[knowledge_id] = r
         return sorted(seen.values(), key=lambda x: x["score"], reverse=True)[:limit]
 
 

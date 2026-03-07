@@ -14,6 +14,7 @@ class _ActiveStream:
     updated_at: datetime
     content: str = ""
     thinking: str = ""
+    attachments_processed: list[dict[str, Any]] = field(default_factory=list)
     sources: list[dict[str, Any]] = field(default_factory=list)
 
     def to_snapshot(self) -> dict[str, Any]:
@@ -22,6 +23,7 @@ class _ActiveStream:
             "data": {
                 "content": self.content,
                 "thinking": self.thinking,
+                "attachments_processed": list(self.attachments_processed),
                 "sources": list(self.sources),
                 "started_at": self.started_at.isoformat(),
                 "updated_at": self.updated_at.isoformat(),
@@ -51,6 +53,17 @@ class ChatStreamRegistry:
         if not stream:
             return
         stream.sources = list(sources)
+        stream.updated_at = datetime.now(UTC)
+
+    def set_attachments_processed(
+        self,
+        conversation_id: UUID,
+        attachments: list[dict[str, Any]],
+    ) -> None:
+        stream = self._streams.get(conversation_id)
+        if not stream:
+            return
+        stream.attachments_processed = list(attachments)
         stream.updated_at = datetime.now(UTC)
 
     def append_thinking(self, conversation_id: UUID, chunk: str) -> None:
@@ -92,4 +105,3 @@ class ChatStreamRegistry:
         ]
         snapshots.sort(key=lambda item: item["data"]["updated_at"], reverse=True)
         return snapshots
-

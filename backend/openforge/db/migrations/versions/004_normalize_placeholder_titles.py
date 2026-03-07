@@ -1,4 +1,4 @@
-"""Normalize placeholder note titles to NULL.
+"""Normalize placeholder knowledge titles to NULL.
 
 Revision ID: 004
 Revises: 003
@@ -19,14 +19,14 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.execute(
         """
-        UPDATE notes
+        UPDATE knowledge
         SET title = NULL
         WHERE title IS NOT NULL AND btrim(lower(title)) = 'untitled'
         """
     )
     op.execute(
         """
-        UPDATE notes
+        UPDATE knowledge
         SET ai_title = NULL
         WHERE ai_title IS NOT NULL AND btrim(lower(ai_title)) = 'untitled'
         """

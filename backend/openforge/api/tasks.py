@@ -19,9 +19,9 @@ router = APIRouter()
 # ── Task type catalogue ────────────────────────────────────────────────────
 TASK_CATALOGUE = [
     {
-        "id": "embed_notes",
-        "label": "Embed Notes",
-        "description": "Re-embed all pending notes into the vector store for semantic search.",
+        "id": "embed_knowledge",
+        "label": "Embed Knowledge",
+        "description": "Re-embed all pending knowledge items into the vector store for semantic search.",
         "category": "indexing",
         "default_enabled": True,
         "default_interval_hours": 1,
@@ -51,7 +51,7 @@ TASK_CATALOGUE = [
     {
         "id": "cleanup_embeddings",
         "label": "Clean Up Embeddings",
-        "description": "Remove orphaned Qdrant vectors for deleted notes.",
+        "description": "Remove orphaned Qdrant vectors for deleted knowledge items.",
         "category": "maintenance",
         "default_enabled": False,
         "default_interval_hours": 168,  # weekly
@@ -329,7 +329,7 @@ async def run_task_now(
     async def _run():
         from sqlalchemy import select as sel
         from openforge.db.models import Knowledge
-        from openforge.services.note_service import note_service
+        from openforge.services.knowledge_service import knowledge_service
 
         start = datetime.now(timezone.utc)
         status = "done"
@@ -347,32 +347,32 @@ async def run_task_now(
                     return True
             return False
 
-        def _intelligence_missing(note: Knowledge) -> bool:
+        def _intelligence_missing(knowledge_record: Knowledge) -> bool:
             return (
-                _is_blank(note.ai_title)
-                or _is_blank(note.ai_summary)
-                or not _has_insights_payload(note.insights)
+                _is_blank(knowledge_record.ai_title)
+                or _is_blank(knowledge_record.ai_summary)
+                or not _has_insights_payload(knowledge_record.insights)
             )
 
         try:
             # Dispatch to appropriate handler
-            if task_id == "embed_notes":
-                from openforge.core.note_processor import note_processor
+            if task_id == "embed_knowledge":
+                from openforge.core.knowledge_processor import knowledge_processor
                 async with AsyncSessionLocal() as s:
                     r = await s.execute(sel(Knowledge).where(Knowledge.embedding_status == "pending").limit(50))
                     pending = r.scalars().all()
-                for note in pending:
-                    await note_processor.process_note(
-                        note_id=note.id, workspace_id=note.workspace_id,
-                        content=note.content,
-                        note_type=note.type,
-                        title=note.title,
+                for knowledge_record in pending:
+                    await knowledge_processor.process_knowledge(
+                        knowledge_id=knowledge_record.id, workspace_id=knowledge_record.workspace_id,
+                        content=knowledge_record.content,
+                        knowledge_type=knowledge_record.type,
+                        title=knowledge_record.title,
                         tags=[],
-                        ai_summary=note.ai_summary,
-                        insights=note.insights if isinstance(note.insights, dict) else None,
+                        ai_summary=knowledge_record.ai_summary,
+                        insights=knowledge_record.insights if isinstance(knowledge_record.insights, dict) else None,
                     )
                     async with AsyncSessionLocal() as s:
-                        r2 = await s.execute(sel(Knowledge).where(Knowledge.id == note.id))
+                        r2 = await s.execute(sel(Knowledge).where(Knowledge.id == knowledge_record.id))
                         n = r2.scalar_one_or_none()
                         if n:
                             n.embedding_status = "done"
@@ -413,15 +413,18 @@ async def run_task_now(
                             records = [n for n in records if _is_blank(n.content)]
                         targets = [(n.id, n.workspace_id) for n in records]
 
-                for note_id, note_workspace_id in targets:
+                for target_knowledge_id, target_workspace_id in targets:
                     try:
-                        extracted = await note_service.run_bookmark_content_extraction_job(
-                            note_id=note_id,
-                            workspace_id=note_workspace_id,
+                        extracted = await knowledge_service.run_bookmark_content_extraction_job(
+                            knowledge_id=target_knowledge_id,
+                            workspace_id=target_workspace_id,
                             audit_task_type=None,
                         )
                         if extracted:
                             item_count += 1
+                        else:
+                            failures += 1
+                            last_failure = "Bookmark content extraction completed without extracted content"
                     except Exception as exc:
                         failures += 1
                         last_failure = str(exc)
@@ -458,11 +461,11 @@ async def run_task_now(
                             records = [n for n in records if _intelligence_missing(n)]
                         targets = [(n.id, n.workspace_id) for n in records]
 
-                for note_id, note_workspace_id in targets:
+                for target_knowledge_id, target_workspace_id in targets:
                     try:
-                        completed = await note_service.run_knowledge_intelligence_job(
-                            note_id=note_id,
-                            workspace_id=note_workspace_id,
+                        completed = await knowledge_service.run_knowledge_intelligence_job(
+                            knowledge_id=target_knowledge_id,
+                            workspace_id=target_workspace_id,
                             audit_task_type=None,
                         )
                         if completed:

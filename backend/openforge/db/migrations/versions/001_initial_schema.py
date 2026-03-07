@@ -105,9 +105,9 @@ def upgrade() -> None:
         ),
     )
 
-    # notes table
+    # knowledge table
     op.create_table(
-        "notes",
+        "knowledge",
         sa.Column(
             "id",
             postgresql.UUID(as_uuid=True),
@@ -147,25 +147,25 @@ def upgrade() -> None:
             server_default=sa.text("NOW()"),
         ),
     )
-    op.create_index("idx_notes_workspace", "notes", ["workspace_id"])
-    op.create_index("idx_notes_type", "notes", ["workspace_id", "type"])
-    op.create_index("idx_notes_updated", "notes", ["workspace_id", "updated_at"])
-    op.create_index("idx_notes_archived", "notes", ["workspace_id", "is_archived"])
+    op.create_index("idx_knowledge_workspace", "knowledge", ["workspace_id"])
+    op.create_index("idx_knowledge_type", "knowledge", ["workspace_id", "type"])
+    op.create_index("idx_knowledge_updated", "knowledge", ["workspace_id", "updated_at"])
+    op.create_index("idx_knowledge_archived", "knowledge", ["workspace_id", "is_archived"])
 
-    # note_tags table
+    # knowledge_tags table
     op.create_table(
-        "note_tags",
+        "knowledge_tags",
         sa.Column(
-            "note_id",
+            "knowledge_id",
             postgresql.UUID(as_uuid=True),
-            sa.ForeignKey("notes.id", ondelete="CASCADE"),
+            sa.ForeignKey("knowledge.id", ondelete="CASCADE"),
             primary_key=True,
         ),
         sa.Column("tag", sa.String(100), primary_key=True),
         sa.Column("source", sa.String(10), nullable=False, server_default="ai"),
     )
-    op.create_index("idx_note_tags_tag", "note_tags", ["tag"])
-    op.create_index("idx_note_tags_note", "note_tags", ["note_id"])
+    op.create_index("idx_knowledge_tags_tag", "knowledge_tags", ["tag"])
+    op.create_index("idx_knowledge_tags_knowledge", "knowledge_tags", ["knowledge_id"])
 
     # conversations table
     op.create_table(
@@ -249,14 +249,14 @@ def downgrade() -> None:
     op.drop_table("messages")
     op.drop_index("idx_conversations_workspace", "conversations")
     op.drop_table("conversations")
-    op.drop_index("idx_note_tags_tag", "note_tags")
-    op.drop_index("idx_note_tags_note", "note_tags")
-    op.drop_table("note_tags")
-    op.drop_index("idx_notes_archived", "notes")
-    op.drop_index("idx_notes_updated", "notes")
-    op.drop_index("idx_notes_type", "notes")
-    op.drop_index("idx_notes_workspace", "notes")
-    op.drop_table("notes")
+    op.drop_index("idx_knowledge_tags_tag", "knowledge_tags")
+    op.drop_index("idx_knowledge_tags_knowledge", "knowledge_tags")
+    op.drop_table("knowledge_tags")
+    op.drop_index("idx_knowledge_archived", "knowledge")
+    op.drop_index("idx_knowledge_updated", "knowledge")
+    op.drop_index("idx_knowledge_type", "knowledge")
+    op.drop_index("idx_knowledge_workspace", "knowledge")
+    op.drop_table("knowledge")
     op.drop_table("workspaces")
     op.drop_index("idx_llm_providers_system_default", "llm_providers")
     op.drop_table("llm_providers")

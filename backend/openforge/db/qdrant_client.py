@@ -16,7 +16,7 @@ def get_qdrant() -> QdrantClient:
 
 
 async def init_qdrant_collection():
-    """Create the notes collection if it doesn't exist. Called on app startup."""
+    """Create the knowledge collection if it doesn't exist. Called on app startup."""
     settings = get_settings()
     client = get_qdrant()
     collection_name = settings.qdrant_collection
@@ -42,7 +42,7 @@ async def init_qdrant_collection():
         )
         client.create_payload_index(
             collection_name=collection_name,
-            field_name="note_type",
+            field_name="knowledge_type",
             field_schema=models.PayloadSchemaType.KEYWORD,
         )
         client.create_payload_index(
@@ -52,7 +52,7 @@ async def init_qdrant_collection():
         )
         client.create_payload_index(
             collection_name=collection_name,
-            field_name="note_id",
+            field_name="knowledge_id",
             field_schema=models.PayloadSchemaType.KEYWORD,
         )
         logger.info(f"Collection {collection_name} created with payload indexes.")

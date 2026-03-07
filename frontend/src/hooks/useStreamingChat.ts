@@ -4,7 +4,7 @@ import { useWorkspaceWebSocket } from './useWorkspaceWebSocket'
 import { useQueryClient } from '@tanstack/react-query'
 
 interface Source {
-    note_id: string
+    knowledge_id: string
     title: string
     snippet: string
     score: number
@@ -13,7 +13,16 @@ interface Source {
 interface StreamSnapshot {
     content?: string
     thinking?: string
+    attachments_processed?: AttachmentProcessed[]
     sources?: Source[]
+}
+
+interface AttachmentProcessed {
+    id: string
+    filename: string
+    status: string
+    pipeline: string
+    details?: string
 }
 
 interface SendMessageOptions {
@@ -30,6 +39,7 @@ export function useStreamingChat(conversationId: string | null) {
     const [streamingContent, setStreamingContent] = useState('')
     const [streamingThinking, setStreamingThinking] = useState('')
     const [isStreaming, setIsStreaming] = useState(false)
+    const [attachmentsProcessed, setAttachmentsProcessed] = useState<AttachmentProcessed[]>([])
     const [sources, setSources] = useState<Source[]>([])
     const [lastError, setLastError] = useState<string | null>(null)
     const [thinkingByMessageId, setThinkingByMessageId] = useState<Record<string, string>>({})
@@ -39,6 +49,7 @@ export function useStreamingChat(conversationId: string | null) {
         setIsStreaming(false)
         setStreamingContent('')
         setStreamingThinking('')
+        setAttachmentsProcessed([])
         setSources([])
         setLastError(null)
     }, [conversationId])
@@ -53,14 +64,22 @@ export function useStreamingChat(conversationId: string | null) {
                 const snapshot = m.data ?? {}
                 const resumedContent = snapshot.content ?? ''
                 const resumedThinking = snapshot.thinking ?? ''
+                const resumedAttachments = Array.isArray(snapshot.attachments_processed) ? snapshot.attachments_processed : []
                 const resumedSources = Array.isArray(snapshot.sources) ? snapshot.sources : []
 
                 setStreamingContent(resumedContent)
                 setStreamingThinking(resumedThinking)
                 streamingThinkingRef.current = resumedThinking
+                setAttachmentsProcessed(resumedAttachments)
                 setSources(resumedSources)
                 setIsStreaming(true)
                 setLastError(null)
+            }),
+            on('chat_attachments_processed', (msg) => {
+                const m = msg as { conversation_id: string; data: AttachmentProcessed[] }
+                if (m.conversation_id === conversationId) {
+                    setAttachmentsProcessed(Array.isArray(m.data) ? m.data : [])
+                }
             }),
             on('chat_token', (msg) => {
                 const m = msg as { conversation_id: string; data: string }
@@ -89,6 +108,7 @@ export function useStreamingChat(conversationId: string | null) {
                     setStreamingContent('')
                     setStreamingThinking('')
                     streamingThinkingRef.current = ''
+                    setAttachmentsProcessed([])
                     setLastError(null)
                     // Refetch messages to get the persisted version
                     queryClient.invalidateQueries({ queryKey: ['conversation', conversationId] })
@@ -108,6 +128,7 @@ export function useStreamingChat(conversationId: string | null) {
                     setStreamingContent('')
                     setStreamingThinking('')
                     streamingThinkingRef.current = ''
+                    setAttachmentsProcessed([])
                     setLastError(m.detail || 'Chat request failed')
                     // Ensure the persisted user message appears even when generation fails.
                     if (conversationId) {
@@ -145,6 +166,7 @@ export function useStreamingChat(conversationId: string | null) {
         setStreamingContent('')
         setStreamingThinking('')
         streamingThinkingRef.current = ''
+        setAttachmentsProcessed([])
         setSources([])
         setLastError(null)
         const sent = send({ type: 'chat_message', conversation_id: targetConversationId, content, ...(options || {}) })
@@ -161,6 +183,7 @@ export function useStreamingChat(conversationId: string | null) {
         streamingContent,
         streamingThinking,
         isStreaming,
+        attachmentsProcessed,
         sources,
         sendMessage,
         isConnected,

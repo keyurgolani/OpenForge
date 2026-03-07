@@ -1,9 +1,9 @@
-from openforge.core.embedding_document import build_note_embedding_document
+from openforge.core.embedding_document import build_knowledge_embedding_document
 
 
 def test_build_embedding_document_includes_content_summary_and_intelligence():
-    doc = build_note_embedding_document(
-        content="Project kickoff notes.",
+    doc = build_knowledge_embedding_document(
+        content="Project kickoff knowledge.",
         ai_summary="Kickoff completed with action items.",
         insights={
             "tasks": ["Prepare roadmap", "Send follow-up"],
@@ -14,7 +14,7 @@ def test_build_embedding_document_includes_content_summary_and_intelligence():
         },
     )
 
-    assert "Project kickoff notes." in doc
+    assert "Project kickoff knowledge." in doc
     assert "## AI Summary" in doc
     assert "Kickoff completed with action items." in doc
     assert "## AI Intelligence" in doc
@@ -25,7 +25,7 @@ def test_build_embedding_document_includes_content_summary_and_intelligence():
 
 
 def test_build_embedding_document_handles_timeline_string_and_empty_values():
-    doc = build_note_embedding_document(
+    doc = build_knowledge_embedding_document(
         content="",
         ai_summary="",
         insights={
@@ -40,7 +40,7 @@ def test_build_embedding_document_handles_timeline_string_and_empty_values():
 
 
 def test_build_embedding_document_ignores_non_list_insight_values():
-    doc = build_note_embedding_document(
+    doc = build_knowledge_embedding_document(
         content="Base content",
         ai_summary=None,
         insights={"tasks": "not-a-list", "facts": None},

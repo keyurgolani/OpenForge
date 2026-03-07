@@ -49,7 +49,6 @@ class WorkspaceResponse(BaseModel):
     llm_provider_id: Optional[UUID] = None
     llm_model: Optional[str] = None
     sort_order: int
-    note_count: int = 0
     knowledge_count: int = 0
     conversation_count: int = 0
     created_at: datetime

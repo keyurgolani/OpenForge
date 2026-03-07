@@ -170,7 +170,7 @@ def _dedupe_timelines(items: list[dict[str, str]]) -> list[dict[str, str]]:
     return out
 
 
-def normalize_insights_payload(raw: Any, note_content: str) -> dict[str, list[Any]]:
+def normalize_insights_payload(raw: Any, knowledge_content: str) -> dict[str, list[Any]]:
     payload = _empty_insights_payload()
     raw_data = raw if isinstance(raw, dict) else {}
 
@@ -198,7 +198,7 @@ def normalize_insights_payload(raw: Any, note_content: str) -> dict[str, list[An
         if item:
             timeline_items.append(item)
     if not timeline_items:
-        timeline_items.extend(_extract_timelines_from_content(note_content))
+        timeline_items.extend(_extract_timelines_from_content(knowledge_content))
 
     payload["tasks"] = _dedupe_strings(tasks)
     payload["facts"] = _dedupe_strings(facts)
