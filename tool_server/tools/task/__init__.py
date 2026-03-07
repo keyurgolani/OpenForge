@@ -4,7 +4,13 @@ Task tools for OpenForge.
 Tools for planning and tracking multi-step agent tasks.
 Provides lightweight task orchestration.
 """
-from tool_server.protocol import BaseTool
+from protocol import BaseTool
+from .create_plan import TaskCreatePlanTool
+from .update_step import TaskUpdateStepTool
+from .get_plan import TaskGetPlanTool
 
-# Placeholder - tools will be implemented in Phase 1
-TOOLS: list[BaseTool] = []
+TOOLS: list[BaseTool] = [
+    TaskCreatePlanTool(),
+    TaskUpdateStepTool(),
+    TaskGetPlanTool(),
+]

@@ -4,7 +4,11 @@ Skills tools for OpenForge.
 Tools for accessing prompt templates and skills from the main app.
 Enables agents to use predefined workflows.
 """
-from tool_server.protocol import BaseTool
+from protocol import BaseTool
+from .list_prompts import SkillsListPromptsTool
+from .get_prompt import SkillsGetPromptTool
 
-# Placeholder - tools will be implemented in Phase 1
-TOOLS: list[BaseTool] = []
+TOOLS: list[BaseTool] = [
+    SkillsListPromptsTool(),
+    SkillsGetPromptTool(),
+]
