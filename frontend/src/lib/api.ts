@@ -112,4 +112,40 @@ export const runTaskNow = (
 export const getTaskHistory = (params?: { task_type?: string; limit?: number }): Promise<any> =>
     api.get('/tasks/history', { params }).then(r => r.data)
 
+// ── MCP Servers ──
+export const listMCPServers = (includeDisabled = false): Promise<any> =>
+    api.get('/mcp/servers', { params: { include_disabled: includeDisabled } }).then(r => r.data)
+export const createMCPServer = (data: {
+    name: string
+    url: string
+    description?: string
+    auth_type?: string
+    auth_value?: string
+    default_risk_level?: string
+}): Promise<any> => api.post('/mcp/servers', data).then(r => r.data)
+export const getMCPServer = (id: string): Promise<any> => api.get(`/mcp/servers/${id}`).then(r => r.data)
+export const updateMCPServer = (id: string, data: object): Promise<any> =>
+    api.put(`/mcp/servers/${id}`, data).then(r => r.data)
+export const deleteMCPServer = (id: string): Promise<any> => api.delete(`/mcp/servers/${id}`)
+export const discoverMCPTools = (id: string): Promise<any> =>
+    api.post(`/mcp/servers/${id}/discover`).then(r => r.data)
+export const listMCPServerTools = (id: string): Promise<any> =>
+    api.get(`/mcp/servers/${id}/tools`).then(r => r.data)
+export const setMCPToolOverride = (
+    serverId: string,
+    toolName: string,
+    data: { risk_level?: string; is_enabled?: boolean },
+): Promise<any> =>
+    api.put(`/mcp/servers/${serverId}/tools/${encodeURIComponent(toolName)}`, data).then(r => r.data)
+export const listAllMCPTools = (): Promise<any> => api.get('/mcp/tools').then(r => r.data)
+
+// ── Tools ──
+export const listTools = (params?: { category?: string; is_enabled?: boolean }): Promise<any> =>
+    api.get('/tools', { params }).then(r => r.data)
+export const getTool = (id: string): Promise<any> => api.get(`/tools/${id}`).then(r => r.data)
+export const updateTool = (id: string, data: { is_enabled?: boolean }): Promise<any> =>
+    api.patch(`/tools/${id}`, data).then(r => r.data)
+export const syncTools = (): Promise<any> => api.post('/tools/sync').then(r => r.data)
+export const listToolCategories = (): Promise<any> => api.get('/tools/categories').then(r => r.data)
+
 export default api
