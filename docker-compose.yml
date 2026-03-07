@@ -14,7 +14,8 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-warning}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
     volumes:
-      - ${WORKSPACE_HOST_PATH:-./data/workspace}:/workspace
+      # Read-only workspace access for main app (only tool-server can write)
+      - ${WORKSPACE_HOST_PATH:-./data/workspace}:/workspace:ro
       - ${UPLOADS_HOST_PATH:-./data/uploads}:/uploads
       - ${MODELS_HOST_PATH:-./data/models}:/models
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -25,6 +26,12 @@ services:
         condition: service_started
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     restart: unless-stopped
     deploy:
       resources:
@@ -100,7 +107,13 @@ services:
       qdrant:
         condition: service_started
       tool-server:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A openforge.worker.celery_app inspect ping -d celery@localhost 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     restart: unless-stopped
     deploy:
       replicas: 2
@@ -125,6 +138,12 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/tools/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     restart: unless-stopped
     deploy:
       resources:

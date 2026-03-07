@@ -201,9 +201,15 @@ class AgentEngine:
                 else:
                     return False, None, f"Tool server error: {response.status_code}"
 
+        except httpx.ConnectError:
+            logger.error(f"Tool server unreachable: {tool_id}")
+            return False, None, "Tools are currently unavailable. The tool server is not responding. Please try again later."
+        except httpx.TimeoutException:
+            logger.error(f"Tool server timeout: {tool_id}")
+            return False, None, "Tool execution timed out. The server may be overloaded. Please try again later."
         except Exception as e:
             logger.exception(f"Tool execution failed: {tool_id}")
-            return False, None, str(e)
+            return False, None, f"Tool execution failed: {str(e)}"
 
     async def run(
         self,

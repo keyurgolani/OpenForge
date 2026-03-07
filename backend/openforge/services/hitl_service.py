@@ -4,17 +4,21 @@ HITL (Human-in-the-Loop) Service for OpenForge.
 Manages approval requests for high-risk tool calls.
 """
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Any
 from uuid import UUID
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openforge.db.models import HITLRequest, HITLAuditLog, Workspace, Conversation
 from openforge.worker.celery_app import celery_app
+from openforge.config import get_settings
 
 logger = logging.getLogger("openforge.hitl")
+
+# Default HITL timeout (24 hours)
+DEFAULT_HITL_TIMEOUT_HOURS = 24
 
 
 class HITLService:
@@ -36,6 +40,10 @@ class HITLService:
 
         This is called by the agent engine when a tool requires approval.
         """
+        settings = get_settings()
+        timeout_hours = getattr(settings, 'hitl_timeout_hours', DEFAULT_HITL_TIMEOUT_HOURS)
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=timeout_hours)
+
         request = HITLRequest(
             workspace_id=workspace_id,
             conversation_id=conversation_id,
@@ -44,6 +52,7 @@ class HITLService:
             tool_input=tool_input,
             agent_state=agent_state,
             status="pending",
+            expires_at=expires_at,
         )
         db.add(request)
         await db.flush()
@@ -114,6 +123,54 @@ class HITLService:
             select(func.count()).select_from(HITLRequest).where(HITLRequest.status == "pending")
         )
         return result.scalar() or 0
+
+    async def expire_expired_requests(self, db: AsyncSession) -> int:
+        """
+        Auto-expire pending HITL requests that have passed their expires_at time.
+
+        This should be called periodically (e.g., on app startup or via scheduled task).
+
+        Returns:
+            Number of expired requests
+        """
+        now = datetime.now(timezone.utc)
+
+        # Find expired pending requests
+        result = await db.execute(
+            update(HITLRequest)
+            .where(HITLRequest.status == "pending")
+            .where(HITLRequest.expires_at < now)
+            .values(status="expired", resolved_at=now)
+            .returning(HITLRequest.id)
+        )
+
+        expired_ids = [row[0] for row in result.fetchall()]
+        expired_count = len(expired_ids)
+
+        if expired_count > 0:
+            # Create audit log entries for expired requests
+            for request_id in expired_ids:
+                # Get workspace_id for the audit log
+                req_result = await db.execute(
+                    select(HITLRequest.workspace_id).where(HITLRequest.id == request_id)
+                )
+                workspace_id = req_result.scalar_one_or_none()
+
+                audit = HITLAuditLog(
+                    request_id=request_id,
+                    workspace_id=workspace_id,
+                    action="expired",
+                    details={"reason": "Auto-expired due to timeout"},
+                )
+                db.add(audit)
+
+            await db.commit()
+            logger.info(f"Auto-expired {expired_count} HITL requests")
+
+            # Publish count update
+            await self._publish_count_event(db)
+
+        return expired_count
 
     async def approve(
         self,
