@@ -9,6 +9,7 @@ from openforge.api import prompts
 from openforge.api import tasks
 from openforge.api import attachments
 from openforge.api import tools
+from openforge.api import mcp_management
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -23,3 +24,4 @@ api_router.include_router(prompts.router, prefix="/prompts", tags=["prompts"])
 api_router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 api_router.include_router(attachments.router, prefix="/attachments", tags=["attachments"])
 api_router.include_router(tools.router, tags=["tools"])
+api_router.include_router(mcp_management.router, tags=["mcp"])
