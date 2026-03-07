@@ -25,6 +25,9 @@ class ToolServerSettings(BaseSettings):
     # Redis URL (for agent memory tools)
     redis_url: str = "redis://localhost:6379/0"
 
+    # Search engine URL (SearxNG or compatible API)
+    search_url: str = ""  # e.g., "http://searxng:8080/search"
+
     # Logging
     log_level: str = "info"
 
