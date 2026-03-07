@@ -4,8 +4,9 @@ Celery tasks for OpenForge v2.
 Agent execution tasks run the ReAct loop with tool calling support.
 Knowledge processing tasks handle file extraction and embedding.
 """
-from openforge.worker.celery_app import celery_app
+import asyncio
 import logging
+from openforge.worker.celery_app import celery_app
 
 logger = logging.getLogger("openforge.worker")
 
@@ -30,12 +31,27 @@ def execute_agent_task(self, execution_id: str, **kwargs):
         Dict with execution status and results
     """
     logger.info(f"Agent execution started: {execution_id}")
-    # Placeholder: will be implemented in Phase 3
-    return {"status": "not_implemented", "execution_id": execution_id}
+
+    from openforge.core.agent_engine import agent_engine
+
+    loop = asyncio.new_event_loop()
+    try:
+        result = loop.run_until_complete(
+            agent_engine.run(
+                execution_id=execution_id,
+                **kwargs
+            )
+        )
+        return {"status": "completed", "execution_id": execution_id, "response": result}
+    except Exception as e:
+        logger.exception(f"Agent execution failed: {execution_id}")
+        return {"status": "failed", "execution_id": execution_id, "error": str(e)}
+    finally:
+        loop.close()
 
 
 @celery_app.task(name="agent.resume_after_hitl", bind=True)
-def resume_after_hitl(self, execution_id: str, hitl_request_id: str, approved: bool):
+def resume_after_hitl(self, execution_id: str, hitl_request_id: str, approved: bool, **kwargs):
     """
     Resume an agent after HITL approval/denial.
 
@@ -43,12 +59,16 @@ def resume_after_hitl(self, execution_id: str, hitl_request_id: str, approved: b
         execution_id: The agent execution to resume
         hitl_request_id: The HITL request that was resolved
         approved: Whether the tool call was approved
+        **kwargs: Additional parameters for resuming
 
     Returns:
         Dict with execution status
     """
     logger.info(f"Agent resume after HITL: {execution_id}, approved={approved}")
-    # Placeholder: will be implemented in Phase 3
+
+    # TODO: Implement HITL resume in Phase 4
+    # This will continue the agent loop with the tool call result
+
     return {"status": "not_implemented", "execution_id": execution_id}
 
 
