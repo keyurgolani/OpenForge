@@ -5,11 +5,15 @@ Provides:
 - Internal REST API for Celery workers to execute built-in tools
 - Tool registry endpoint for discovery
 - Health check endpoint
+- MCP Server endpoint for external clients (Claude Desktop, Cursor, etc.)
 """
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Any
 import logging
+import asyncio
+import json
 
 from tool_server.registry import registry
 from tool_server.protocol import ToolContext, ToolResult
@@ -128,4 +132,103 @@ async def get_tool(tool_id: str):
         "input_schema": tool.input_schema,
         "risk_level": tool.risk_level,
         "max_output_chars": tool.max_output_chars,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MCP Server Endpoints (HTTP Streamable Transport)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/mcp/tools")
+async def mcp_list_tools():
+    """
+    List all available tools in MCP format.
+
+    This endpoint is for MCP clients to discover available tools.
+    """
+    tools = []
+    for tool_def in registry.list_all():
+        tools.append({
+            "name": tool_def["id"],
+            "description": tool_def["description"],
+            "inputSchema": tool_def["input_schema"],
+        })
+    return {"tools": tools}
+
+
+@app.post("/mcp/call")
+async def mcp_call_tool(request: Request):
+    """
+    Execute a tool via MCP protocol.
+
+    This endpoint accepts MCP tool call requests and executes the tool.
+    """
+    try:
+        body = await request.json()
+        tool_name = body.get("name")
+        arguments = body.get("arguments", {})
+
+        # Extract MCP-specific context
+        workspace_id = arguments.pop("_workspace_id", "default")
+        workspace_path = arguments.pop("_workspace_path", f"/workspace/{workspace_id}")
+        execution_id = arguments.pop("_execution_id", "mcp-execution")
+
+        tool = registry.get(tool_name)
+        if not tool:
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"Tool not found: {tool_name}"}
+            )
+
+        context = ToolContext(
+            workspace_id=workspace_id,
+            workspace_path=workspace_path,
+            execution_id=execution_id,
+            main_app_url=settings.main_app_url,
+        )
+
+        result = await tool.execute(arguments, context)
+
+        if result.success:
+            output = result.output
+            if isinstance(output, dict):
+                content = [{"type": "text", "text": json.dumps(output, indent=2)}]
+            elif isinstance(output, str):
+                content = [{"type": "text", "text": output}]
+            else:
+                content = [{"type": "text", "text": str(output)}]
+
+            if result.truncated:
+                content[0]["text"] += f"\n\n[Output truncated. Original length: {result.original_length}]"
+
+            return {"content": content}
+        else:
+            return {
+                "content": [{
+                    "type": "text",
+                    "text": f"Error: {result.error or 'Unknown error'}"
+                }],
+                "isError": True
+            }
+
+    except Exception as e:
+        logger.exception("Error in MCP call")
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        )
+
+
+@app.post("/mcp/initialize")
+async def mcp_initialize(request: Request):
+    """Handle MCP initialize request."""
+    return {
+        "protocolVersion": "2024-11-05",
+        "serverInfo": {
+            "name": "openforge-tools",
+            "version": "0.1.0"
+        },
+        "capabilities": {
+            "tools": {}
+        }
     }
