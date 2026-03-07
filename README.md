@@ -16,7 +16,23 @@ Organize your knowledge, have AI-powered conversations grounded in your own know
 - 🏠 **Self-hosted** — Docker-based single-container deployment, all data stays on your server
 - 🔒 **API key encryption** — Provider keys encrypted at rest using Fernet symmetric encryption
 - ⌨️ **Command palette** — `Cmd+K` for instant navigation, search, and creation
+- ✏️ **CodeMirror Editor** — Full markdown editor with vim mode, syntax highlighting
 
+---
+
+## v2 Features (OpenForge v2)
+
+- 🤖 **Agent Mode** — ReAct loop with tool calling for autonomous actions (filesystem, web search, code execution)
+- 👷 **Human-in-the-Loop (HITL)** — Approval workflow for high-risk tool calls with auto-expire
+- ⚡ **LLM Router** — Complexity-based routing to appropriate model tiers (simple → fast, complex → capable)
+- 🏛️ **LLM Council** — Multi-model deliberation with chairman judging for best response
+- 🔎 **Hybrid Search** — BM25 + dense vectors with RRF fusion for better keyword matching
+- 📦 **Celery Workers** — Distributed task queue for async agent execution
+- 🔧 **MCP Server** — Model Context Protocol server for external tool integration
+
+---
+
+## Architecture (v2)
 ---
 
 ## Quick Start (5 commands)
@@ -100,18 +116,54 @@ The backend pytest configuration enforces:
 
 ---
 
-## Architecture
+## Architecture (v2)
 
 ```
 Frontend (React 19 + Vite + Tailwind)
     ↕ HTTP + WebSocket
 Backend (FastAPI + Python 3.11)
-    ├── PostgreSQL 16          — workspaces, knowledge, conversations, messages
-    ├── Qdrant                 — knowledge chunk embeddings (BAAI/bge-small-en-v1.5, 384-dim)
-    └── LiteLLM                — unified LLM gateway (OpenAI, Anthropic, Gemini, Ollama…)
+    ├── PostgreSQL 16          — workspaces, knowledge, conversations, messages, HITL requests
+    ├── Qdrant                 — hybrid search (dense + sparse/BM25 vectors, 384-dim)
+    ├── Redis 7                — message broker, pub/sub events
+    ├── Celery Workers        — async task execution (agent loop, knowledge processing)
+    └── Tool Server            — tool execution with MCP support
 ```
 
-The chat pipeline: user message → embed query → Qdrant semantic search → token-budget context assembly → stream from LLM via WebSocket → persist response + source citations.
+The chat pipeline: user message → embed query → Qdrant hybrid search (BM25 + dense) → agent loop with tool calling → stream from LLM via WebSocket → persist response + source citations.
+
+---
+
+## v2 Configuration
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `REDIS_URL` | Redis connection URL | `redis://localhost:6379/0` |
+| `TOOL_SERVER_URL` | Tool server URL | `http://localhost:3001` |
+| `HITL_TIMEOUT_HOURS` | HITL request expiration time | `24` |
+| `EMBEDDING_DIMENSION` | Vector embedding dimension | `384` |
+
+### Scaling
+
+Scale Celery workers based on load:
+```bash
+docker compose up --scale celery-worker=4
+```
+
+### Migration from v1
+
+If upgrading from v1, you'll need to:
+
+1. **Re-embed knowledge for BM25**: Run the migration task to add sparse vectors:
+   ```bash
+   docker compose exec celery-worker celery -A openforge.worker.tasks migrate_knowledge_to_hybrid
+   ```
+
+2. **New database tables**: Run migrations for HITL tables.
+   ```bash
+   docker compose exec openforge alembic upgrade head
+   ```
 
 ---
 
