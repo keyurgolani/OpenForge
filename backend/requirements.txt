@@ -20,3 +20,9 @@ aiofiles==24.1.0
 PyMuPDF==1.25.1
 redis[hiredis]==5.2.1
 celery[redis]==5.4.0
+# Knowledge processing
+pytesseract==0.3.13
+Pillow==11.0.0
+openai-whisper==20231117
+pypdf==5.1.0
+httpx==0.28.1

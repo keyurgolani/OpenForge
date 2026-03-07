@@ -20,6 +20,7 @@ from openforge.services.automation_config import is_auto_bookmark_content_extrac
 from openforge.services.attachment_pipeline import (
     extract_http_urls,
     resolve_attachment_pipeline,
+    process_attachment,
 )
 from openforge.services.chat_stream_registry import ChatStreamRegistry
 from openforge.api.websocket import ws_manager
@@ -40,11 +41,13 @@ class ChatService:
         *,
         user_message_id: UUID,
         attachment_ids: Optional[List[str]],
+        workspace_id: Optional[UUID] = None,
     ) -> tuple[str, list[dict]]:
         if not attachment_ids:
             return "", []
 
         from openforge.api.attachments import extract_text_from_text_file
+        from openforge.services.attachment_pipeline import process_attachment
 
         context_blocks: list[str] = []
         processed: list[dict] = []
@@ -88,7 +91,47 @@ class ChatService:
                 attachment.message_id = user_message_id
                 db_updated = True
 
-            if pipeline == "text":
+            # Use content processor registry for all pipelines
+            if pipeline != "deferred":
+                try:
+                    # Process using the content processor
+                    proc_result = await process_attachment(
+                        file_path=attachment.file_path,
+                        workspace_id=workspace_id or UUID("00000000-0000-0000-0000-000000000000"),
+                        content_type=attachment.content_type,
+                        filename=attachment.filename,
+                    )
+
+                    if proc_result.success and proc_result.extracted_text:
+                        # Store extracted text
+                        if not (attachment.extracted_text or "").strip():
+                            attachment.extracted_text = proc_result.extracted_text
+                            db_updated = True
+
+                        extracted_text = proc_result.extracted_text.strip()
+                        if extracted_text:
+                            attachment_status = "processed"
+                            details = f"Extracted via {pipeline} ({len(extracted_text)} chars)"
+                            context_blocks.append(
+                                (
+                                    f"\n--- Content from {attachment.filename} ---\n"
+                                    f"{extracted_text}\n"
+                                    f"--- End of {attachment.filename} ---\n"
+                                )
+                            )
+                        else:
+                            attachment_status = "empty"
+                            details = "No text extracted from attachment"
+                    elif proc_result.error:
+                        attachment_status = "error"
+                        details = proc_result.error
+                except Exception as e:
+                    logger.warning(f"Failed to process attachment {attachment_id}: {e}")
+                    attachment_status = "error"
+                    details = str(e)
+
+            # Fallback for text files (legacy path)
+            if pipeline == "text" and attachment_status == "deferred":
                 if not (attachment.extracted_text or "").strip():
                     extracted = await extract_text_from_text_file(attachment.file_path)
                     attachment.extracted_text = extracted or None
