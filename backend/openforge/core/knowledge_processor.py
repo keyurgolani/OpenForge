@@ -1,5 +1,5 @@
 from uuid import uuid4, UUID
-from openforge.core.embedding import embed_texts
+from openforge.core.embedding import embed_texts, sparse_encode_batch
 from openforge.core.embedding_document import build_knowledge_embedding_document
 from openforge.core.markdown_utils import chunk_markdown
 from openforge.db.qdrant_client import get_qdrant
@@ -24,7 +24,7 @@ class KnowledgeProcessor:
         ai_summary: str | None = None,
         insights: dict | None = None,
     ):
-        """Full embedding pipeline for a knowledge item."""
+        """Full embedding pipeline for a knowledge item with hybrid search support."""
         settings = get_settings()
         client = get_qdrant()
         collection = settings.qdrant_collection
@@ -51,18 +51,22 @@ class KnowledgeProcessor:
         if not chunks:
             return
 
-        # Step 3: Embed
+        # Step 3: Embed (both dense and sparse for hybrid search)
         texts = [c["text"] for c in chunks]
-        embeddings = embed_texts(texts)
+        dense_embeddings = embed_texts(texts)
+        sparse_embeddings = sparse_encode_batch(texts)
 
-        # Step 4: Upsert
+        # Step 4: Upsert with named vectors for hybrid search
         now_str = datetime.now(timezone.utc).isoformat()
         normalized_title = normalize_knowledge_title(title) or ""
         points = []
-        for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+        for i, (chunk, dense_vec, sparse_vec) in enumerate(zip(chunks, dense_embeddings, sparse_embeddings)):
             points.append(PointStruct(
                 id=str(uuid4()),
-                vector=embedding,
+                vector={
+                    "": dense_vec,  # Default dense vector (empty string key)
+                    "sparse": sparse_vec,  # Sparse vector for BM25
+                },
                 payload={
                     "knowledge_id": str(knowledge_id),
                     "workspace_id": str(workspace_id),
@@ -78,7 +82,7 @@ class KnowledgeProcessor:
             ))
 
         client.upsert(collection_name=collection, points=points)
-        logger.info(f"Embedded knowledge {knowledge_id}: {len(points)} chunks")
+        logger.info(f"Embedded knowledge {knowledge_id}: {len(points)} chunks (hybrid: dense+sparse)")
 
     async def delete_knowledge_vectors(self, knowledge_id: UUID):
         settings = get_settings()

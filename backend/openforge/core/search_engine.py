@@ -1,8 +1,10 @@
-from openforge.core.embedding import embed_text
+from openforge.core.embedding import embed_text, sparse_encode
 from openforge.db.qdrant_client import get_qdrant
 from openforge.config import get_settings
 from openforge.utils.title import normalize_knowledge_title
-from qdrant_client.models import Filter, FieldCondition, MatchValue
+from qdrant_client.models import (
+    Filter, FieldCondition, MatchValue, Prefetch, Fusion, SparseVector
+)
 from typing import Optional
 import logging
 
@@ -18,10 +20,26 @@ class SearchEngine:
         knowledge_type: Optional[str] = None,
         tag: Optional[str] = None,
         score_threshold: float = 0.3,
+        use_hybrid: bool = True,
     ) -> list[dict]:
-        """Semantic search within a workspace."""
+        """
+        Search within a workspace using hybrid search (dense + sparse).
+
+        Args:
+            query: The search query
+            workspace_id: Workspace to search within
+            limit: Maximum number of results
+            knowledge_type: Filter by knowledge type
+            tag: Filter by tag
+            score_threshold: Minimum score threshold
+            use_hybrid: Use hybrid search (dense + sparse with RRF fusion)
+
+        Returns:
+            List of search results with knowledge metadata
+        """
         try:
             query_vector = embed_text(query)
+            query_sparse = sparse_encode(query)
         except Exception as e:
             logger.warning(f"Embedding failed for search query: {e}")
             return []
@@ -40,19 +58,61 @@ class SearchEngine:
 
         settings = get_settings()
         client = get_qdrant()
+        query_filter = Filter(must=must_conditions)
 
         try:
-            results = client.search(
-                collection_name=settings.qdrant_collection,
-                query_vector=query_vector,
-                query_filter=Filter(must=must_conditions),
-                limit=limit,
-                with_payload=True,
-                score_threshold=score_threshold,
-            )
+            if use_hybrid and query_sparse.indices:
+                # Hybrid search: use RRF fusion to combine dense and sparse results
+                results = client.query_points(
+                    collection_name=settings.qdrant_collection,
+                    query=query_vector,  # Dense vector query
+                    query_filter=query_filter,
+                    limit=limit,
+                    with_payload=True,
+                    score_threshold=score_threshold,
+                    prefetch=[
+                        # Dense vector prefetch
+                        Prefetch(
+                            query=query_vector,
+                            using="",  # Default dense vector
+                            filter=query_filter,
+                            limit=limit * 2,
+                        ),
+                        # Sparse vector prefetch (BM25)
+                        Prefetch(
+                            query=query_sparse,
+                            using="sparse",  # Named sparse vector
+                            filter=query_filter,
+                            limit=limit * 2,
+                        ),
+                    ],
+                    query_fusion=Fusion.RRF,  # Reciprocal Rank Fusion
+                ).points
+            else:
+                # Fallback to dense-only search (for legacy data or sparse encode failure)
+                results = client.search(
+                    collection_name=settings.qdrant_collection,
+                    query_vector=query_vector,
+                    query_filter=query_filter,
+                    limit=limit,
+                    with_payload=True,
+                    score_threshold=score_threshold,
+                )
         except Exception as e:
             logger.error(f"Qdrant search failed: {e}")
-            return []
+            # Try fallback to dense-only search
+            try:
+                results = client.search(
+                    collection_name=settings.qdrant_collection,
+                    query_vector=query_vector,
+                    query_filter=query_filter,
+                    limit=limit,
+                    with_payload=True,
+                    score_threshold=score_threshold,
+                )
+            except Exception as e2:
+                logger.error(f"Dense-only fallback search also failed: {e2}")
+                return []
 
         return [
             {

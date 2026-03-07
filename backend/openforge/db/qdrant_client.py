@@ -32,6 +32,12 @@ async def init_qdrant_collection():
                 size=settings.embedding_dimension,
                 distance=models.Distance.COSINE,
             ),
+            # Add sparse vector config for hybrid search (BM25)
+            sparse_vectors_config={
+                "sparse": models.SparseVectorParams(
+                    modifier=models.Modifier.IDF,
+                ),
+            },
         )
 
         # Create payload indexes for filtering
@@ -58,3 +64,20 @@ async def init_qdrant_collection():
         logger.info(f"Collection {collection_name} created with payload indexes.")
     else:
         logger.info(f"Qdrant collection {collection_name} already exists.")
+
+        # Check and add sparse vectors for hybrid search if not present
+        collection_info = client.get_collection(collection_name)
+        sparse_vectors = getattr(collection_info.config.params, "sparse_vectors", None)
+        has_sparse = sparse_vectors is not None and "sparse" in sparse_vectors
+
+        if not has_sparse:
+            logger.info(f"Adding sparse vector config to collection {collection_name}")
+            client.update_collection(
+                collection_name=collection_name,
+                sparse_vectors_config={
+                    "sparse": models.SparseVectorParams(
+                        modifier=models.Modifier.IDF,
+                    ),
+                },
+            )
+            logger.info(f"Sparse vector config added to {collection_name}")

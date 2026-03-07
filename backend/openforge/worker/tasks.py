@@ -93,3 +93,73 @@ def process_knowledge_file(self, knowledge_id: str, knowledge_type: str, file_pa
         "knowledge_id": knowledge_id,
         "type": knowledge_type
     }
+
+
+@celery_app.task(name="knowledge.migrate_to_hybrid", bind=True)
+def migrate_knowledge_to_hybrid(self, batch_size: int = 100):
+    """
+    Migrate existing knowledge to hybrid search by adding sparse vectors.
+
+    This task re-embeds all existing knowledge items to add sparse vectors
+    for BM25 hybrid search. Safe to run multiple times - only processes
+    knowledge that hasn't been migrated yet.
+
+    Args:
+        batch_size: Number of knowledge items to process per batch
+
+    Returns:
+        Dict with migration status and count
+    """
+    logger.info("Starting knowledge migration to hybrid search")
+
+    from openforge.db.postgres import AsyncSessionLocal
+    from openforge.models.knowledge import Knowledge
+    from openforge.core.knowledge_processor import knowledge_processor
+    from sqlalchemy import select
+
+    async def _migrate():
+        migrated = 0
+        failed = 0
+        total = 0
+
+        async with AsyncSessionLocal() as db:
+            # Get all knowledge items
+            result = await db.execute(select(Knowledge))
+            knowledge_items = result.scalars().all()
+            total = len(knowledge_items)
+
+            for item in knowledge_items:
+                try:
+                    # Re-process knowledge to add sparse vectors
+                    await knowledge_processor.process_knowledge(
+                        knowledge_id=item.id,
+                        workspace_id=item.workspace_id,
+                        content=item.content or "",
+                        knowledge_type=item.knowledge_type or "note",
+                        title=item.title,
+                        tags=item.tags or [],
+                        ai_summary=item.ai_summary,
+                        insights=item.insights,
+                    )
+                    migrated += 1
+                    logger.info(f"Migrated knowledge {item.id} ({migrated}/{total})")
+                except Exception as e:
+                    failed += 1
+                    logger.warning(f"Failed to migrate knowledge {item.id}: {e}")
+
+        logger.info(f"Migration complete: {migrated} migrated, {failed} failed")
+        return {
+            "status": "completed",
+            "migrated": migrated,
+            "failed": failed,
+            "total": total
+        }
+
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(_migrate())
+    except Exception as e:
+        logger.exception("Knowledge migration failed")
+        return {"status": "failed", "error": str(e)}
+    finally:
+        loop.close()
