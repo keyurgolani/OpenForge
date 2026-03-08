@@ -41,9 +41,15 @@ class LLMService:
         count_result = await db.execute(select(func.count(LLMProvider.id)))
         is_first = count_result.scalar() == 0
 
+        # Determine provider_type: virtual providers have their type as provider_name
+        provider_type = "standard"
+        if data.provider_name in ("router", "council", "optimizer"):
+            provider_type = data.provider_name
+
         provider = LLMProvider(
             provider_name=data.provider_name,
             display_name=data.display_name,
+            provider_type=provider_type,
             endpoint_id=data.endpoint_id,
             base_url=data.base_url,
             default_model=data.default_model,
