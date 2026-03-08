@@ -28,6 +28,9 @@ class ToolServerSettings(BaseSettings):
     # Search engine URL (SearxNG or compatible API)
     search_url: str = ""  # e.g., "http://searxng:8080/search"
 
+    # Skills root directory (volume mount for skill scripts)
+    skills_root: str = "/skills"
+
     # Logging
     log_level: str = "info"
 

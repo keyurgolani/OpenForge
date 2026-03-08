@@ -38,6 +38,13 @@ class Settings(BaseSettings):
     # Encryption key for API keys (generated on first run if not set)
     encryption_key: str = ""
 
+    # Auth
+    admin_password: str = ""
+    session_expiry_hours: int = 168  # 7 days
+
+    # Skills
+    skills_root: str = "/skills"
+
 @lru_cache()
 def get_settings() -> Settings:
     return Settings()

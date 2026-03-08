@@ -4,6 +4,7 @@ v2 Schema Migration
 Adds:
 - provider_type column to llm_providers
 - vision_provider_id and vision_model columns to workspaces
+- file-related columns to knowledge (file_path, file_size, mime_type, thumbnail_path, file_metadata)
 - tool_calls and execution_id columns to messages
 - LLM Router tables (llm_router_config, llm_router_tiers)
 - LLM Council tables (llm_council_config, llm_council_members)
@@ -17,7 +18,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 revision = "011_v2_schema"
-down_revision = "010_message_attachments_nullable_message_id"
+down_revision = "010_msg_attach_nullable_mid"
 branch_labels = None
 depends_on = None
 
@@ -44,19 +45,32 @@ def upgrade():
         sa.Column("vision_model", sa.String(200), nullable=True)
     )
 
-    # 3. Add tool tracking columns to messages
+    # 3. Add tool tracking columns to messages (tool_calls only, execution_id added after agent_executions table)
     op.add_column(
         "messages",
         sa.Column("tool_calls", postgresql.JSONB, nullable=True)
     )
+
+    # 3b. Add file-related columns to knowledge table
     op.add_column(
-        "messages",
-        sa.Column(
-            "execution_id",
-            postgresql.UUID(as_uuid=True),
-            sa.ForeignKey("agent_executions.id", ondelete="SET NULL"),
-            nullable=True
-        )
+        "knowledge",
+        sa.Column("file_path", sa.String(500), nullable=True)
+    )
+    op.add_column(
+        "knowledge",
+        sa.Column("file_size", sa.Integer, nullable=True)
+    )
+    op.add_column(
+        "knowledge",
+        sa.Column("mime_type", sa.String(100), nullable=True)
+    )
+    op.add_column(
+        "knowledge",
+        sa.Column("thumbnail_path", sa.String(500), nullable=True)
+    )
+    op.add_column(
+        "knowledge",
+        sa.Column("file_metadata", postgresql.JSONB, nullable=True)
     )
 
     # 4. Create LLM Router tables
@@ -241,6 +255,17 @@ def upgrade():
         postgresql_where="status IN ('running', 'paused_hitl')"
     )
 
+    # 8b. Add execution_id column to messages (now that agent_executions table exists)
+    op.add_column(
+        "messages",
+        sa.Column(
+            "execution_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("agent_executions.id", ondelete="SET NULL"),
+            nullable=True
+        )
+    )
+
     # 9. Create HITL tables
     op.create_table(
         "hitl_requests",
@@ -305,6 +330,10 @@ def downgrade():
     # Drop tables in reverse order
     op.drop_table("hitl_audit_log")
     op.drop_table("hitl_requests")
+
+    # Drop execution_id column before dropping agent_executions table (FK constraint)
+    op.drop_column("messages", "execution_id")
+
     op.drop_table("agent_executions")
     op.drop_table("tool_definitions")
     op.drop_table("mcp_tool_overrides")
@@ -316,8 +345,12 @@ def downgrade():
     op.drop_table("llm_router_config")
 
     # Drop columns
-    op.drop_column("messages", "execution_id")
     op.drop_column("messages", "tool_calls")
+    op.drop_column("knowledge", "file_metadata")
+    op.drop_column("knowledge", "thumbnail_path")
+    op.drop_column("knowledge", "mime_type")
+    op.drop_column("knowledge", "file_size")
+    op.drop_column("knowledge", "file_path")
     op.drop_column("workspaces", "vision_model")
     op.drop_column("workspaces", "vision_provider_id")
     op.drop_column("llm_providers", "provider_type")

@@ -85,6 +85,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Auth middleware (must be added before CORS)
+from openforge.middleware.auth import AuthMiddleware
+app.add_middleware(AuthMiddleware)
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -129,6 +133,10 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": detail, "type": "internal_error"},
     )
 
+
+# Register auth router (at /api/auth, not under /api/v1)
+from openforge.api.auth import router as auth_router
+app.include_router(auth_router)
 
 # Register API router
 from openforge.api.router import api_router

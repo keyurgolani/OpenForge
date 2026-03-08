@@ -51,7 +51,7 @@ def execute_agent_task(self, execution_id: str, **kwargs):
 
 
 @celery_app.task(name="agent.resume_after_hitl", bind=True)
-def resume_after_hitl(self, execution_id: str, hitl_request_id: str, approved: bool, **kwargs):
+def resume_after_hitl(self, execution_id: str, hitl_request_id: str, approved: bool, resolution_note: str = None, **kwargs):
     """
     Resume an agent after HITL approval/denial.
 
@@ -59,6 +59,7 @@ def resume_after_hitl(self, execution_id: str, hitl_request_id: str, approved: b
         execution_id: The agent execution to resume
         hitl_request_id: The HITL request that was resolved
         approved: Whether the tool call was approved
+        resolution_note: Optional note about the resolution
         **kwargs: Additional parameters for resuming
 
     Returns:
@@ -66,10 +67,50 @@ def resume_after_hitl(self, execution_id: str, hitl_request_id: str, approved: b
     """
     logger.info(f"Agent resume after HITL: {execution_id}, approved={approved}")
 
-    # TODO: Implement HITL resume in Phase 4
-    # This will continue the agent loop with the tool call result
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(
+            _resume_after_hitl_async(execution_id, hitl_request_id, approved, resolution_note)
+        )
+        return {"status": "completed", "execution_id": execution_id}
+    except Exception as e:
+        logger.exception(f"HITL resume failed: {execution_id}")
+        return {"status": "failed", "execution_id": execution_id, "error": str(e)}
+    finally:
+        loop.close()
 
-    return {"status": "not_implemented", "execution_id": execution_id}
+
+async def _resume_after_hitl_async(execution_id, hitl_request_id, approved, resolution_note):
+    from openforge.db.postgres import AsyncSessionLocal
+    from openforge.db.models import HITLRequest
+    from openforge.api.websocket import ws_manager
+    from uuid import UUID
+
+    async with AsyncSessionLocal() as db:
+        # Load HITL request
+        hitl = await db.get(HITLRequest, UUID(hitl_request_id))
+        if not hitl:
+            logger.error(f"HITL request {hitl_request_id} not found")
+            return
+
+        # Emit resolution event to workspace WebSocket
+        workspace_id = str(hitl.workspace_id)
+        await ws_manager.send_to_workspace(workspace_id, {
+            "type": "hitl_resolved",
+            "hitl_id": hitl_request_id,
+            "decision": "approved" if approved else "denied",
+            "reason": resolution_note,
+        })
+
+        # Get conversation_id for further notifications
+        if hitl.conversation_id:
+            await ws_manager.send_to_workspace(workspace_id, {
+                "type": "chat_done",
+                "conversation_id": str(hitl.conversation_id),
+                "content": f"[{'Approved' if approved else 'Denied'}] Tool execution {'will proceed' if approved else 'was denied'}. {resolution_note or ''}",
+            })
+
+        logger.info(f"HITL {hitl_request_id} resolved: approved={approved}")
 
 
 @celery_app.task(name="knowledge.process_file", bind=True)

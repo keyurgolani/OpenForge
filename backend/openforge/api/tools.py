@@ -10,7 +10,7 @@ from typing import Optional
 import httpx
 import logging
 
-from openforge.db.database import get_db
+from openforge.db.postgres import get_db
 from openforge.db.models import ToolDefinition
 from openforge.config import get_settings
 

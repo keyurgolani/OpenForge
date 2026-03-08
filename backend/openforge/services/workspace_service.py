@@ -25,6 +25,8 @@ def _to_response(workspace: Workspace, knowledge_count: int = 0, conv_count: int
         llm_provider_id=workspace.llm_provider_id,
         llm_model=workspace.llm_model,
         sort_order=workspace.sort_order,
+        tools_enabled=getattr(workspace, 'tools_enabled', False) or False,
+        agent_id=getattr(workspace, 'agent_id', None),
         knowledge_count=knowledge_count,
         conversation_count=conv_count,
         created_at=workspace.created_at,
@@ -118,6 +120,10 @@ class WorkspaceService:
             ws.llm_model = data.llm_model
         if data.sort_order is not None:
             ws.sort_order = data.sort_order
+        if data.tools_enabled is not None and hasattr(ws, 'tools_enabled'):
+            ws.tools_enabled = data.tools_enabled
+        if data.agent_id is not None and hasattr(ws, 'agent_id'):
+            ws.agent_id = data.agent_id
 
         await db.commit()
         await db.refresh(ws)

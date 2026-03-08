@@ -24,6 +24,9 @@ import {
 } from '@/components/ui/context-menu'
 import MarkdownIt from 'markdown-it'
 import { sanitizeProviderDisplayName } from '@/lib/provider-display'
+import { ToolCallCard } from '@/components/chat/ToolCallCard'
+import { HITLApprovalCard } from '@/components/chat/HITLApprovalCard'
+import { LLMBadge } from '@/components/chat/LLMBadge'
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
 const MIN_CHAT_LIST_WIDTH = 280
@@ -47,6 +50,20 @@ interface Message {
     generation_ms?: number | null
     context_sources?: { knowledge_id: string; title: string; snippet: string; score: number }[]
     attachments_processed?: AttachmentProcessed[]
+    tool_calls?: Array<{
+        id: string
+        name: string
+        arguments: Record<string, unknown>
+        status: 'executing' | 'success' | 'error'
+        result?: string
+        error?: string
+        durationMs?: number
+        timestamp?: string
+    }>
+    provider_metadata?: {
+        type: 'router' | 'council' | 'optimizer'
+        [key: string]: unknown
+    } | null
     created_at: string
 }
 
@@ -175,6 +192,9 @@ export default function ChatPage() {
         lastError,
         clearLastError,
         thinkingByMessageId,
+        toolCalls,
+        hitlRequest,
+        setHitlRequest,
     } = useStreamingChat(activeCid)
 
     const messages: Message[] = conversationData?.messages ?? []
@@ -747,6 +767,24 @@ export default function ChatPage() {
         scheduleComposerFocus()
     }
 
+    const handleHITLApprove = async (hitlId: string, reason?: string) => {
+        await fetch(`/api/v1/hitl/${hitlId}/approve`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ resolution_note: reason }),
+        })
+        setHitlRequest(null)
+    }
+
+    const handleHITLReject = async (hitlId: string, reason?: string) => {
+        await fetch(`/api/v1/hitl/${hitlId}/deny`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ resolution_note: reason }),
+        })
+        setHitlRequest(null)
+    }
+
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(e.target.files || [])
         // Filter to allowed types
@@ -943,6 +981,24 @@ export default function ChatPage() {
                                                                 ))}
                                                             </div>
                                                         </div>
+                                                    </div>
+                                                )}
+                                                {toolCalls.length > 0 && (
+                                                    <div className="chat-workflow-step chat-section-reveal">
+                                                        <div className="space-y-0.5">
+                                                            {toolCalls.map(tc => (
+                                                                <ToolCallCard key={tc.id} toolCall={tc} />
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {hitlRequest && (
+                                                    <div className="chat-workflow-step chat-section-reveal">
+                                                        <HITLApprovalCard
+                                                            request={hitlRequest}
+                                                            onApprove={handleHITLApprove}
+                                                            onReject={handleHITLReject}
+                                                        />
                                                     </div>
                                                 )}
                                                 {streamingModelLabel && (
@@ -1710,14 +1766,23 @@ function ChatMessageCard({
                                         </div>
                                     </div>
                                 )}
-                                {modelLabel && (
+                                {msg.tool_calls && msg.tool_calls.length > 0 && (
                                     <div className="chat-workflow-step chat-section-reveal">
-                                        <div className="chat-llm-inline">
-                                            <Bot className="h-3.5 w-3.5" />
-                                            <span className="text-[11px] uppercase tracking-wide text-muted-foreground">LLM</span>
-                                            <span className="text-accent/65">·</span>
-                                            <span className="truncate">{modelLabel}</span>
+                                        <div className="space-y-0.5">
+                                            {msg.tool_calls.map(tc => (
+                                                <ToolCallCard key={tc.id} toolCall={tc} />
+                                            ))}
                                         </div>
+                                    </div>
+                                )}
+                                {(modelLabel || msg.provider_metadata) && (
+                                    <div className="chat-workflow-step chat-section-reveal">
+                                        <LLMBadge
+                                            providerUsed={providerText}
+                                            modelUsed={modelText}
+                                            generationMs={msg.generation_ms}
+                                            providerMetadata={msg.provider_metadata as any}
+                                        />
                                     </div>
                                 )}
                                 {hasThinking && (

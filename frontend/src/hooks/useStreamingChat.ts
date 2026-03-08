@@ -31,6 +31,25 @@ interface SendMessageOptions {
     attachment_ids?: string[]
 }
 
+export interface ToolCallDisplay {
+    id: string;
+    name: string;
+    arguments: Record<string, unknown>;
+    status: 'executing' | 'success' | 'error';
+    result?: string;
+    error?: string;
+    durationMs?: number;
+    timestamp?: string;
+}
+
+export interface HITLRequestState {
+    id: string;
+    toolName: string;
+    arguments: Record<string, unknown>;
+    riskLevel?: string;
+    actionSummary?: string;
+}
+
 export function useStreamingChat(conversationId: string | null) {
     const { workspaceId = '' } = useParams<{ workspaceId: string }>()
     const { on, send, isConnected } = useWorkspaceWebSocket(workspaceId)
@@ -45,6 +64,10 @@ export function useStreamingChat(conversationId: string | null) {
     const [thinkingByMessageId, setThinkingByMessageId] = useState<Record<string, string>>({})
     const streamingThinkingRef = useRef('')
 
+    // Tool call and HITL state
+    const [toolCalls, setToolCalls] = useState<ToolCallDisplay[]>([])
+    const [hitlRequest, setHitlRequest] = useState<HITLRequestState | null>(null)
+
     useEffect(() => {
         setIsStreaming(false)
         setStreamingContent('')
@@ -52,6 +75,8 @@ export function useStreamingChat(conversationId: string | null) {
         setAttachmentsProcessed([])
         setSources([])
         setLastError(null)
+        setToolCalls([])
+        setHitlRequest(null)
     }, [conversationId])
 
     useEffect(() => {
@@ -110,6 +135,8 @@ export function useStreamingChat(conversationId: string | null) {
                     streamingThinkingRef.current = ''
                     setAttachmentsProcessed([])
                     setLastError(null)
+                    setToolCalls([])
+                    setHitlRequest(null)
                     // Refetch messages to get the persisted version
                     queryClient.invalidateQueries({ queryKey: ['conversation', conversationId] })
                     queryClient.invalidateQueries({ queryKey: ['conversations', workspaceId] })
@@ -130,6 +157,8 @@ export function useStreamingChat(conversationId: string | null) {
                     streamingThinkingRef.current = ''
                     setAttachmentsProcessed([])
                     setLastError(m.detail || 'Chat request failed')
+                    setToolCalls([])
+                    setHitlRequest(null)
                     // Ensure the persisted user message appears even when generation fails.
                     if (conversationId) {
                         queryClient.invalidateQueries({ queryKey: ['conversation', conversationId] })
@@ -145,6 +174,43 @@ export function useStreamingChat(conversationId: string | null) {
                         queryClient.invalidateQueries({ queryKey: ['conversation', conversationId] })
                     }
                 }
+            }),
+            on('agent_tool_call', (msg: any) => {
+                if (msg.conversation_id !== conversationId) return
+                setToolCalls(prev => [...prev, {
+                    id: msg.data?.tool_call_id || msg.tool_call_id || String(Date.now()),
+                    name: msg.data?.tool_name || msg.tool_name || 'unknown',
+                    arguments: msg.data?.arguments || msg.arguments || {},
+                    status: 'executing',
+                    timestamp: msg.data?.timestamp || msg.timestamp,
+                }])
+            }),
+            on('agent_tool_result', (msg: any) => {
+                if (msg.conversation_id !== conversationId) return
+                const tcId = msg.data?.tool_call_id || msg.tool_call_id
+                setToolCalls(prev => prev.map(tc =>
+                    tc.id === tcId
+                        ? {
+                            ...tc,
+                            status: (msg.data?.success || msg.success) ? 'success' : 'error',
+                            result: msg.data?.result || msg.result,
+                            error: msg.data?.error || msg.error,
+                            durationMs: msg.data?.duration_ms || msg.duration_ms,
+                        }
+                        : tc
+                ))
+            }),
+            on('hitl_request', (msg: any) => {
+                setHitlRequest({
+                    id: msg.hitl_id || msg.data?.hitl_id,
+                    toolName: msg.tool_name || msg.data?.tool_name || 'unknown',
+                    arguments: msg.arguments || msg.data?.arguments || {},
+                    riskLevel: msg.risk_level || msg.data?.risk_level,
+                    actionSummary: msg.action_summary || msg.data?.action_summary,
+                })
+            }),
+            on('hitl_resolved', (_msg: any) => {
+                setHitlRequest(null)
             }),
         ]
         return () => unsubs.forEach(u => u())
@@ -169,6 +235,8 @@ export function useStreamingChat(conversationId: string | null) {
         setAttachmentsProcessed([])
         setSources([])
         setLastError(null)
+        setToolCalls([])
+        setHitlRequest(null)
         const sent = send({ type: 'chat_message', conversation_id: targetConversationId, content, ...(options || {}) })
         if (!sent) {
             setIsStreaming(false)
@@ -190,5 +258,8 @@ export function useStreamingChat(conversationId: string | null) {
         lastError,
         clearLastError,
         thinkingByMessageId,
+        toolCalls,
+        hitlRequest,
+        setHitlRequest,
     }
 }

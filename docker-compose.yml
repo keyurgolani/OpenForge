@@ -14,11 +14,12 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-warning}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
     volumes:
-      # Read-only workspace access for main app (only tool-server can write)
-      - ${WORKSPACE_HOST_PATH:-./data/workspace}:/workspace:ro
+      # Workspace access for knowledge files, uploads, and processing
+      - ${WORKSPACE_HOST_PATH:-./data/workspace}:/workspace
       - ${UPLOADS_HOST_PATH:-./data/uploads}:/uploads
       - ${MODELS_HOST_PATH:-./data/models}:/models
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${SKILLS_HOST_PATH:-./data/skills}:/skills:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -99,6 +100,7 @@ services:
       - SENTENCE_TRANSFORMERS_HOME=/models
     volumes:
       - ${MODELS_HOST_PATH:-./data/models}:/models
+      - ${SKILLS_HOST_PATH:-./data/skills}:/skills:ro
     depends_on:
       redis:
         condition: service_healthy
@@ -109,7 +111,7 @@ services:
       tool-server:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "celery -A openforge.worker.celery_app inspect ping -d celery@localhost 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "celery -A openforge.worker.celery_app inspect ping 2>&1 | grep -q pong || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -135,6 +137,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
     volumes:
       - ${WORKSPACE_HOST_PATH:-./data/workspace}:/workspace
+      - ${SKILLS_HOST_PATH:-./data/skills}:/skills:rw
     depends_on:
       redis:
         condition: service_healthy

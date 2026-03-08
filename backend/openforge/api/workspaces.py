@@ -30,6 +30,14 @@ async def update_workspace(
     return await workspace_service.update_workspace(db, workspace_id, body)
 
 
+@router.patch("/{workspace_id}", response_model=WorkspaceResponse)
+async def patch_workspace(
+    workspace_id: UUID, body: WorkspaceUpdate, db: AsyncSession = Depends(get_db)
+):
+    """Partial update of workspace fields (same as PUT but semantically PATCH)."""
+    return await workspace_service.update_workspace(db, workspace_id, body)
+
+
 @router.delete("/{workspace_id}", status_code=204)
 async def delete_workspace(workspace_id: UUID, db: AsyncSession = Depends(get_db)):
     await workspace_service.delete_workspace(db, workspace_id)

@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typing import Optional
 import uuid
 
-from openforge.db.database import get_db
+from openforge.db.postgres import get_db
 from openforge.services.mcp_service import MCPService, get_mcp_service
 
 router = APIRouter(prefix="/mcp", tags=["mcp"])

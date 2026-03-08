@@ -38,6 +38,8 @@ class WorkspaceUpdate(BaseModel):
     llm_provider_id: Optional[UUID] = None
     llm_model: Optional[str] = None
     sort_order: Optional[int] = None
+    tools_enabled: Optional[bool] = None
+    agent_id: Optional[str] = None
 
 
 class WorkspaceResponse(BaseModel):
@@ -49,6 +51,8 @@ class WorkspaceResponse(BaseModel):
     llm_provider_id: Optional[UUID] = None
     llm_model: Optional[str] = None
     sort_order: int
+    tools_enabled: bool = False
+    agent_id: Optional[str] = None
     knowledge_count: int = 0
     conversation_count: int = 0
     created_at: datetime

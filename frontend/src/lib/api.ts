@@ -160,4 +160,73 @@ export const updateTool = (id: string, data: { is_enabled?: boolean }): Promise<
 export const syncTools = (): Promise<any> => api.post('/tools/sync').then(r => r.data)
 export const listToolCategories = (): Promise<any> => api.get('/tools/categories').then(r => r.data)
 
+// ── Auth ──
+export const checkAuth = (): Promise<any> =>
+    fetch('/api/auth/check').then(r => {
+        if (r.status === 401) return { authenticated: false, auth_required: true }
+        return r.json()
+    })
+
+export const login = (password: string): Promise<any> =>
+    fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+    }).then(r => r.json())
+
+export const logout = (): Promise<any> =>
+    fetch('/api/auth/logout', { method: 'POST' }).then(r => r.json())
+
+// ── Router/Council/Optimizer configs ──
+export const getRouterConfig = (providerId: string): Promise<any> =>
+    api.get(`/llm/virtual/${providerId}/router-config`).then(r => r.data).catch(() => null)
+
+export const createRouterConfig = (providerId: string, data: object): Promise<any> =>
+    api.post(`/llm/virtual/${providerId}/router-config`, data).then(r => r.data)
+
+export const updateRouterConfig = (providerId: string, data: object): Promise<any> =>
+    api.put(`/llm/virtual/${providerId}/router-config`, data).then(r => r.data)
+
+export const getCouncilConfig = (providerId: string): Promise<any> =>
+    api.get(`/llm/virtual/${providerId}/council-config`).then(r => r.data).catch(() => null)
+
+export const createCouncilConfig = (providerId: string, data: object): Promise<any> =>
+    api.post(`/llm/virtual/${providerId}/council-config`, data).then(r => r.data)
+
+export const updateCouncilConfig = (providerId: string, data: object): Promise<any> =>
+    api.put(`/llm/virtual/${providerId}/council-config`, data).then(r => r.data)
+
+export const getOptimizerConfig = (providerId: string): Promise<any> =>
+    api.get(`/llm/virtual/${providerId}/optimizer-config`).then(r => r.data).catch(() => null)
+
+export const createOptimizerConfig = (providerId: string, data: object): Promise<any> =>
+    api.post(`/llm/virtual/${providerId}/optimizer-config`, data).then(r => r.data)
+
+export const updateOptimizerConfig = (providerId: string, data: object): Promise<any> =>
+    api.put(`/llm/virtual/${providerId}/optimizer-config`, data).then(r => r.data)
+
+// ── Agents ──
+export const listAgents = (): Promise<any> => api.get('/agents').then(r => r.data)
+export const getAgent = (agentId: string): Promise<any> => api.get(`/agents/${agentId}`).then(r => r.data)
+export const getWorkspaceAgent = (wid: string): Promise<any> => api.get(`/agents/workspaces/${wid}/agent`).then(r => r.data)
+export const setWorkspaceAgent = (wid: string, agentId: string): Promise<any> =>
+    api.put(`/agents/workspaces/${wid}/agent`, { agent_id: agentId }).then(r => r.data)
+
+// ── HITL ──
+export const listHITLPending = (workspaceId?: string): Promise<any> =>
+    api.get('/hitl/pending', { params: workspaceId ? { workspace_id: workspaceId } : {} }).then(r => r.data)
+export const approveHITL = (id: string, note?: string): Promise<any> =>
+    api.post(`/hitl/${id}/approve`, { resolution_note: note }).then(r => r.data)
+export const denyHITL = (id: string, note?: string): Promise<any> =>
+    api.post(`/hitl/${id}/deny`, { resolution_note: note }).then(r => r.data)
+
+// ── Visual Search ──
+export const visualSearch = (wid: string, file: File): Promise<any> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post(`/workspaces/${wid}/knowledge/search/visual`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data)
+}
+
 export default api

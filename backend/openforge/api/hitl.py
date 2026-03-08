@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 from typing import Optional
 
-from openforge.db.database import get_db
+from openforge.db.postgres import get_db
 from openforge.services.hitl_service import hitl_service
 from openforge.schemas.hitl import (
     HITLRequestResponse,
@@ -77,6 +77,20 @@ async def approve_request(
         if not request:
             raise HTTPException(404, "HITL request not found")
 
+        # Trigger celery task to notify via WebSocket
+        try:
+            from openforge.worker.tasks import resume_after_hitl as resume_hitl_task
+            execution_id = request.get("execution_id", "") if isinstance(request, dict) else getattr(request, "execution_id", "")
+            resume_hitl_task.delay(
+                execution_id=str(execution_id),
+                hitl_request_id=str(request_id),
+                approved=True,
+                resolution_note=note,
+            )
+        except Exception as task_err:
+            import logging
+            logging.getLogger("openforge.hitl").warning(f"Could not trigger resume task: {task_err}")
+
         return {
             "status": "approved",
             "request_id": str(request_id),
@@ -99,6 +113,20 @@ async def deny_request(
 
         if not request:
             raise HTTPException(404, "HITL request not found")
+
+        # Trigger celery task to notify via WebSocket
+        try:
+            from openforge.worker.tasks import resume_after_hitl as resume_hitl_task
+            execution_id = request.get("execution_id", "") if isinstance(request, dict) else getattr(request, "execution_id", "")
+            resume_hitl_task.delay(
+                execution_id=str(execution_id),
+                hitl_request_id=str(request_id),
+                approved=False,
+                resolution_note=note,
+            )
+        except Exception as task_err:
+            import logging
+            logging.getLogger("openforge.hitl").warning(f"Could not trigger resume task: {task_err}")
 
         return {
             "status": "denied",

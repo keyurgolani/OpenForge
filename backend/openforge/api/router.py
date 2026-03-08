@@ -11,6 +11,10 @@ from openforge.api import attachments
 from openforge.api import tools
 from openforge.api import mcp_management
 from openforge.api import hitl
+from openforge.api import knowledge_upload
+from openforge.api import llm_virtual_providers
+from openforge.api import agents
+from openforge.api import visual_search
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -27,3 +31,7 @@ api_router.include_router(attachments.router, prefix="/attachments", tags=["atta
 api_router.include_router(tools.router, tags=["tools"])
 api_router.include_router(mcp_management.router, tags=["mcp"])
 api_router.include_router(hitl.router, tags=["hitl"])
+api_router.include_router(knowledge_upload.router, tags=["knowledge-upload"])
+api_router.include_router(llm_virtual_providers.router, tags=["llm-virtual-providers"])
+api_router.include_router(agents.router, tags=["agents"])
+api_router.include_router(visual_search.router, prefix="/workspaces", tags=["visual-search"])

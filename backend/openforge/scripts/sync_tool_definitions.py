@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
-from openforge.db.database import async_session_factory
+from openforge.db.postgres import AsyncSessionLocal
 from openforge.db.models import ToolDefinition
 from openforge.config import get_settings
 
@@ -57,7 +57,7 @@ async def sync_tool_definitions(tool_server_url: str, dry_run: bool = False) -> 
             logger.info(f"  - {tool['id']}: {tool['display_name']} ({tool['risk_level']})")
         return len(tools)
 
-    async with async_session_factory() as session:
+    async with AsyncSessionLocal() as session:
         synced = 0
 
         for tool in tools:

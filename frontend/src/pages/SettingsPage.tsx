@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { ProviderIcon } from '@/components/shared/ProviderIcon'
 import { ModelOverrideSelect } from '@/components/shared/ModelOverrideSelect'
+import { MCPServerSettings } from '@/components/settings/MCPServerSettings'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import { isLocalProvider, sanitizeProviderDisplayName } from '@/lib/provider-display'
 
@@ -62,8 +63,8 @@ export function getWorkspaceIcon(iconName: string | null): React.ReactNode {
     return <IconComponent className="w-4 h-4" />
 }
 
-type SettingsTab = 'workspaces' | 'llm' | 'prompts' | 'jobs' | 'audit'
-const SETTINGS_TABS: SettingsTab[] = ['workspaces', 'llm', 'prompts', 'jobs', 'audit']
+type SettingsTab = 'workspaces' | 'llm' | 'prompts' | 'jobs' | 'tools' | 'mcp' | 'hitl' | 'audit' | 'skills'
+const SETTINGS_TABS: SettingsTab[] = ['workspaces', 'llm', 'prompts', 'jobs', 'tools', 'mcp', 'hitl', 'audit', 'skills']
 const toSettingsTab = (value: string | null): SettingsTab => {
     const normalized = value === 'schedules' ? 'jobs' : value
     return SETTINGS_TABS.includes(normalized as SettingsTab) ? (normalized as SettingsTab) : 'workspaces'
@@ -92,7 +93,11 @@ export default function SettingsPage() {
         { id: 'llm' as const, label: 'AI Providers', Icon: Bot },
         { id: 'prompts' as const, label: 'Prompts', Icon: Sliders },
         { id: 'jobs' as const, label: 'Jobs', Icon: Timer },
+        { id: 'tools' as const, label: 'Tools', Icon: Wrench },
+        { id: 'mcp' as const, label: 'MCP Servers', Icon: Server },
+        { id: 'hitl' as const, label: 'Approvals', Icon: Shield },
         { id: 'audit' as const, label: 'Audit', Icon: History },
+        { id: 'skills' as const, label: 'Skills', Icon: Zap },
     ]
 
     return (
@@ -137,6 +142,10 @@ export default function SettingsPage() {
             {activeTab === 'llm' && <LLMSettings />}
             {activeTab === 'prompts' && <PromptsTab />}
             {activeTab === 'jobs' && <JobsTab />}
+            {activeTab === 'tools' && <ToolsTab />}
+            {activeTab === 'mcp' && <MCPServerSettings />}
+            {activeTab === 'hitl' && <HITLTab />}
+            {activeTab === 'skills' && <SkillsTab />}
             {activeTab === 'audit' && (
                 <div className="min-h-0 flex-1">
                     <AuditTab workspaceId={workspaceId} />
@@ -153,6 +162,7 @@ type WorkspaceRow = {
     llm_provider_id: string | null; llm_model: string | null
     knowledge_count: number
     conversation_count: number
+    tools_enabled?: boolean
 }
 
 function WorkspacesSettings({
@@ -246,6 +256,7 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
     const [showIcons, setShowIcons] = useState(false)
     const [providerId, setProviderId] = useState(ws.llm_provider_id ?? '')
     const [model, setModel] = useState(ws.llm_model ?? '')
+    const [toolsEnabled, setToolsEnabled] = useState(ws.tools_enabled ?? false)
     const [saving, setSaving] = useState(false)
     const [saved, setSaved] = useState(false)
     const [deleting, setDeleting] = useState(false)
@@ -260,6 +271,7 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
             icon: icon || null,
             llm_provider_id: providerId || null,
             llm_model: model || null,
+            tools_enabled: toolsEnabled,
         })
         setSaving(false); setSaved(true)
         setTimeout(() => setSaved(false), 2000)
@@ -397,6 +409,25 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
                         </div>
                     </div>
 
+                    <div className="border-t border-border/40 pt-3">
+                        <div className="flex items-center justify-between p-4 rounded-xl border border-white/10 bg-white/5">
+                            <div>
+                                <div className="font-medium text-sm">Agent Mode (Tool Calling)</div>
+                                <div className="text-xs text-muted-foreground mt-0.5">
+                                    Enable AI agent to use tools during chat. When disabled, chat is knowledge-only.
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setToolsEnabled(v => !v)}
+                                className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${toolsEnabled ? 'bg-accent' : 'bg-white/20'}`}
+                                aria-label="Toggle agent mode"
+                            >
+                                <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${toolsEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                            </button>
+                        </div>
+                    </div>
+
                     <button className="btn-primary text-xs py-1.5 px-3" onClick={handleSave} disabled={saving}>
                         {saved
                             ? <><CheckCircle2 className="w-3.5 h-3.5" /> Saved</>
@@ -456,9 +487,66 @@ function LLMSettings() {
     )
 }
 
+// ── Virtual Provider Types ────────────────────────────────────────────────────
+const VIRTUAL_PROVIDER_TYPES = ['router', 'council', 'optimizer'] as const
+type VirtualProviderType = typeof VIRTUAL_PROVIDER_TYPES[number]
+const VIRTUAL_PROVIDER_META: Record<VirtualProviderType, { name: string; color: string; description: string }> = {
+    router: { name: 'Router (Virtual)', color: 'bg-indigo-500/10 border-indigo-500/20 text-indigo-300', description: 'Automatically routes requests to the best model based on complexity' },
+    council: { name: 'Council (Virtual)', color: 'bg-purple-500/10 border-purple-500/20 text-purple-300', description: 'Multiple models deliberate and the best response is selected' },
+    optimizer: { name: 'Optimizer (Virtual)', color: 'bg-teal-500/10 border-teal-500/20 text-teal-300', description: 'Optimizes prompts before forwarding to a target model' },
+}
+
+function VirtualProviderPanel({ providerType, onAdded }: { providerType: VirtualProviderType; onAdded: () => void }) {
+    const [displayName, setDisplayName] = useState('')
+    const [saving, setSaving] = useState(false)
+    const [saved, setSaved] = useState(false)
+    const [saveError, setSaveError] = useState<string | null>(null)
+
+    const meta = VIRTUAL_PROVIDER_META[providerType]
+
+    const handleSave = async () => {
+        if (!displayName.trim()) { setSaveError('Display name is required'); return }
+        setSaving(true); setSaveError(null)
+        try {
+            await createProvider({
+                provider_name: providerType,
+                display_name: displayName.trim(),
+                provider_type: providerType,
+            })
+            setSaved(true); onAdded()
+            setTimeout(() => setSaved(false), 3000)
+        } catch (e: unknown) {
+            const err = e as { response?: { data?: { detail?: string } }; message?: string }
+            setSaveError(err?.response?.data?.detail ?? err?.message ?? 'Save failed')
+        } finally { setSaving(false) }
+    }
+
+    return (
+        <div className="space-y-4 pt-2">
+            <div className={`p-3 rounded-lg border text-xs ${meta.color}`}>
+                {meta.description}
+            </div>
+            <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Display Name</label>
+                <input className="input text-sm" placeholder={`e.g. My ${meta.name}`} value={displayName} onChange={e => setDisplayName(e.target.value)} />
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+                After saving, configure this virtual provider's settings via the provider card.
+            </p>
+            {saveError && <div className="text-xs p-2.5 rounded-lg bg-destructive/10 text-red-300 border border-destructive/20">{saveError}</div>}
+            <button className="btn-primary w-full justify-center py-2.5" onClick={handleSave} disabled={saving || !displayName.trim()}>
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                {saving ? 'Saving…' : `Save ${meta.name}`}
+                {saved && <CheckCircle2 className="w-4 h-4 text-emerald-400 ml-1" />}
+            </button>
+        </div>
+    )
+}
+
 // ── Add Provider Panel ────────────────────────────────────────────────────────
 function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
     const [providerName, setProviderName] = useState('openai')
+    const [virtualType, setVirtualType] = useState<VirtualProviderType | null>(null)
     const [displayName, setDisplayName] = useState('')
     const [apiKey, setApiKey] = useState('')
     const [baseUrl, setBaseUrl] = useState('')
@@ -479,12 +567,20 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
     const meta = PROVIDER_META[providerName]
 
     const handleProviderChange = (id: string) => {
-        setProviderName(id); setDisplayName(''); setApiKey(''); setBaseUrl('')
+        setProviderName(id); setVirtualType(null); setDisplayName(''); setApiKey(''); setBaseUrl('')
         setShowKey(false); setModels(null); setModelError(null)
         setModelSearch(''); setSelectedModels(new Set()); setManualModel('')
         setSaved(false); setSaveError(null)
         setCreatedProviderId(null)
         setShowAdvanced(false)
+    }
+
+    const handleVirtualTypeChange = (vt: VirtualProviderType) => {
+        setVirtualType(vt); setProviderName(''); setDisplayName(''); setApiKey(''); setBaseUrl('')
+        setShowKey(false); setModels(null); setModelError(null)
+        setModelSearch(''); setSelectedModels(new Set()); setManualModel('')
+        setSaved(false); setSaveError(null)
+        setCreatedProviderId(null)
     }
 
     const filteredModels = useMemo(() => {
@@ -588,7 +684,7 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
                         const m = PROVIDER_META[id]
                         return (
                             <button key={id} onClick={() => handleProviderChange(id)}
-                                className={`p-2 rounded-xl border text-center text-xs transition-all duration-300 ${providerName === id ? `${m.color} border-accent ring-2 ring-accent/30 scale-105 shadow-glass-md` : 'border-border/50 hover:bg-muted/30 hover:shadow-glass-sm'
+                                className={`p-2 rounded-xl border text-center text-xs transition-all duration-300 ${providerName === id && !virtualType ? `${m.color} border-accent ring-2 ring-accent/30 scale-105 shadow-glass-md` : 'border-border/50 hover:bg-muted/30 hover:shadow-glass-sm'
                                     }`}
                             >
                                 <div className="flex justify-center mb-1.5">
@@ -602,8 +698,32 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
                         )
                     })}
                 </div>
+                <div className="mt-2">
+                    <label className="text-[10px] text-muted-foreground font-medium block mb-1.5">Virtual Providers</label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                        {VIRTUAL_PROVIDER_TYPES.map(vt => {
+                            const vm = VIRTUAL_PROVIDER_META[vt]
+                            return (
+                                <button key={vt} onClick={() => handleVirtualTypeChange(vt)}
+                                    className={`p-2 rounded-xl border text-center text-xs transition-all duration-300 ${virtualType === vt ? `${vm.color} border-accent ring-2 ring-accent/30 scale-105 shadow-glass-md` : 'border-border/50 hover:bg-muted/30 hover:shadow-glass-sm'}`}
+                                >
+                                    <div className="flex justify-center mb-1.5">
+                                        <Bot className="w-4 h-4 opacity-70" />
+                                    </div>
+                                    <div className="text-[10px] leading-tight font-medium truncate">{vm.name}</div>
+                                </button>
+                            )
+                        })}
+                    </div>
+                </div>
             </div>
 
+            {virtualType && (
+                <VirtualProviderPanel providerType={virtualType} onAdded={onAdded} />
+            )}
+
+            {!virtualType && (
+            <>
             {/* Step 2 — Credentials */}
             <div className="space-y-2">
                 <label className="text-xs text-muted-foreground font-medium block">2. Enter credentials</label>
@@ -709,6 +829,8 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
                 {saving ? `Saving…` : totalSelected > 0 ? `Save Provider with ${totalSelected} model${totalSelected > 1 ? 's' : ''}` : 'Select models above'}
             </button>
             <p className="text-[10px] text-muted-foreground text-center">Panel stays open — add more providers after saving</p>
+            </>
+            )}
         </div>
     )
 }
@@ -1490,6 +1612,398 @@ function StatusIcon({ status }: { status: string }) {
     if (status === 'done') return <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
     if (status === 'failed') return <AlertCircle className="w-3.5 h-3.5 text-red-400" />
     return <Circle className="w-3.5 h-3.5 text-muted-foreground" />
+}
+
+// ── HITL Tab (Human-in-the-Loop Approvals) ────────────────────────────────────────
+function HITLTab() {
+    const qc = useQueryClient()
+    const { data: pendingData, isLoading } = useQuery({
+        queryKey: ['hitl-pending'],
+        queryFn: async () => {
+            const res = await fetch('/api/v1/hitl/pending')
+            if (!res.ok) throw new Error('Failed to fetch pending requests')
+            return res.json()
+        },
+        refetchInterval: 5000, // Refresh every 5 seconds
+    })
+
+    const approveMutation = useMutation({
+        mutationFn: async (requestId: string) => {
+            const res = await fetch(`/api/v1/hitl/${requestId}/approve`, { method: 'POST' })
+            if (!res.ok) throw new Error('Failed to approve')
+            return res.json()
+        },
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['hitl-pending'] }),
+    })
+
+    const denyMutation = useMutation({
+        mutationFn: async (requestId: string) => {
+            const res = await fetch(`/api/v1/hitl/${requestId}/deny`, { method: 'POST' })
+            if (!res.ok) throw new Error('Failed to deny')
+            return res.json()
+        },
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['hitl-pending'] }),
+    })
+
+    const requests = pendingData?.requests || []
+
+    return (
+        <div className="space-y-6">
+            <div className="flex items-center justify-between">
+                <div>
+                    <h3 className="font-semibold text-sm flex items-center gap-2">
+                        <Shield className="w-4 h-4 text-orange-400" />
+                        Pending Approvals
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                        Review and approve or deny agent tool requests
+                    </p>
+                </div>
+                {requests.length > 0 && (
+                    <span className="px-2 py-0.5 bg-orange-500/20 text-orange-300 text-xs rounded-full">
+                        {requests.length} pending
+                    </span>
+                )}
+            </div>
+
+            {isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+            ) : requests.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                    <Shield className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                    <p>No pending approval requests</p>
+                    <p className="text-xs mt-1">Agent tool calls requiring approval will appear here</p>
+                </div>
+            ) : (
+                <div className="space-y-3">
+                    {requests.map((req: any) => (
+                        <div key={req.id} className="glass-card p-4 border border-orange-500/20">
+                            <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <span className="px-2 py-0.5 bg-orange-500/20 text-orange-300 text-xs rounded">
+                                            {req.tool_id}
+                                        </span>
+                                        <span className="text-xs text-muted-foreground">
+                                            {new Date(req.created_at).toLocaleString()}
+                                        </span>
+                                    </div>
+                                    <p className="text-sm text-foreground mb-2">{req.action_summary}</p>
+                                    {req.tool_input && (
+                                        <pre className="text-xs text-muted-foreground bg-black/20 p-2 rounded overflow-x-auto">
+                                            {JSON.stringify(req.tool_input, null, 2)}
+                                        </pre>
+                                    )}
+                                </div>
+                                <div className="flex gap-2 ml-4">
+                                    <button
+                                        onClick={() => approveMutation.mutate(req.id)}
+                                        disabled={approveMutation.isPending}
+                                        className="flex items-center gap-1 px-3 py-1.5 bg-green-500/20 hover:bg-green-500/30
+                                                 text-green-300 rounded-lg text-sm transition-colors disabled:opacity-50"
+                                    >
+                                        {approveMutation.isPending ? (
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                        ) : (
+                                            <CheckCircle2 className="w-4 h-4" />
+                                        )}
+                                        Approve
+                                    </button>
+                                    <button
+                                        onClick={() => denyMutation.mutate(req.id)}
+                                        disabled={denyMutation.isPending}
+                                        className="flex items-center gap-1 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30
+                                                 text-red-300 rounded-lg text-sm transition-colors disabled:opacity-50"
+                                    >
+                                        {denyMutation.isPending ? (
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                        ) : (
+                                            <XCircle className="w-4 h-4" />
+                                        )}
+                                        Deny
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    )
+}
+
+// ── Tools Tab (Tool Definitions) ────────────────────────────────────────────────
+function ToolsTab() {
+    const qc = useQueryClient()
+    const { data: toolsData, isLoading } = useQuery({
+        queryKey: ['tools'],
+        queryFn: async () => {
+            const res = await fetch('/api/v1/tools')
+            if (!res.ok) throw new Error('Failed to fetch tools')
+            return res.json()
+        },
+    })
+
+    const { data: categoriesData } = useQuery({
+        queryKey: ['tool-categories'],
+        queryFn: async () => {
+            const res = await fetch('/api/v1/tools/categories')
+            if (!res.ok) throw new Error('Failed to fetch categories')
+            return res.json()
+        },
+    })
+
+    const syncMutation = useMutation({
+        mutationFn: async () => {
+            const res = await fetch('/api/v1/tools/sync', { method: 'POST' })
+            if (!res.ok) throw new Error('Failed to sync tools')
+            return res.json()
+        },
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['tools'] })
+            qc.invalidateQueries({ queryKey: ['tool-categories'] })
+        },
+    })
+
+    const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+    const tools = toolsData?.tools || []
+    const categories = categoriesData?.categories || []
+    const filteredTools = selectedCategory
+        ? tools.filter((t: any) => t.category === selectedCategory)
+        : tools
+
+    const categoryColors: Record<string, string> = {
+        filesystem: 'text-blue-400',
+        git: 'text-orange-400',
+        shell: 'text-red-400',
+        language: 'text-purple-400',
+        web: 'text-green-400',
+        default: 'text-gray-400',
+    }
+
+    return (
+        <div className="space-y-6">
+            <div className="flex items-center justify-between">
+                <div>
+                    <h3 className="font-semibold text-sm flex items-center gap-2">
+                        <Wrench className="w-4 h-4 text-purple-400" />
+                        Tool Definitions
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                        Built-in tools available to agents
+                    </p>
+                </div>
+                <button
+                    onClick={() => syncMutation.mutate()}
+                    disabled={syncMutation.isPending}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30
+                             text-purple-300 rounded-lg text-sm transition-colors disabled:opacity-50"
+                >
+                    {syncMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                        <RefreshCw className="w-4 h-4" />
+                    )}
+                    Sync from Server
+                </button>
+            </div>
+
+            {/* Category filters */}
+            {categories.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                    <button
+                        onClick={() => setSelectedCategory(null)}
+                        className={`px-2.5 py-1 rounded text-xs transition-colors ${
+                            selectedCategory === null
+                                ? 'bg-accent/20 text-accent'
+                                : 'bg-gray-700/50 text-gray-400 hover:text-white'
+                        }`}
+                    >
+                        All ({tools.length})
+                    </button>
+                    {categories.map((cat: any) => (
+                        <button
+                            key={cat.name}
+                            onClick={() => setSelectedCategory(cat.name)}
+                            className={`px-2.5 py-1 rounded text-xs transition-colors ${
+                                selectedCategory === cat.name
+                                    ? 'bg-accent/20 text-accent'
+                                    : 'bg-gray-700/50 text-gray-400 hover:text-white'
+                            }`}
+                        >
+                            {cat.name} ({cat.count})
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            {isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+            ) : filteredTools.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                    <Wrench className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                    <p>No tools found</p>
+                    <p className="text-xs mt-1">Click "Sync from Server" to fetch tool definitions</p>
+                </div>
+            ) : (
+                <div className="grid gap-3">
+                    {filteredTools.map((tool: any) => (
+                        <div key={tool.id} className="glass-card p-4">
+                            <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className={`text-xs font-medium ${categoryColors[tool.category] || categoryColors.default}`}>
+                                            {tool.category}
+                                        </span>
+                                        <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                            tool.risk_level === 'low' ? 'bg-green-500/20 text-green-300' :
+                                            tool.risk_level === 'medium' ? 'bg-yellow-500/20 text-yellow-300' :
+                                            tool.risk_level === 'high' ? 'bg-orange-500/20 text-orange-300' :
+                                            'bg-red-500/20 text-red-300'
+                                        }`}>
+                                            {tool.risk_level}
+                                        </span>
+                                        {!tool.is_enabled && (
+                                            <span className="text-xs px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-400">
+                                                disabled
+                                            </span>
+                                        )}
+                                    </div>
+                                    <h4 className="font-medium text-white">{tool.display_name}</h4>
+                                    <p className="text-xs text-muted-foreground mt-1">{tool.description}</p>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    )
+}
+
+// ── Skills Tab ─────────────────────────────────────────────────────────────────
+function SkillsTab() {
+    const [installInput, setInstallInput] = useState('')
+    const [installing, setInstalling] = useState(false)
+    const [installResult, setInstallResult] = useState<{ success: boolean; message: string } | null>(null)
+    const { data: skillsList, isLoading, refetch } = useQuery({
+        queryKey: ['skills'],
+        queryFn: async () => {
+            const res = await fetch('/api/v1/skills')
+            if (!res.ok) return []
+            return res.json()
+        },
+    })
+
+    const skills: any[] = Array.isArray(skillsList) ? skillsList : (skillsList?.skills ?? [])
+
+    const handleInstall = async () => {
+        if (!installInput.trim()) return
+        setInstalling(true); setInstallResult(null)
+        try {
+            const res = await fetch('/api/v1/skills/install', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ source: installInput.trim() }),
+            })
+            const data = await res.json()
+            if (res.ok) {
+                setInstallResult({ success: true, message: data.message || 'Skill installed successfully' })
+                setInstallInput('')
+                refetch()
+            } else {
+                setInstallResult({ success: false, message: data.detail || 'Installation failed' })
+            }
+        } catch (e: unknown) {
+            const err = e as { message?: string }
+            setInstallResult({ success: false, message: err?.message || 'Installation failed' })
+        } finally { setInstalling(false) }
+    }
+
+    return (
+        <div className="space-y-6">
+            <div className="flex items-center justify-between">
+                <div>
+                    <h3 className="font-semibold text-sm flex items-center gap-2">
+                        <Zap className="w-4 h-4 text-amber-400" />
+                        Skills
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                        Manage agent skills and capabilities
+                    </p>
+                </div>
+                <button
+                    onClick={() => refetch()}
+                    className="btn-ghost text-xs py-1.5 px-2.5 gap-1.5"
+                >
+                    <RefreshCw className="w-3.5 h-3.5" /> Refresh
+                </button>
+            </div>
+
+            <div className="glass-card p-4 space-y-3 border border-accent/20">
+                <h4 className="text-sm font-medium">Install Skill</h4>
+                <p className="text-xs text-muted-foreground">Enter a skill name, package, or URL to install.</p>
+                <div className="flex gap-2">
+                    <input
+                        className="input text-sm flex-1"
+                        placeholder="e.g. openforge-skill-web-search or https://github.com/..."
+                        value={installInput}
+                        onChange={e => setInstallInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') void handleInstall() }}
+                    />
+                    <button
+                        className="btn-primary text-xs py-1.5 px-3 whitespace-nowrap"
+                        onClick={handleInstall}
+                        disabled={installing || !installInput.trim()}
+                    >
+                        {installing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                        Install
+                    </button>
+                </div>
+                {installResult && (
+                    <div className={`flex items-start gap-2 text-xs p-2.5 rounded-lg ${installResult.success ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' : 'bg-destructive/10 text-red-300 border border-destructive/20'}`}>
+                        {installResult.success ? <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" /> : <XCircle className="w-3.5 h-3.5 flex-shrink-0" />}
+                        {installResult.message}
+                    </div>
+                )}
+            </div>
+
+            {isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+            ) : skills.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                    <Zap className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                    <p>No skills installed yet</p>
+                    <p className="text-xs mt-1">Install skills to extend agent capabilities</p>
+                </div>
+            ) : (
+                <div className="space-y-3">
+                    {skills.map((skill: any, i: number) => (
+                        <div key={skill.id ?? skill.name ?? i} className="glass-card p-4">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <Zap className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                                        <span className="font-medium text-sm">{skill.name ?? skill.id ?? 'Unknown'}</span>
+                                        {skill.version && <span className="chip-muted text-[10px]">v{skill.version}</span>}
+                                    </div>
+                                    {skill.description && (
+                                        <p className="text-xs text-muted-foreground mt-0.5">{skill.description}</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    )
 }
 
 function AuditTab({ workspaceId }: { workspaceId: string }) {
