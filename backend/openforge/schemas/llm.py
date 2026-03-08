@@ -27,6 +27,7 @@ class LLMProviderResponse(BaseModel):
     id: UUID
     provider_name: str
     display_name: str
+    provider_type: str = "standard"
     endpoint_id: str
     base_url: Optional[str] = None
     default_model: Optional[str] = None

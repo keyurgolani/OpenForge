@@ -19,10 +19,11 @@ logger = logging.getLogger("openforge.llm_service")
 
 
 def _to_response(provider: LLMProvider) -> LLMProviderResponse:
-    response = LLMProviderResponse(
+    return LLMProviderResponse(
         id=provider.id,
         provider_name=provider.provider_name,
         display_name=provider.display_name,
+        provider_type=getattr(provider, 'provider_type', 'standard'),
         endpoint_id=provider.endpoint_id,
         base_url=provider.base_url,
         default_model=provider.default_model,
@@ -32,10 +33,6 @@ def _to_response(provider: LLMProvider) -> LLMProviderResponse:
         created_at=provider.created_at,
         updated_at=provider.updated_at,
     )
-    # Add provider_type if the schema supports it
-    if hasattr(provider, 'provider_type'):
-        response.provider_type = provider.provider_type  # type: ignore
-    return response
 
 
 class LLMService:
