@@ -20,6 +20,9 @@ import {
 import { ProviderIcon } from '@/components/shared/ProviderIcon'
 import { ModelOverrideSelect } from '@/components/shared/ModelOverrideSelect'
 import { MCPServerSettings } from '@/components/settings/MCPServerSettings'
+import { RouterConfig } from '@/components/settings/RouterConfig'
+import { CouncilConfig } from '@/components/settings/CouncilConfig'
+import { OptimizerConfig } from '@/components/settings/OptimizerConfig'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import { isLocalProvider, sanitizeProviderDisplayName } from '@/lib/provider-display'
 
@@ -240,7 +243,7 @@ function WorkspacesSettings({
     )
 }
 
-type ProviderRow = { id: string; display_name: string; provider_name: string; default_model: string | null; is_system_default: boolean; has_api_key: boolean; base_url: string | null; enabled_models: { id: string; name: string }[] }
+type ProviderRow = { id: string; display_name: string; provider_name: string; provider_type: string; default_model: string | null; is_system_default: boolean; has_api_key: boolean; base_url: string | null; enabled_models: { id: string; name: string }[] }
 
 function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved }: {
     workspace: WorkspaceRow
@@ -901,50 +904,60 @@ function ProviderCard({ provider, expanded, onToggle, onDelete, onSetDefault }: 
 
             {expanded && (
                 <div className="border-t border-border/50 px-4 py-4 space-y-3 animate-fade-in">
-                    <button className="btn-ghost text-xs border border-border w-full justify-center py-2" onClick={handleTest} disabled={testing}>
-                        {testing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe2 className="w-3.5 h-3.5" />}
-                        {testing ? 'Testing…' : 'Test Connection'}
-                    </button>
-                    {testResult && (
-                        <div className={`flex items-start gap-2 text-xs p-2.5 rounded-lg ${testResult.success ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20' : 'bg-destructive/10 text-red-700 border border-destructive/20'}`}>
-                            {testResult.success ? <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" /> : <XCircle className="w-3.5 h-3.5 flex-shrink-0" />}
-                            {testResult.message}
-                        </div>
-                    )}
+                    {/* Virtual provider configuration */}
+                    {provider.provider_type === 'router' && <RouterConfig providerId={provider.id} />}
+                    {provider.provider_type === 'council' && <CouncilConfig providerId={provider.id} />}
+                    {provider.provider_type === 'optimizer' && <OptimizerConfig providerId={provider.id} />}
 
-                    <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                            <label className="text-xs font-medium text-muted-foreground">Default Model</label>
-                            {modelSaved && <span className="text-[10px] text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Saved</span>}
-                        </div>
-                        {provider.enabled_models && provider.enabled_models.length > 0 ? (
-                            <>
-                                <div className="max-h-36 overflow-y-auto rounded-lg border border-border/50 bg-background/30 divide-y divide-border/20">
-                                    {filteredModels.map(m => (
-                                        <button key={m.id} onClick={() => setSelectedModel(m.id)}
-                                            className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-muted/30 transition-colors ${selectedModel === m.id ? 'bg-accent/10 text-accent' : 'text-muted-foreground'}`}>
-                                            {selectedModel === m.id ? <Zap className="w-3 h-3 flex-shrink-0" /> : <span className="w-3" />}
-                                            <span className="truncate">{m.name}</span>
+                    {/* Standard provider configuration */}
+                    {provider.provider_type === 'standard' && (
+                        <>
+                            <button className="btn-ghost text-xs border border-border w-full justify-center py-2" onClick={handleTest} disabled={testing}>
+                                {testing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe2 className="w-3.5 h-3.5" />}
+                                {testing ? 'Testing…' : 'Test Connection'}
+                            </button>
+                            {testResult && (
+                                <div className={`flex items-start gap-2 text-xs p-2.5 rounded-lg ${testResult.success ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20' : 'bg-destructive/10 text-red-700 border border-destructive/20'}`}>
+                                    {testResult.success ? <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" /> : <XCircle className="w-3.5 h-3.5 flex-shrink-0" />}
+                                    {testResult.message}
+                                </div>
+                            )}
+
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-medium text-muted-foreground">Default Model</label>
+                                    {modelSaved && <span className="text-[10px] text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Saved</span>}
+                                </div>
+                                {provider.enabled_models && provider.enabled_models.length > 0 ? (
+                                    <>
+                                        <div className="max-h-36 overflow-y-auto rounded-lg border border-border/50 bg-background/30 divide-y divide-border/20">
+                                            {filteredModels.map(m => (
+                                                <button key={m.id} onClick={() => setSelectedModel(m.id)}
+                                                    className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-muted/30 transition-colors ${selectedModel === m.id ? 'bg-accent/10 text-accent' : 'text-muted-foreground'}`}>
+                                                    {selectedModel === m.id ? <Zap className="w-3 h-3 flex-shrink-0" /> : <span className="w-3" />}
+                                                    <span className="truncate">{m.name}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <input className="input text-xs flex-1 py-1.5" placeholder="Model ID…" value={selectedModel} onChange={e => setSelectedModel(e.target.value)} />
+                                            <button className="btn-primary text-xs py-1.5 px-3 whitespace-nowrap" onClick={handleSaveModel} disabled={savingModel || !selectedModel}>
+                                                {savingModel ? 'Saving…' : 'Save Default Model'}
+                                            </button>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="flex gap-2 items-center">
+                                        <input className="input text-xs flex-1 py-1.5" placeholder="Model ID…" value={selectedModel} onChange={e => setSelectedModel(e.target.value)} />
+                                        <button className="btn-primary text-xs py-1.5 px-3" onClick={handleSaveModel} disabled={savingModel || !selectedModel}>
+                                            {modelSaved ? <CheckCircle2 className="w-3.5 h-3.5" /> : savingModel ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                                            {modelSaved ? 'Saved' : 'Set default'}
                                         </button>
-                                    ))}
-                                </div>
-                                <div className="flex gap-2">
-                                    <input className="input text-xs flex-1 py-1.5" placeholder="Model ID…" value={selectedModel} onChange={e => setSelectedModel(e.target.value)} />
-                                    <button className="btn-primary text-xs py-1.5 px-3 whitespace-nowrap" onClick={handleSaveModel} disabled={savingModel || !selectedModel}>
-                                        {savingModel ? 'Saving…' : 'Save Default Model'}
-                                    </button>
-                                </div>
-                            </>
-                        ) : (
-                            <div className="flex gap-2 items-center">
-                                <input className="input text-xs flex-1 py-1.5" placeholder="Model ID…" value={selectedModel} onChange={e => setSelectedModel(e.target.value)} />
-                                <button className="btn-primary text-xs py-1.5 px-3" onClick={handleSaveModel} disabled={savingModel || !selectedModel}>
-                                    {modelSaved ? <CheckCircle2 className="w-3.5 h-3.5" /> : savingModel ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                                    {modelSaved ? 'Saved' : 'Set default'}
-                                </button>
+                                    </div>
+                                )}
                             </div>
-                        )}
-                    </div>
+                        </>
+                    )}
                 </div>
             )}
         </div>

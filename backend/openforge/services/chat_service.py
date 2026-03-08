@@ -10,6 +10,12 @@ from typing import List, Optional
 from openforge.core.llm_gateway import llm_gateway
 from openforge.core.search_engine import search_engine
 from openforge.core.context_assembler import ContextAssembler
+from openforge.core.llm_router import LLMRouter
+from openforge.core.llm_council import LLMCouncil
+from openforge.core.llm_optimizer import LLMOptimizer
+from openforge.services.llm_router_service import llm_router_service
+from openforge.services.llm_council_service import llm_council_service
+from openforge.services.llm_optimizer_service import llm_optimizer_service
 from openforge.services.conversation_service import conversation_service
 from openforge.services.llm_service import llm_service
 from openforge.services.chat_retrieval import (
@@ -253,6 +259,67 @@ class ChatService:
                 **snapshot,
             })
 
+    async def _stream_via_virtual_provider(
+        self,
+        messages: list[dict],
+        provider_type: str,
+        provider_id: UUID | str,
+        db: AsyncSession,
+        workspace_id: UUID,
+    ):
+        """
+        Route messages through a virtual provider (router, council, optimizer).
+        Yields events in the same format as llm_gateway.stream_events().
+        """
+        try:
+            provider_uuid = provider_id if isinstance(provider_id, UUID) else UUID(str(provider_id))
+        except (ValueError, TypeError) as e:
+            logger.error(f"Invalid provider_id for virtual provider: {provider_id}: {e}")
+            yield {"type": "error", "detail": "Invalid virtual provider configuration"}
+            return
+
+        try:
+            if provider_type == "router":
+                config = await llm_router_service.get_config(db, provider_uuid)
+                if not config:
+                    logger.error(f"Router config not found for provider {provider_uuid}")
+                    yield {"type": "error", "detail": "Router configuration not found"}
+                    return
+
+                router = LLMRouter(config)
+                async for token in router.stream(messages, db):
+                    yield {"type": "content", "content": token}
+
+            elif provider_type == "council":
+                config = await llm_council_service.get_config(db, provider_uuid)
+                if not config:
+                    logger.error(f"Council config not found for provider {provider_uuid}")
+                    yield {"type": "error", "detail": "Council configuration not found"}
+                    return
+
+                council = LLMCouncil(config)
+                async for token in council.stream(messages, db):
+                    yield {"type": "content", "content": token}
+
+            elif provider_type == "optimizer":
+                config = await llm_optimizer_service.get_config(db, provider_uuid)
+                if not config:
+                    logger.error(f"Optimizer config not found for provider {provider_uuid}")
+                    yield {"type": "error", "detail": "Optimizer configuration not found"}
+                    return
+
+                optimizer = LLMOptimizer(config)
+                async for token in optimizer.stream_via_target(messages, db):
+                    yield {"type": "content", "content": token}
+
+            else:
+                logger.error(f"Unknown virtual provider type: {provider_type}")
+                yield {"type": "error", "detail": f"Unknown provider type: {provider_type}"}
+
+        except Exception as e:
+            logger.error(f"Error streaming via virtual provider {provider_type}: {e}", exc_info=True)
+            yield {"type": "error", "detail": f"Virtual provider error: {str(e)}"}
+
     async def handle_chat_message(
         self,
         workspace_id: UUID,
@@ -360,7 +427,7 @@ class ChatService:
 
             # 6. Get provider and stream response
             try:
-                provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(
+                provider_name, api_key, model, base_url, provider_type = await llm_service.get_provider_for_workspace(
                     db, workspace_id, provider_id=provider_id, model_override=model_id
                 )
             except Exception as e:
@@ -375,14 +442,29 @@ class ChatService:
             full_thinking = ""
             generation_started = time.perf_counter()
             try:
-                async for event in llm_gateway.stream_events(
-                    messages=assembled,
-                    provider_name=provider_name,
-                    api_key=api_key,
-                    model=model,
-                    base_url=base_url,
-                    include_thinking=True,
-                ):
+                # Dispatch through virtual provider if applicable
+                if provider_type in ("router", "council", "optimizer"):
+                    if not provider_id:
+                        await ws_manager.send_to_workspace(workspace_key, {
+                            "type": "chat_error",
+                            "conversation_id": str(conversation_id),
+                            "detail": "Virtual provider requires explicit provider configuration",
+                        })
+                        return
+                    event_generator = self._stream_via_virtual_provider(
+                        assembled, provider_type, provider_id, db, workspace_id
+                    )
+                else:
+                    event_generator = llm_gateway.stream_events(
+                        messages=assembled,
+                        provider_name=provider_name,
+                        api_key=api_key,
+                        model=model,
+                        base_url=base_url,
+                        include_thinking=True,
+                    )
+
+                async for event in event_generator:
                     if event.get("type") == "thinking":
                         thinking = event.get("content", "")
                         if thinking:

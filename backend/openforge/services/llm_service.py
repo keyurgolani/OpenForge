@@ -19,7 +19,7 @@ logger = logging.getLogger("openforge.llm_service")
 
 
 def _to_response(provider: LLMProvider) -> LLMProviderResponse:
-    return LLMProviderResponse(
+    response = LLMProviderResponse(
         id=provider.id,
         provider_name=provider.provider_name,
         display_name=provider.display_name,
@@ -32,6 +32,10 @@ def _to_response(provider: LLMProvider) -> LLMProviderResponse:
         created_at=provider.created_at,
         updated_at=provider.updated_at,
     )
+    # Add provider_type if the schema supports it
+    if hasattr(provider, 'provider_type'):
+        response.provider_type = provider.provider_type  # type: ignore
+    return response
 
 
 class LLMService:
@@ -134,8 +138,8 @@ class LLMService:
         workspace_id: UUID,
         provider_id: Optional[Union[UUID, str]] = None,
         model_override: Optional[str] = None,
-    ) -> tuple[str, str, str, str | None]:
-        """Returns (provider_name, decrypted_api_key, model, base_url)."""
+    ) -> tuple[str, str, str, str | None, str]:
+        """Returns (provider_name, decrypted_api_key, model, base_url, provider_type)."""
         # If specific provider requested, use it
         provider = None
         if provider_id:
@@ -190,7 +194,8 @@ class LLMService:
                     "Set a default model in Settings > AI Providers."
                 ),
             )
-        return provider.provider_name, api_key, model, provider.base_url
+        provider_type = getattr(provider, 'provider_type', 'standard')
+        return provider.provider_name, api_key, model, provider.base_url, provider_type
 
     async def list_models(self, db: AsyncSession, provider_id: UUID) -> list[ModelInfo]:
         result = await db.execute(select(LLMProvider).where(LLMProvider.id == provider_id))

@@ -223,7 +223,7 @@ export function QuickKnowledgePanel({ open, defaultType = 'standard', onClose }:
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
-                className="fixed inset-0 z-40 bg-black/50 backdrop-blur-md"
+                className="fixed inset-0 z-40 bg-black/70 backdrop-blur-md dark:bg-black/50"
                 onClick={handleClose}
             />
 

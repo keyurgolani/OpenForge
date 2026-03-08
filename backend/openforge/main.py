@@ -57,6 +57,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Embedding model pre-load failed (will load on first use): {e}")
 
+    # Sync tool definitions from tool server
+    try:
+        from openforge.services.tool_sync import sync_tools_from_server
+        synced = await sync_tools_from_server()
+        logger.info(f"Synced {synced} tool definitions from tool server.")
+    except Exception as e:
+        logger.warning(f"Tool sync failed (continuing): {e}")
+
     logger.info("OpenForge ready.")
     await task_scheduler.start()
     yield

@@ -165,7 +165,7 @@ export function KnowledgeModal({ knowledgeId, workspaceId, onClose }: KnowledgeM
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
                 ref={backdropRef}
-                className="fixed inset-0 z-40 bg-black/40 backdrop-blur-md"
+                className="fixed inset-0 z-40 bg-black/60 backdrop-blur-md dark:bg-black/40"
                 onClick={onClose}
             />
 

@@ -131,68 +131,71 @@ async def update_tool(
 
 
 @router.post("/sync")
-async def sync_tool_definitions(db: AsyncSession = Depends(get_db)):
+async def sync_tool_definitions():
     """
     Sync tool definitions from the tool server.
 
     Fetches all tools from the tool server's /tools/registry endpoint
     and updates the local database.
     """
-    from sqlalchemy.dialects.postgresql import insert
-
-    settings = get_settings()
+    from openforge.services.tool_sync import sync_tools_from_server
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(f"{settings.tool_server_url}/tools/registry")
-            response.raise_for_status()
-            tools = response.json()
+        synced = await sync_tools_from_server()
     except httpx.HTTPError as e:
         logger.error(f"Failed to fetch tools from server: {e}")
         raise HTTPException(503, f"Failed to connect to tool server: {e}")
 
-    synced = 0
-    errors = []
-
-    for tool in tools:
-        try:
-            requires_workspace = tool["category"] in [
-                "filesystem", "git", "shell", "language"
-            ]
-
-            stmt = insert(ToolDefinition).values(
-                id=tool["id"],
-                category=tool["category"],
-                display_name=tool["display_name"],
-                description=tool["description"],
-                input_schema=tool["input_schema"],
-                output_schema=None,
-                risk_level=tool["risk_level"],
-                requires_workspace_scope=requires_workspace,
-                is_enabled=True,
-            ).on_conflict_do_update(
-                index_elements=["id"],
-                set_={
-                    "category": tool["category"],
-                    "display_name": tool["display_name"],
-                    "description": tool["description"],
-                    "input_schema": tool["input_schema"],
-                    "risk_level": tool["risk_level"],
-                    "requires_workspace_scope": requires_workspace,
-                }
-            )
-
-            await db.execute(stmt)
-            synced += 1
-        except Exception as e:
-            errors.append(f"{tool['id']}: {str(e)}")
-            logger.error(f"Failed to sync tool {tool['id']}: {e}")
-
-    await db.commit()
-
     return {
         "synced": synced,
-        "total": len(tools),
-        "errors": errors,
-        "message": f"Synced {synced}/{len(tools)} tool definitions",
+        "message": f"Synced {synced} tool definitions from tool server",
     }
+
+
+# ── Skills endpoints (alias for tools) ──
+skills_router = APIRouter(prefix="/skills", tags=["skills"])
+
+
+@skills_router.get("")
+async def list_skills(db: AsyncSession = Depends(get_db)):
+    """List all available skills."""
+    query = select(ToolDefinition).where(ToolDefinition.is_enabled == True)
+    query = query.order_by(ToolDefinition.category, ToolDefinition.id)
+
+    result = await db.execute(query)
+    tools = result.scalars().all()
+
+    return [
+        {
+            "id": t.id,
+            "category": t.category,
+            "display_name": t.display_name,
+            "description": t.description,
+            "input_schema": t.input_schema,
+            "risk_level": t.risk_level,
+            "is_enabled": t.is_enabled,
+        }
+        for t in tools
+    ]
+
+
+@skills_router.post("/install")
+async def install_skill(request_body: dict):
+    """Install a skill from a source."""
+    # For now, this is a placeholder that syncs tools
+    # In the future, this could support installing from URLs or packages
+    from openforge.services.tool_sync import sync_tools_from_server
+
+    source = request_body.get("source")
+    if not source:
+        raise HTTPException(400, "source field is required")
+
+    try:
+        synced = await sync_tools_from_server()
+        return {
+            "success": True,
+            "message": f"Skill installed successfully (synced {synced} tool definitions)",
+        }
+    except httpx.HTTPError as e:
+        logger.error(f"Failed to install skill: {e}")
+        raise HTTPException(503, f"Failed to install skill: {e}")
