@@ -42,6 +42,7 @@ export function RouterConfig({ providerId }: { providerId: string }) {
     queryKey: ['router-config', providerId],
     queryFn: () => getRouterConfig(providerId),
     enabled: !!providerId,
+    retry: false,
   })
 
   useEffect(() => {
@@ -110,7 +111,12 @@ export function RouterConfig({ providerId }: { providerId: string }) {
   }
 
   if (loading) {
-    return <div className="text-xs text-muted-foreground">Loading router configuration...</div>
+    return (
+      <div className="flex items-center gap-2">
+        <Loader2 className="w-3 h-3 animate-spin" />
+        <span className="text-xs text-muted-foreground">Loading router configuration...</span>
+      </div>
+    )
   }
 
   return (

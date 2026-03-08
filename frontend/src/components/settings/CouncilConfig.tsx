@@ -37,6 +37,7 @@ export function CouncilConfig({ providerId }: { providerId: string }) {
     queryKey: ['council-config', providerId],
     queryFn: () => getCouncilConfig(providerId),
     enabled: !!providerId,
+    retry: false,
   })
 
   useEffect(() => {
@@ -116,7 +117,12 @@ export function CouncilConfig({ providerId }: { providerId: string }) {
   }
 
   if (loading) {
-    return <div className="text-xs text-muted-foreground">Loading council configuration...</div>
+    return (
+      <div className="flex items-center gap-2">
+        <Loader2 className="w-3 h-3 animate-spin" />
+        <span className="text-xs text-muted-foreground">Loading council configuration...</span>
+      </div>
+    )
   }
 
   return (

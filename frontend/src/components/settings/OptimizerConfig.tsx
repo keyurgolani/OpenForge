@@ -42,6 +42,7 @@ export function OptimizerConfig({ providerId }: { providerId: string }) {
     queryKey: ['optimizer-config', providerId],
     queryFn: () => getOptimizerConfig(providerId),
     enabled: !!providerId,
+    retry: false,
   })
 
   useEffect(() => {
@@ -106,7 +107,12 @@ export function OptimizerConfig({ providerId }: { providerId: string }) {
   }
 
   if (loading) {
-    return <div className="text-xs text-muted-foreground">Loading optimizer configuration...</div>
+    return (
+      <div className="flex items-center gap-2">
+        <Loader2 className="w-3 h-3 animate-spin" />
+        <span className="text-xs text-muted-foreground">Loading optimizer configuration...</span>
+      </div>
+    )
   }
 
   return (
