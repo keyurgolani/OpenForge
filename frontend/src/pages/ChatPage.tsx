@@ -947,7 +947,7 @@ export default function ChatPage() {
                                                                     <div key={att.id} className="rounded-lg border border-border/60 bg-muted/25 px-3 py-2 text-xs">
                                                                         <div className="mb-1 flex items-center justify-between gap-2">
                                                                             <span className="truncate font-medium text-foreground/90">{att.filename}</span>
-                                                                            <span className={`text-[10px] ${att.status === 'processed' ? 'text-emerald-300' : att.status === 'deferred' ? 'text-amber-300' : 'text-muted-foreground'}`}>
+                                                                            <span className={`text-[10px] ${att.status === 'processed' ? 'text-emerald-700' : att.status === 'deferred' ? 'text-amber-300' : 'text-muted-foreground'}`}>
                                                                                 {att.pipeline}
                                                                             </span>
                                                                         </div>
@@ -1700,7 +1700,7 @@ function ChatMessageCard({
                                                         <div key={att.id} className="rounded-lg border border-border/60 bg-muted/25 px-3 py-2 text-xs">
                                                             <div className="mb-1 flex items-center justify-between gap-2">
                                                                 <span className="truncate font-medium text-foreground/90">{att.filename}</span>
-                                                                <span className={`text-[10px] ${att.status === 'processed' ? 'text-emerald-300' : att.status === 'deferred' ? 'text-amber-300' : 'text-muted-foreground'}`}>
+                                                                <span className={`text-[10px] ${att.status === 'processed' ? 'text-emerald-700' : att.status === 'deferred' ? 'text-amber-300' : 'text-muted-foreground'}`}>
                                                                     {att.pipeline}
                                                                 </span>
                                                             </div>

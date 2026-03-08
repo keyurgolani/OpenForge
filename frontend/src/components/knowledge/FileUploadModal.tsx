@@ -166,7 +166,7 @@ export function FileUploadModal({ open, type, onClose, onSuccess }: FileUploadMo
                     </div>
                     <button
                         onClick={handleClose}
-                        className="p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                        className="p-2 rounded-lg hover:bg-white/10 text-muted-foreground hover:text-white transition-colors"
                     >
                         <X className="w-5 h-5" />
                     </button>
@@ -202,7 +202,7 @@ export function FileUploadModal({ open, type, onClose, onSuccess }: FileUploadMo
                             <div className="text-center">
                                 <FileIcon className="w-12 h-12 mx-auto mb-3 text-green-400" />
                                 <p className="text-white font-medium">{file.name}</p>
-                                <p className="text-sm text-gray-400 mt-1">
+                                <p className="text-sm text-muted-foreground mt-1">
                                     {(file.size / (1024 * 1024)).toFixed(2)} MB
                                 </p>
                             </div>
@@ -212,7 +212,7 @@ export function FileUploadModal({ open, type, onClose, onSuccess }: FileUploadMo
                                 <p className="text-white font-medium">
                                     Drop {config.label.toLowerCase()} here
                                 </p>
-                                <p className="text-sm text-gray-400 mt-1">
+                                <p className="text-sm text-muted-foreground mt-1">
                                     or click to browse
                                 </p>
                                 <p className="text-xs text-gray-500 mt-2">
@@ -224,7 +224,7 @@ export function FileUploadModal({ open, type, onClose, onSuccess }: FileUploadMo
 
                     {/* Title input */}
                     <div>
-                        <label className="block text-sm text-gray-400 mb-1.5">
+                        <label className="block text-sm text-muted-foreground mb-1.5">
                             Title (optional)
                         </label>
                         <input
@@ -243,7 +243,7 @@ export function FileUploadModal({ open, type, onClose, onSuccess }: FileUploadMo
                 <div className="flex justify-end gap-2 p-4 border-t border-white/10 bg-white/5">
                     <button
                         onClick={handleClose}
-                        className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+                        className="px-4 py-2 text-sm text-muted-foreground hover:text-white transition-colors"
                     >
                         Cancel
                     </button>

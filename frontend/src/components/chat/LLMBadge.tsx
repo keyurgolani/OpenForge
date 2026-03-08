@@ -130,7 +130,7 @@ export function LLMBadge({ providerUsed, modelUsed, generationMs, providerMetada
     <div className="rounded-lg border border-purple-500/20 bg-purple-500/10 overflow-hidden">
       <button
         onClick={() => setExpanded(e => !e)}
-        className="flex items-center gap-1.5 text-[11px] text-purple-300 px-2.5 py-1 w-full hover:bg-purple-500/10 transition-colors"
+        className="flex items-center gap-1.5 text-[11px] text-purple-700 px-2.5 py-1 w-full hover:bg-purple-500/10 transition-colors"
       >
         <Bot className="w-3 h-3 shrink-0" />
         <span className="flex-1 text-left">{label}</span>

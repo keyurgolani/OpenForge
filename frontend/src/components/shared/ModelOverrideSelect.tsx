@@ -105,7 +105,7 @@ export function ModelOverrideSelect({
                         </button>
 
                         {hasUnknownSelectedValue && (
-                            <div className="px-2.5 py-1.5 rounded-lg text-xs border border-amber-400/30 bg-amber-400/10 text-amber-200">
+                            <div className="px-2.5 py-1.5 rounded-lg text-xs border border-amber-400/30 bg-amber-400/10 text-amber-700">
                                 Current value <span className="font-mono">{value}</span> is not in this provider&apos;s enabled model list.
                             </div>
                         )}

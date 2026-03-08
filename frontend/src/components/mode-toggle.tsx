@@ -57,7 +57,7 @@ export function ModeToggle() {
         
         {/* System mode gears */}
         <div className={`absolute inset-0 flex items-center justify-around px-2 transition-opacity duration-300 ${theme === 'system' ? 'opacity-100' : 'opacity-0'}`}>
-           <Settings className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 animate-[spin_4s_linear_infinite]" />
+           <Settings className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400 animate-[spin_4s_linear_infinite]" />
            <Settings className="w-4 h-4 text-slate-300 dark:text-slate-600 animate-[spin_3s_linear_infinite_reverse]" />
         </div>
       </div>

@@ -28,20 +28,20 @@ const PROVIDER_META: Record<string, {
     name: string; color: string
     needsKey: boolean; needsUrl: boolean; placeholder: string; urlPlaceholder?: string
 }> = {
-    openai: { name: 'OpenAI', color: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300', needsKey: true, needsUrl: false, placeholder: 'sk-proj-…' },
-    anthropic: { name: 'Anthropic', color: 'bg-orange-500/10 border-orange-500/20 text-orange-300', needsKey: true, needsUrl: false, placeholder: 'sk-ant-…' },
-    gemini: { name: 'Google Gemini', color: 'bg-blue-500/10 border-blue-500/20 text-blue-300', needsKey: true, needsUrl: false, placeholder: 'AIza…' },
-    groq: { name: 'Groq', color: 'bg-yellow-500/10 border-yellow-500/20 text-yellow-300', needsKey: true, needsUrl: false, placeholder: 'gsk_…' },
-    deepseek: { name: 'DeepSeek', color: 'bg-cyan-500/10 border-cyan-500/20 text-cyan-300', needsKey: true, needsUrl: false, placeholder: 'sk-…' },
-    mistral: { name: 'Mistral AI', color: 'bg-purple-500/10 border-purple-500/20 text-purple-300', needsKey: true, needsUrl: false, placeholder: 'Key…' },
-    openrouter: { name: 'OpenRouter', color: 'bg-pink-500/10 border-pink-500/20 text-pink-300', needsKey: true, needsUrl: false, placeholder: 'sk-or-…' },
-    xai: { name: 'xAI (Grok)', color: 'bg-gray-500/10 border-gray-500/20 text-gray-300', needsKey: true, needsUrl: false, placeholder: 'xai-…' },
-    cohere: { name: 'Cohere', color: 'bg-teal-500/10 border-teal-500/20 text-teal-300', needsKey: true, needsUrl: false, placeholder: 'API key…' },
-    zhipuai: { name: 'Z.AI (ZhipuAI)', color: 'bg-indigo-500/10 border-indigo-500/20 text-indigo-300', needsKey: true, needsUrl: false, placeholder: 'API key…' },
-    huggingface: { name: 'HuggingFace', color: 'bg-orange-400/10 border-orange-400/20 text-orange-200', needsKey: true, needsUrl: false, placeholder: 'hf_…' },
-    ollama: { name: 'Ollama', color: 'bg-lime-500/10 border-lime-500/20 text-lime-300', needsKey: false, needsUrl: true, placeholder: 'Token (optional)', urlPlaceholder: 'http://localhost:11434' },
-    'custom-openai': { name: 'Custom OpenAI-compatible', color: 'bg-violet-500/10 border-violet-500/20 text-violet-300', needsKey: false, needsUrl: true, placeholder: 'Token (optional)', urlPlaceholder: 'https://your-api.com' },
-    'custom-anthropic': { name: 'Custom Anthropic-compat.', color: 'bg-rose-500/10 border-rose-500/20 text-rose-300', needsKey: false, needsUrl: true, placeholder: 'Token (optional)', urlPlaceholder: 'https://your-api.com' },
+    openai: { name: 'OpenAI', color: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700', needsKey: true, needsUrl: false, placeholder: 'sk-proj-…' },
+    anthropic: { name: 'Anthropic', color: 'bg-orange-500/10 border-orange-500/20 text-orange-700', needsKey: true, needsUrl: false, placeholder: 'sk-ant-…' },
+    gemini: { name: 'Google Gemini', color: 'bg-blue-500/10 border-blue-500/20 text-blue-700', needsKey: true, needsUrl: false, placeholder: 'AIza…' },
+    groq: { name: 'Groq', color: 'bg-yellow-500/10 border-yellow-500/20 text-yellow-700', needsKey: true, needsUrl: false, placeholder: 'gsk_…' },
+    deepseek: { name: 'DeepSeek', color: 'bg-cyan-500/10 border-cyan-500/20 text-cyan-700', needsKey: true, needsUrl: false, placeholder: 'sk-…' },
+    mistral: { name: 'Mistral AI', color: 'bg-purple-500/10 border-purple-500/20 text-purple-700', needsKey: true, needsUrl: false, placeholder: 'Key…' },
+    openrouter: { name: 'OpenRouter', color: 'bg-pink-500/10 border-pink-500/20 text-pink-700', needsKey: true, needsUrl: false, placeholder: 'sk-or-…' },
+    xai: { name: 'xAI (Grok)', color: 'bg-gray-500/10 border-gray-500/20 text-gray-700', needsKey: true, needsUrl: false, placeholder: 'xai-…' },
+    cohere: { name: 'Cohere', color: 'bg-teal-500/10 border-teal-500/20 text-teal-700', needsKey: true, needsUrl: false, placeholder: 'API key…' },
+    zhipuai: { name: 'Z.AI (ZhipuAI)', color: 'bg-indigo-500/10 border-indigo-500/20 text-indigo-700', needsKey: true, needsUrl: false, placeholder: 'API key…' },
+    huggingface: { name: 'HuggingFace', color: 'bg-orange-400/10 border-orange-400/20 text-orange-700', needsKey: true, needsUrl: false, placeholder: 'hf_…' },
+    ollama: { name: 'Ollama', color: 'bg-lime-500/10 border-lime-500/20 text-lime-700', needsKey: false, needsUrl: true, placeholder: 'Token (optional)', urlPlaceholder: 'http://localhost:11434' },
+    'custom-openai': { name: 'Custom OpenAI-compatible', color: 'bg-violet-500/10 border-violet-500/20 text-violet-700', needsKey: false, needsUrl: true, placeholder: 'Token (optional)', urlPlaceholder: 'https://your-api.com' },
+    'custom-anthropic': { name: 'Custom Anthropic-compat.', color: 'bg-rose-500/10 border-rose-500/20 text-rose-700', needsKey: false, needsUrl: true, placeholder: 'Token (optional)', urlPlaceholder: 'https://your-api.com' },
 }
 const PROVIDER_NAMES = Object.keys(PROVIDER_META)
 
@@ -491,9 +491,9 @@ function LLMSettings() {
 const VIRTUAL_PROVIDER_TYPES = ['router', 'council', 'optimizer'] as const
 type VirtualProviderType = typeof VIRTUAL_PROVIDER_TYPES[number]
 const VIRTUAL_PROVIDER_META: Record<VirtualProviderType, { name: string; color: string; description: string }> = {
-    router: { name: 'Router (Virtual)', color: 'bg-indigo-500/10 border-indigo-500/20 text-indigo-300', description: 'Automatically routes requests to the best model based on complexity' },
-    council: { name: 'Council (Virtual)', color: 'bg-purple-500/10 border-purple-500/20 text-purple-300', description: 'Multiple models deliberate and the best response is selected' },
-    optimizer: { name: 'Optimizer (Virtual)', color: 'bg-teal-500/10 border-teal-500/20 text-teal-300', description: 'Optimizes prompts before forwarding to a target model' },
+    router: { name: 'Router (Virtual)', color: 'bg-indigo-500/10 border-indigo-500/20 text-indigo-700', description: 'Automatically routes requests to the best model based on complexity' },
+    council: { name: 'Council (Virtual)', color: 'bg-purple-500/10 border-purple-500/20 text-purple-700', description: 'Multiple models deliberate and the best response is selected' },
+    optimizer: { name: 'Optimizer (Virtual)', color: 'bg-teal-500/10 border-teal-500/20 text-teal-700', description: 'Optimizes prompts before forwarding to a target model' },
 }
 
 function VirtualProviderPanel({ providerType, onAdded }: { providerType: VirtualProviderType; onAdded: () => void }) {
@@ -533,7 +533,7 @@ function VirtualProviderPanel({ providerType, onAdded }: { providerType: Virtual
             <p className="text-[10px] text-muted-foreground">
                 After saving, configure this virtual provider's settings via the provider card.
             </p>
-            {saveError && <div className="text-xs p-2.5 rounded-lg bg-destructive/10 text-red-300 border border-destructive/20">{saveError}</div>}
+            {saveError && <div className="text-xs p-2.5 rounded-lg bg-destructive/10 text-red-700 border border-destructive/20">{saveError}</div>}
             <button className="btn-primary w-full justify-center py-2.5" onClick={handleSave} disabled={saving || !displayName.trim()}>
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                 {saving ? 'Saving…' : `Save ${meta.name}`}
@@ -692,7 +692,7 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
                                 </div>
                                 <div className="text-[10px] leading-tight font-medium truncate">{m.name}</div>
                                 {isLocalProvider(id) && (
-                                    <div className="mt-1 text-[9px] text-lime-300/90 font-medium">Local</div>
+                                    <div className="mt-1 text-[9px] text-lime-700 font-medium">Local</div>
                                 )}
                             </button>
                         )
@@ -728,7 +728,7 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
             <div className="space-y-2">
                 <label className="text-xs text-muted-foreground font-medium block">2. Enter credentials</label>
                 {isLocalProvider(providerName) && (
-                    <p className="text-[10px] text-lime-300/90">Local provider (runs on this machine)</p>
+                    <p className="text-[10px] text-lime-700">Local provider (runs on this machine)</p>
                 )}
                 <input className="input text-sm" placeholder={`Display name (default: ${meta?.name})`} value={displayName} onChange={e => setDisplayName(e.target.value)} />
 
@@ -778,7 +778,7 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
                 </div>
 
                 {modelError && (
-                    <div className="text-xs p-3 rounded-lg bg-destructive/10 text-red-300 border border-destructive/20 space-y-1">
+                    <div className="text-xs p-3 rounded-lg bg-destructive/10 text-red-700 border border-destructive/20 space-y-1">
                         <p className="font-medium">Could not fetch model list</p>
                         <p className="opacity-80">{modelError}</p>
                         <p className="text-muted-foreground mt-1">Type model ID directly:</p>
@@ -821,7 +821,7 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
                 )}
             </div>
 
-            {saveError && <div className="text-xs p-2.5 rounded-lg bg-destructive/10 text-red-300 border border-destructive/20">{saveError}</div>}
+            {saveError && <div className="text-xs p-2.5 rounded-lg bg-destructive/10 text-red-700 border border-destructive/20">{saveError}</div>}
 
             {/* Step 4 — Save */}
             <button className="btn-primary w-full justify-center py-2.5" onClick={handleSave} disabled={saving || totalSelected === 0}>
@@ -906,7 +906,7 @@ function ProviderCard({ provider, expanded, onToggle, onDelete, onSetDefault }: 
                         {testing ? 'Testing…' : 'Test Connection'}
                     </button>
                     {testResult && (
-                        <div className={`flex items-start gap-2 text-xs p-2.5 rounded-lg ${testResult.success ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' : 'bg-destructive/10 text-red-300 border border-destructive/20'}`}>
+                        <div className={`flex items-start gap-2 text-xs p-2.5 rounded-lg ${testResult.success ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20' : 'bg-destructive/10 text-red-700 border border-destructive/20'}`}>
                             {testResult.success ? <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" /> : <XCircle className="w-3.5 h-3.5 flex-shrink-0" />}
                             {testResult.message}
                         </div>
@@ -1312,7 +1312,7 @@ function AutomatedTriggersTab() {
                 disabled={savingKey === AUTO_BOOKMARK_EXTRACTION_KEY}
             >
                 <div className="flex items-start gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-blue-500/15 border border-blue-400/30 flex items-center justify-center text-blue-300">
+                    <div className="w-9 h-9 rounded-lg bg-blue-500/15 border border-blue-400/30 flex items-center justify-center text-blue-700">
                         <Globe2 className="w-4 h-4" />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -1599,11 +1599,11 @@ const LOG_LEVEL_OPTIONS: Array<{ value: 'all' | LogLevel; label: string }> = [
 ]
 
 const LOG_LEVEL_CLASS: Record<LogLevel, string> = {
-    error: 'bg-red-500/15 border-red-400/30 text-red-300',
-    warn: 'bg-amber-500/15 border-amber-300/35 text-amber-200',
-    info: 'bg-blue-500/15 border-blue-300/35 text-blue-200',
-    debug: 'bg-cyan-500/15 border-cyan-300/35 text-cyan-200',
-    trace: 'bg-purple-500/15 border-purple-300/35 text-purple-200',
+    error: 'bg-red-500/15 border-red-400/30 text-red-700',
+    warn: 'bg-amber-500/15 border-amber-300/35 text-amber-700',
+    info: 'bg-blue-500/15 border-blue-300/35 text-blue-700',
+    debug: 'bg-cyan-500/15 border-cyan-300/35 text-cyan-700',
+    trace: 'bg-purple-500/15 border-purple-300/35 text-purple-700',
     unknown: 'bg-muted/60 border-border/60 text-muted-foreground',
 }
 
@@ -1660,7 +1660,7 @@ function HITLTab() {
                     </p>
                 </div>
                 {requests.length > 0 && (
-                    <span className="px-2 py-0.5 bg-orange-500/20 text-orange-300 text-xs rounded-full">
+                    <span className="px-2 py-0.5 bg-orange-500/20 text-orange-700 text-xs rounded-full">
                         {requests.length} pending
                     </span>
                 )}
@@ -1683,7 +1683,7 @@ function HITLTab() {
                             <div className="flex items-start justify-between">
                                 <div className="flex-1">
                                     <div className="flex items-center gap-2 mb-2">
-                                        <span className="px-2 py-0.5 bg-orange-500/20 text-orange-300 text-xs rounded">
+                                        <span className="px-2 py-0.5 bg-orange-500/20 text-orange-700 text-xs rounded">
                                             {req.tool_id}
                                         </span>
                                         <span className="text-xs text-muted-foreground">
@@ -1702,7 +1702,7 @@ function HITLTab() {
                                         onClick={() => approveMutation.mutate(req.id)}
                                         disabled={approveMutation.isPending}
                                         className="flex items-center gap-1 px-3 py-1.5 bg-green-500/20 hover:bg-green-500/30
-                                                 text-green-300 rounded-lg text-sm transition-colors disabled:opacity-50"
+                                                 text-green-700 rounded-lg text-sm transition-colors disabled:opacity-50"
                                     >
                                         {approveMutation.isPending ? (
                                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -1715,7 +1715,7 @@ function HITLTab() {
                                         onClick={() => denyMutation.mutate(req.id)}
                                         disabled={denyMutation.isPending}
                                         className="flex items-center gap-1 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30
-                                                 text-red-300 rounded-lg text-sm transition-colors disabled:opacity-50"
+                                                 text-red-700 rounded-lg text-sm transition-colors disabled:opacity-50"
                                     >
                                         {denyMutation.isPending ? (
                                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -1780,7 +1780,7 @@ function ToolsTab() {
         shell: 'text-red-400',
         language: 'text-purple-400',
         web: 'text-green-400',
-        default: 'text-gray-400',
+        default: 'text-muted-foreground',
     }
 
     return (
@@ -1799,7 +1799,7 @@ function ToolsTab() {
                     onClick={() => syncMutation.mutate()}
                     disabled={syncMutation.isPending}
                     className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30
-                             text-purple-300 rounded-lg text-sm transition-colors disabled:opacity-50"
+                             text-purple-700 rounded-lg text-sm transition-colors disabled:opacity-50"
                 >
                     {syncMutation.isPending ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -1818,7 +1818,7 @@ function ToolsTab() {
                         className={`px-2.5 py-1 rounded text-xs transition-colors ${
                             selectedCategory === null
                                 ? 'bg-accent/20 text-accent'
-                                : 'bg-gray-700/50 text-gray-400 hover:text-white'
+                                : 'bg-gray-700/50 text-muted-foreground hover:text-white'
                         }`}
                     >
                         All ({tools.length})
@@ -1830,7 +1830,7 @@ function ToolsTab() {
                             className={`px-2.5 py-1 rounded text-xs transition-colors ${
                                 selectedCategory === cat.name
                                     ? 'bg-accent/20 text-accent'
-                                    : 'bg-gray-700/50 text-gray-400 hover:text-white'
+                                    : 'bg-gray-700/50 text-muted-foreground hover:text-white'
                             }`}
                         >
                             {cat.name} ({cat.count})
@@ -1860,15 +1860,15 @@ function ToolsTab() {
                                             {tool.category}
                                         </span>
                                         <span className={`text-xs px-1.5 py-0.5 rounded ${
-                                            tool.risk_level === 'low' ? 'bg-green-500/20 text-green-300' :
-                                            tool.risk_level === 'medium' ? 'bg-yellow-500/20 text-yellow-300' :
-                                            tool.risk_level === 'high' ? 'bg-orange-500/20 text-orange-300' :
-                                            'bg-red-500/20 text-red-300'
+                                            tool.risk_level === 'low' ? 'bg-green-500/20 text-green-700' :
+                                            tool.risk_level === 'medium' ? 'bg-yellow-500/20 text-yellow-700' :
+                                            tool.risk_level === 'high' ? 'bg-orange-500/20 text-orange-700' :
+                                            'bg-red-500/20 text-red-700'
                                         }`}>
                                             {tool.risk_level}
                                         </span>
                                         {!tool.is_enabled && (
-                                            <span className="text-xs px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-400">
+                                            <span className="text-xs px-1.5 py-0.5 rounded bg-gray-500/20 text-muted-foreground">
                                                 disabled
                                             </span>
                                         )}
@@ -1965,7 +1965,7 @@ function SkillsTab() {
                     </button>
                 </div>
                 {installResult && (
-                    <div className={`flex items-start gap-2 text-xs p-2.5 rounded-lg ${installResult.success ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' : 'bg-destructive/10 text-red-300 border border-destructive/20'}`}>
+                    <div className={`flex items-start gap-2 text-xs p-2.5 rounded-lg ${installResult.success ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20' : 'bg-destructive/10 text-red-700 border border-destructive/20'}`}>
                         {installResult.success ? <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" /> : <XCircle className="w-3.5 h-3.5 flex-shrink-0" />}
                         {installResult.message}
                     </div>
@@ -2280,14 +2280,14 @@ function ContainerLogsSubTab({ workspaceId }: { workspaceId: string }) {
                     {paused ? 'Resume' : 'Pause'}
                 </button>
                 <button
-                    className="btn-ghost text-xs py-1.5 px-2.5 gap-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/20 shrink-0"
+                    className="btn-ghost text-xs py-1.5 px-2.5 gap-1.5 text-red-400 hover:text-red-700 hover:bg-red-900/20 shrink-0"
                     onClick={() => setLogs([])}
                 >
                     <Trash2 className="w-3.5 h-3.5" /> Clear
                 </button>
             </div>
 
-            <div className="min-h-0 flex-1 glass-card border border-border/50 rounded-xl overflow-y-auto p-4 font-mono text-xs bg-black/40 text-gray-300 flex flex-col gap-1 relative">
+            <div className="min-h-0 flex-1 glass-card border border-border/50 rounded-xl overflow-y-auto p-4 font-mono text-xs bg-black/40 text-gray-700 flex flex-col gap-1 relative">
                 {filteredLogs.length === 0 ? (
                     <div className="m-auto text-muted-foreground opacity-50 flex items-center gap-2">
                         {isConnected ? (

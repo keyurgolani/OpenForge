@@ -318,7 +318,7 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
                     {configured.map(c => (
                         <div key={c.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/5 border border-emerald-500/20 text-xs">
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-                            <span className="text-emerald-300 truncate">{c.name}</span>
+                            <span className="text-emerald-700 truncate">{c.name}</span>
                         </div>
                     ))}
                 </div>
@@ -342,7 +342,7 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
                                 </div>
                                 <div className="text-[10px] leading-tight font-medium truncate">{p.name}</div>
                                 {isLocalProvider(p.id) && (
-                                    <div className="mt-1 text-[9px] text-lime-300/90 font-medium">Local</div>
+                                    <div className="mt-1 text-[9px] text-lime-700 font-medium">Local</div>
                                 )}
                             </button>
                         ))}
@@ -355,7 +355,7 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
                         <div className="space-y-2">
                             <label className="text-xs text-muted-foreground font-medium block">2. Enter credentials</label>
                             {isLocalProvider(selected) && (
-                                <p className="text-[10px] text-lime-300/90">Local provider (runs on this machine)</p>
+                                <p className="text-[10px] text-lime-700">Local provider (runs on this machine)</p>
                             )}
                             <input className="input text-sm" placeholder={`Display name (default: ${provider?.name})`} value={displayName} onChange={e => setDisplayName(e.target.value)} />
 
@@ -404,7 +404,7 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
                             </div>
 
                             {testResult && (
-                                <div className={`flex items-center gap-2 text-xs p-2.5 rounded-lg ${testResult.success ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' : 'bg-destructive/10 text-red-300 border border-destructive/20'}`}>
+                                <div className={`flex items-center gap-2 text-xs p-2.5 rounded-lg ${testResult.success ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20' : 'bg-destructive/10 text-red-700 border border-destructive/20'}`}>
                                     {testResult.success ? <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" /> : <XCircle className="w-3.5 h-3.5 flex-shrink-0" />}
                                     {testResult.message}
                                 </div>
@@ -595,7 +595,7 @@ function AutomationPreferencesStep({ onNext, loading }: { onNext: () => void | P
                     onClick={() => setAutoBookmarkExtractionEnabled(prev => !prev)}
                 >
                     <div className="flex items-start gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-blue-500/15 border border-blue-400/30 flex items-center justify-center text-blue-300">
+                        <div className="w-9 h-9 rounded-lg bg-blue-500/15 border border-blue-400/30 flex items-center justify-center text-blue-700">
                             <Link className="w-4 h-4" />
                         </div>
                         <div className="flex-1 min-w-0">
@@ -614,7 +614,7 @@ function AutomationPreferencesStep({ onNext, loading }: { onNext: () => void | P
                     onClick={() => setScheduledJobsEnabled(prev => !prev)}
                 >
                     <div className="flex items-start gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center text-emerald-300">
+                        <div className="w-9 h-9 rounded-lg bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center text-emerald-700">
                             <Play className="w-4 h-4" />
                         </div>
                         <div className="flex-1 min-w-0">

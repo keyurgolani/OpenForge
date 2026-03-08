@@ -101,14 +101,14 @@ export function MCPServerSettings({ className = '' }: MCPServerSettingsProps) {
                         <Server className="w-5 h-5 text-purple-400" />
                         MCP Servers
                     </h2>
-                    <p className="text-sm text-gray-400 mt-1">
+                    <p className="text-sm text-muted-foreground mt-1">
                         Connect external MCP servers for additional tools
                     </p>
                 </div>
                 <button
                     onClick={() => setShowAddForm(!showAddForm)}
                     className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30
-                             text-purple-300 rounded-lg text-sm transition-colors"
+                             text-purple-700 rounded-lg text-sm transition-colors"
                 >
                     <Plus className="w-4 h-4" />
                     Add Server
@@ -122,7 +122,7 @@ export function MCPServerSettings({ className = '' }: MCPServerSettingsProps) {
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-xs text-gray-400 mb-1">Name *</label>
+                            <label className="block text-xs text-muted-foreground mb-1">Name *</label>
                             <input
                                 type="text"
                                 value={newServer.name}
@@ -133,7 +133,7 @@ export function MCPServerSettings({ className = '' }: MCPServerSettingsProps) {
                             />
                         </div>
                         <div>
-                            <label className="block text-xs text-gray-400 mb-1">URL *</label>
+                            <label className="block text-xs text-muted-foreground mb-1">URL *</label>
                             <input
                                 type="text"
                                 value={newServer.url}
@@ -146,7 +146,7 @@ export function MCPServerSettings({ className = '' }: MCPServerSettingsProps) {
                     </div>
 
                     <div>
-                        <label className="block text-xs text-gray-400 mb-1">Description</label>
+                        <label className="block text-xs text-muted-foreground mb-1">Description</label>
                         <input
                             type="text"
                             value={newServer.description}
@@ -159,7 +159,7 @@ export function MCPServerSettings({ className = '' }: MCPServerSettingsProps) {
 
                     <div className="grid grid-cols-3 gap-4">
                         <div>
-                            <label className="block text-xs text-gray-400 mb-1">Auth Type</label>
+                            <label className="block text-xs text-muted-foreground mb-1">Auth Type</label>
                             <select
                                 value={newServer.auth_type}
                                 onChange={(e) => setNewServer({ ...newServer, auth_type: e.target.value })}
@@ -174,7 +174,7 @@ export function MCPServerSettings({ className = '' }: MCPServerSettingsProps) {
                         </div>
                         {newServer.auth_type !== 'none' && (
                             <div className="col-span-2">
-                                <label className="block text-xs text-gray-400 mb-1">Auth Value</label>
+                                <label className="block text-xs text-muted-foreground mb-1">Auth Value</label>
                                 <div className="relative">
                                     <input
                                         type={showAuthValue ? 'text' : 'password'}
@@ -187,7 +187,7 @@ export function MCPServerSettings({ className = '' }: MCPServerSettingsProps) {
                                     <button
                                         type="button"
                                         onClick={() => setShowAuthValue(!showAuthValue)}
-                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white"
                                     >
                                         {showAuthValue ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                     </button>
@@ -197,7 +197,7 @@ export function MCPServerSettings({ className = '' }: MCPServerSettingsProps) {
                     </div>
 
                     <div>
-                        <label className="block text-xs text-gray-400 mb-1">Default Risk Level</label>
+                        <label className="block text-xs text-muted-foreground mb-1">Default Risk Level</label>
                         <select
                             value={newServer.default_risk_level}
                             onChange={(e) => setNewServer({ ...newServer, default_risk_level: e.target.value })}
@@ -214,7 +214,7 @@ export function MCPServerSettings({ className = '' }: MCPServerSettingsProps) {
                     <div className="flex justify-end gap-2">
                         <button
                             onClick={() => setShowAddForm(false)}
-                            className="px-3 py-1.5 text-gray-400 hover:text-white text-sm transition-colors"
+                            className="px-3 py-1.5 text-muted-foreground hover:text-white text-sm transition-colors"
                         >
                             Cancel
                         </button>
@@ -238,7 +238,7 @@ export function MCPServerSettings({ className = '' }: MCPServerSettingsProps) {
                     <Loader2 className="w-6 h-6 animate-spin text-purple-400" />
                 </div>
             ) : servers.length === 0 ? (
-                <div className="text-center py-8 text-gray-400">
+                <div className="text-center py-8 text-muted-foreground">
                     <Server className="w-12 h-12 mx-auto mb-3 opacity-50" />
                     <p>No MCP servers configured</p>
                     <p className="text-sm mt-1">Add a server to enable external tools</p>
@@ -316,7 +316,7 @@ function MCPServerCard({
                     }`} />
                     <div>
                         <h3 className="font-medium text-white">{server.name}</h3>
-                        <p className="text-xs text-gray-400">{server.url}</p>
+                        <p className="text-xs text-muted-foreground">{server.url}</p>
                     </div>
                 </div>
 
@@ -325,13 +325,13 @@ function MCPServerCard({
                         <Shield className="w-3 h-3 inline mr-1" />
                         {server.default_risk_level}
                     </span>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-muted-foreground">
                         {server.tool_count || 0} tools
                     </span>
                     {isExpanded ? (
-                        <ChevronUp className="w-4 h-4 text-gray-400" />
+                        <ChevronUp className="w-4 h-4 text-muted-foreground" />
                     ) : (
-                        <ChevronDown className="w-4 h-4 text-gray-400" />
+                        <ChevronDown className="w-4 h-4 text-muted-foreground" />
                     )}
                 </div>
             </div>
@@ -340,7 +340,7 @@ function MCPServerCard({
             {isExpanded && (
                 <div className="border-t border-gray-700 p-4 space-y-4">
                     {server.description && (
-                        <p className="text-sm text-gray-400">{server.description}</p>
+                        <p className="text-sm text-muted-foreground">{server.description}</p>
                     )}
 
                     {/* Actions */}
@@ -349,8 +349,8 @@ function MCPServerCard({
                             onClick={(e) => { e.stopPropagation(); onToggleEnabled(!server.is_enabled) }}
                             className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-colors ${
                                 server.is_enabled
-                                    ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                                    : 'bg-green-500/20 text-green-300 hover:bg-green-500/30'
+                                    ? 'bg-gray-700 text-gray-700 hover:bg-gray-600'
+                                    : 'bg-green-500/20 text-green-700 hover:bg-green-500/30'
                             }`}
                         >
                             <Power className="w-3 h-3" />
@@ -360,7 +360,7 @@ function MCPServerCard({
                             onClick={(e) => { e.stopPropagation(); onDiscover() }}
                             disabled={isDiscovering}
                             className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/20 hover:bg-blue-500/30
-                                     text-blue-300 rounded text-xs transition-colors disabled:opacity-50"
+                                     text-blue-700 rounded text-xs transition-colors disabled:opacity-50"
                         >
                             {isDiscovering ? (
                                 <Loader2 className="w-3 h-3 animate-spin" />
@@ -373,7 +373,7 @@ function MCPServerCard({
                             onClick={(e) => { e.stopPropagation(); onDelete() }}
                             disabled={isDeleting}
                             className="flex items-center gap-1.5 px-2.5 py-1 bg-red-500/20 hover:bg-red-500/30
-                                     text-red-300 rounded text-xs transition-colors disabled:opacity-50"
+                                     text-red-700 rounded text-xs transition-colors disabled:opacity-50"
                         >
                             {isDeleting ? (
                                 <Loader2 className="w-3 h-3 animate-spin" />
@@ -386,10 +386,10 @@ function MCPServerCard({
 
                     {/* Tools List */}
                     <div>
-                        <h4 className="text-xs font-medium text-gray-300 mb-2">Discovered Tools</h4>
+                        <h4 className="text-xs font-medium text-gray-700 mb-2">Discovered Tools</h4>
                         {isLoadingTools ? (
                             <div className="flex items-center justify-center py-4">
-                                <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                             </div>
                         ) : toolsData?.tools?.length > 0 ? (
                             <div className="max-h-60 overflow-y-auto space-y-1">

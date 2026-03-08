@@ -47,9 +47,9 @@ export function HITLApprovalCard({ request, onApprove, onReject }: HITLApprovalC
       <div className="px-4 py-3 space-y-3">
         <div className="flex items-center gap-2">
           <Wrench className="w-4 h-4 text-purple-400 shrink-0" />
-          <span className="font-mono text-sm text-purple-300">{request.toolName}</span>
+          <span className="font-mono text-sm text-purple-700">{request.toolName}</span>
           {request.riskLevel && (
-            <span className="ml-auto text-[10px] uppercase tracking-widest px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30">
+            <span className="ml-auto text-[10px] uppercase tracking-widest px-2 py-0.5 rounded bg-red-500/20 text-red-700 border border-red-500/30">
               {request.riskLevel} Risk
             </span>
           )}
@@ -82,7 +82,7 @@ export function HITLApprovalCard({ request, onApprove, onReject }: HITLApprovalC
           <button
             onClick={handleReject}
             disabled={loading !== null}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-red-500/30 bg-red-500/10 text-red-700 hover:bg-red-500/20 transition-colors disabled:opacity-50"
           >
             <X className="w-3.5 h-3.5" />
             {loading === 'reject' ? 'Rejecting...' : 'Reject'}

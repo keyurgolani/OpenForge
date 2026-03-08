@@ -36,7 +36,7 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
         className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-white/5 transition-colors"
       >
         <Wrench className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-        <span className="font-mono text-purple-300">{toolCall.name}</span>
+        <span className="font-mono text-purple-700">{toolCall.name}</span>
         <span className="flex-1" />
         {durationStr && (
           <span className="flex items-center gap-1 text-white/40">
@@ -72,7 +72,7 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
           {toolCall.error && (
             <div>
               <div className="text-[10px] uppercase tracking-widest text-red-400/60 mb-1">Error</div>
-              <pre className="text-xs text-red-300 bg-red-950/30 rounded p-2 overflow-x-auto whitespace-pre-wrap">
+              <pre className="text-xs text-red-700 bg-red-950/30 rounded p-2 overflow-x-auto whitespace-pre-wrap">
                 {toolCall.error}
               </pre>
             </div>
