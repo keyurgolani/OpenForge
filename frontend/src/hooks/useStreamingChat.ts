@@ -26,6 +26,7 @@ interface AttachmentProcessed {
 }
 
 interface SendMessageOptions {
+    endpoint_id?: string
     provider_id?: string
     model_id?: string
     attachment_ids?: string[]

@@ -22,8 +22,8 @@ def _to_response(workspace: Workspace, knowledge_count: int = 0, conv_count: int
         description=workspace.description,
         icon=workspace.icon,
         color=workspace.color,
-        llm_provider_id=workspace.llm_provider_id,
-        llm_model=workspace.llm_model,
+        chat_endpoint_id=workspace.chat_endpoint_id,
+        vision_endpoint_id=workspace.vision_endpoint_id,
         sort_order=workspace.sort_order,
         tools_enabled=getattr(workspace, 'tools_enabled', False) or False,
         agent_id=getattr(workspace, 'agent_id', None),
@@ -47,8 +47,8 @@ class WorkspaceService:
             description=data.description,
             icon=data.icon,
             color=data.color,
-            llm_provider_id=data.llm_provider_id,
-            llm_model=data.llm_model,
+            chat_endpoint_id=data.chat_endpoint_id,
+            vision_endpoint_id=data.vision_endpoint_id,
             sort_order=max_order + 1,
         )
         db.add(workspace)
@@ -114,10 +114,10 @@ class WorkspaceService:
             ws.icon = data.icon
         if data.color is not None:
             ws.color = data.color
-        if data.llm_provider_id is not None:
-            ws.llm_provider_id = data.llm_provider_id
-        if data.llm_model is not None:
-            ws.llm_model = data.llm_model
+        if data.chat_endpoint_id is not None:
+            ws.chat_endpoint_id = data.chat_endpoint_id
+        if data.vision_endpoint_id is not None:
+            ws.vision_endpoint_id = data.vision_endpoint_id
         if data.sort_order is not None:
             ws.sort_order = data.sort_order
         if data.tools_enabled is not None and hasattr(ws, 'tools_enabled'):

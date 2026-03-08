@@ -3,9 +3,9 @@ Search knowledge tool for OpenForge.
 
 Searches across workspace knowledge using semantic search.
 """
-from protocol import BaseTool, ToolResult, ToolContext
-from config import get_settings
-import aiohttp
+from tool_server.protocol import BaseTool, ToolResult, ToolContext
+from tool_server.config import get_settings
+import httpx
 import logging
 
 logger = logging.getLogger("tool-server.memory")
@@ -90,25 +90,23 @@ Use for:
             if types:
                 search_params["types"] = ",".join(types)
 
-            timeout = aiohttp.ClientTimeout(total=30)
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(url, params=search_params)
 
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(url, params=search_params) as response:
-                    if response.status == 404:
-                        return ToolResult(
-                            success=False,
-                            output=None,
-                            error="Workspace not found or search not available"
-                        )
-                    if response.status != 200:
-                        error_text = await response.text()
-                        return ToolResult(
-                            success=False,
-                            output=None,
-                            error=f"Search API error: {response.status}"
-                        )
+            if response.status_code == 404:
+                return ToolResult(
+                    success=False,
+                    output=None,
+                    error="Workspace not found or search not available"
+                )
+            if response.status_code != 200:
+                return ToolResult(
+                    success=False,
+                    output=None,
+                    error=f"Search API error: {response.status_code}"
+                )
 
-                    data = await response.json()
+            data = response.json()
 
             results = []
             for item in data.get("results", []):
@@ -132,7 +130,7 @@ Use for:
                 }
             )
 
-        except aiohttp.ClientError as e:
+        except httpx.RequestError as e:
             return ToolResult(
                 success=False,
                 output=None,

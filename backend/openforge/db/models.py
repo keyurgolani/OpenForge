@@ -34,10 +34,11 @@ class Config(Base):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# LLM Provider Models
+# LLM Provider Models (v3 - redesigned for composable virtual providers)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class LLMProvider(Base):
+    """Standard LLM provider — an API connection with credentials."""
     __tablename__ = "llm_providers"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -45,14 +46,9 @@ class LLMProvider(Base):
     )
     provider_name: Mapped[str] = mapped_column(String(50), nullable=False)
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    # v2: provider type (standard, router, council)
-    provider_type: Mapped[str] = mapped_column(String(20), nullable=False, default="standard")
     api_key_enc: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
     endpoint_id: Mapped[str] = mapped_column(String(50), nullable=False, default="default")
     base_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    default_model: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
-    enabled_models: Mapped[List[Dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
-    is_system_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=now_utc
     )
@@ -60,36 +56,157 @@ class LLMProvider(Base):
         DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc
     )
 
-    workspaces: Mapped[list["Workspace"]] = relationship(back_populates="llm_provider", foreign_keys="Workspace.llm_provider_id")
-    router_config: Mapped[Optional["LLMRouterConfig"]] = relationship(back_populates="provider", uselist=False, foreign_keys="LLMRouterConfig.llm_provider_id")
-    council_config: Mapped[Optional["LLMCouncilConfig"]] = relationship(back_populates="provider", uselist=False, foreign_keys="LLMCouncilConfig.llm_provider_id")
+    models: Mapped[list["LLMModel"]] = relationship(back_populates="provider", cascade="all, delete-orphan")
+
+
+class LLMModel(Base):
+    """A discovered/registered model for a standard provider."""
+    __tablename__ = "llm_models"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    provider_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("llm_providers.id", ondelete="CASCADE"), nullable=False
+    )
+    model_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    display_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    capabilities: Mapped[List[str]] = mapped_column(JSONB, nullable=False, default=list)  # ["chat", "vision"]
+    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=now_utc
+    )
+
+    provider: Mapped["LLMProvider"] = relationship(back_populates="models")
 
     __table_args__ = (
-        Index(
-            "idx_llm_providers_system_default",
-            "is_system_default",
-            unique=True,
-            postgresql_where="is_system_default = TRUE",
+        UniqueConstraint("provider_id", "model_id", name="uq_llm_model_provider_model"),
+    )
+
+
+class LLMVirtualProvider(Base):
+    """Virtual provider — orchestrates multiple endpoints (router, council, optimizer)."""
+    __tablename__ = "llm_virtual_providers"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    virtual_type: Mapped[str] = mapped_column(String(20), nullable=False)  # router, council, optimizer
+    display_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=now_utc
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc
+    )
+
+    router_config: Mapped[Optional["LLMRouterConfig"]] = relationship(
+        back_populates="virtual_provider", uselist=False, cascade="all, delete-orphan"
+    )
+    council_config: Mapped[Optional["LLMCouncilConfig"]] = relationship(
+        back_populates="virtual_provider", uselist=False, cascade="all, delete-orphan"
+    )
+    optimizer_config: Mapped[Optional["LLMOptimizerConfig"]] = relationship(
+        back_populates="virtual_provider", uselist=False, cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "virtual_type IN ('router', 'council', 'optimizer')",
+            name="ck_virtual_type",
         ),
     )
 
 
+class LLMEndpoint(Base):
+    """Unified model reference — points to either a standard provider+model or a virtual provider.
+
+    This is the core abstraction enabling composability: anywhere a model is needed,
+    an endpoint ID is used. The endpoint can resolve to a direct LLM call or recursively
+    through virtual providers.
+    """
+    __tablename__ = "llm_endpoints"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    endpoint_type: Mapped[str] = mapped_column(String(20), nullable=False)  # "standard" or "virtual"
+    display_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    # Standard endpoint fields
+    provider_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("llm_providers.id", ondelete="CASCADE"), nullable=True
+    )
+    model_id: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    # Virtual endpoint field
+    virtual_provider_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("llm_virtual_providers.id", ondelete="CASCADE"), nullable=True
+    )
+    # System defaults
+    is_default_chat: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_default_vision: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_default_tts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_default_stt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=now_utc
+    )
+
+    provider: Mapped[Optional["LLMProvider"]] = relationship(foreign_keys=[provider_id])
+    virtual_provider: Mapped[Optional["LLMVirtualProvider"]] = relationship(foreign_keys=[virtual_provider_id])
+
+    __table_args__ = (
+        CheckConstraint(
+            "endpoint_type IN ('standard', 'virtual')",
+            name="ck_endpoint_type",
+        ),
+        CheckConstraint(
+            "(endpoint_type = 'standard' AND provider_id IS NOT NULL AND model_id IS NOT NULL AND virtual_provider_id IS NULL) OR "
+            "(endpoint_type = 'virtual' AND virtual_provider_id IS NOT NULL AND provider_id IS NULL AND model_id IS NULL)",
+            name="ck_endpoint_consistency",
+        ),
+        Index(
+            "idx_llm_endpoints_default_chat",
+            "is_default_chat",
+            unique=True,
+            postgresql_where="is_default_chat = TRUE",
+        ),
+        Index(
+            "idx_llm_endpoints_default_vision",
+            "is_default_vision",
+            unique=True,
+            postgresql_where="is_default_vision = TRUE",
+        ),
+        Index(
+            "idx_llm_endpoints_default_tts",
+            "is_default_tts",
+            unique=True,
+            postgresql_where="is_default_tts = TRUE",
+        ),
+        Index(
+            "idx_llm_endpoints_default_stt",
+            "is_default_stt",
+            unique=True,
+            postgresql_where="is_default_stt = TRUE",
+        ),
+    )
+
+
+# ── Router ────────────────────────────────────────────────────────────────────
+
 class LLMRouterConfig(Base):
-    """Configuration for LLM router providers that route based on prompt complexity."""
+    """Configuration for a router virtual provider."""
     __tablename__ = "llm_router_config"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    llm_provider_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("llm_providers.id", ondelete="CASCADE"), nullable=False, unique=True
+    virtual_provider_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("llm_virtual_providers.id", ondelete="CASCADE"), nullable=False, unique=True
     )
-    # The lightweight model used to classify prompt complexity
-    routing_model_provider_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("llm_providers.id"), nullable=False
+    # Routing model — an endpoint (can be standard or virtual for full composability)
+    routing_endpoint_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("llm_endpoints.id", ondelete="CASCADE"), nullable=False
     )
-    routing_model: Mapped[str] = mapped_column(String(200), nullable=False)
-    # JSON schema for complexity classification prompt
     routing_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=now_utc
@@ -98,12 +215,13 @@ class LLMRouterConfig(Base):
         DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc
     )
 
-    provider: Mapped["LLMProvider"] = relationship(back_populates="router_config", foreign_keys=[llm_provider_id])
+    virtual_provider: Mapped["LLMVirtualProvider"] = relationship(back_populates="router_config")
+    routing_endpoint: Mapped["LLMEndpoint"] = relationship(foreign_keys=[routing_endpoint_id])
     tiers: Mapped[list["LLMRouterTier"]] = relationship(back_populates="router_config", cascade="all, delete-orphan")
 
 
 class LLMRouterTier(Base):
-    """Models assigned to complexity tiers within a router."""
+    """A complexity tier within a router — target is an endpoint (composable)."""
     __tablename__ = "llm_router_tiers"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -112,39 +230,39 @@ class LLMRouterTier(Base):
     router_config_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("llm_router_config.id", ondelete="CASCADE"), nullable=False
     )
-    complexity_level: Mapped[str] = mapped_column(String(20), nullable=False)  # simple, moderate, complex, expert
-    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # Lower = tried first
-    llm_provider_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("llm_providers.id"), nullable=False
+    complexity_level: Mapped[str] = mapped_column(String(20), nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    endpoint_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("llm_endpoints.id", ondelete="CASCADE"), nullable=False
     )
-    model: Mapped[str] = mapped_column(String(200), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=now_utc
     )
 
     router_config: Mapped["LLMRouterConfig"] = relationship(back_populates="tiers")
+    endpoint: Mapped["LLMEndpoint"] = relationship(foreign_keys=[endpoint_id])
 
     __table_args__ = (
         Index("idx_router_tiers_config", "router_config_id", "complexity_level", "priority"),
     )
 
 
+# ── Council ───────────────────────────────────────────────────────────────────
+
 class LLMCouncilConfig(Base):
-    """Configuration for LLM council providers that query multiple models and judge responses."""
+    """Configuration for a council virtual provider."""
     __tablename__ = "llm_council_config"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    llm_provider_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("llm_providers.id", ondelete="CASCADE"), nullable=False, unique=True
+    virtual_provider_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("llm_virtual_providers.id", ondelete="CASCADE"), nullable=False, unique=True
     )
-    # The strong reasoning model used to judge responses
-    chairman_provider_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("llm_providers.id"), nullable=False
+    # Chairman — an endpoint (composable)
+    chairman_endpoint_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("llm_endpoints.id", ondelete="CASCADE"), nullable=False
     )
-    chairman_model: Mapped[str] = mapped_column(String(200), nullable=False)
-    # Judging prompt template
     judging_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     parallel_execution: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -154,12 +272,13 @@ class LLMCouncilConfig(Base):
         DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc
     )
 
-    provider: Mapped["LLMProvider"] = relationship(back_populates="council_config", foreign_keys=[llm_provider_id])
+    virtual_provider: Mapped["LLMVirtualProvider"] = relationship(back_populates="council_config")
+    chairman_endpoint: Mapped["LLMEndpoint"] = relationship(foreign_keys=[chairman_endpoint_id])
     members: Mapped[list["LLMCouncilMember"]] = relationship(back_populates="council_config", cascade="all, delete-orphan")
 
 
 class LLMCouncilMember(Base):
-    """Models that participate in the council."""
+    """A member of a council — target is an endpoint (composable)."""
     __tablename__ = "llm_council_members"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -168,16 +287,16 @@ class LLMCouncilMember(Base):
     council_config_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("llm_council_config.id", ondelete="CASCADE"), nullable=False
     )
-    llm_provider_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("llm_providers.id"), nullable=False
+    endpoint_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("llm_endpoints.id", ondelete="CASCADE"), nullable=False
     )
-    model: Mapped[str] = mapped_column(String(200), nullable=False)
     display_label: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=now_utc
     )
 
     council_config: Mapped["LLMCouncilConfig"] = relationship(back_populates="members")
+    endpoint: Mapped["LLMEndpoint"] = relationship(foreign_keys=[endpoint_id])
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -194,15 +313,13 @@ class Workspace(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     icon: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     color: Mapped[Optional[str]] = mapped_column(String(7), nullable=True)
-    llm_provider_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("llm_providers.id", ondelete="SET NULL"), nullable=True
+    # v3: Endpoint-based model assignment (replaces provider_id + model pairs)
+    chat_endpoint_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("llm_endpoints.id", ondelete="SET NULL"), nullable=True
     )
-    llm_model: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
-    # v2: Vision model overrides
-    vision_provider_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("llm_providers.id", ondelete="SET NULL"), nullable=True
+    vision_endpoint_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("llm_endpoints.id", ondelete="SET NULL"), nullable=True
     )
-    vision_model: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=now_utc
@@ -215,7 +332,8 @@ class Workspace(Base):
     tools_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default='false')
     agent_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
-    llm_provider: Mapped[Optional["LLMProvider"]] = relationship(back_populates="workspaces", foreign_keys=[llm_provider_id])
+    chat_endpoint: Mapped[Optional["LLMEndpoint"]] = relationship(foreign_keys=[chat_endpoint_id])
+    vision_endpoint: Mapped[Optional["LLMEndpoint"]] = relationship(foreign_keys=[vision_endpoint_id])
     knowledge: Mapped[list["Knowledge"]] = relationship(back_populates="workspace", cascade="all, delete-orphan")
     conversations: Mapped[list["Conversation"]] = relationship(back_populates="workspace", cascade="all, delete-orphan")
 
@@ -638,23 +756,23 @@ class AgentDefinition(Base):
 
 
 class LLMOptimizerConfig(Base):
-    """Configuration for LLM optimizer providers that rewrite prompts before sending."""
+    """Configuration for an optimizer virtual provider."""
     __tablename__ = "llm_optimizer_config"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    llm_provider_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("llm_providers.id", ondelete="CASCADE"), nullable=False, unique=True
+    virtual_provider_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("llm_virtual_providers.id", ondelete="CASCADE"), nullable=False, unique=True
     )
-    optimizer_provider_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("llm_providers.id"), nullable=False
+    # Optimizer model — an endpoint (composable)
+    optimizer_endpoint_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("llm_endpoints.id", ondelete="CASCADE"), nullable=False
     )
-    optimizer_model: Mapped[str] = mapped_column(String(200), nullable=False)
-    target_provider_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("llm_providers.id"), nullable=False
+    # Target — an endpoint (composable: could be standard, router, council, etc.)
+    target_endpoint_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("llm_endpoints.id", ondelete="CASCADE"), nullable=False
     )
-    target_model: Mapped[str] = mapped_column(String(200), nullable=False)
     optimization_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     additional_context: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -662,4 +780,40 @@ class LLMOptimizerConfig(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc
+    )
+
+    virtual_provider: Mapped["LLMVirtualProvider"] = relationship(back_populates="optimizer_config")
+    optimizer_endpoint: Mapped["LLMEndpoint"] = relationship(foreign_keys=[optimizer_endpoint_id])
+    target_endpoint: Mapped["LLMEndpoint"] = relationship(foreign_keys=[target_endpoint_id])
+
+
+class ToolExecutionLog(Base):
+    """Audit log for tool executions made by the agent."""
+    __tablename__ = "tool_execution_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    workspace_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True
+    )
+    conversation_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="SET NULL"), nullable=True
+    )
+    execution_id: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    tool_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    tool_display_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    tool_category: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    input_params: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    output_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    success: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    duration_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=now_utc
+    )
+
+    __table_args__ = (
+        Index("idx_tool_exec_logs_workspace", "workspace_id", "started_at"),
+        Index("idx_tool_exec_logs_tool", "tool_id", "started_at"),
     )

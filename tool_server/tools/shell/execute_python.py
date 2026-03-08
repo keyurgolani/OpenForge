@@ -3,9 +3,9 @@ Execute Python tool for OpenForge.
 
 Executes Python scripts within workspace scope with safety restrictions.
 """
-from protocol import BaseTool, ToolResult, ToolContext
-from security import WorkspaceSecurity
-from config import get_settings
+from tool_server.protocol import BaseTool, ToolResult, ToolContext
+from tool_server.security import WorkspaceSecurity
+from tool_server.config import get_settings
 import subprocess
 import asyncio
 import logging

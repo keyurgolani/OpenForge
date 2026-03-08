@@ -27,6 +27,8 @@ class MessageResponse(BaseModel):
     generation_ms: Optional[int] = None
     context_sources: Optional[list] = None
     attachments_processed: Optional[list] = None
+    provider_metadata: Optional[dict] = None
+    tool_calls: Optional[list] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

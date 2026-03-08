@@ -3,9 +3,9 @@ HTTP GET tool for OpenForge.
 
 Makes HTTP GET requests with configurable options.
 """
-from protocol import BaseTool, ToolResult, ToolContext
-from config import get_settings
-import aiohttp
+from tool_server.protocol import BaseTool, ToolResult, ToolContext
+from tool_server.config import get_settings
+import httpx
 import logging
 from typing import Any
 
@@ -108,57 +108,50 @@ Use for:
             headers["User-Agent"] = "OpenForge-ToolServer/1.0"
 
         try:
-            timeout_config = aiohttp.ClientTimeout(total=timeout)
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=follow_redirects) as client:
+                response = await client.get(url, headers=headers)
 
-            async with aiohttp.ClientSession(timeout=timeout_config) as session:
-                async with session.get(
-                    url,
-                    headers=headers,
-                    allow_redirects=follow_redirects,
-                    ssl=True
-                ) as response:
-                    status_code = response.status
-                    response_headers = dict(response.headers)
+            status_code = response.status_code
+            response_headers = dict(response.headers)
 
-                    # Read response body
-                    if return_format == "json":
-                        try:
-                            body = await response.json()
-                        except Exception:
-                            body = await response.text()
-                            return ToolResult(
-                                success=False,
-                                output=None,
-                                error=f"Response is not valid JSON: {body[:500]}"
-                            )
-                    elif return_format == "binary":
-                        body_bytes = await response.read()
-                        body = f"<binary data: {len(body_bytes)} bytes>"
-                    else:
-                        body = await response.text()
-
-                    # Truncate if needed
-                    original_length = len(str(body))
-                    truncated = False
-                    if self.max_output_chars and original_length > self.max_output_chars:
-                        body = str(body)[:self.max_output_chars]
-                        body += "\n\n... [OUTPUT TRUNCATED]"
-                        truncated = True
-
+            # Read response body
+            if return_format == "json":
+                try:
+                    body = response.json()
+                except Exception:
+                    body = response.text
                     return ToolResult(
-                        success=200 <= status_code < 300,
-                        output={
-                            "url": str(response.url),
-                            "status_code": status_code,
-                            "headers": response_headers,
-                            "body": body,
-                            "content_type": response_headers.get("Content-Type", ""),
-                        },
-                        truncated=truncated,
-                        original_length=original_length if truncated else None
+                        success=False,
+                        output=None,
+                        error=f"Response is not valid JSON: {body[:500]}"
                     )
+            elif return_format == "binary":
+                body = f"<binary data: {len(response.content)} bytes>"
+            else:
+                body = response.text
 
-        except aiohttp.ClientError as e:
+            # Truncate if needed
+            original_length = len(str(body))
+            truncated = False
+            if self.max_output_chars and original_length > self.max_output_chars:
+                body = str(body)[:self.max_output_chars]
+                body += "\n\n... [OUTPUT TRUNCATED]"
+                truncated = True
+
+            return ToolResult(
+                success=200 <= status_code < 300,
+                output={
+                    "url": str(response.url),
+                    "status_code": status_code,
+                    "headers": response_headers,
+                    "body": body,
+                    "content_type": response_headers.get("content-type", ""),
+                },
+                truncated=truncated,
+                original_length=original_length if truncated else None
+            )
+
+        except httpx.RequestError as e:
             return ToolResult(
                 success=False,
                 output=None,

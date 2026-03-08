@@ -3,8 +3,8 @@ Create plan tool for OpenForge.
 
 Creates a structured plan with steps for task execution.
 """
-from protocol import BaseTool, ToolResult, ToolContext
-from config import get_settings
+from tool_server.protocol import BaseTool, ToolResult, ToolContext
+from tool_server.config import get_settings
 import redis.asyncio as aioredis
 import logging
 import json

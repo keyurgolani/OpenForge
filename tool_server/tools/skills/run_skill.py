@@ -10,8 +10,8 @@ import logging
 import os
 from pathlib import Path
 
-from protocol import BaseTool, ToolResult, ToolContext
-from config import get_settings
+from tool_server.protocol import BaseTool, ToolResult, ToolContext
+from tool_server.config import get_settings
 
 logger = logging.getLogger("tool-server.skills")
 

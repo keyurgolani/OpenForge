@@ -4,7 +4,7 @@ HTTP tools for OpenForge.
 Tools for making HTTP requests and fetching web content.
 Includes safety validations for URL access.
 """
-from protocol import BaseTool
+from tool_server.protocol import BaseTool
 from .get import HttpGetTool
 from .post import HttpPostTool
 from .fetch_page import HttpFetchPageTool

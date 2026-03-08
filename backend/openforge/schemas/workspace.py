@@ -10,8 +10,8 @@ class WorkspaceCreate(BaseModel):
     description: Optional[str] = None
     icon: Optional[str] = None
     color: Optional[str] = None
-    llm_provider_id: Optional[UUID] = None
-    llm_model: Optional[str] = None
+    chat_endpoint_id: Optional[UUID] = None
+    vision_endpoint_id: Optional[UUID] = None
 
     @field_validator("name")
     @classmethod
@@ -35,8 +35,8 @@ class WorkspaceUpdate(BaseModel):
     description: Optional[str] = None
     icon: Optional[str] = None
     color: Optional[str] = None
-    llm_provider_id: Optional[UUID] = None
-    llm_model: Optional[str] = None
+    chat_endpoint_id: Optional[UUID] = None
+    vision_endpoint_id: Optional[UUID] = None
     sort_order: Optional[int] = None
     tools_enabled: Optional[bool] = None
     agent_id: Optional[str] = None
@@ -48,8 +48,8 @@ class WorkspaceResponse(BaseModel):
     description: Optional[str] = None
     icon: Optional[str] = None
     color: Optional[str] = None
-    llm_provider_id: Optional[UUID] = None
-    llm_model: Optional[str] = None
+    chat_endpoint_id: Optional[UUID] = None
+    vision_endpoint_id: Optional[UUID] = None
     sort_order: int
     tools_enabled: bool = False
     agent_id: Optional[str] = None

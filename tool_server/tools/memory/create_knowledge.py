@@ -3,9 +3,9 @@ Create knowledge tool for OpenForge.
 
 Creates a new knowledge entry in the workspace.
 """
-from protocol import BaseTool, ToolResult, ToolContext
-from config import get_settings
-import aiohttp
+from tool_server.protocol import BaseTool, ToolResult, ToolContext
+from tool_server.config import get_settings
+import httpx
 import logging
 
 logger = logging.getLogger("tool-server.memory")
@@ -106,25 +106,27 @@ Use for:
             if entry_type == "gist" and gist_language:
                 payload["gist_language"] = gist_language
 
-            timeout = aiohttp.ClientTimeout(total=30)
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(url, json=payload)
 
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.post(url, json=payload) as response:
-                    if response.status == 404:
-                        return ToolResult(
-                            success=False,
-                            output=None,
-                            error="Workspace not found"
-                        )
-                    if response.status not in [200, 201]:
-                        error_data = await response.json() if response.content_type == "application/json" else {}
-                        return ToolResult(
-                            success=False,
-                            output=None,
-                            error=error_data.get("detail", f"Failed to create knowledge: {response.status}")
-                        )
+            if response.status_code == 404:
+                return ToolResult(
+                    success=False,
+                    output=None,
+                    error="Workspace not found"
+                )
+            if response.status_code not in [200, 201]:
+                try:
+                    error_data = response.json()
+                except Exception:
+                    error_data = {}
+                return ToolResult(
+                    success=False,
+                    output=None,
+                    error=error_data.get("detail", f"Failed to create knowledge: {response.status_code}")
+                )
 
-                    data = await response.json()
+            data = response.json()
 
             return ToolResult(
                 success=True,
@@ -137,7 +139,7 @@ Use for:
                 }
             )
 
-        except aiohttp.ClientError as e:
+        except httpx.RequestError as e:
             return ToolResult(
                 success=False,
                 output=None,

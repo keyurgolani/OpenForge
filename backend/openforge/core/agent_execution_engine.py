@@ -1,28 +1,25 @@
-"""Agent Execution Engine for OpenForge v2.5.
+"""Agent Execution Engine for OpenForge v3.
 
 This engine handles the full chat/agent pipeline for a given AgentDefinition,
-replacing the direct use of chat_service in the WebSocket handler.
+using the endpoint-based composable LLM architecture.
 """
 import asyncio
+import json
 import logging
 import time
 from typing import List, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
+import litellm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from openforge.core.llm_gateway import llm_gateway
 from openforge.core.search_engine import search_engine
 from openforge.core.context_assembler import ContextAssembler
-from openforge.core.llm_router import LLMRouter
-from openforge.core.llm_council import LLMCouncil
-from openforge.core.llm_optimizer import LLMOptimizer
 from openforge.services.conversation_service import conversation_service
 from openforge.services.llm_service import llm_service
-from openforge.services.llm_router_service import llm_router_service
-from openforge.services.llm_council_service import llm_council_service
-from openforge.services.llm_optimizer_service import llm_optimizer_service
+from openforge.services.endpoint_resolver import endpoint_resolver
 from openforge.services.chat_retrieval import (
     build_context_sources,
     select_relevant_rag_results,
@@ -34,7 +31,7 @@ from openforge.services.attachment_pipeline import (
     process_attachment,
 )
 from openforge.api.websocket import ws_manager
-from openforge.db.models import Conversation, Knowledge, MessageAttachment
+from openforge.db.models import Conversation, Knowledge, MessageAttachment, ToolDefinition, Workspace
 
 logger = logging.getLogger("openforge.agent_engine")
 
@@ -53,8 +50,7 @@ class AgentExecutionEngine:
         db: AsyncSession,
         *,
         attachment_ids: Optional[List[str]] = None,
-        provider_id: Optional[str] = None,
-        model_id: Optional[str] = None,
+        endpoint_id: Optional[str] = None,
     ) -> None:
         """Execute the full agent pipeline for a chat message."""
         workspace_key = str(workspace_id)
@@ -145,10 +141,11 @@ class AgentExecutionEngine:
                 extra_context=attachment_context if attachment_context else None,
             )
 
-            # 7. Get provider and stream response
+            # 7. Resolve the endpoint for this workspace
             try:
-                provider_name, api_key, model, base_url, provider_type = await llm_service.get_provider_for_workspace(
-                    db, workspace_id, provider_id=provider_id, model_override=model_id
+                endpoint_override = UUID(endpoint_id) if endpoint_id else None
+                active_endpoint = await llm_service.get_endpoint_for_workspace(
+                    db, workspace_id, purpose="chat", endpoint_override=endpoint_override
                 )
             except Exception as e:
                 await ws_manager.send_to_workspace(workspace_key, {
@@ -160,46 +157,170 @@ class AgentExecutionEngine:
 
             full_response = ""
             full_thinking = ""
+            provider_metadata = {}
             generation_started = time.perf_counter()
 
+            # 7b. Resolve tool schemas — only for standard endpoints that support function calling
+            tool_schemas: list[dict] = []
+            fn_to_id: dict[str, str] = {}
+            if active_endpoint.endpoint_type == "standard":
+                info = await endpoint_resolver.resolve_provider_info(db, active_endpoint)
+                resolved_model = llm_gateway._resolve_model(info["provider_name"], info["model"])
+                try:
+                    model_supports_tools = litellm.supports_function_calling(model=resolved_model)
+                except Exception:
+                    model_supports_tools = False
+                if model_supports_tools:
+                    tool_schemas, fn_to_id = await self._get_tool_schemas(db, agent, workspace_id)
+
             try:
-                # Dispatch through virtual provider if applicable
-                if provider_type in ("router", "council", "optimizer"):
-                    event_generator = self._stream_via_virtual_provider(
-                        assembled, provider_type, provider_id, db, workspace_id
-                    )
-                else:
-                    event_generator = llm_gateway.stream_events(
-                        messages=assembled,
-                        provider_name=provider_name,
-                        api_key=api_key,
-                        model=model,
-                        base_url=base_url,
-                        include_thinking=True,
-                    )
+                if tool_schemas:
+                    # 8a. ReAct loop: non-streaming iterations with tool calling, stream the final response
+                    info = await endpoint_resolver.resolve_provider_info(db, active_endpoint)
+                    execution_id = str(uuid4())
+                    loop_messages = list(assembled)
 
-                async for event in event_generator:
-                    if event.get("type") == "thinking":
-                        thinking = event.get("content", "")
-                        if thinking:
-                            full_thinking += thinking
-                            await ws_manager.send_to_workspace(workspace_key, {
-                                "type": "chat_thinking",
-                                "conversation_id": str(conversation_id),
-                                "data": thinking,
+                    from openforge.services.tool_dispatcher import ToolDispatcher, ToolCallRequest
+
+                    for _iteration in range(agent.max_iterations):
+                        loop_response = await litellm.acompletion(
+                            model=llm_gateway._resolve_model(info["provider_name"], info["model"]),
+                            messages=loop_messages,
+                            api_key=info["api_key"] or None,
+                            api_base=info["base_url"],
+                            tools=tool_schemas,
+                            tool_choice="auto",
+                            max_tokens=4000,
+                        )
+                        lm = loop_response.choices[0].message
+
+                        if lm.tool_calls:
+                            # Append assistant turn (with tool_calls) to message history
+                            loop_messages.append({
+                                "role": "assistant",
+                                "content": lm.content,
+                                "tool_calls": [
+                                    {
+                                        "id": tc.id,
+                                        "type": "function",
+                                        "function": {
+                                            "name": tc.function.name,
+                                            "arguments": tc.function.arguments,
+                                        },
+                                    }
+                                    for tc in lm.tool_calls
+                                ],
                             })
-                        continue
 
-                    token = event.get("content", "")
-                    if token:
-                        full_response += token
-                        await ws_manager.send_to_workspace(workspace_key, {
-                            "type": "chat_token",
-                            "conversation_id": str(conversation_id),
-                            "data": token,
-                        })
+                            dispatcher = ToolDispatcher(db)
+                            for tc in lm.tool_calls:
+                                fn_name = tc.function.name
+                                actual_tool_id = fn_to_id.get(fn_name, fn_name)
+                                try:
+                                    args = json.loads(tc.function.arguments)
+                                except Exception:
+                                    args = {}
+
+                                # Notify frontend that a tool is being called
+                                await ws_manager.send_to_workspace(workspace_key, {
+                                    "type": "chat_tool_call",
+                                    "conversation_id": str(conversation_id),
+                                    "tool_id": actual_tool_id,
+                                    "arguments": args,
+                                })
+
+                                request = ToolCallRequest(
+                                    tool_id=actual_tool_id,
+                                    params=args,
+                                    workspace_id=str(workspace_id),
+                                    execution_id=execution_id,
+                                    conversation_id=str(conversation_id),
+                                )
+                                result = await dispatcher.dispatch(request, skip_approval=True)
+                                await db.commit()
+
+                                tool_content = (
+                                    json.dumps(result.output)
+                                    if result.success
+                                    else f"Error: {result.error}"
+                                )
+
+                                # Notify frontend of tool result
+                                await ws_manager.send_to_workspace(workspace_key, {
+                                    "type": "chat_tool_result",
+                                    "conversation_id": str(conversation_id),
+                                    "tool_id": actual_tool_id,
+                                    "success": result.success,
+                                    "error": result.error,
+                                })
+
+                                loop_messages.append({
+                                    "role": "tool",
+                                    "tool_call_id": tc.id,
+                                    "content": tool_content,
+                                })
+                            # Continue to next iteration
+                        else:
+                            # Final text response — send as a single token block
+                            full_response = lm.content or ""
+                            if full_response:
+                                await ws_manager.send_to_workspace(workspace_key, {
+                                    "type": "chat_token",
+                                    "conversation_id": str(conversation_id),
+                                    "data": full_response,
+                                })
+                            break
+                    else:
+                        # Hit max_iterations without a final response — ask one more time without tools
+                        fallback = await litellm.acompletion(
+                            model=llm_gateway._resolve_model(info["provider_name"], info["model"]),
+                            messages=loop_messages,
+                            api_key=info["api_key"] or None,
+                            api_base=info["base_url"],
+                            max_tokens=2000,
+                        )
+                        full_response = fallback.choices[0].message.content or ""
+                        if full_response:
+                            await ws_manager.send_to_workspace(workspace_key, {
+                                "type": "chat_token",
+                                "conversation_id": str(conversation_id),
+                                "data": full_response,
+                            })
+
+                else:
+                    # 8b. No tools — unified streaming via endpoint resolver
+                    async for event in endpoint_resolver.stream_events(
+                        db, active_endpoint, assembled,
+                        include_thinking=True,
+                    ):
+                        event_type = event.get("type")
+
+                        if event_type == "thinking":
+                            thinking = event.get("content", "")
+                            if thinking:
+                                full_thinking += thinking
+                                await ws_manager.send_to_workspace(workspace_key, {
+                                    "type": "chat_thinking",
+                                    "conversation_id": str(conversation_id),
+                                    "data": thinking,
+                                })
+                            continue
+
+                        if event_type == "metadata":
+                            provider_metadata = {**provider_metadata, **event.get("data", {})}
+                            continue
+
+                        token = event.get("content", "")
+                        if token:
+                            full_response += token
+                            await ws_manager.send_to_workspace(workspace_key, {
+                                "type": "chat_token",
+                                "conversation_id": str(conversation_id),
+                                "data": token,
+                            })
+
             except Exception as e:
-                logger.error(f"LLM streaming error: {e}")
+                logger.error(f"LLM error: {e}")
                 await ws_manager.send_to_workspace(workspace_key, {
                     "type": "chat_error",
                     "conversation_id": str(conversation_id),
@@ -207,9 +328,16 @@ class AgentExecutionEngine:
                 })
                 return
 
-            # 8. Save assistant message
+            # 9. Determine display info for the message
+            model_used = active_endpoint.display_name or ""
+            provider_used = ""
+            if active_endpoint.endpoint_type == "standard" and active_endpoint.provider:
+                model_used = active_endpoint.model_id or ""
+                provider_used = active_endpoint.provider.provider_name or ""
+            elif active_endpoint.endpoint_type == "virtual" and active_endpoint.virtual_provider:
+                provider_used = f"virtual:{active_endpoint.virtual_provider.virtual_type}"
+
             generation_ms = int((time.perf_counter() - generation_started) * 1000)
-            has_runtime_override = bool(provider_id or model_id)
 
             msg = await conversation_service.add_message(
                 db,
@@ -217,15 +345,16 @@ class AgentExecutionEngine:
                 role="assistant",
                 content=full_response,
                 thinking=full_thinking.strip() or None,
-                model_used=model,
-                provider_used=provider_name,
+                model_used=model_used,
+                provider_used=provider_used,
                 token_count=llm_gateway.count_tokens(full_response),
                 generation_ms=generation_ms,
                 context_sources=context_sources,
-                trigger_auto_title=not has_runtime_override,
+                trigger_auto_title=not bool(endpoint_id),
+                provider_metadata=provider_metadata or None,
             )
 
-            # 9. Notify completion
+            # 10. Notify completion
             await ws_manager.send_to_workspace(workspace_key, {
                 "type": "chat_done",
                 "conversation_id": str(conversation_id),
@@ -233,7 +362,9 @@ class AgentExecutionEngine:
                 "generation_ms": generation_ms,
             })
 
-            if has_runtime_override:
+            if endpoint_id and active_endpoint.endpoint_type == "standard":
+                info = await endpoint_resolver.resolve_provider_info(db, active_endpoint)
+
                 async def _refresh_chat_title() -> None:
                     from openforge.db.postgres import AsyncSessionLocal
                     try:
@@ -242,10 +373,10 @@ class AgentExecutionEngine:
                                 title_db,
                                 workspace_id=workspace_id,
                                 conversation_id=conversation_id,
-                                provider_name=provider_name,
-                                api_key=api_key,
-                                model=model,
-                                base_url=base_url,
+                                provider_name=info["provider_name"],
+                                api_key=info["api_key"],
+                                model=info["model"],
+                                base_url=info["base_url"],
                             )
                     except Exception as e:
                         logger.warning("Chat title refresh failed for conversation %s: %s", conversation_id, e)
@@ -259,6 +390,52 @@ class AgentExecutionEngine:
                 "conversation_id": str(conversation_id),
                 "detail": str(e),
             })
+
+    async def _get_tool_schemas(
+        self,
+        db: AsyncSession,
+        agent,
+        workspace_id: UUID,
+    ) -> tuple[list[dict], dict[str, str]]:
+        """Return (tool_schemas_for_llm, fn_name_to_tool_id_map).
+
+        Returns empty lists when tools are disabled at the workspace or agent level.
+        """
+        try:
+            if not agent.tools_enabled:
+                return [], {}
+
+            ws_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+            workspace = ws_result.scalar_one_or_none()
+            if not workspace or not workspace.tools_enabled:
+                return [], {}
+
+            query = select(ToolDefinition).where(ToolDefinition.is_enabled == True)
+            if agent.allowed_tool_ids:
+                query = query.where(ToolDefinition.id.in_(agent.allowed_tool_ids))
+            elif agent.allowed_tool_categories:
+                query = query.where(ToolDefinition.category.in_(agent.allowed_tool_categories))
+
+            result = await db.execute(query)
+            tools = result.scalars().all()
+
+            schemas: list[dict] = []
+            fn_to_id: dict[str, str] = {}
+            for t in tools:
+                fn_name = t.id.replace(".", "_")
+                fn_to_id[fn_name] = t.id
+                schemas.append({
+                    "type": "function",
+                    "function": {
+                        "name": fn_name,
+                        "description": t.description,
+                        "parameters": t.input_schema,
+                    },
+                })
+            return schemas, fn_to_id
+        except Exception as exc:
+            logger.warning("Failed to fetch tool schemas: %s", exc)
+            return [], {}
 
     async def _process_attachments(
         self,
@@ -387,72 +564,6 @@ class AgentExecutionEngine:
             "\n\nThe user has attached the following files:\n" + "\n".join(context_blocks),
             processed,
         )
-
-    async def _stream_via_virtual_provider(
-        self,
-        messages: list[dict],
-        provider_type: str,
-        provider_id: Optional[str],
-        db: AsyncSession,
-        workspace_id: UUID,
-    ):
-        """
-        Route messages through a virtual provider (router, council, optimizer).
-        Yields events in the same format as llm_gateway.stream_events().
-        """
-        if not provider_id:
-            logger.error("Virtual provider requires explicit provider_id")
-            yield {"type": "error", "detail": "Virtual provider requires explicit provider configuration"}
-            return
-
-        try:
-            provider_uuid = UUID(str(provider_id))
-        except (ValueError, TypeError) as e:
-            logger.error(f"Invalid provider_id for virtual provider: {provider_id}: {e}")
-            yield {"type": "error", "detail": "Invalid virtual provider configuration"}
-            return
-
-        try:
-            if provider_type == "router":
-                config = await llm_router_service.get_config(db, provider_uuid)
-                if not config:
-                    logger.error(f"Router config not found for provider {provider_uuid}")
-                    yield {"type": "error", "detail": "Router configuration not found"}
-                    return
-
-                router = LLMRouter(config)
-                async for token in router.stream(messages, db):
-                    yield {"type": "content", "content": token}
-
-            elif provider_type == "council":
-                config = await llm_council_service.get_config(db, provider_uuid)
-                if not config:
-                    logger.error(f"Council config not found for provider {provider_uuid}")
-                    yield {"type": "error", "detail": "Council configuration not found"}
-                    return
-
-                council = LLMCouncil(config)
-                async for token in council.stream(messages, db):
-                    yield {"type": "content", "content": token}
-
-            elif provider_type == "optimizer":
-                config = await llm_optimizer_service.get_config(db, provider_uuid)
-                if not config:
-                    logger.error(f"Optimizer config not found for provider {provider_uuid}")
-                    yield {"type": "error", "detail": "Optimizer configuration not found"}
-                    return
-
-                optimizer = LLMOptimizer(config)
-                async for token in optimizer.stream_via_target(messages, db):
-                    yield {"type": "content", "content": token}
-
-            else:
-                logger.error(f"Unknown virtual provider type: {provider_type}")
-                yield {"type": "error", "detail": f"Unknown provider type: {provider_type}"}
-
-        except Exception as e:
-            logger.error(f"Error streaming via virtual provider {provider_type}: {e}", exc_info=True)
-            yield {"type": "error", "detail": f"Virtual provider error: {str(e)}"}
 
     async def _trigger_bookmark_extraction(
         self,

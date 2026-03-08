@@ -290,7 +290,7 @@ class KnowledgeProcessingService:
                 if not (knowledge_record.content or "").strip():
                     raise RuntimeError("Knowledge content is empty; intelligence generation skipped")
 
-                provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
+                provider_name, api_key, model, base_url, _ = await llm_service.get_provider_for_workspace(db, workspace_id)
                 tags_str = ", ".join([t.tag for t in knowledge_record.tags])
 
                 title_prompt = await self._get_prompt_text(
@@ -726,7 +726,7 @@ class KnowledgeProcessingService:
                 from openforge.core.llm_gateway import llm_gateway
                 from openforge.services.llm_service import llm_service
                 async with AsyncSessionLocal() as db:
-                    provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
+                    provider_name, api_key, model, base_url, _ = await llm_service.get_provider_for_workspace(db, workspace_id)
                     generated = await llm_gateway.chat(
                         messages=[
                             {"role": "system", "content": "Generate a concise, descriptive title (max 60 chars). Return ONLY the title, no quotes or extra text."},

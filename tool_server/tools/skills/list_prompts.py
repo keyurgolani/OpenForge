@@ -3,9 +3,9 @@ List prompts tool for OpenForge.
 
 Lists available prompt templates/skills.
 """
-from protocol import BaseTool, ToolResult, ToolContext
-from config import get_settings
-import aiohttp
+from tool_server.protocol import BaseTool, ToolResult, ToolContext
+from tool_server.config import get_settings
+import httpx
 import logging
 
 logger = logging.getLogger("tool-server.skills")
@@ -64,32 +64,19 @@ Use for:
             # Call main app's prompts/skills API
             url = f"{settings.main_app_url}/api/v1/workspaces/{context.workspace_id}/prompts"
 
-            query_params = {}
+            params = {}
             if category:
-                query_params["category"] = category
+                params["category"] = category
 
-            timeout = aiohttp.ClientTimeout(total=30)
-
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(url, params=query_params) as response:
-                    if response.status == 404:
-                        # If no prompts API, return empty list
-                        return ToolResult(
-                            success=True,
-                            output={
-                                "prompts": [],
-                                "count": 0,
-                                "message": "No prompts available"
-                            }
-                        )
-                    if response.status != 200:
-                        return ToolResult(
-                            success=False,
-                            output=None,
-                            error=f"Prompts API error: {response.status}"
-                        )
-
-                    data = await response.json()
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(url, params=params)
+                if response.status_code == 404:
+                    return ToolResult(
+                        success=True,
+                        output={"prompts": [], "count": 0, "message": "No prompts available"},
+                    )
+                response.raise_for_status()
+                data = response.json()
 
             prompts = []
             for item in data.get("prompts", []):
@@ -103,22 +90,19 @@ Use for:
 
             return ToolResult(
                 success=True,
-                output={
-                    "prompts": prompts,
-                    "count": len(prompts),
-                }
+                output={"prompts": prompts, "count": len(prompts)},
             )
 
-        except aiohttp.ClientError as e:
+        except httpx.RequestError as e:
             return ToolResult(
                 success=False,
                 output=None,
-                error=f"Failed to connect to main app: {str(e)}"
+                error=f"Failed to connect to main app: {str(e)}",
             )
         except Exception as e:
             logger.exception("Error listing prompts")
             return ToolResult(
                 success=False,
                 output=None,
-                error=f"Failed to list prompts: {str(e)}"
+                error=f"Failed to list prompts: {str(e)}",
             )

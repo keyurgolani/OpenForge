@@ -92,8 +92,10 @@ async def workspace_websocket(websocket: WebSocket, workspace_id: str):
                 conversation_id = data.get("conversation_id")
                 content = data.get("content", "").strip()
                 attachment_ids = data.get("attachment_ids", [])
-                provider_id = data.get("provider_id")
-                model_id = data.get("model_id")
+                endpoint_id = data.get("endpoint_id")
+                # Legacy support: accept provider_id/model_id as fallback
+                if not endpoint_id:
+                    endpoint_id = data.get("provider_id")
                 if not conversation_id or not content:
                     await ws_manager.send_to_connection(websocket, {
                         "type": "chat_error",
@@ -118,8 +120,7 @@ async def workspace_websocket(websocket: WebSocket, workspace_id: str):
                                 agent=agent,
                                 db=db,
                                 attachment_ids=attachment_ids,
-                                provider_id=provider_id,
-                                model_id=model_id,
+                                endpoint_id=endpoint_id,
                             )
                         except Exception as e:
                             logger.error(f"Agent execution engine error: {e}")
@@ -131,8 +132,7 @@ async def workspace_websocket(websocket: WebSocket, workspace_id: str):
                                 user_content=content,
                                 db=db,
                                 attachment_ids=attachment_ids,
-                                provider_id=provider_id,
-                                model_id=model_id,
+                                provider_id=endpoint_id,
                             )
                     else:
                         from openforge.services.chat_service import chat_service
@@ -142,8 +142,7 @@ async def workspace_websocket(websocket: WebSocket, workspace_id: str):
                             user_content=content,
                             db=db,
                             attachment_ids=attachment_ids,
-                            provider_id=provider_id,
-                            model_id=model_id,
+                            endpoint_id=endpoint_id,
                         )
 
             elif msg_type == "chat_stream_resume":

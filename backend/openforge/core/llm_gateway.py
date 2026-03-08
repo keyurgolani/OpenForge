@@ -464,8 +464,9 @@ class LLMGateway:
             "model": self._normalize_ollama_model(model),
             "messages": ollama_messages,
             "stream": stream,
-            "think": include_thinking,
         }
+        if include_thinking:
+            payload["think"] = True
         if max_tokens > 0:
             payload["options"] = {"num_predict": max_tokens}
         return payload

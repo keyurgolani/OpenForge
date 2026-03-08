@@ -3,9 +3,9 @@ Read note tool for OpenForge.
 
 Reads a specific knowledge entry's content.
 """
-from protocol import BaseTool, ToolResult, ToolContext
-from config import get_settings
-import aiohttp
+from tool_server.protocol import BaseTool, ToolResult, ToolContext
+from tool_server.config import get_settings
+import httpx
 import logging
 
 logger = logging.getLogger("tool-server.memory")
@@ -83,24 +83,23 @@ Use for:
             # Call main app's knowledge API
             url = f"{settings.main_app_url}/api/v1/workspaces/{context.workspace_id}/knowledge/{knowledge_id}"
 
-            timeout = aiohttp.ClientTimeout(total=30)
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(url)
 
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(url) as response:
-                    if response.status == 404:
-                        return ToolResult(
-                            success=False,
-                            output=None,
-                            error=f"Knowledge entry not found: {knowledge_id}"
-                        )
-                    if response.status != 200:
-                        return ToolResult(
-                            success=False,
-                            output=None,
-                            error=f"Knowledge API error: {response.status}"
-                        )
+            if response.status_code == 404:
+                return ToolResult(
+                    success=False,
+                    output=None,
+                    error=f"Knowledge entry not found: {knowledge_id}"
+                )
+            if response.status_code != 200:
+                return ToolResult(
+                    success=False,
+                    output=None,
+                    error=f"Knowledge API error: {response.status_code}"
+                )
 
-                    data = await response.json()
+            data = response.json()
 
             result = {
                 "id": data.get("id"),
@@ -134,7 +133,7 @@ Use for:
                 output=result
             )
 
-        except aiohttp.ClientError as e:
+        except httpx.RequestError as e:
             return ToolResult(
                 success=False,
                 output=None,

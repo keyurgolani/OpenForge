@@ -8,15 +8,17 @@ Provides a unified interface for dispatching tool calls to:
 Handles HITL approval flows for high-risk tools.
 """
 import logging
+import time
 from typing import Any, Optional
 from dataclasses import dataclass
 from enum import Enum
+from datetime import datetime, timezone
 
 import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from openforge.db.models import ToolDefinition
+from openforge.db.models import ToolDefinition, ToolExecutionLog
 from openforge.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -185,16 +187,76 @@ class ToolDispatcher:
                 requires_approval=True,
             )
 
-        # Dispatch to appropriate handler
+        # Dispatch to appropriate handler and log the execution
+        started_at = datetime.now(timezone.utc)
+        start_time = time.monotonic()
+
         if tool.category in ["filesystem", "git", "http", "shell", "language", "memory", "task", "skills"]:
-            return await self._dispatch_to_tool_server(request)
+            result = await self._dispatch_to_tool_server(request)
         else:
-            # Unknown category - could be external MCP tool
-            return ToolCallResult(
+            result = ToolCallResult(
                 success=False,
                 output=None,
                 error=f"Unknown tool category: {tool.category}",
             )
+
+        duration_ms = int((time.monotonic() - start_time) * 1000)
+        await self._log_execution(request, tool, result, started_at, duration_ms)
+        return result
+
+    async def _log_execution(
+        self,
+        request: ToolCallRequest,
+        tool: ToolDefinition,
+        result: ToolCallResult,
+        started_at: datetime,
+        duration_ms: int,
+    ) -> None:
+        """Persist a tool execution record to the audit log."""
+        try:
+            from uuid import UUID as _UUID
+
+            workspace_uuid: Optional[_UUID] = None
+            if request.workspace_id:
+                try:
+                    workspace_uuid = _UUID(str(request.workspace_id))
+                except (ValueError, AttributeError):
+                    pass
+
+            conversation_uuid: Optional[_UUID] = None
+            if request.conversation_id:
+                try:
+                    conversation_uuid = _UUID(str(request.conversation_id))
+                except (ValueError, AttributeError):
+                    pass
+
+            output_summary: Optional[str] = None
+            if result.output is not None:
+                import json as _json
+                try:
+                    raw = _json.dumps(result.output) if not isinstance(result.output, str) else result.output
+                    output_summary = raw[:500] if len(raw) > 500 else raw
+                except Exception:
+                    output_summary = str(result.output)[:500]
+
+            log_entry = ToolExecutionLog(
+                workspace_id=workspace_uuid,
+                conversation_id=conversation_uuid,
+                execution_id=request.execution_id,
+                tool_id=request.tool_id,
+                tool_display_name=tool.display_name,
+                tool_category=tool.category,
+                input_params=request.params,
+                output_summary=output_summary,
+                success=result.success,
+                error_message=result.error[:500] if result.error else None,
+                duration_ms=duration_ms,
+                started_at=started_at,
+            )
+            self.db.add(log_entry)
+            await self.db.flush()
+        except Exception as exc:
+            logger.warning("Failed to log tool execution: %s", exc)
 
     async def _dispatch_to_tool_server(self, request: ToolCallRequest) -> ToolCallResult:
         """Dispatch a tool call to the tool server."""

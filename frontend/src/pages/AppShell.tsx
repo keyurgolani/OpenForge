@@ -9,6 +9,7 @@ import { getShortcutDisplay } from '@/lib/keyboard'
 import { onQuickKnowledgeOpen, type QuickKnowledgeType } from '@/lib/quick-knowledge'
 import CommandPalette from '@/components/shared/CommandPalette'
 import { QuickKnowledgePanel } from '@/components/shared/QuickKnowledgePanel'
+import { FileUploadModal, type FileUploadType } from '@/components/knowledge'
 import { ModeToggle } from '@/components/mode-toggle'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator,
@@ -17,7 +18,8 @@ import MarkdownIt from 'markdown-it'
 import {
     Home, MessageSquare, Search, Settings, Plus, Folder,
     FileText, Pin, Archive, Bookmark, Code2, Zap, WifiOff,
-    PanelLeft, ChevronDown, ChevronLeft, ChevronRight, Brain, CheckSquare, Calendar, Star, Pencil, Trash2
+    PanelLeft, ChevronDown, ChevronLeft, ChevronRight, Brain, CheckSquare, Calendar, Star, Pencil, Trash2,
+    Image, Music
 } from 'lucide-react'
 import { getWorkspaceIcon } from '@/pages/SettingsPage'
 
@@ -87,6 +89,7 @@ export default function AppShell() {
     const location = useLocation()
     const [sidebarOpen, setSidebarOpen] = useState(true)
     const [showQuickKnowledge, setShowQuickKnowledge] = useState(false)
+    const [uploadModalType, setUploadModalType] = useState<FileUploadType | null>(null)
     const [defaultKnowledgeType, setDefaultKnowledgeType] = useState<'standard' | 'fleeting' | 'bookmark' | 'gist'>('standard')
     const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
     const [workspaceQuery, setWorkspaceQuery] = useState('')
@@ -650,6 +653,25 @@ export default function AppShell() {
                             >
                                 <Code2 className="w-3.5 h-3.5 text-green-500" /> Gist
                             </button>
+                            <div className="my-1 border-t border-border/50" />
+                            <button
+                                className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground focus:outline-none"
+                                onClick={() => setUploadModalType('image')}
+                            >
+                                <Image className="w-3.5 h-3.5 text-pink-400" /> Image
+                            </button>
+                            <button
+                                className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground focus:outline-none"
+                                onClick={() => setUploadModalType('audio')}
+                            >
+                                <Music className="w-3.5 h-3.5 text-purple-400" /> Audio
+                            </button>
+                            <button
+                                className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground focus:outline-none"
+                                onClick={() => setUploadModalType('pdf')}
+                            >
+                                <FileText className="w-3.5 h-3.5 text-red-400" /> PDF
+                            </button>
                         </div>
                     </div>
                 </header>
@@ -659,6 +681,13 @@ export default function AppShell() {
                     defaultType={defaultKnowledgeType}
                     onClose={() => setShowQuickKnowledge(false)}
                 />
+                {uploadModalType && (
+                    <FileUploadModal
+                        open={true}
+                        type={uploadModalType}
+                        onClose={() => setUploadModalType(null)}
+                    />
+                )}
 
                 <div className="relative z-0 flex-1 min-h-0 flex gap-3 p-3">
                     <main

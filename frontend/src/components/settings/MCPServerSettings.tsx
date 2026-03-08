@@ -97,7 +97,7 @@ export function MCPServerSettings({ className = '' }: MCPServerSettingsProps) {
         <div className={`space-y-6 ${className}`}>
             <div className="flex items-center justify-between">
                 <div>
-                    <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
                         <Server className="w-5 h-5 text-purple-400" />
                         MCP Servers
                     </h2>
@@ -108,7 +108,7 @@ export function MCPServerSettings({ className = '' }: MCPServerSettingsProps) {
                 <button
                     onClick={() => setShowAddForm(!showAddForm)}
                     className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30
-                             text-purple-700 rounded-lg text-sm transition-colors"
+                             text-accent rounded-lg text-sm transition-colors"
                 >
                     <Plus className="w-4 h-4" />
                     Add Server
@@ -117,8 +117,8 @@ export function MCPServerSettings({ className = '' }: MCPServerSettingsProps) {
 
             {/* Add Server Form */}
             {showAddForm && (
-                <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-4 space-y-4">
-                    <h3 className="text-sm font-medium text-white">Add New MCP Server</h3>
+                <div className="bg-card border border-border rounded-xl p-4 space-y-4">
+                    <h3 className="text-sm font-medium text-foreground">Add New MCP Server</h3>
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -127,8 +127,7 @@ export function MCPServerSettings({ className = '' }: MCPServerSettingsProps) {
                                 type="text"
                                 value={newServer.name}
                                 onChange={(e) => setNewServer({ ...newServer, name: e.target.value })}
-                                className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white
-                                         text-sm focus:outline-none focus:border-purple-500"
+                                className="input"
                                 placeholder="My MCP Server"
                             />
                         </div>
@@ -138,8 +137,7 @@ export function MCPServerSettings({ className = '' }: MCPServerSettingsProps) {
                                 type="text"
                                 value={newServer.url}
                                 onChange={(e) => setNewServer({ ...newServer, url: e.target.value })}
-                                className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white
-                                         text-sm focus:outline-none focus:border-purple-500"
+                                className="input"
                                 placeholder="http://localhost:3002"
                             />
                         </div>
@@ -151,8 +149,7 @@ export function MCPServerSettings({ className = '' }: MCPServerSettingsProps) {
                             type="text"
                             value={newServer.description}
                             onChange={(e) => setNewServer({ ...newServer, description: e.target.value })}
-                            className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white
-                                     text-sm focus:outline-none focus:border-purple-500"
+                            className="input"
                             placeholder="Optional description"
                         />
                     </div>
@@ -163,8 +160,7 @@ export function MCPServerSettings({ className = '' }: MCPServerSettingsProps) {
                             <select
                                 value={newServer.auth_type}
                                 onChange={(e) => setNewServer({ ...newServer, auth_type: e.target.value })}
-                                className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white
-                                         text-sm focus:outline-none focus:border-purple-500"
+                                className="input"
                             >
                                 <option value="none">None</option>
                                 <option value="bearer">Bearer Token</option>
@@ -180,14 +176,13 @@ export function MCPServerSettings({ className = '' }: MCPServerSettingsProps) {
                                         type={showAuthValue ? 'text' : 'password'}
                                         value={newServer.auth_value}
                                         onChange={(e) => setNewServer({ ...newServer, auth_value: e.target.value })}
-                                        className="w-full px-3 py-2 pr-10 bg-gray-900 border border-gray-600 rounded-lg text-white
-                                                 text-sm focus:outline-none focus:border-purple-500"
+                                        className="input pr-10"
                                         placeholder="Enter auth value"
                                     />
                                     <button
                                         type="button"
                                         onClick={() => setShowAuthValue(!showAuthValue)}
-                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white"
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                                     >
                                         {showAuthValue ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                     </button>
@@ -201,8 +196,7 @@ export function MCPServerSettings({ className = '' }: MCPServerSettingsProps) {
                         <select
                             value={newServer.default_risk_level}
                             onChange={(e) => setNewServer({ ...newServer, default_risk_level: e.target.value })}
-                            className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white
-                                     text-sm focus:outline-none focus:border-purple-500"
+                            className="input"
                         >
                             <option value="low">Low (auto-approve)</option>
                             <option value="medium">Medium (warn)</option>
@@ -214,15 +208,15 @@ export function MCPServerSettings({ className = '' }: MCPServerSettingsProps) {
                     <div className="flex justify-end gap-2">
                         <button
                             onClick={() => setShowAddForm(false)}
-                            className="px-3 py-1.5 text-muted-foreground hover:text-white text-sm transition-colors"
+                            className="px-3 py-1.5 text-muted-foreground hover:text-foreground text-sm transition-colors"
                         >
                             Cancel
                         </button>
                         <button
                             onClick={handleCreate}
                             disabled={!newServer.name || !newServer.url || createMutation.isPending}
-                            className="flex items-center gap-2 px-4 py-1.5 bg-purple-500 hover:bg-purple-600
-                                     disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg
+                            className="flex items-center gap-2 px-4 py-1.5 bg-accent hover:bg-accent/90
+                                     disabled:opacity-50 disabled:cursor-not-allowed text-accent-foreground rounded-lg
                                      text-sm transition-colors"
                         >
                             {createMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -302,20 +296,20 @@ function MCPServerCard({
     }
 
     return (
-        <div className={`bg-gray-800/50 border rounded-xl overflow-hidden ${
-            server.is_enabled ? 'border-gray-700' : 'border-gray-800 opacity-60'
+        <div className={`bg-card border rounded-xl overflow-hidden ${
+            server.is_enabled ? 'border-border' : 'border-border opacity-60'
         }`}>
             {/* Header */}
             <div
-                className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-800/30"
+                className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/30"
                 onClick={onToggleExpand}
             >
                 <div className="flex items-center gap-3">
                     <div className={`w-2 h-2 rounded-full ${
-                        server.is_enabled ? 'bg-green-400' : 'bg-gray-500'
+                        server.is_enabled ? 'bg-green-400' : 'bg-muted'
                     }`} />
                     <div>
-                        <h3 className="font-medium text-white">{server.name}</h3>
+                        <h3 className="font-medium text-foreground">{server.name}</h3>
                         <p className="text-xs text-muted-foreground">{server.url}</p>
                     </div>
                 </div>
@@ -338,7 +332,7 @@ function MCPServerCard({
 
             {/* Expanded Content */}
             {isExpanded && (
-                <div className="border-t border-gray-700 p-4 space-y-4">
+                <div className="border-t border-border p-4 space-y-4">
                     {server.description && (
                         <p className="text-sm text-muted-foreground">{server.description}</p>
                     )}
@@ -349,8 +343,8 @@ function MCPServerCard({
                             onClick={(e) => { e.stopPropagation(); onToggleEnabled(!server.is_enabled) }}
                             className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-colors ${
                                 server.is_enabled
-                                    ? 'bg-gray-700 text-gray-700 hover:bg-gray-600'
-                                    : 'bg-green-500/20 text-green-700 hover:bg-green-500/30'
+                                    ? 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                    : 'bg-green-500/20 text-green-600 dark:text-green-400 hover:bg-green-500/30'
                             }`}
                         >
                             <Power className="w-3 h-3" />
@@ -360,7 +354,7 @@ function MCPServerCard({
                             onClick={(e) => { e.stopPropagation(); onDiscover() }}
                             disabled={isDiscovering}
                             className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/20 hover:bg-blue-500/30
-                                     text-blue-700 rounded text-xs transition-colors disabled:opacity-50"
+                                     text-blue-600 dark:text-blue-400 rounded text-xs transition-colors disabled:opacity-50"
                         >
                             {isDiscovering ? (
                                 <Loader2 className="w-3 h-3 animate-spin" />
@@ -373,7 +367,7 @@ function MCPServerCard({
                             onClick={(e) => { e.stopPropagation(); onDelete() }}
                             disabled={isDeleting}
                             className="flex items-center gap-1.5 px-2.5 py-1 bg-red-500/20 hover:bg-red-500/30
-                                     text-red-700 rounded text-xs transition-colors disabled:opacity-50"
+                                     text-red-600 dark:text-red-400 rounded text-xs transition-colors disabled:opacity-50"
                         >
                             {isDeleting ? (
                                 <Loader2 className="w-3 h-3 animate-spin" />
@@ -386,7 +380,7 @@ function MCPServerCard({
 
                     {/* Tools List */}
                     <div>
-                        <h4 className="text-xs font-medium text-gray-700 mb-2">Discovered Tools</h4>
+                        <h4 className="text-xs font-medium text-muted-foreground mb-2">Discovered Tools</h4>
                         {isLoadingTools ? (
                             <div className="flex items-center justify-center py-4">
                                 <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
@@ -396,11 +390,11 @@ function MCPServerCard({
                                 {toolsData.tools.map((tool: any) => (
                                     <div
                                         key={tool.name}
-                                        className="flex items-center justify-between p-2 bg-gray-900/50 rounded"
+                                        className="flex items-center justify-between p-2 bg-muted rounded"
                                     >
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-sm text-white truncate">{tool.name}</p>
-                                            <p className="text-xs text-gray-500 truncate">
+                                            <p className="text-sm text-foreground truncate">{tool.name}</p>
+                                            <p className="text-xs text-muted-foreground truncate">
                                                 {tool.description || 'No description'}
                                             </p>
                                         </div>
@@ -416,7 +410,7 @@ function MCPServerCard({
                                 ))}
                             </div>
                         ) : (
-                            <p className="text-sm text-gray-500 py-2">
+                            <p className="text-sm text-muted-foreground py-2">
                                 No tools discovered. Click "Discover" to fetch tools.
                             </p>
                         )}

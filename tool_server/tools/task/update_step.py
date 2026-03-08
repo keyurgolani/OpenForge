@@ -3,8 +3,8 @@ Update step tool for OpenForge.
 
 Updates the status of a plan step.
 """
-from protocol import BaseTool, ToolResult, ToolContext
-from config import get_settings
+from tool_server.protocol import BaseTool, ToolResult, ToolContext
+from tool_server.config import get_settings
 import redis.asyncio as aioredis
 import logging
 import json

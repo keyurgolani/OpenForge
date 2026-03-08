@@ -3,9 +3,9 @@ Web search tool for OpenForge.
 
 Searches the web using SearxNG or a search API.
 """
-from protocol import BaseTool, ToolResult, ToolContext
-from config import get_settings
-import aiohttp
+from tool_server.protocol import BaseTool, ToolResult, ToolContext
+from tool_server.config import get_settings
+import httpx
 import logging
 from typing import Optional
 
@@ -117,23 +117,17 @@ Note: Requires search engine configuration in the tool server settings."""
             # Remove None values
             search_params = {k: v for k, v in search_params.items() if v is not None}
 
-            timeout = aiohttp.ClientTimeout(total=30)
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(settings.search_url, params=search_params, headers=headers)
 
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(
-                    settings.search_url,
-                    params=search_params,
-                    headers=headers,
-                    ssl=True
-                ) as response:
-                    if response.status != 200:
-                        return ToolResult(
-                            success=False,
-                            output=None,
-                            error=f"Search API error: {response.status}"
-                        )
+            if response.status_code != 200:
+                return ToolResult(
+                    success=False,
+                    output=None,
+                    error=f"Search API error: {response.status_code}"
+                )
 
-                    data = await response.json()
+            data = response.json()
 
             # Parse results
             results = []
@@ -162,7 +156,7 @@ Note: Requires search engine configuration in the tool server settings."""
                 }
             )
 
-        except aiohttp.ClientError as e:
+        except httpx.RequestError as e:
             return ToolResult(
                 success=False,
                 output=None,

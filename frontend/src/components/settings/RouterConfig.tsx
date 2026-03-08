@@ -1,107 +1,94 @@
 import { useState, useEffect } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getRouterConfig, createRouterConfig, updateRouterConfig, listProviders } from '@/lib/api'
-import { Loader2, Plus, Trash2, Save } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { getRouterConfig, createRouterConfig, updateRouterConfig, listEndpoints } from '@/lib/api'
+import { Loader2, Save } from 'lucide-react'
 
 interface Tier {
-  minScore: number
-  maxScore: number
-  providerId: string
-  model: string
-}
-
-interface RouterConfigData {
-  routingProviderId: string
-  routingModel: string
-  tiers: Tier[]
+  complexityLevel: string
+  endpointId: string
+  priority: number
 }
 
 const TIERS = [
-  { name: 'Simple', minScore: 0, maxScore: 0.25 },
-  { name: 'Moderate', minScore: 0.25, maxScore: 0.5 },
-  { name: 'Complex', minScore: 0.5, maxScore: 0.75 },
-  { name: 'Expert', minScore: 0.75, maxScore: 1.0 },
+  { name: 'Simple', level: '0-0.25' },
+  { name: 'Moderate', level: '0.25-0.5' },
+  { name: 'Complex', level: '0.5-0.75' },
+  { name: 'Expert', level: '0.75-1.0' },
 ]
 
-export function RouterConfig({ providerId }: { providerId: string }) {
+export function RouterConfig({ vpId }: { vpId: string }) {
   const qc = useQueryClient()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [routingProviderId, setRoutingProviderId] = useState('')
-  const [routingModel, setRoutingModel] = useState('')
+  const [routingEndpointId, setRoutingEndpointId] = useState('')
+  const [routingPrompt, setRoutingPrompt] = useState('')
   const [tiers, setTiers] = useState<Tier[]>([])
-  const [models, setModels] = useState<Map<string, { id: string; name: string }[]>>(new Map())
 
-  const { data: providers } = useQuery({
-    queryKey: ['providers'],
-    queryFn: listProviders,
+  const { data: endpoints } = useQuery({
+    queryKey: ['endpoints'],
+    queryFn: listEndpoints,
   })
 
   const { data: existingConfig } = useQuery({
-    queryKey: ['router-config', providerId],
-    queryFn: () => getRouterConfig(providerId),
-    enabled: !!providerId,
+    queryKey: ['router-config', vpId],
+    queryFn: () => getRouterConfig(vpId),
+    enabled: !!vpId,
     retry: false,
   })
 
   useEffect(() => {
-    const loadConfig = async () => {
-      setLoading(true)
-      try {
-        if (existingConfig) {
-          setRoutingProviderId(existingConfig.routing_provider_id || '')
-          setRoutingModel(existingConfig.routing_model || '')
-          setTiers(existingConfig.tiers || [])
-        } else {
-          setRoutingProviderId('')
-          setRoutingModel('')
-          setTiers(
-            TIERS.map((t) => ({
-              minScore: t.minScore,
-              maxScore: t.maxScore,
-              providerId: '',
-              model: '',
-            }))
-          )
-        }
-        setError(null)
-      } catch (e: unknown) {
-        const err = e as { response?: { data?: { detail?: string } }; message?: string }
-        setError(err?.response?.data?.detail ?? err?.message ?? 'Failed to load config')
-      } finally {
-        setLoading(false)
-      }
+    setLoading(true)
+    if (existingConfig) {
+      setRoutingEndpointId(existingConfig.routing_endpoint_id || '')
+      setRoutingPrompt(existingConfig.routing_prompt || '')
+      const loadedTiers = (existingConfig.tiers || []).map((t: any) => ({
+        complexityLevel: t.complexity_level,
+        endpointId: t.endpoint_id,
+        priority: t.priority || 0,
+      }))
+      // Fill in missing tiers with defaults
+      const tierMap = new Map<string, Tier>(loadedTiers.map((t: Tier) => [t.complexityLevel, t]))
+      setTiers(TIERS.map((t): Tier => tierMap.get(t.level) ?? { complexityLevel: t.level, endpointId: '', priority: 0 }))
+    } else {
+      setRoutingEndpointId('')
+      setRoutingPrompt('')
+      setTiers(TIERS.map(t => ({ complexityLevel: t.level, endpointId: '', priority: 0 })))
     }
-    loadConfig()
+    setError(null)
+    setLoading(false)
   }, [existingConfig])
 
   const handleSave = async () => {
-    if (!routingProviderId || !routingModel) {
-      setError('Routing provider and model are required')
+    if (!routingEndpointId) {
+      setError('Routing endpoint is required')
       return
     }
 
-    const incompleteTier = tiers.find((t) => !t.providerId || !t.model)
+    const incompleteTier = tiers.find(t => !t.endpointId)
     if (incompleteTier) {
-      setError('All tiers must have a provider and model selected')
+      setError('All tiers must have an endpoint selected')
       return
     }
 
     setSaving(true)
     setError(null)
     try {
-      await updateRouterConfig(providerId, {
-        routing_provider_id: routingProviderId,
-        routing_model: routingModel,
-        tiers: tiers.map((t) => ({
-          complexity_level: `${t.minScore}-${t.maxScore}`,
-          llm_provider_id: t.providerId,
-          model: t.model,
-          priority: 0,
+      const payload = {
+        routing_endpoint_id: routingEndpointId,
+        routing_prompt: routingPrompt || undefined,
+        tiers: tiers.map(t => ({
+          complexity_level: t.complexityLevel,
+          endpoint_id: t.endpointId,
+          priority: t.priority,
         })),
-      })
-      qc.invalidateQueries({ queryKey: ['router-config', providerId] })
+      }
+      if (existingConfig) {
+        await updateRouterConfig(vpId, payload)
+      } else {
+        await createRouterConfig(vpId, payload)
+      }
+      qc.invalidateQueries({ queryKey: ['router-config', vpId] })
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } }; message?: string }
       setError(err?.response?.data?.detail ?? err?.message ?? 'Failed to save config')
@@ -124,32 +111,31 @@ export function RouterConfig({ providerId }: { providerId: string }) {
       {error && <div className="text-xs p-2.5 rounded-lg bg-destructive/10 text-red-700 border border-destructive/20">{error}</div>}
 
       <div>
-        <label className="text-xs text-muted-foreground font-medium block mb-1.5">Routing Model Provider</label>
+        <label className="text-xs text-muted-foreground font-medium block mb-1.5">Routing Endpoint</label>
         <select
-          value={routingProviderId}
-          onChange={(e) => setRoutingProviderId(e.target.value)}
+          value={routingEndpointId}
+          onChange={(e) => setRoutingEndpointId(e.target.value)}
           className="input text-sm w-full"
         >
-          <option value="">Select provider...</option>
-          {providers?.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.display_name}
+          <option value="">Select endpoint...</option>
+          {endpoints?.map((ep: any) => (
+            <option key={ep.id} value={ep.id}>
+              {ep.display_name || `${ep.provider_display_name || ep.virtual_display_name} / ${ep.model_id || ep.virtual_type}`}
             </option>
           ))}
         </select>
-        <p className="text-[10px] text-muted-foreground mt-1">The LLM that will score prompt complexity and route requests</p>
+        <p className="text-[10px] text-muted-foreground mt-1">The endpoint that will score prompt complexity and route requests</p>
       </div>
 
-      {routingProviderId && (
-        <div>
-          <label className="text-xs text-muted-foreground font-medium block mb-1.5">Routing Model</label>
-          <select value={routingModel} onChange={(e) => setRoutingModel(e.target.value)} className="input text-sm w-full">
-            <option value="">Select model...</option>
-            {/* Models would be fetched based on routingProviderId */}
-            <option value="gpt-4o-mini">gpt-4o-mini (sample)</option>
-          </select>
-        </div>
-      )}
+      <div>
+        <label className="text-xs text-muted-foreground font-medium block mb-1.5">Custom Routing Prompt (optional)</label>
+        <textarea
+          placeholder="Custom instructions for complexity classification..."
+          value={routingPrompt}
+          onChange={(e) => setRoutingPrompt(e.target.value)}
+          className="input text-sm w-full min-h-16"
+        />
+      </div>
 
       <div className="space-y-3">
         <label className="text-xs text-muted-foreground font-medium block">Routing Tiers</label>
@@ -157,45 +143,27 @@ export function RouterConfig({ providerId }: { providerId: string }) {
           const tierInfo = TIERS[idx]
           return (
             <div key={idx} className="p-2.5 rounded-lg border border-border/50 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium">
-                  {tierInfo.name} ({tierInfo.minScore.toFixed(2)} - {tierInfo.maxScore.toFixed(2)})
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[10px] text-muted-foreground block mb-1">Provider</label>
-                  <select
-                    value={tier.providerId}
-                    onChange={(e) => {
-                      const newTiers = [...tiers]
-                      newTiers[idx].providerId = e.target.value
-                      setTiers(newTiers)
-                    }}
-                    className="input text-sm w-full"
-                  >
-                    <option value="">Select provider...</option>
-                    {providers?.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.display_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] text-muted-foreground block mb-1">Model</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. gpt-4o"
-                    value={tier.model}
-                    onChange={(e) => {
-                      const newTiers = [...tiers]
-                      newTiers[idx].model = e.target.value
-                      setTiers(newTiers)
-                    }}
-                    className="input text-sm w-full"
-                  />
-                </div>
+              <span className="text-xs font-medium">
+                {tierInfo.name} ({tierInfo.level})
+              </span>
+              <div>
+                <label className="text-[10px] text-muted-foreground block mb-1">Target Endpoint</label>
+                <select
+                  value={tier.endpointId}
+                  onChange={(e) => {
+                    const newTiers = [...tiers]
+                    newTiers[idx] = { ...newTiers[idx], endpointId: e.target.value }
+                    setTiers(newTiers)
+                  }}
+                  className="input text-sm w-full"
+                >
+                  <option value="">Select endpoint...</option>
+                  {endpoints?.map((ep: any) => (
+                    <option key={ep.id} value={ep.id}>
+                      {ep.display_name || `${ep.provider_display_name || ep.virtual_display_name} / ${ep.model_id || ep.virtual_type}`}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           )
@@ -205,7 +173,7 @@ export function RouterConfig({ providerId }: { providerId: string }) {
       <div className="flex gap-2">
         <button className="btn-primary flex-1 justify-center py-2.5" onClick={handleSave} disabled={saving}>
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          {saving ? 'Saving…' : 'Save Router Configuration'}
+          {saving ? 'Saving...' : 'Save Router Configuration'}
         </button>
       </div>
     </div>

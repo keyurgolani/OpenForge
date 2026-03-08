@@ -5,6 +5,8 @@ services:
       dockerfile: docker/Dockerfile
     ports:
       - "${PORT:-3100}:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - DATABASE_URL=postgresql+asyncpg://openforge:${DB_PASSWORD:-changeme}@postgres:5432/openforge
       - QDRANT_URL=http://qdrant:6333
@@ -88,6 +90,8 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.worker
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - DATABASE_URL=postgresql+asyncpg://openforge:${DB_PASSWORD:-changeme}@postgres:5432/openforge
       - REDIS_URL=redis://redis:6379/0

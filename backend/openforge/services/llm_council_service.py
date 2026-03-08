@@ -1,31 +1,32 @@
-"""LLM Council Service - manages council configs in the database."""
+"""LLM Council Service — manages council configs in the database."""
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from uuid import UUID
 from typing import Optional
 
-from openforge.db.models import LLMCouncilConfig, LLMCouncilMember, LLMProvider
-from openforge.utils.crypto import decrypt_value
+from openforge.db.models import LLMCouncilConfig, LLMCouncilMember, LLMEndpoint
 
 
 class LLMCouncilService:
-    async def get_config(self, db: AsyncSession, provider_id: UUID) -> Optional[dict]:
+    async def get_config(self, db: AsyncSession, virtual_provider_id: UUID) -> Optional[dict]:
         result = await db.execute(
             select(LLMCouncilConfig)
-            .where(LLMCouncilConfig.llm_provider_id == provider_id)
-            .options(selectinload(LLMCouncilConfig.members))
+            .where(LLMCouncilConfig.virtual_provider_id == virtual_provider_id)
+            .options(
+                selectinload(LLMCouncilConfig.members).selectinload(LLMCouncilMember.endpoint),
+                selectinload(LLMCouncilConfig.chairman_endpoint),
+            )
         )
         config = result.scalar_one_or_none()
         if not config:
             return None
-        return await self._config_to_dict(db, config)
+        return self._config_to_dict(config)
 
-    async def create_config(self, db: AsyncSession, provider_id: UUID, chairman_provider_id: UUID, chairman_model: str, parallel_execution: bool, judging_prompt: Optional[str], members: list[dict]) -> dict:
+    async def create_config(self, db: AsyncSession, virtual_provider_id: UUID, chairman_endpoint_id: UUID, parallel_execution: bool, judging_prompt: Optional[str], members: list[dict]) -> dict:
         config = LLMCouncilConfig(
-            llm_provider_id=provider_id,
-            chairman_provider_id=chairman_provider_id,
-            chairman_model=chairman_model,
+            virtual_provider_id=virtual_provider_id,
+            chairman_endpoint_id=chairman_endpoint_id,
             parallel_execution=parallel_execution,
             judging_prompt=judging_prompt,
         )
@@ -35,35 +36,26 @@ class LLMCouncilService:
         for member_data in members:
             member = LLMCouncilMember(
                 council_config_id=config.id,
-                llm_provider_id=UUID(member_data["llm_provider_id"]),
-                model=member_data["model"],
+                endpoint_id=UUID(str(member_data["endpoint_id"])),
                 display_label=member_data.get("display_label"),
             )
             db.add(member)
 
         await db.commit()
-        result = await db.execute(
-            select(LLMCouncilConfig)
-            .where(LLMCouncilConfig.id == config.id)
-            .options(selectinload(LLMCouncilConfig.members))
-        )
-        config = result.scalar_one()
-        return await self._config_to_dict(db, config)
+        return await self.get_config(db, virtual_provider_id)
 
-    async def update_config(self, db: AsyncSession, provider_id: UUID, **kwargs) -> Optional[dict]:
+    async def update_config(self, db: AsyncSession, virtual_provider_id: UUID, **kwargs) -> Optional[dict]:
         result = await db.execute(
             select(LLMCouncilConfig)
-            .where(LLMCouncilConfig.llm_provider_id == provider_id)
+            .where(LLMCouncilConfig.virtual_provider_id == virtual_provider_id)
             .options(selectinload(LLMCouncilConfig.members))
         )
         config = result.scalar_one_or_none()
         if not config:
             return None
 
-        if "chairman_provider_id" in kwargs:
-            config.chairman_provider_id = UUID(kwargs["chairman_provider_id"])
-        if "chairman_model" in kwargs:
-            config.chairman_model = kwargs["chairman_model"]
+        if "chairman_endpoint_id" in kwargs:
+            config.chairman_endpoint_id = UUID(str(kwargs["chairman_endpoint_id"]))
         if "parallel_execution" in kwargs:
             config.parallel_execution = kwargs["parallel_execution"]
         if "judging_prompt" in kwargs:
@@ -76,59 +68,41 @@ class LLMCouncilService:
             for member_data in kwargs["members"]:
                 member = LLMCouncilMember(
                     council_config_id=config.id,
-                    llm_provider_id=UUID(member_data["llm_provider_id"]),
-                    model=member_data["model"],
+                    endpoint_id=UUID(str(member_data["endpoint_id"])),
                     display_label=member_data.get("display_label"),
                 )
                 db.add(member)
 
         await db.commit()
-        result = await db.execute(
-            select(LLMCouncilConfig)
-            .where(LLMCouncilConfig.id == config.id)
-            .options(selectinload(LLMCouncilConfig.members))
-        )
-        config = result.scalar_one()
-        return await self._config_to_dict(db, config)
+        return await self.get_config(db, virtual_provider_id)
 
-    async def delete_config(self, db: AsyncSession, provider_id: UUID):
+    async def delete_config(self, db: AsyncSession, virtual_provider_id: UUID):
         result = await db.execute(
-            select(LLMCouncilConfig).where(LLMCouncilConfig.llm_provider_id == provider_id)
+            select(LLMCouncilConfig).where(LLMCouncilConfig.virtual_provider_id == virtual_provider_id)
         )
         config = result.scalar_one_or_none()
         if config:
             await db.delete(config)
             await db.commit()
 
-    async def _config_to_dict(self, db: AsyncSession, config: LLMCouncilConfig) -> dict:
+    def _config_to_dict(self, config: LLMCouncilConfig) -> dict:
         members = []
         for member in config.members:
-            p_result = await db.execute(select(LLMProvider).where(LLMProvider.id == member.llm_provider_id))
-            provider = p_result.scalar_one_or_none()
             members.append({
                 "id": str(member.id),
-                "llm_provider_id": str(member.llm_provider_id),
-                "model": member.model,
+                "endpoint_id": str(member.endpoint_id),
+                "endpoint_display_name": member.endpoint.display_name if member.endpoint else None,
+                "endpoint_type": member.endpoint.endpoint_type if member.endpoint else None,
                 "display_label": member.display_label,
-                "provider_name": provider.provider_name if provider else None,
-                "api_key": decrypt_value(provider.api_key_enc) if provider and provider.api_key_enc else "",
-                "base_url": provider.base_url if provider else None,
             })
-
-        # Chairman provider
-        ch_result = await db.execute(select(LLMProvider).where(LLMProvider.id == config.chairman_provider_id))
-        ch_provider = ch_result.scalar_one_or_none()
 
         return {
             "id": str(config.id),
-            "llm_provider_id": str(config.llm_provider_id),
-            "chairman_provider_id": str(config.chairman_provider_id),
-            "chairman_model": config.chairman_model,
+            "virtual_provider_id": str(config.virtual_provider_id),
+            "chairman_endpoint_id": str(config.chairman_endpoint_id),
+            "chairman_endpoint_display_name": config.chairman_endpoint.display_name if config.chairman_endpoint else None,
             "parallel_execution": config.parallel_execution,
             "judging_prompt": config.judging_prompt,
-            "chairman_provider_name": ch_provider.provider_name if ch_provider else None,
-            "chairman_api_key": decrypt_value(ch_provider.api_key_enc) if ch_provider and ch_provider.api_key_enc else "",
-            "chairman_base_url": ch_provider.base_url if ch_provider else None,
             "members": members,
             "created_at": config.created_at.isoformat(),
             "updated_at": config.updated_at.isoformat(),

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
-    getOnboarding, advanceOnboarding, createProvider, updateProvider,
+    getOnboarding, advanceOnboarding, createProvider, updateProvider, syncModels,
     testConnection, listModels, createWorkspace, listProviders,
     listSettings, updateSetting, listSchedules, updateSchedule,
 } from '@/lib/api'
@@ -196,7 +196,7 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
 
     const handleSelectProvider = (id: string) => {
         setSelected(id); setApiKey(''); setShowKey(false)
-        setBaseUrl(id === 'ollama' ? 'http://localhost:11434' : '')
+        setBaseUrl(id === 'ollama' ? 'http://host.docker.internal:11434' : '')
         setDisplayName(''); setModels(null); setModelError(null)
         setSelectedModels(new Set()); setManualModel(''); setSaveError(null); setTestResult(null)
         setCreatedProviderId(null); setShowAdvanced(false)
@@ -276,9 +276,8 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
                     display_name: displayName || provider?.name || selected,
                     api_key: apiKey || undefined,
                     base_url: baseUrl || undefined,
-                    default_model: modelsToAdd[0],
-                    enabled_models: enabledList,
                 })
+                await syncModels(createdProviderId, enabledList)
                 setConfigured(c => [...c, { id: createdProviderId, name: sanitizeProviderDisplayName(displayName || provider?.name || selected!) }])
             } else {
                 const saved = await createProvider({
@@ -286,7 +285,6 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
                     display_name: displayName || provider?.name || selected,
                     api_key: apiKey || undefined,
                     base_url: baseUrl || undefined,
-                    default_model: modelsToAdd[0],
                     enabled_models: enabledList,
                 })
                 setConfigured(c => [...c, { id: saved.id, name: sanitizeProviderDisplayName(saved.display_name) }])
@@ -362,6 +360,9 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
                             {provider?.needsUrl ? (
                                 <>
                                     <input className="input text-sm" placeholder={(provider as any)?.urlPlaceholder ?? 'https://your-api.com'} value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
+                                    {selected === 'ollama' && (
+                                        <p className="text-[10px] text-muted-foreground">Running via Docker? Use <code className="bg-muted px-1 rounded">host.docker.internal</code> instead of <code className="bg-muted px-1 rounded">localhost</code> or a LAN IP.</p>
+                                    )}
                                     <div className="relative">
                                         <input type={showKey ? 'text' : 'password'} className="input text-sm pr-10" placeholder={(provider as any)?.placeholder ?? 'API Key or Token'} value={apiKey} onChange={e => setApiKey(e.target.value)} autoComplete="off" />
                                         <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setShowKey(v => !v)}>

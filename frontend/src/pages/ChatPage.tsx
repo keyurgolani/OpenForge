@@ -8,7 +8,7 @@ import {
     deleteConversation,
     permanentlyDeleteConversation,
     updateConversation,
-    listProviders,
+    listEndpoints,
     getWorkspace,
 } from '@/lib/api'
 import { useStreamingChat } from '@/hooks/useStreamingChat'
@@ -85,21 +85,24 @@ interface Conversation {
     last_message_at: string | null
 }
 
-interface ProviderRecord {
+interface EndpointRecord {
     id: string
-    display_name: string
-    provider_name: string
-    default_model: string | null
-    enabled_models?: { id?: string; name?: string }[]
-    is_system_default?: boolean
+    endpoint_type: string
+    display_name?: string | null
+    provider_id?: string | null
+    model_id?: string | null
+    virtual_provider_id?: string | null
+    is_default_chat?: boolean
+    is_default_vision?: boolean
+    provider_name?: string | null
+    provider_display_name?: string | null
+    virtual_type?: string | null
+    virtual_display_name?: string | null
 }
 
 interface ModelOption {
     key: string
-    providerId: string
-    modelId: string
-    providerLabel: string
-    modelLabel: string
+    endpointId: string
     label: string
     searchText: string
 }
@@ -176,9 +179,9 @@ export default function ChatPage() {
         enabled: !!activeCid,
     })
 
-    const { data: providers = [] } = useQuery({
-        queryKey: ['providers'],
-        queryFn: listProviders,
+    const { data: endpoints = [] } = useQuery({
+        queryKey: ['endpoints'],
+        queryFn: listEndpoints,
     })
 
     const {
@@ -234,41 +237,35 @@ export default function ChatPage() {
         return best?.id ?? null
     }, [activeConversations])
 
-    // Build model options from providers (provider + enabled model pairs)
+    // Build model options from endpoints
     const modelOptions = useMemo(() => {
         const options: ModelOption[] = []
-        const seen = new Set<string>()
 
-        for (const provider of providers as ProviderRecord[]) {
-            const enabled = provider.enabled_models ?? []
-            const candidateModels = enabled.length > 0
-                ? enabled
-                : (provider.default_model ? [{ id: provider.default_model, name: provider.default_model }] : [])
-            const providerLabel = sanitizeProviderDisplayName(provider.display_name) || provider.provider_name
-
-            for (const model of candidateModels) {
-                const modelId = (model.id ?? '').trim()
-                if (!modelId) continue
-
-                const dedupeKey = `${provider.id}:${modelId}`
-                if (seen.has(dedupeKey)) continue
-                seen.add(dedupeKey)
-
-                const modelName = (model.name ?? modelId).trim()
-                options.push({
-                    key: dedupeKey,
-                    providerId: provider.id,
-                    modelId,
-                    providerLabel,
-                    modelLabel: modelName,
-                    label: `${providerLabel} · ${modelName}`,
-                    searchText: `${providerLabel} ${provider.provider_name} ${modelName} ${modelId}`.toLowerCase(),
-                })
+        for (const ep of endpoints as EndpointRecord[]) {
+            let label: string
+            let searchText: string
+            if (ep.endpoint_type === 'standard') {
+                const providerLabel = sanitizeProviderDisplayName(ep.provider_display_name || '') || ep.provider_name || ''
+                const modelLabel = ep.display_name || ep.model_id || ''
+                label = providerLabel ? `${providerLabel} · ${modelLabel}` : modelLabel
+                searchText = `${providerLabel} ${ep.provider_name || ''} ${modelLabel} ${ep.model_id || ''}`.toLowerCase()
+            } else {
+                const vpLabel = ep.virtual_display_name || ep.display_name || ''
+                const vpType = ep.virtual_type || 'virtual'
+                label = `${vpLabel} (${vpType})`
+                searchText = `${vpLabel} ${vpType} virtual`.toLowerCase()
             }
+
+            options.push({
+                key: ep.id,
+                endpointId: ep.id,
+                label,
+                searchText,
+            })
         }
 
         return options.sort((a, b) => a.label.localeCompare(b.label))
-    }, [providers])
+    }, [endpoints])
 
     const selectedOption = modelOptions.find(o => o.key === selectedModelKey)
     const filteredModelOptions = useMemo(() => {
@@ -279,27 +276,37 @@ export default function ChatPage() {
 
     const providerDisplayByName = useMemo(() => {
         const map: Record<string, string> = {}
-        for (const provider of providers as ProviderRecord[]) {
-            const key = (provider.provider_name || '').trim()
-            if (key) map[key] = sanitizeProviderDisplayName(provider.display_name) || key
+        for (const ep of endpoints as EndpointRecord[]) {
+            const key = (ep.provider_name || '').trim()
+            if (key) map[key] = sanitizeProviderDisplayName(ep.provider_display_name || '') || key
         }
         return map
-    }, [providers])
+    }, [endpoints])
 
     // Determine the default model label
     const defaultLabel = useMemo(() => {
         if (!workspace) return 'Default model'
-        if (workspace.llm_provider_id) {
-            const dp = (providers as ProviderRecord[]).find(p => p.id === workspace.llm_provider_id)
-            if (dp) {
-                const modelName = workspace.llm_model || dp.default_model || 'provider default'
-                return `${sanitizeProviderDisplayName(dp.display_name) || dp.provider_name} · ${modelName} (Workspace default)`
+        const chatEpId = workspace.chat_endpoint_id
+        if (chatEpId) {
+            const ep = (endpoints as EndpointRecord[]).find(e => e.id === chatEpId)
+            if (ep) {
+                if (ep.endpoint_type === 'standard') {
+                    const providerLabel = sanitizeProviderDisplayName(ep.provider_display_name || '') || ep.provider_name || ''
+                    return `${providerLabel} · ${ep.display_name || ep.model_id || 'auto'} (Workspace default)`
+                }
+                return `${ep.virtual_display_name || ep.display_name || ep.virtual_type} (Workspace default)`
             }
         }
-        const sys = (providers as ProviderRecord[]).find(p => p.is_system_default)
-        if (sys) return `${sanitizeProviderDisplayName(sys.display_name) || sys.provider_name} · ${sys.default_model || 'provider default'} (System default)`
+        const sysDefault = (endpoints as EndpointRecord[]).find(e => e.is_default_chat)
+        if (sysDefault) {
+            if (sysDefault.endpoint_type === 'standard') {
+                const providerLabel = sanitizeProviderDisplayName(sysDefault.provider_display_name || '') || sysDefault.provider_name || ''
+                return `${providerLabel} · ${sysDefault.display_name || sysDefault.model_id || 'auto'} (System default)`
+            }
+            return `${sysDefault.virtual_display_name || sysDefault.display_name || sysDefault.virtual_type} (System default)`
+        }
         return 'Default model'
-    }, [workspace, providers])
+    }, [workspace, endpoints])
 
     useEffect(() => {
         if (conversationId !== activeCid) {
@@ -749,7 +756,7 @@ export default function ChatPage() {
         }
 
         const override = selectedOption
-            ? { provider_id: selectedOption.providerId, model_id: selectedOption.modelId, attachment_ids: attachmentIds }
+            ? { endpoint_id: selectedOption.endpointId, attachment_ids: attachmentIds }
             : attachmentIds.length > 0 ? { attachment_ids: attachmentIds } : undefined
 
         const sent = sendMessage(msg, override, targetCid)
@@ -1776,12 +1783,13 @@ function ChatMessageCard({
                                     </div>
                                 )}
                                 {(modelLabel || msg.provider_metadata) && (
-                                    <div className="chat-workflow-step chat-section-reveal">
+                                    <div className="chat-workflow-step">
                                         <LLMBadge
                                             providerUsed={providerText}
                                             modelUsed={modelText}
                                             generationMs={msg.generation_ms}
                                             providerMetadata={msg.provider_metadata as any}
+                                            requestVisibility={requestVisibility}
                                         />
                                     </div>
                                 )}

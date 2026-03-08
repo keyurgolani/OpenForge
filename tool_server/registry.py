@@ -67,7 +67,7 @@ class ToolRegistry:
             init_path = os.path.join(category_path, "__init__.py")
             if os.path.exists(init_path):
                 try:
-                    module_name = f"tools.{category_dir}"
+                    module_name = f"tool_server.tools.{category_dir}"
                     module = importlib.import_module(module_name)
                     if hasattr(module, "TOOLS"):
                         for tool in module.TOOLS:

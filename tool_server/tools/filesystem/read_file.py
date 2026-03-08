@@ -3,9 +3,9 @@ Read file tool for OpenForge.
 
 Reads file contents within workspace scope with path traversal protection.
 """
-from protocol import BaseTool, ToolResult, ToolContext
-from security import WorkspaceSecurity
-from config import get_settings
+from tool_server.protocol import BaseTool, ToolResult, ToolContext
+from tool_server.security import WorkspaceSecurity
+from tool_server.config import get_settings
 import logging
 
 logger = logging.getLogger("tool-server.filesystem")

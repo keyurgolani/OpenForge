@@ -155,7 +155,7 @@ async def summarize_knowledge(
     )
 
     try:
-        provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
+        provider_name, api_key, model, base_url, _ = await llm_service.get_provider_for_workspace(db, workspace_id)
         tags_str = ", ".join([t.tag for t in knowledge_record.tags])
         prompt = await _get_prompt(
             db, "summarize_knowledge",
@@ -222,7 +222,7 @@ async def extract_insights(
     )
 
     try:
-        provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
+        provider_name, api_key, model, base_url, _ = await llm_service.get_provider_for_workspace(db, workspace_id)
         tags_str = ", ".join([t.tag for t in knowledge_record.tags])
         prompt = await _get_prompt(
             db, "extract_insights",
@@ -302,7 +302,7 @@ async def generate_title(
     )
 
     try:
-        provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
+        provider_name, api_key, model, base_url, _ = await llm_service.get_provider_for_workspace(db, workspace_id)
         prompt = await _get_prompt(db, "generate_title", knowledge_content=knowledge_record.content[:2000])
 
         title_response = await llm_gateway.chat(

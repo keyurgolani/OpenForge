@@ -3,9 +3,9 @@ Fetch page tool for OpenForge.
 
 Fetches and extracts readable text content from a URL.
 """
-from protocol import BaseTool, ToolResult, ToolContext
-from config import get_settings
-import aiohttp
+from tool_server.protocol import BaseTool, ToolResult, ToolContext
+from tool_server.config import get_settings
+import httpx
 import logging
 import re
 
@@ -187,34 +187,28 @@ Use for:
         }
 
         try:
-            timeout_config = aiohttp.ClientTimeout(total=timeout)
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+                response = await client.get(url, headers=headers)
 
-            async with aiohttp.ClientSession(timeout=timeout_config) as session:
-                async with session.get(
-                    url,
-                    headers=headers,
-                    allow_redirects=True,
-                    ssl=True
-                ) as response:
-                    status_code = response.status
+            status_code = response.status_code
 
-                    if status_code != 200:
-                        return ToolResult(
-                            success=False,
-                            output=None,
-                            error=f"HTTP error: {status_code}"
-                        )
+            if status_code != 200:
+                return ToolResult(
+                    success=False,
+                    output=None,
+                    error=f"HTTP error: {status_code}"
+                )
 
-                    content_type = response.headers.get("Content-Type", "")
-                    if "text/html" not in content_type and "application/xhtml" not in content_type:
-                        return ToolResult(
-                            success=False,
-                            output=None,
-                            error=f"Content is not HTML: {content_type}"
-                        )
+            content_type = response.headers.get("content-type", "")
+            if "text/html" not in content_type and "application/xhtml" not in content_type:
+                return ToolResult(
+                    success=False,
+                    output=None,
+                    error=f"Content is not HTML: {content_type}"
+                )
 
-                    html = await response.text()
-                    final_url = str(response.url)
+            html = response.text
+            final_url = str(response.url)
 
             # Extract content
             title, description, content = self._extract_text(html)
@@ -241,7 +235,7 @@ Use for:
                 output=result
             )
 
-        except aiohttp.ClientError as e:
+        except httpx.RequestError as e:
             return ToolResult(
                 success=False,
                 output=None,

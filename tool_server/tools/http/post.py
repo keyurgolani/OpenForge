@@ -3,9 +3,9 @@ HTTP POST tool for OpenForge.
 
 Makes HTTP POST requests with configurable body and options.
 """
-from protocol import BaseTool, ToolResult, ToolContext
-from config import get_settings
-import aiohttp
+from tool_server.protocol import BaseTool, ToolResult, ToolContext
+from tool_server.config import get_settings
+import httpx
 import json
 import logging
 from typing import Any
@@ -132,50 +132,43 @@ WARNING: This can modify data on external services."""
                 request_body = str(body)
 
         try:
-            timeout_config = aiohttp.ClientTimeout(total=timeout)
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=follow_redirects) as client:
+                response = await client.post(url, content=request_body, headers=headers)
 
-            async with aiohttp.ClientSession(timeout=timeout_config) as session:
-                async with session.post(
-                    url,
-                    data=request_body,
-                    headers=headers,
-                    allow_redirects=follow_redirects,
-                    ssl=True
-                ) as response:
-                    status_code = response.status
-                    response_headers = dict(response.headers)
+            status_code = response.status_code
+            response_headers = dict(response.headers)
 
-                    # Read response body
-                    if return_format == "json":
-                        try:
-                            response_body = await response.json()
-                        except Exception:
-                            response_body = await response.text()
-                    else:
-                        response_body = await response.text()
+            # Read response body
+            if return_format == "json":
+                try:
+                    response_body = response.json()
+                except Exception:
+                    response_body = response.text
+            else:
+                response_body = response.text
 
-                    # Truncate if needed
-                    original_length = len(str(response_body))
-                    truncated = False
-                    if self.max_output_chars and original_length > self.max_output_chars:
-                        response_body = str(response_body)[:self.max_output_chars]
-                        response_body += "\n\n... [OUTPUT TRUNCATED]"
-                        truncated = True
+            # Truncate if needed
+            original_length = len(str(response_body))
+            truncated = False
+            if self.max_output_chars and original_length > self.max_output_chars:
+                response_body = str(response_body)[:self.max_output_chars]
+                response_body += "\n\n... [OUTPUT TRUNCATED]"
+                truncated = True
 
-                    return ToolResult(
-                        success=200 <= status_code < 300,
-                        output={
-                            "url": str(response.url),
-                            "status_code": status_code,
-                            "headers": response_headers,
-                            "body": response_body,
-                            "content_type": response_headers.get("Content-Type", ""),
-                        },
-                        truncated=truncated,
-                        original_length=original_length if truncated else None
-                    )
+            return ToolResult(
+                success=200 <= status_code < 300,
+                output={
+                    "url": str(response.url),
+                    "status_code": status_code,
+                    "headers": response_headers,
+                    "body": response_body,
+                    "content_type": response_headers.get("content-type", ""),
+                },
+                truncated=truncated,
+                original_length=original_length if truncated else None
+            )
 
-        except aiohttp.ClientError as e:
+        except httpx.RequestError as e:
             return ToolResult(
                 success=False,
                 output=None,

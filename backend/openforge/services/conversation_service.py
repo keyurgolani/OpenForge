@@ -67,6 +67,8 @@ def _msg_to_response(m: Message) -> MessageResponse:
         generation_ms=m.generation_ms,
         context_sources=m.context_sources,
         attachments_processed=[_attachment_to_processed_summary(att) for att in (m.attachments or [])],
+        provider_metadata=m.provider_metadata,
+        tool_calls=m.tool_calls,
         created_at=m.created_at,
     )
 
@@ -283,6 +285,7 @@ class ConversationService:
         generation_ms: int | None = None,
         context_sources: list | None = None,
         trigger_auto_title: bool = True,
+        provider_metadata: dict | None = None,
     ) -> Message:
         msg = Message(
             conversation_id=conversation_id,
@@ -294,6 +297,7 @@ class ConversationService:
             token_count=token_count,
             generation_ms=generation_ms,
             context_sources=context_sources,
+            provider_metadata=provider_metadata,
         )
         db.add(msg)
 
@@ -428,7 +432,7 @@ class ConversationService:
         raw_title = ""
         try:
             if not selected_provider_name or not selected_model:
-                selected_provider_name, selected_api_key, selected_model, selected_base_url = await llm_service.get_provider_for_workspace(
+                selected_provider_name, selected_api_key, selected_model, selected_base_url, _ = await llm_service.get_provider_for_workspace(
                     db, workspace_id
                 )
 

@@ -3,9 +3,9 @@ Get prompt tool for OpenForge.
 
 Retrieves a prompt template with variable substitution.
 """
-from protocol import BaseTool, ToolResult, ToolContext
-from config import get_settings
-import aiohttp
+from tool_server.protocol import BaseTool, ToolResult, ToolContext
+from tool_server.config import get_settings
+import httpx
 import logging
 
 logger = logging.getLogger("tool-server.skills")
@@ -77,24 +77,16 @@ Use for:
             # Call main app's prompts API
             url = f"{settings.main_app_url}/api/v1/workspaces/{context.workspace_id}/prompts/{prompt_id}"
 
-            timeout = aiohttp.ClientTimeout(total=30)
-
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(url) as response:
-                    if response.status == 404:
-                        return ToolResult(
-                            success=False,
-                            output=None,
-                            error=f"Prompt not found: {prompt_id}"
-                        )
-                    if response.status != 200:
-                        return ToolResult(
-                            success=False,
-                            output=None,
-                            error=f"Prompt API error: {response.status}"
-                        )
-
-                    data = await response.json()
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(url)
+                if response.status_code == 404:
+                    return ToolResult(
+                        success=False,
+                        output=None,
+                        error=f"Prompt not found: {prompt_id}",
+                    )
+                response.raise_for_status()
+                data = response.json()
 
             # Get template content
             template = data.get("content", "")
@@ -120,19 +112,19 @@ Use for:
                     "variables_used": list(variables.keys()),
                     "remaining_variables": remaining_vars,
                     "missing_variables": [v for v in (data.get("variables", [])) if v not in variables],
-                }
+                },
             )
 
-        except aiohttp.ClientError as e:
+        except httpx.RequestError as e:
             return ToolResult(
                 success=False,
                 output=None,
-                error=f"Failed to connect to main app: {str(e)}"
+                error=f"Failed to connect to main app: {str(e)}",
             )
         except Exception as e:
             logger.exception(f"Error getting prompt: {prompt_id}")
             return ToolResult(
                 success=False,
                 output=None,
-                error=f"Failed to get prompt: {str(e)}"
+                error=f"Failed to get prompt: {str(e)}",
             )

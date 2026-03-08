@@ -25,7 +25,7 @@ import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import {
     X, ExternalLink, Pin, PinOff, Archive, ArchiveX, Trash2, Sparkles,
     FileText, Bookmark, Code2, Zap, Clock, Tag, Hash, Loader2,
-    Brain, Star, ChevronRight, ChevronDown,
+    Brain, Star, ChevronRight, ChevronDown, Image, Music,
 } from 'lucide-react'
 import MarkdownIt from 'markdown-it'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -38,6 +38,9 @@ const TYPE_META: Record<string, { icon: React.ComponentType<{ className?: string
     fleeting: { icon: Zap, label: 'Fleeting', color: 'text-yellow-400' },
     bookmark: { icon: Bookmark, label: 'Bookmark', color: 'text-purple-400' },
     gist: { icon: Code2, label: 'Gist', color: 'text-green-400' },
+    image: { icon: Image, label: 'Image', color: 'text-pink-400' },
+    audio: { icon: Music, label: 'Audio', color: 'text-purple-400' },
+    pdf: { icon: FileText, label: 'PDF', color: 'text-red-400' },
 }
 
 interface KnowledgeModalProps {

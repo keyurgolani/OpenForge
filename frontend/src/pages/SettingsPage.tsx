@@ -3,10 +3,13 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
     listProviders, createProvider, updateProvider, deleteProvider,
-    testConnection, listModels, setDefaultProvider,
+    testConnection, listModels, syncModels,
+    listEndpoints, setDefaultEndpoint,
+    listVirtualProviders, createVirtualProvider, deleteVirtualProvider,
     listWorkspaces, updateWorkspace, createWorkspace, deleteWorkspace,
     listPrompts, updatePrompt,
-    listSchedules, updateSchedule, runTaskNow, getTaskHistory, listSettings, updateSetting
+    listSchedules, updateSchedule, runTaskNow, getTaskHistory, listSettings, updateSetting,
+    getEmbeddingConfig, setEmbeddingConfig, reindexAllEmbeddings,
 } from '@/lib/api'
 import {
     Globe2, Loader2, Trash2, CheckCircle2, XCircle, Star, Plus,
@@ -15,10 +18,10 @@ import {
     FileText, Timer, History, Play, Clock, CheckCircle, AlertCircle, Circle, Terminal,
     Brain, Folder, Briefcase, Microscope, BookOpen, Target, Globe, Lightbulb, Wrench,
     Palette, BarChart3, Rocket, Shield, FlaskConical, Leaf, Key, Settings2, PenLine,
-    Database, Sprout
+    Database, Sprout, Activity, ChevronRight, Mic, Volume2, Cpu, RotateCw
 } from 'lucide-react'
 import { ProviderIcon } from '@/components/shared/ProviderIcon'
-import { ModelOverrideSelect } from '@/components/shared/ModelOverrideSelect'
+
 import { MCPServerSettings } from '@/components/settings/MCPServerSettings'
 import { RouterConfig } from '@/components/settings/RouterConfig'
 import { CouncilConfig } from '@/components/settings/CouncilConfig'
@@ -42,7 +45,7 @@ const PROVIDER_META: Record<string, {
     cohere: { name: 'Cohere', color: 'bg-teal-500/10 border-teal-500/20 text-teal-700', needsKey: true, needsUrl: false, placeholder: 'API key…' },
     zhipuai: { name: 'Z.AI (ZhipuAI)', color: 'bg-indigo-500/10 border-indigo-500/20 text-indigo-700', needsKey: true, needsUrl: false, placeholder: 'API key…' },
     huggingface: { name: 'HuggingFace', color: 'bg-orange-400/10 border-orange-400/20 text-orange-700', needsKey: true, needsUrl: false, placeholder: 'hf_…' },
-    ollama: { name: 'Ollama', color: 'bg-lime-500/10 border-lime-500/20 text-lime-700', needsKey: false, needsUrl: true, placeholder: 'Token (optional)', urlPlaceholder: 'http://localhost:11434' },
+    ollama: { name: 'Ollama', color: 'bg-lime-500/10 border-lime-500/20 text-lime-700', needsKey: false, needsUrl: true, placeholder: 'Token (optional)', urlPlaceholder: 'http://host.docker.internal:11434' },
     'custom-openai': { name: 'Custom OpenAI-compatible', color: 'bg-violet-500/10 border-violet-500/20 text-violet-700', needsKey: false, needsUrl: true, placeholder: 'Token (optional)', urlPlaceholder: 'https://your-api.com' },
     'custom-anthropic': { name: 'Custom Anthropic-compat.', color: 'bg-rose-500/10 border-rose-500/20 text-rose-700', needsKey: false, needsUrl: true, placeholder: 'Token (optional)', urlPlaceholder: 'https://your-api.com' },
 }
@@ -162,7 +165,7 @@ export default function SettingsPage() {
 type WorkspaceRow = {
     id: string; name: string; description: string | null
     icon: string | null; color: string | null
-    llm_provider_id: string | null; llm_model: string | null
+    chat_endpoint_id: string | null; vision_endpoint_id: string | null
     knowledge_count: number
     conversation_count: number
     tools_enabled?: boolean
@@ -179,7 +182,7 @@ function WorkspacesSettings({
 }) {
     const qc = useQueryClient()
     const { data: workspaces = [] } = useQuery({ queryKey: ['workspaces'], queryFn: listWorkspaces })
-    const { data: providers = [] } = useQuery({ queryKey: ['providers'], queryFn: listProviders })
+    const { data: endpoints = [] } = useQuery({ queryKey: ['endpoints'], queryFn: listEndpoints })
 
     const [showAdd, setShowAdd] = useState(false)
     const [newName, setNewName] = useState('')
@@ -233,7 +236,7 @@ function WorkspacesSettings({
                 <WorkspaceCard
                     key={ws.id}
                     workspace={ws}
-                    providers={providers as ProviderRow[]}
+                    endpoints={endpoints as EndpointRow[]}
                     isActive={ws.id === activeWorkspaceId}
                     onDeleted={() => qc.invalidateQueries({ queryKey: ['workspaces'] })}
                     onSaved={() => qc.invalidateQueries({ queryKey: ['workspaces'] })}
@@ -243,11 +246,13 @@ function WorkspacesSettings({
     )
 }
 
-type ProviderRow = { id: string; display_name: string; provider_name: string; provider_type: string; default_model: string | null; is_system_default: boolean; has_api_key: boolean; base_url: string | null; enabled_models: { id: string; name: string }[] }
+type ProviderRow = { id: string; display_name: string; provider_name: string; has_api_key: boolean; base_url: string | null; endpoint_id: string; models: { id: string; model_id: string; display_name: string; capabilities: string[]; is_enabled: boolean }[] }
+type EndpointRow = { id: string; endpoint_type: string; display_name: string | null; provider_id: string | null; model_id: string | null; virtual_provider_id: string | null; is_default_chat: boolean; is_default_vision: boolean; is_default_tts: boolean; is_default_stt: boolean; provider_name?: string; provider_display_name?: string; virtual_type?: string; virtual_display_name?: string }
+type VirtualProviderRow = { id: string; virtual_type: string; display_name: string; description: string | null; endpoint_id: string | null }
 
-function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved }: {
+function WorkspaceCard({ workspace: ws, endpoints, isActive, onDeleted, onSaved }: {
     workspace: WorkspaceRow
-    providers: ProviderRow[]
+    endpoints: EndpointRow[]
     isActive: boolean
     onDeleted: () => void
     onSaved: () => void
@@ -257,14 +262,15 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
     const [description, setDescription] = useState(ws.description ?? '')
     const [icon, setIcon] = useState(ws.icon ?? 'folder')
     const [showIcons, setShowIcons] = useState(false)
-    const [providerId, setProviderId] = useState(ws.llm_provider_id ?? '')
-    const [model, setModel] = useState(ws.llm_model ?? '')
+    const [chatEndpointId, setChatEndpointId] = useState(ws.chat_endpoint_id ?? '')
+    const [visionEndpointId, setVisionEndpointId] = useState(ws.vision_endpoint_id ?? '')
     const [toolsEnabled, setToolsEnabled] = useState(ws.tools_enabled ?? false)
     const [saving, setSaving] = useState(false)
     const [saved, setSaved] = useState(false)
     const [deleting, setDeleting] = useState(false)
 
-    const selectedProvider = providers.find(p => p.id === providerId)
+    const endpointLabel = (ep: EndpointRow) =>
+        ep.display_name || `${ep.provider_display_name || ep.virtual_display_name || ''} / ${ep.model_id || ep.virtual_type || ''}`
 
     const handleSave = async () => {
         setSaving(true)
@@ -272,8 +278,8 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
             name: name.trim(),
             description: description || null,
             icon: icon || null,
-            llm_provider_id: providerId || null,
-            llm_model: model || null,
+            chat_endpoint_id: chatEndpointId || null,
+            vision_endpoint_id: visionEndpointId || null,
             tools_enabled: toolsEnabled,
         })
         setSaving(false); setSaved(true)
@@ -312,7 +318,7 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
                         <span className="text-xs text-muted-foreground">{ws.knowledge_count} knowledge · {ws.conversation_count} chats</span>
                     </div>
                     <p className="text-xs text-muted-foreground truncate mt-0.5">
-                        {ws.description || (ws.llm_provider_id ? `Provider override set` : 'Using global default provider')}
+                        {ws.description || (ws.chat_endpoint_id ? `Endpoint override set` : 'Using global default endpoint')}
                     </p>
                 </div>
                 <div className="flex gap-1 flex-shrink-0">
@@ -386,28 +392,22 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
                         <p className="text-xs font-medium text-muted-foreground">AI Override <span className="text-xs font-normal opacity-60">(overrides global default for this workspace)</span></p>
                         <div className="grid gap-3 md:grid-cols-2">
                             <div>
-                                <label className="text-xs text-muted-foreground mb-1 block">Provider</label>
-                                <select className="input text-sm" value={providerId} onChange={e => { setProviderId(e.target.value); setModel('') }}>
+                                <label className="text-xs text-muted-foreground mb-1 block">Chat Endpoint</label>
+                                <select className="input text-sm" value={chatEndpointId} onChange={e => setChatEndpointId(e.target.value)}>
                                     <option value="">Use global default</option>
-                                    {providers.map(p => (
-                                        <option key={p.id} value={p.id}>{sanitizeProviderDisplayName(p.display_name)}</option>
+                                    {endpoints.map(ep => (
+                                        <option key={ep.id} value={ep.id}>{endpointLabel(ep)}</option>
                                     ))}
                                 </select>
                             </div>
                             <div>
-                                <label className="text-xs text-muted-foreground mb-1 block">Model override</label>
-                                <ModelOverrideSelect
-                                    models={selectedProvider?.enabled_models ?? []}
-                                    value={model}
-                                    onChange={setModel}
-                                    disabled={!providerId}
-                                    placeholder={providerId
-                                        ? (selectedProvider?.default_model
-                                            ? `Default: ${selectedProvider.default_model}`
-                                            : 'Select model override')
-                                        : 'Select provider first'}
-                                    inheritLabel="Inherit provider default"
-                                />
+                                <label className="text-xs text-muted-foreground mb-1 block">Vision Endpoint</label>
+                                <select className="input text-sm" value={visionEndpointId} onChange={e => setVisionEndpointId(e.target.value)}>
+                                    <option value="">Use global default</option>
+                                    {endpoints.map(ep => (
+                                        <option key={ep.id} value={ep.id}>{endpointLabel(ep)}</option>
+                                    ))}
+                                </select>
                             </div>
                         </div>
                     </div>
@@ -445,47 +445,489 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
 }
 
 // ── LLM Settings Tab ──────────────────────────────────────────────────────────
+type LLMInnerTab = 'chat' | 'vision' | 'audio' | 'embedding'
+
 function LLMSettings() {
-    const qc = useQueryClient()
+    const [innerTab, setInnerTab] = useState<LLMInnerTab>('chat')
+
+    const LLM_INNER_TABS: { id: LLMInnerTab; label: string; Icon: React.ElementType }[] = [
+        { id: 'chat', label: 'Chat Models', Icon: MessageSquare },
+        { id: 'vision', label: 'Vision Models', Icon: Eye },
+        { id: 'audio', label: 'Audio Models', Icon: Mic },
+        { id: 'embedding', label: 'Embedding', Icon: Database },
+    ]
+
+    return (
+        <div className="space-y-5">
+            {/* Inner tabs */}
+            <div className="flex gap-1.5 p-1 glass-card w-fit rounded-xl overflow-x-auto">
+                {LLM_INNER_TABS.map(({ id, label, Icon }) => (
+                    <button
+                        key={id}
+                        onClick={() => setInnerTab(id)}
+                        className={`flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 whitespace-nowrap ${innerTab === id
+                            ? 'bg-accent/20 text-accent shadow-glass-inset ring-1 ring-accent/30'
+                            : 'text-muted-foreground hover:bg-muted/30 hover:text-foreground'
+                            }`}
+                    >
+                        <Icon className="w-3.5 h-3.5" />
+                        {label}
+                    </button>
+                ))}
+            </div>
+
+            {innerTab === 'chat' && <ChatModelsTab />}
+            {innerTab === 'vision' && <VisionModelsTab />}
+            {innerTab === 'audio' && <AudioModelsTab />}
+            {innerTab === 'embedding' && <EmbeddingModelsTab />}
+        </div>
+    )
+}
+
+// ── Shared: Provider + Virtual Provider management panels ─────────────────────
+function ProvidersPanel({ onInvalidate }: { onInvalidate: () => void }) {
     const { data: providers = [] } = useQuery({ queryKey: ['providers'], queryFn: listProviders })
+    const { data: virtualProviders = [] } = useQuery({ queryKey: ['virtual-providers'], queryFn: listVirtualProviders })
     const [expanded, setExpanded] = useState<string | null>(null)
+    const [expandedVP, setExpandedVP] = useState<string | null>(null)
     const [showAdd, setShowAdd] = useState(false)
 
     return (
-        <div className="space-y-3">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h3 className="font-semibold text-sm">AI Providers</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                        Each entry is a provider + model pair. <Star className="w-3 h-3 inline-block text-amber-400" /> default is used for new chats.
-                    </p>
+        <div className="space-y-6">
+            {/* Standard Providers */}
+            <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h3 className="font-semibold text-sm">AI Providers</h3>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                            Standard LLM providers. Endpoints are auto-created for each model.
+                        </p>
+                    </div>
+                    <button className="btn-primary text-xs py-1.5 px-3" onClick={() => setShowAdd(p => !p)}>
+                        <Plus className="w-3.5 h-3.5" /> {showAdd ? 'Close' : 'Add Provider'}
+                    </button>
                 </div>
-                <button className="btn-primary text-xs py-1.5 px-3" onClick={() => setShowAdd(p => !p)}>
-                    <Plus className="w-3.5 h-3.5" /> {showAdd ? 'Close' : 'Add Provider'}
+
+                {showAdd && <AddProviderPanel onAdded={onInvalidate} />}
+
+                {(providers as ProviderRow[]).map(p => (
+                    <ProviderCard
+                        key={p.id}
+                        provider={p}
+                        expanded={expanded === p.id}
+                        onToggle={() => setExpanded(expanded === p.id ? null : p.id)}
+                        onDelete={() => deleteProvider(p.id).then(onInvalidate)}
+                    />
+                ))}
+
+                {(providers as unknown[]).length === 0 && !showAdd && (
+                    <div className="text-center py-8 text-muted-foreground text-sm">
+                        <Server className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                        <p>No AI providers configured yet.</p>
+                    </div>
+                )}
+            </div>
+
+            {/* Virtual Providers */}
+            {(virtualProviders as VirtualProviderRow[]).length > 0 && (
+                <div className="space-y-3">
+                    <h3 className="font-semibold text-sm">Virtual Providers</h3>
+                    {(virtualProviders as VirtualProviderRow[]).map(vp => {
+                        const meta = VIRTUAL_PROVIDER_META[vp.virtual_type as VirtualProviderType]
+                        return (
+                            <div key={vp.id} className="glass-card-hover transition-all duration-300">
+                                <div className="flex items-center gap-3 px-4 py-3">
+                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${meta?.color ?? 'bg-muted border-border'}`}>
+                                        <Bot className="w-4 h-4" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="font-medium text-sm">{vp.display_name}</span>
+                                            <span className="chip-muted text-[10px]">{meta?.name || vp.virtual_type}</span>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                                            {vp.description || meta?.description || ''}
+                                        </p>
+                                    </div>
+                                    <div className="flex gap-1 flex-shrink-0">
+                                        <button className="btn-ghost p-1.5 text-red-400"
+                                            onClick={() => { if (confirm(`Delete "${vp.display_name}"?`)) deleteVirtualProvider(vp.id).then(onInvalidate) }}>
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button className="btn-ghost p-1.5" onClick={() => setExpandedVP(expandedVP === vp.id ? null : vp.id)}>
+                                            {expandedVP === vp.id ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                        </button>
+                                    </div>
+                                </div>
+                                {expandedVP === vp.id && (
+                                    <div className="border-t border-border/50 px-4 py-4 animate-fade-in">
+                                        {vp.virtual_type === 'router' && <RouterConfig vpId={vp.id} />}
+                                        {vp.virtual_type === 'council' && <CouncilConfig vpId={vp.id} />}
+                                        {vp.virtual_type === 'optimizer' && <OptimizerConfig vpId={vp.id} />}
+                                    </div>
+                                )}
+                            </div>
+                        )
+                    })}
+                </div>
+            )}
+        </div>
+    )
+}
+
+// ── Chat Models Tab ───────────────────────────────────────────────────────────
+function ChatModelsTab() {
+    const qc = useQueryClient()
+    const { data: endpoints = [] } = useQuery({ queryKey: ['endpoints'], queryFn: listEndpoints })
+
+    const invalidateAll = () => {
+        qc.invalidateQueries({ queryKey: ['providers'] })
+        qc.invalidateQueries({ queryKey: ['virtual-providers'] })
+        qc.invalidateQueries({ queryKey: ['endpoints'] })
+    }
+
+    return (
+        <div className="space-y-6">
+            <ProvidersPanel onInvalidate={invalidateAll} />
+
+            {(endpoints as EndpointRow[]).length > 0 && (
+                <div className="space-y-3">
+                    <h3 className="font-semibold text-sm">Default Chat Endpoint</h3>
+                    <p className="text-xs text-muted-foreground">
+                        <Star className="w-3 h-3 inline-block text-amber-400" /> Used for new chats when no workspace override is set.
+                    </p>
+                    <select
+                        className="input text-sm max-w-md"
+                        value={(endpoints as EndpointRow[]).find(e => e.is_default_chat)?.id ?? ''}
+                        onChange={e => { if (e.target.value) setDefaultEndpoint(e.target.value, 'chat').then(invalidateAll) }}
+                    >
+                        <option value="">None</option>
+                        {(endpoints as EndpointRow[]).map(ep => (
+                            <option key={ep.id} value={ep.id}>
+                                {ep.display_name || `${ep.provider_display_name || ep.virtual_display_name || ''} / ${ep.model_id || ep.virtual_type || ''}`}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+            )}
+        </div>
+    )
+}
+
+// ── Vision Models Tab ─────────────────────────────────────────────────────────
+function VisionModelsTab() {
+    const qc = useQueryClient()
+    const { data: endpoints = [] } = useQuery({ queryKey: ['endpoints'], queryFn: listEndpoints })
+
+    const invalidateAll = () => {
+        qc.invalidateQueries({ queryKey: ['providers'] })
+        qc.invalidateQueries({ queryKey: ['virtual-providers'] })
+        qc.invalidateQueries({ queryKey: ['endpoints'] })
+    }
+
+    return (
+        <div className="space-y-6">
+            <ProvidersPanel onInvalidate={invalidateAll} />
+
+            {(endpoints as EndpointRow[]).length > 0 && (
+                <div className="space-y-3">
+                    <h3 className="font-semibold text-sm">Default Vision Endpoint</h3>
+                    <p className="text-xs text-muted-foreground">
+                        <Star className="w-3 h-3 inline-block text-amber-400" /> Used for image analysis when no workspace override is set.
+                    </p>
+                    <select
+                        className="input text-sm max-w-md"
+                        value={(endpoints as EndpointRow[]).find(e => e.is_default_vision)?.id ?? ''}
+                        onChange={e => { if (e.target.value) setDefaultEndpoint(e.target.value, 'vision').then(invalidateAll) }}
+                    >
+                        <option value="">None</option>
+                        {(endpoints as EndpointRow[]).map(ep => (
+                            <option key={ep.id} value={ep.id}>
+                                {ep.display_name || `${ep.provider_display_name || ep.virtual_display_name || ''} / ${ep.model_id || ep.virtual_type || ''}`}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+            )}
+        </div>
+    )
+}
+
+// ── Audio Models Tab ──────────────────────────────────────────────────────────
+function AudioModelsTab() {
+    const qc = useQueryClient()
+    const { data: endpoints = [] } = useQuery({ queryKey: ['endpoints'], queryFn: listEndpoints })
+
+    const invalidateAll = () => {
+        qc.invalidateQueries({ queryKey: ['endpoints'] })
+    }
+
+    // Only standard (non-virtual) endpoints for audio
+    const standardEndpoints = (endpoints as EndpointRow[]).filter(e => e.endpoint_type === 'standard')
+    const defaultTTS = standardEndpoints.find(e => e.is_default_tts)
+    const defaultSTT = standardEndpoints.find(e => e.is_default_stt)
+
+    const epLabel = (ep: EndpointRow) =>
+        ep.display_name || `${ep.provider_display_name || ''} / ${ep.model_id || ''}`
+
+    return (
+        <div className="space-y-6">
+            <div className="glass-card p-4 space-y-1">
+                <div className="flex items-center gap-2 mb-2">
+                    <Volume2 className="w-4 h-4 text-accent" />
+                    <h3 className="font-semibold text-sm">Text-to-Speech (TTS)</h3>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                    Model used to synthesize speech from text. Select a provider endpoint that supports audio generation.
+                </p>
+                <select
+                    className="input text-sm"
+                    value={defaultTTS?.id ?? ''}
+                    onChange={e => { if (e.target.value) setDefaultEndpoint(e.target.value, 'tts').then(invalidateAll) }}
+                >
+                    <option value="">None — TTS disabled</option>
+                    {standardEndpoints.map(ep => (
+                        <option key={ep.id} value={ep.id}>{epLabel(ep)}</option>
+                    ))}
+                </select>
+                {defaultTTS && (
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                        Current: <span className="text-foreground">{epLabel(defaultTTS)}</span>
+                    </p>
+                )}
+            </div>
+
+            <div className="glass-card p-4 space-y-1">
+                <div className="flex items-center gap-2 mb-2">
+                    <Mic className="w-4 h-4 text-accent" />
+                    <h3 className="font-semibold text-sm">Speech-to-Text (STT)</h3>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                    Model used to transcribe audio to text. Select a provider endpoint that supports transcription.
+                </p>
+                <select
+                    className="input text-sm"
+                    value={defaultSTT?.id ?? ''}
+                    onChange={e => { if (e.target.value) setDefaultEndpoint(e.target.value, 'stt').then(invalidateAll) }}
+                >
+                    <option value="">None — STT disabled</option>
+                    {standardEndpoints.map(ep => (
+                        <option key={ep.id} value={ep.id}>{epLabel(ep)}</option>
+                    ))}
+                </select>
+                {defaultSTT && (
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                        Current: <span className="text-foreground">{epLabel(defaultSTT)}</span>
+                    </p>
+                )}
+            </div>
+
+            {standardEndpoints.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground text-sm">
+                    <Server className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                    <p>No provider endpoints configured yet.</p>
+                    <p className="text-xs mt-1">Add a provider in the Chat Models tab first.</p>
+                </div>
+            )}
+        </div>
+    )
+}
+
+// ── Embedding Models Tab ──────────────────────────────────────────────────────
+function EmbeddingModelsTab() {
+    const qc = useQueryClient()
+    const { data: endpoints = [] } = useQuery({ queryKey: ['endpoints'], queryFn: listEndpoints })
+    const { data: embeddingConfig, isLoading: configLoading } = useQuery({
+        queryKey: ['embedding-config'],
+        queryFn: getEmbeddingConfig,
+    })
+
+    const [mode, setMode] = useState<'native' | 'provider'>('native')
+    const [nativeModel, setNativeModel] = useState('all-MiniLM-L6-v2')
+    const [providerEndpointId, setProviderEndpointId] = useState('')
+    const [saving, setSaving] = useState(false)
+    const [saved, setSaved] = useState(false)
+    const [reindexing, setReindexing] = useState(false)
+    const [reindexResult, setReindexResult] = useState<string | null>(null)
+    const [saveError, setSaveError] = useState<string | null>(null)
+
+    // Sync state from loaded config
+    useEffect(() => {
+        if (!embeddingConfig) return
+        setMode(embeddingConfig.mode === 'provider' ? 'provider' : 'native')
+        setNativeModel(embeddingConfig.native_model || 'all-MiniLM-L6-v2')
+        setProviderEndpointId(embeddingConfig.provider_endpoint_id || '')
+    }, [embeddingConfig])
+
+    // Only standard (non-virtual) endpoints for embedding
+    const standardEndpoints = (endpoints as EndpointRow[]).filter(e => e.endpoint_type === 'standard')
+    const epLabel = (ep: EndpointRow) =>
+        ep.display_name || `${ep.provider_display_name || ''} / ${ep.model_id || ''}`
+
+    const handleSave = async () => {
+        setSaving(true); setSaveError(null)
+        try {
+            await setEmbeddingConfig({
+                mode,
+                native_model: mode === 'native' ? nativeModel : undefined,
+                provider_endpoint_id: mode === 'provider' ? providerEndpointId : undefined,
+            })
+            qc.invalidateQueries({ queryKey: ['embedding-config'] })
+            setSaved(true)
+            setTimeout(() => setSaved(false), 3000)
+        } catch (e: unknown) {
+            const err = e as { response?: { data?: { detail?: string } }; message?: string }
+            setSaveError(err?.response?.data?.detail ?? err?.message ?? 'Save failed')
+        } finally { setSaving(false) }
+    }
+
+    const handleReindex = async () => {
+        if (!confirm('This will reset all knowledge items and trigger a full re-embedding. Continue?')) return
+        setReindexing(true); setReindexResult(null)
+        try {
+            const result = await reindexAllEmbeddings()
+            setReindexResult(result.message || `Reset ${result.reset_count} items for re-embedding.`)
+        } catch (e: unknown) {
+            const err = e as { response?: { data?: { detail?: string } }; message?: string }
+            setReindexResult(`Error: ${err?.response?.data?.detail ?? err?.message ?? 'Failed'}`)
+        } finally { setReindexing(false) }
+    }
+
+    if (configLoading) {
+        return <div className="flex justify-center py-10"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+    }
+
+    return (
+        <div className="space-y-5">
+            {/* Mode selection */}
+            <div className="glass-card p-4 space-y-4">
+                <div className="flex items-center gap-2">
+                    <Cpu className="w-4 h-4 text-accent" />
+                    <h3 className="font-semibold text-sm">Embedding Model</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                    Controls how knowledge is converted to vectors for semantic search.
+                    Changing the model requires re-indexing all existing knowledge.
+                </p>
+
+                <div className="grid grid-cols-2 gap-3">
+                    <button
+                        onClick={() => setMode('native')}
+                        className={`p-3 rounded-xl border text-left transition-all duration-200 ${mode === 'native'
+                            ? 'border-accent bg-accent/10 ring-2 ring-accent/30'
+                            : 'border-border/50 hover:bg-muted/30'
+                            }`}
+                    >
+                        <div className="flex items-center gap-2 mb-1">
+                            <Cpu className="w-3.5 h-3.5 text-accent" />
+                            <span className="text-xs font-semibold">Built-in Native</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">
+                            Local sentence-transformers model. No API calls, works offline.
+                        </p>
+                    </button>
+                    <button
+                        onClick={() => setMode('provider')}
+                        className={`p-3 rounded-xl border text-left transition-all duration-200 ${mode === 'provider'
+                            ? 'border-accent bg-accent/10 ring-2 ring-accent/30'
+                            : 'border-border/50 hover:bg-muted/30'
+                            }`}
+                    >
+                        <div className="flex items-center gap-2 mb-1">
+                            <Server className="w-3.5 h-3.5 text-accent" />
+                            <span className="text-xs font-semibold">Provider Model</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">
+                            Use an API provider's embedding model (e.g. OpenAI text-embedding-3-small).
+                        </p>
+                    </button>
+                </div>
+
+                {mode === 'native' && (
+                    <div className="animate-fade-in">
+                        <label className="text-xs text-muted-foreground mb-1 block font-medium">Model Name</label>
+                        <input
+                            className="input text-sm"
+                            placeholder="all-MiniLM-L6-v2"
+                            value={nativeModel}
+                            onChange={e => setNativeModel(e.target.value)}
+                        />
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                            Any sentence-transformers compatible model name from HuggingFace.
+                        </p>
+                    </div>
+                )}
+
+                {mode === 'provider' && (
+                    <div className="animate-fade-in space-y-2">
+                        <label className="text-xs text-muted-foreground mb-1 block font-medium">Provider Endpoint</label>
+                        {standardEndpoints.length > 0 ? (
+                            <select
+                                className="input text-sm"
+                                value={providerEndpointId}
+                                onChange={e => setProviderEndpointId(e.target.value)}
+                            >
+                                <option value="">Select endpoint…</option>
+                                {standardEndpoints.map(ep => (
+                                    <option key={ep.id} value={ep.id}>{epLabel(ep)}</option>
+                                ))}
+                            </select>
+                        ) : (
+                            <p className="text-xs text-amber-600 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                                No standard provider endpoints configured. Add a provider in the Chat Models tab first.
+                            </p>
+                        )}
+                        <p className="text-[10px] text-muted-foreground">
+                            Virtual providers are not supported for embedding.
+                        </p>
+                    </div>
+                )}
+
+                {saveError && (
+                    <div className="text-xs p-2.5 rounded-lg bg-destructive/10 text-red-700 border border-destructive/20">
+                        {saveError}
+                    </div>
+                )}
+
+                <button
+                    className="btn-primary text-xs py-2 px-4"
+                    onClick={handleSave}
+                    disabled={saving || (mode === 'provider' && !providerEndpointId)}
+                >
+                    {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : saved ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
+                    {saving ? 'Saving…' : saved ? 'Saved' : 'Save'}
                 </button>
             </div>
 
-            {showAdd && (
-                <AddProviderPanel onAdded={() => qc.invalidateQueries({ queryKey: ['providers'] })} />
-            )}
-
-            {(providers as ProviderRow[]).map(p => (
-                <ProviderCard
-                    key={p.id}
-                    provider={p}
-                    expanded={expanded === p.id}
-                    onToggle={() => setExpanded(expanded === p.id ? null : p.id)}
-                    onDelete={() => deleteProvider(p.id).then(() => qc.invalidateQueries({ queryKey: ['providers'] }))}
-                    onSetDefault={() => setDefaultProvider(p.id).then(() => qc.invalidateQueries({ queryKey: ['providers'] }))}
-                />
-            ))}
-
-            {(providers as unknown[]).length === 0 && !showAdd && (
-                <div className="text-center py-12 text-muted-foreground text-sm">
-                    <Server className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                    <p>No AI providers configured yet.</p>
+            {/* Re-index section */}
+            <div className="glass-card p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                    <RotateCw className="w-4 h-4 text-amber-500" />
+                    <h3 className="font-semibold text-sm">Re-index All Embeddings</h3>
                 </div>
-            )}
+                <p className="text-xs text-muted-foreground">
+                    After changing the embedding model, re-index all knowledge items to use the new model.
+                    All existing knowledge will be re-processed on the next embedding run.
+                </p>
+
+                {reindexResult && (
+                    <div className={`text-xs p-2.5 rounded-lg border ${reindexResult.startsWith('Error')
+                        ? 'bg-destructive/10 text-red-700 border-destructive/20'
+                        : 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20'
+                        }`}>
+                        {reindexResult}
+                    </div>
+                )}
+
+                <button
+                    className="btn-ghost text-xs border border-amber-500/30 text-amber-600 hover:bg-amber-500/10 py-2 px-4"
+                    onClick={handleReindex}
+                    disabled={reindexing}
+                >
+                    {reindexing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCw className="w-3.5 h-3.5" />}
+                    {reindexing ? 'Resetting…' : 'Trigger Re-index'}
+                </button>
+            </div>
         </div>
     )
 }
@@ -511,10 +953,9 @@ function VirtualProviderPanel({ providerType, onAdded }: { providerType: Virtual
         if (!displayName.trim()) { setSaveError('Display name is required'); return }
         setSaving(true); setSaveError(null)
         try {
-            await createProvider({
-                provider_name: providerType,
+            await createVirtualProvider({
+                virtual_type: providerType,
                 display_name: displayName.trim(),
-                provider_type: providerType,
             })
             setSaved(true); onAdded()
             setTimeout(() => setSaved(false), 3000)
@@ -636,20 +1077,14 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
                 return { id: modelId, name: label }
             })
             if (createdProviderId) {
-                await updateProvider(createdProviderId, {
-                    display_name: displayName || meta?.name || providerName,
-                    api_key: apiKey || undefined,
-                    base_url: baseUrl || undefined,
-                    default_model: modelsToSave[0],
-                    enabled_models: enabledList,
-                })
+                // Sync discovered models into the existing provider
+                await syncModels(createdProviderId, enabledList)
             } else {
                 await createProvider({
                     provider_name: providerName,
                     display_name: displayName || meta?.name || providerName,
                     api_key: apiKey || undefined,
                     base_url: baseUrl || undefined,
-                    default_model: modelsToSave[0],
                     enabled_models: enabledList,
                 })
             }
@@ -738,6 +1173,9 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
                 {meta?.needsUrl ? (
                     <>
                         <input className="input text-sm" placeholder={meta.urlPlaceholder ?? 'https://your-api.com'} value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
+                        {providerName === 'ollama' && (
+                            <p className="text-[10px] text-muted-foreground">Running via Docker? Use <code className="bg-muted px-1 rounded">host.docker.internal</code> instead of <code className="bg-muted px-1 rounded">localhost</code> or a LAN IP.</p>
+                        )}
                         <div className="relative">
                             <input type={showKey ? 'text' : 'password'} className="input text-sm pr-10" placeholder={meta.placeholder} value={apiKey} onChange={e => setApiKey(e.target.value)} autoComplete="off" />
                             <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setShowKey(v => !v)}>
@@ -839,38 +1277,21 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
 }
 
 // ── Provider Card ────────────────────────────────────────────────────────────
-function ProviderCard({ provider, expanded, onToggle, onDelete, onSetDefault }: {
+function ProviderCard({ provider, expanded, onToggle, onDelete }: {
     provider: ProviderRow; expanded: boolean
-    onToggle: () => void; onDelete: () => void; onSetDefault: () => void
+    onToggle: () => void; onDelete: () => void
 }) {
-    const qc = useQueryClient()
     const [testing, setTesting] = useState(false)
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
-    const [selectedModel, setSelectedModel] = useState(provider.default_model ?? '')
-    const [savingModel, setSavingModel] = useState(false)
-    const [modelSaved, setModelSaved] = useState(false)
-    const [modelSearch, setModelSearch] = useState('')
 
     const meta = PROVIDER_META[provider.provider_name]
-    const filteredModels = useMemo(() => {
-        const list = provider.enabled_models || []
-        const q = modelSearch.toLowerCase()
-        return q ? list.filter(m => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)) : list
-    }, [provider.enabled_models, modelSearch])
+    const enabledModels = (provider.models || []).filter(m => m.is_enabled)
 
     const handleTest = async () => {
         setTesting(true); setTestResult(null)
         try { setTestResult(await testConnection(provider.id)) }
         catch { setTestResult({ success: false, message: 'Request failed' }) }
         finally { setTesting(false) }
-    }
-
-    const handleSaveModel = async () => {
-        setSavingModel(true)
-        await updateProvider(provider.id, { default_model: selectedModel })
-        qc.invalidateQueries({ queryKey: ['providers'] })
-        setSavingModel(false); setModelSaved(true)
-        setTimeout(() => setModelSaved(false), 2000)
     }
 
     return (
@@ -884,17 +1305,13 @@ function ProviderCard({ provider, expanded, onToggle, onDelete, onSetDefault }: 
                         <span className="font-medium text-sm">{sanitizeProviderDisplayName(provider.display_name) || provider.provider_name}</span>
                         <span className="chip-muted text-[10px]">{provider.provider_name}</span>
                         {isLocalProvider(provider.provider_name) && <span className="chip-muted text-[10px]">Local provider</span>}
-                        {provider.is_system_default && <span className="chip-accent text-[10px]"><Star className="w-2.5 h-2.5 mr-0.5 inline" />Default</span>}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5 truncate">
                         {provider.has_api_key ? 'Key set' : provider.base_url ?? 'No credentials'}
-                        {provider.default_model ? ` · ${provider.default_model}` : ''}
+                        {enabledModels.length > 0 ? ` · ${enabledModels.length} model${enabledModels.length > 1 ? 's' : ''}` : ''}
                     </p>
                 </div>
                 <div className="flex gap-1 flex-shrink-0">
-                    {!provider.is_system_default && (
-                        <button className="btn-ghost p-1.5" title="Set as default" onClick={onSetDefault}><Star className="w-3.5 h-3.5" /></button>
-                    )}
                     <button className="btn-ghost p-1.5 text-red-400" onClick={onDelete}><Trash2 className="w-3.5 h-3.5" /></button>
                     <button className="btn-ghost p-1.5" onClick={onToggle}>
                         {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
@@ -904,59 +1321,30 @@ function ProviderCard({ provider, expanded, onToggle, onDelete, onSetDefault }: 
 
             {expanded && (
                 <div className="border-t border-border/50 px-4 py-4 space-y-3 animate-fade-in">
-                    {/* Virtual provider configuration */}
-                    {provider.provider_type === 'router' && <RouterConfig providerId={provider.id} />}
-                    {provider.provider_type === 'council' && <CouncilConfig providerId={provider.id} />}
-                    {provider.provider_type === 'optimizer' && <OptimizerConfig providerId={provider.id} />}
+                    <button className="btn-ghost text-xs border border-border w-full justify-center py-2" onClick={handleTest} disabled={testing}>
+                        {testing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe2 className="w-3.5 h-3.5" />}
+                        {testing ? 'Testing...' : 'Test Connection'}
+                    </button>
+                    {testResult && (
+                        <div className={`flex items-start gap-2 text-xs p-2.5 rounded-lg ${testResult.success ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20' : 'bg-destructive/10 text-red-700 border border-destructive/20'}`}>
+                            {testResult.success ? <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" /> : <XCircle className="w-3.5 h-3.5 flex-shrink-0" />}
+                            {testResult.message}
+                        </div>
+                    )}
 
-                    {/* Standard provider configuration */}
-                    {provider.provider_type === 'standard' && (
-                        <>
-                            <button className="btn-ghost text-xs border border-border w-full justify-center py-2" onClick={handleTest} disabled={testing}>
-                                {testing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe2 className="w-3.5 h-3.5" />}
-                                {testing ? 'Testing…' : 'Test Connection'}
-                            </button>
-                            {testResult && (
-                                <div className={`flex items-start gap-2 text-xs p-2.5 rounded-lg ${testResult.success ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20' : 'bg-destructive/10 text-red-700 border border-destructive/20'}`}>
-                                    {testResult.success ? <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" /> : <XCircle className="w-3.5 h-3.5 flex-shrink-0" />}
-                                    {testResult.message}
-                                </div>
-                            )}
-
-                            <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <label className="text-xs font-medium text-muted-foreground">Default Model</label>
-                                    {modelSaved && <span className="text-[10px] text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Saved</span>}
-                                </div>
-                                {provider.enabled_models && provider.enabled_models.length > 0 ? (
-                                    <>
-                                        <div className="max-h-36 overflow-y-auto rounded-lg border border-border/50 bg-background/30 divide-y divide-border/20">
-                                            {filteredModels.map(m => (
-                                                <button key={m.id} onClick={() => setSelectedModel(m.id)}
-                                                    className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-muted/30 transition-colors ${selectedModel === m.id ? 'bg-accent/10 text-accent' : 'text-muted-foreground'}`}>
-                                                    {selectedModel === m.id ? <Zap className="w-3 h-3 flex-shrink-0" /> : <span className="w-3" />}
-                                                    <span className="truncate">{m.name}</span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <input className="input text-xs flex-1 py-1.5" placeholder="Model ID…" value={selectedModel} onChange={e => setSelectedModel(e.target.value)} />
-                                            <button className="btn-primary text-xs py-1.5 px-3 whitespace-nowrap" onClick={handleSaveModel} disabled={savingModel || !selectedModel}>
-                                                {savingModel ? 'Saving…' : 'Save Default Model'}
-                                            </button>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <div className="flex gap-2 items-center">
-                                        <input className="input text-xs flex-1 py-1.5" placeholder="Model ID…" value={selectedModel} onChange={e => setSelectedModel(e.target.value)} />
-                                        <button className="btn-primary text-xs py-1.5 px-3" onClick={handleSaveModel} disabled={savingModel || !selectedModel}>
-                                            {modelSaved ? <CheckCircle2 className="w-3.5 h-3.5" /> : savingModel ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                                            {modelSaved ? 'Saved' : 'Set default'}
-                                        </button>
+                    {enabledModels.length > 0 && (
+                        <div className="space-y-2">
+                            <label className="text-xs font-medium text-muted-foreground">Registered Models</label>
+                            <div className="max-h-36 overflow-y-auto rounded-lg border border-border/50 bg-background/30 divide-y divide-border/20">
+                                {enabledModels.map(m => (
+                                    <div key={m.id} className="px-3 py-1.5 text-xs flex items-center gap-2 text-muted-foreground">
+                                        <Zap className="w-3 h-3 flex-shrink-0 text-accent" />
+                                        <span className="truncate">{m.display_name || m.model_id}</span>
+                                        <span className="text-[10px] opacity-50 ml-auto">{m.model_id}</span>
                                     </div>
-                                )}
+                                ))}
                             </div>
-                        </>
+                        </div>
                     )}
                 </div>
             )}
@@ -1781,6 +2169,7 @@ function ToolsTab() {
     })
 
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+    const [expandedTool, setExpandedTool] = useState<string | null>(null)
     const tools = toolsData?.tools || []
     const categories = categoriesData?.categories || []
     const filteredTools = selectedCategory
@@ -1831,7 +2220,7 @@ function ToolsTab() {
                         className={`px-2.5 py-1 rounded text-xs transition-colors ${
                             selectedCategory === null
                                 ? 'bg-accent/20 text-accent'
-                                : 'bg-gray-700/50 text-muted-foreground hover:text-white'
+                                : 'bg-gray-700/50 text-muted-foreground hover:text-foreground'
                         }`}
                     >
                         All ({tools.length})
@@ -1843,7 +2232,7 @@ function ToolsTab() {
                             className={`px-2.5 py-1 rounded text-xs transition-colors ${
                                 selectedCategory === cat.name
                                     ? 'bg-accent/20 text-accent'
-                                    : 'bg-gray-700/50 text-muted-foreground hover:text-white'
+                                    : 'bg-gray-700/50 text-muted-foreground hover:text-foreground'
                             }`}
                         >
                             {cat.name} ({cat.count})
@@ -1865,10 +2254,13 @@ function ToolsTab() {
             ) : (
                 <div className="grid gap-3">
                     {filteredTools.map((tool: any) => (
-                        <div key={tool.id} className="glass-card p-4">
-                            <div className="flex items-start justify-between">
+                        <div key={tool.id} className="glass-card overflow-hidden">
+                            <div
+                                onClick={() => setExpandedTool(expandedTool === tool.id ? null : tool.id)}
+                                className="p-4 cursor-pointer flex items-start justify-between"
+                            >
                                 <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-1">
+                                    <div className="flex items-center gap-2 mb-2">
                                         <span className={`text-xs font-medium ${categoryColors[tool.category] || categoryColors.default}`}>
                                             {tool.category}
                                         </span>
@@ -1886,10 +2278,32 @@ function ToolsTab() {
                                             </span>
                                         )}
                                     </div>
-                                    <h4 className="font-medium text-white">{tool.display_name}</h4>
-                                    <p className="text-xs text-muted-foreground mt-1">{tool.description}</p>
+                                    <h4 className="text-sm font-semibold text-foreground mt-2">{tool.display_name}</h4>
+                                    <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{tool.description}</p>
+                                </div>
+                                <div className="ml-3">
+                                    {expandedTool === tool.id ? (
+                                        <ChevronUp className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                                    ) : (
+                                        <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                                    )}
                                 </div>
                             </div>
+                            {expandedTool === tool.id && (
+                                <div className="border-t border-border/50 px-4 py-4 space-y-4 animate-fade-in">
+                                    <div>
+                                        <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5">Description</div>
+                                        <p className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed">{tool.description}</p>
+                                    </div>
+                                    <div>
+                                        <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5">Input Schema</div>
+                                        <pre className="text-xs text-white/70 bg-black/20 rounded p-3 overflow-x-auto whitespace-pre-wrap">
+                                            {JSON.stringify(tool.input_schema, null, 2)}
+                                        </pre>
+                                    </div>
+                                    <div className="text-[10px] text-muted-foreground/50 font-mono">{tool.id}</div>
+                                </div>
+                            )}
                         </div>
                     ))}
                 </div>
@@ -1927,7 +2341,7 @@ function SkillsTab() {
             if (res.ok) {
                 setInstallResult({ success: true, message: data.message || 'Skill installed successfully' })
                 setInstallInput('')
-                refetch()
+                await refetch()
             } else {
                 setInstallResult({ success: false, message: data.detail || 'Installation failed' })
             }
@@ -1959,11 +2373,11 @@ function SkillsTab() {
 
             <div className="glass-card p-4 space-y-3 border border-accent/20">
                 <h4 className="text-sm font-medium">Install Skill</h4>
-                <p className="text-xs text-muted-foreground">Enter a skill name, package, or URL to install.</p>
+                <p className="text-xs text-muted-foreground">Enter a skill in <code>owner/skill-name</code> format from skills.sh (e.g. <code>vercel-labs/agent-skills</code>).</p>
                 <div className="flex gap-2">
                     <input
                         className="input text-sm flex-1"
-                        placeholder="e.g. openforge-skill-web-search or https://github.com/..."
+                        placeholder="e.g. vercel-labs/agent-skills"
                         value={installInput}
                         onChange={e => setInstallInput(e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter') void handleInstall() }}
@@ -2020,7 +2434,7 @@ function SkillsTab() {
 }
 
 function AuditTab({ workspaceId }: { workspaceId: string }) {
-    const [subTab, setSubTab] = useState<'history' | 'logs'>('history')
+    const [subTab, setSubTab] = useState<'history' | 'tool-executions' | 'logs'>('history')
 
     return (
         <div className={subTab === 'logs' ? 'h-full min-h-0 flex flex-col gap-6' : 'space-y-6'}>
@@ -2035,6 +2449,15 @@ function AuditTab({ workspaceId }: { workspaceId: string }) {
                     <History className="w-4 h-4" /> Job History
                 </button>
                 <button
+                    onClick={() => setSubTab('tool-executions')}
+                    className={`flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-300 whitespace-nowrap ${subTab === 'tool-executions'
+                        ? 'bg-accent/20 text-accent ring-1 ring-accent/30'
+                        : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
+                        }`}
+                >
+                    <Activity className="w-4 h-4" /> Tool Executions
+                </button>
+                <button
                     onClick={() => setSubTab('logs')}
                     className={`flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-300 whitespace-nowrap ${subTab === 'logs'
                         ? 'bg-accent/20 text-accent ring-1 ring-accent/30'
@@ -2045,9 +2468,9 @@ function AuditTab({ workspaceId }: { workspaceId: string }) {
                 </button>
             </div>
 
-            {subTab === 'history' ? (
-                <JobHistorySubTab />
-            ) : (
+            {subTab === 'history' && <JobHistorySubTab />}
+            {subTab === 'tool-executions' && <ToolExecutionLogSubTab />}
+            {subTab === 'logs' && (
                 <div className="min-h-0 flex-1">
                     <ContainerLogsSubTab workspaceId={workspaceId} />
                 </div>
@@ -2157,6 +2580,195 @@ function JobHistorySubTab() {
                             </div>
                         </div>
                     ))}
+                </div>
+            )}
+        </div>
+    )
+}
+
+// ── Tool Execution Log ────────────────────────────────────────────────────────
+
+interface ToolExecutionEntry {
+    id: string
+    workspace_id: string | null
+    conversation_id: string | null
+    execution_id: string | null
+    tool_id: string
+    tool_display_name: string | null
+    tool_category: string | null
+    input_params: Record<string, unknown> | null
+    output_summary: string | null
+    success: boolean
+    error_message: string | null
+    duration_ms: number | null
+    started_at: string
+}
+
+const TOOL_CATEGORY_COLORS: Record<string, string> = {
+    filesystem: 'text-blue-400 bg-blue-500/10',
+    git: 'text-orange-400 bg-orange-500/10',
+    http: 'text-green-400 bg-green-500/10',
+    shell: 'text-yellow-400 bg-yellow-500/10',
+    language: 'text-purple-400 bg-purple-500/10',
+    memory: 'text-pink-400 bg-pink-500/10',
+    task: 'text-cyan-400 bg-cyan-500/10',
+    skills: 'text-indigo-400 bg-indigo-500/10',
+}
+
+function ToolExecutionLogSubTab() {
+    const [filterCategory, setFilterCategory] = useState('')
+    const [filterSuccess, setFilterSuccess] = useState<'' | 'true' | 'false'>('')
+    const [expandedId, setExpandedId] = useState<string | null>(null)
+
+    const { data: executions = [], isLoading, refetch } = useQuery<ToolExecutionEntry[]>({
+        queryKey: ['tool-executions', filterCategory, filterSuccess],
+        queryFn: async () => {
+            const params = new URLSearchParams()
+            if (filterCategory) params.set('tool_category', filterCategory)
+            if (filterSuccess !== '') params.set('success', filterSuccess)
+            params.set('limit', '100')
+            const res = await fetch(`/api/v1/tools/executions?${params}`)
+            if (!res.ok) throw new Error('Failed to fetch tool executions')
+            return res.json()
+        },
+        refetchInterval: 15000,
+    })
+
+    const formatDuration = (ms: number | null) => {
+        if (!ms) return '—'
+        if (ms < 1000) return `${ms}ms`
+        return `${(ms / 1000).toFixed(1)}s`
+    }
+
+    const categories = useMemo(() => {
+        const cats = new Set(executions.map(e => e.tool_category).filter(Boolean))
+        return Array.from(cats).sort()
+    }, [executions])
+
+    return (
+        <div className="space-y-5 animate-fade-in">
+            <div className="flex items-center justify-between gap-3">
+                <h3 className="font-semibold text-sm">Tool Execution Audit Log</h3>
+                <div className="flex items-center gap-2">
+                    <select
+                        className="input text-xs py-1.5 pr-7 w-auto"
+                        value={filterCategory}
+                        onChange={e => setFilterCategory(e.target.value)}
+                    >
+                        <option value="">All categories</option>
+                        {categories.map(c => (
+                            <option key={c} value={c!}>{c}</option>
+                        ))}
+                    </select>
+                    <select
+                        className="input text-xs py-1.5 pr-7 w-auto"
+                        value={filterSuccess}
+                        onChange={e => setFilterSuccess(e.target.value as '' | 'true' | 'false')}
+                    >
+                        <option value="">All results</option>
+                        <option value="true">Successful</option>
+                        <option value="false">Failed</option>
+                    </select>
+                    <button className="btn-ghost text-xs py-1.5 px-2.5 gap-1.5" onClick={() => refetch()}>
+                        <RefreshCw className="w-3.5 h-3.5" /> Refresh
+                    </button>
+                </div>
+            </div>
+
+            {isLoading && (
+                <div className="flex items-center justify-center py-20">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+            )}
+
+            {!isLoading && executions.length === 0 && (
+                <div className="text-center py-14 text-muted-foreground glass-card rounded-xl">
+                    <Activity className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                    <p className="text-sm">No tool executions recorded yet.</p>
+                    <p className="text-xs mt-1 opacity-60">Tool calls made by the agent will appear here.</p>
+                </div>
+            )}
+
+            {!isLoading && executions.length > 0 && (
+                <div className="space-y-2">
+                    {executions.map(entry => {
+                        const isExpanded = expandedId === entry.id
+                        const categoryColor = TOOL_CATEGORY_COLORS[entry.tool_category ?? ''] ?? 'text-muted-foreground bg-muted/30'
+                        return (
+                            <div key={entry.id} className="glass-card rounded-xl border-border/50 overflow-hidden">
+                                <button
+                                    className="w-full px-4 py-3 flex items-start gap-3 text-left hover:bg-muted/20 transition-colors"
+                                    onClick={() => setExpandedId(isExpanded ? null : entry.id)}
+                                >
+                                    <div className="mt-0.5">
+                                        {entry.success
+                                            ? <CheckCircle className="w-4 h-4 text-emerald-400" />
+                                            : <XCircle className="w-4 h-4 text-red-400" />
+                                        }
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                                            <span className="text-sm font-medium">
+                                                {entry.tool_display_name ?? entry.tool_id}
+                                            </span>
+                                            <div className="flex items-center gap-2">
+                                                {entry.tool_category && (
+                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${categoryColor}`}>
+                                                        {entry.tool_category}
+                                                    </span>
+                                                )}
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${entry.success ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
+                                                    {entry.success ? 'success' : 'failed'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3 mt-1 text-[10px] text-muted-foreground flex-wrap">
+                                            <span>{new Date(entry.started_at).toLocaleString()}</span>
+                                            {entry.duration_ms !== null && <span>Duration: {formatDuration(entry.duration_ms)}</span>}
+                                            {entry.tool_id !== entry.tool_display_name && (
+                                                <span className="font-mono opacity-60">{entry.tool_id}</span>
+                                            )}
+                                        </div>
+                                        {entry.error_message && (
+                                            <p className="text-[10px] text-red-400 mt-1 font-mono truncate" title={entry.error_message}>
+                                                {entry.error_message}
+                                            </p>
+                                        )}
+                                    </div>
+                                    <ChevronRight className={`w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                                </button>
+
+                                {isExpanded && (
+                                    <div className="border-t border-border/30 px-4 py-3 space-y-3 bg-muted/10">
+                                        {entry.input_params && Object.keys(entry.input_params).length > 0 && (
+                                            <div>
+                                                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Input</p>
+                                                <pre className="text-[10px] font-mono bg-background/60 rounded-lg p-2.5 overflow-x-auto whitespace-pre-wrap break-all max-h-40">
+                                                    {JSON.stringify(entry.input_params, null, 2)}
+                                                </pre>
+                                            </div>
+                                        )}
+                                        {entry.output_summary && (
+                                            <div>
+                                                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Output</p>
+                                                <pre className="text-[10px] font-mono bg-background/60 rounded-lg p-2.5 overflow-x-auto whitespace-pre-wrap break-all max-h-40">
+                                                    {entry.output_summary}
+                                                </pre>
+                                            </div>
+                                        )}
+                                        <div className="flex gap-4 text-[10px] text-muted-foreground flex-wrap">
+                                            {entry.conversation_id && (
+                                                <span>Conversation: <span className="font-mono">{entry.conversation_id.slice(0, 8)}…</span></span>
+                                            )}
+                                            {entry.execution_id && (
+                                                <span>Execution: <span className="font-mono">{entry.execution_id.slice(0, 12)}…</span></span>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )
+                    })}
                 </div>
             )}
         </div>

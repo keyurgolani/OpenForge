@@ -3,8 +3,8 @@ Recall facts tool for OpenForge.
 
 Recalls stored facts from the agent's working memory (Redis).
 """
-from protocol import BaseTool, ToolResult, ToolContext
-from config import get_settings
+from tool_server.protocol import BaseTool, ToolResult, ToolContext
+from tool_server.config import get_settings
 import redis.asyncio as aioredis
 import logging
 import json

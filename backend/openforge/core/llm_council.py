@@ -1,40 +1,18 @@
-"""
-LLM Council for OpenForge v2.
+"""LLM Council — orchestrates multiple models to deliberate and select the best response.
 
-Orchestrates multiple LLM models to deliberate and select the best response.
+Fully composable: both the chairman and member endpoints can be standard models
+or other virtual providers.
 """
 import asyncio
 import logging
-from typing import Any, Optional
-from dataclasses import dataclass, field
+import re
+from typing import AsyncGenerator
 
-import litellm
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from openforge.core.llm_gateway import llm_gateway
+from openforge.db.models import LLMEndpoint, LLMCouncilConfig
 
 logger = logging.getLogger("openforge.llm_council")
-
-
-@dataclass
-class CouncilMember:
-    """A member of the LLM council."""
-    id: str
-    provider_id: str
-    model: str
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
-    label: Optional[str] = None  # Display label
-
-
-@dataclass
-class CouncilConfig:
-    """Configuration for an LLM Council."""
-    council_id: str
-    chairman: CouncilMember  # Model that judges responses
-    members: list[CouncilMember] = field(default_factory=list)
-    parallel_execution: bool = True  # Run members in parallel or sequentially
-    judging_prompt: Optional[str] = None  # Custom prompt for judging
-
 
 DEFAULT_JUDGING_PROMPT = """You are a judge evaluating multiple AI responses to the same prompt. Your task is to select the best response.
 
@@ -55,194 +33,143 @@ Respond with ONLY the number (1, 2, 3, etc.) of the best response, followed by a
 Best Response Number: """
 
 
+def _endpoint_label(ep: LLMEndpoint) -> str:
+    """Get a human-readable label for an endpoint."""
+    if ep.display_name:
+        return ep.display_name
+    if ep.endpoint_type == "standard" and ep.model_id:
+        return ep.model_id
+    return str(ep.id)[:8]
+
+
 class LLMCouncil:
-    """
-    Orchestrates multiple LLM models to deliberate and select the best response.
-
-    How it works:
-    1. User sends a prompt
-    2. All council members generate responses (parallel or sequential)
-    3. Chairman evaluates all responses and selects the best one
-    4. Return the winning response
-    """
-
-    def __init__(self, config: CouncilConfig):
+    def __init__(self, resolver, db: AsyncSession, config: LLMCouncilConfig, chairman_endpoint: LLMEndpoint):
+        self.resolver = resolver
+        self.db = db
         self.config = config
+        self.chairman_endpoint = chairman_endpoint
 
-    async def _get_member_response(
-        self,
-        member: CouncilMember,
-        messages: list[dict],
-        max_tokens: int,
-    ) -> tuple[str, str]:
-        """
-        Get a response from a council member.
-
-        Returns:
-            Tuple of (member_id, response_content)
-        """
+    async def _get_member_response(self, member_endpoint: LLMEndpoint, messages: list[dict], max_tokens: int, _depth: int) -> tuple[str, str, str]:
+        """Get response from a council member endpoint. Returns (endpoint_id, label, response)."""
+        label = _endpoint_label(member_endpoint)
         try:
-            response = await litellm.acompletion(
-                model=llm_gateway._resolve_model(member.provider_id, member.model),
-                messages=messages,
-                api_key=member.api_key or None,
-                api_base=member.base_url,
-                max_tokens=max_tokens,
+            response = await self.resolver.chat(
+                self.db, member_endpoint, messages,
+                max_tokens=max_tokens, _depth=_depth,
             )
-            content = llm_gateway._normalize_content(response.choices[0].message.content)
-            return member.id, content
+            return str(member_endpoint.id), label, response
         except Exception as e:
-            logger.warning(f"Council member {member.id} ({member.model}) failed: {e}")
-            return member.id, f"[Error: {str(e)}]"
+            logger.warning(f"Council member {member_endpoint.id} failed: {e}")
+            return str(member_endpoint.id), label, f"[Error: {str(e)}]"
 
-    async def _judge_responses(
-        self,
-        prompt: str,
-        responses: list[tuple[str, str]],
-    ) -> int:
-        """
-        Have the chairman judge the responses.
-
-        Returns:
-            Index of the winning response (0-based)
-        """
-        # Format responses for judging
+    async def _judge_responses(self, prompt: str, responses: list[tuple[str, str, str]], _depth: int) -> tuple[int, str]:
+        """Have the chairman judge responses. Returns (0-based index of winner, reasoning)."""
         response_text = ""
-        for i, (member_id, response) in enumerate(responses):
-            label = f"Response {i + 1}"
-            response_text += f"\n\n--- {label} ---\n{response}\n"
+        for i, (_, label, response) in enumerate(responses):
+            response_text += f"\n\n--- Response {i + 1} ({label}) ---\n{response}\n"
 
         judging_prompt = self.config.judging_prompt or DEFAULT_JUDGING_PROMPT
         full_prompt = judging_prompt.format(prompt=prompt, responses=response_text)
 
         try:
-            response = await litellm.acompletion(
-                model=llm_gateway._resolve_model(
-                    self.config.chairman.provider_id,
-                    self.config.chairman.model
-                ),
-                messages=[{"role": "user", "content": full_prompt}],
-                api_key=self.config.chairman.api_key or None,
-                api_base=self.config.chairman.base_url,
-                max_tokens=100,
+            content = await self.resolver.chat(
+                self.db, self.chairman_endpoint,
+                [{"role": "user", "content": full_prompt}],
+                max_tokens=200, _depth=_depth,
             )
-
-            content = llm_gateway._normalize_content(response.choices[0].message.content)
-
-            # Extract the winning number
-            import re
             match = re.search(r'\b([1-9])\b', content)
             if match:
                 winning_index = int(match.group(1)) - 1
                 if 0 <= winning_index < len(responses):
                     logger.info(f"Chairman selected response {winning_index + 1}")
-                    return winning_index
-
-            # Fallback to first response
+                    return winning_index, content.strip()
             logger.warning(f"Could not parse chairman's decision: {content}")
-            return 0
-
+            return 0, content.strip()
         except Exception as e:
             logger.warning(f"Chairman judging failed: {e}, defaulting to first response")
-            return 0
+            return 0, f"Judging failed: {str(e)}"
 
-    async def chat(
+    async def stream(
         self,
         messages: list[dict],
+        *,
         max_tokens: int = 2000,
-    ) -> str:
-        """
-        Get a response from the council.
-
-        Args:
-            messages: Conversation messages
-            max_tokens: Maximum tokens for response
-
-        Returns:
-            Best response from the council
-        """
+        _depth: int = 0,
+    ) -> AsyncGenerator[dict, None]:
         if not self.config.members:
             raise ValueError("No council members configured")
 
-        # Get the last user message for judging context
+        # Get last user message for judging context
         user_prompt = ""
         for msg in reversed(messages):
             if msg.get("role") == "user":
-                user_prompt = msg.get("content", "")
+                content = msg.get("content", "")
+                user_prompt = content if isinstance(content, str) else str(content)
                 break
 
         logger.info(f"Council deliberating with {len(self.config.members)} members...")
 
         # Gather responses from all members
         if self.config.parallel_execution:
-            # Run all members in parallel
             tasks = [
-                self._get_member_response(member, messages, max_tokens)
+                self._get_member_response(member.endpoint, messages, max_tokens, _depth)
                 for member in self.config.members
             ]
-            responses = await asyncio.gather(*tasks)
+            responses = list(await asyncio.gather(*tasks))
         else:
-            # Run members sequentially
             responses = []
             for member in self.config.members:
-                member_id, content = await self._get_member_response(member, messages, max_tokens)
-                responses.append((member_id, content))
+                ep_id, label, content = await self._get_member_response(member.endpoint, messages, max_tokens, _depth)
+                responses.append((ep_id, label, content))
 
-        # Filter out error responses for judging
+        # Filter out errors
         valid_responses = [
-            (i, resp) for i, (member_id, resp) in enumerate(responses)
+            (i, resp) for i, (_, _, resp) in enumerate(responses)
             if not resp.startswith("[Error:")
         ]
 
         if not valid_responses:
-            # All failed, return first error
-            return responses[0][1] if responses else "All council members failed"
+            error_msg = responses[0][2] if responses else "All council members failed"
+            yield {"type": "token", "content": error_msg}
+            return
 
-        # Judge responses
+        # Judge
+        chairman_reasoning = ""
         if len(valid_responses) == 1:
-            # Only one valid response, use it
             winning_index = valid_responses[0][0]
+            chairman_reasoning = "Only one valid response — auto-selected."
         else:
-            # Have chairman judge
-            winning_index = await self._judge_responses(
+            valid_for_judging = [(responses[i][0], responses[i][1], responses[i][2]) for i, _ in valid_responses]
+            winning_index, chairman_reasoning = await self._judge_responses(
                 user_prompt,
-                [(responses[i][0], responses[i][1]) for i, _ in valid_responses]
+                valid_for_judging,
+                _depth=_depth,
             )
 
-        # Return winning response
-        return responses[winning_index][1]
+        # Yield winning response as tokens
+        winning_response = responses[winning_index][2]
+        yield {"type": "token", "content": winning_response}
 
-    async def stream(
-        self,
-        messages: list[dict],
-        max_tokens: int = 2000,
-    ) -> Any:
-        """
-        Council doesn't stream - it deliberates and returns the best response.
+        # Build rich metadata for the UI
+        member_details = []
+        for i, (ep_id, label, resp) in enumerate(responses):
+            is_error = resp.startswith("[Error:")
+            member_details.append({
+                "label": label,
+                "response_preview": resp[:300] if not is_error else resp,
+                "is_winner": i == winning_index,
+                "is_error": is_error,
+            })
 
-        This method yields status updates followed by the final response.
-        """
-        # Yield status update
-        yield "[Council deliberating...]"
-
-        # Get the final response
-        response = await self.chat(messages, max_tokens)
-
-        # Yield the response
-        for char in response:
-            yield char
-            await asyncio.sleep(0.001)
-
-
-def create_default_council_config() -> CouncilConfig:
-    """Create a default council configuration."""
-    return CouncilConfig(
-        council_id="default",
-        chairman=CouncilMember(
-            id="chairman",
-            provider_id="openai",
-            model="gpt-4o-mini",
-        ),
-        members=[],
-        parallel_execution=True,
-    )
+        yield {
+            "type": "metadata",
+            "data": {
+                "type": "council",
+                "member_count": len(self.config.members),
+                "valid_responses": len(valid_responses),
+                "selected_index": winning_index,
+                "chairman": _endpoint_label(self.chairman_endpoint),
+                "chairman_reasoning": chairman_reasoning[:300],
+                "members": member_details,
+            },
+        }

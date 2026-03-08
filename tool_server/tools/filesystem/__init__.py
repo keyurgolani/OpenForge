@@ -4,7 +4,7 @@ Filesystem tools for OpenForge.
 Tools for reading, writing, and managing files within workspace scope.
 All operations are sandboxed to the workspace directory.
 """
-from protocol import BaseTool
+from tool_server.protocol import BaseTool
 from .read_file import ReadFileTool
 from .write_file import WriteFileTool
 from .list_directory import ListDirectoryTool

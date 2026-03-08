@@ -28,8 +28,26 @@ export const listModels = (providerId: string): Promise<any> =>
     api.get(`/llm/providers/${providerId}/models`).then(r => r.data)
 export const testConnection = (providerId: string): Promise<any> =>
     api.post(`/llm/providers/${providerId}/test`).then(r => r.data)
-export const setDefaultProvider = (id: string): Promise<any> =>
-    api.put(`/llm/providers/${id}/default`).then(r => r.data)
+export const syncModels = (providerId: string, models: object[]): Promise<any> =>
+    api.post(`/llm/providers/${providerId}/sync-models`, { models }).then(r => r.data)
+
+// ── LLM Endpoints ──
+export const listEndpoints = (): Promise<any> => api.get('/llm/endpoints').then(r => r.data)
+export const createEndpoint = (data: object): Promise<any> => api.post('/llm/endpoints', data).then(r => r.data)
+export const getEndpoint = (id: string): Promise<any> => api.get(`/llm/endpoints/${id}`).then(r => r.data)
+export const deleteEndpoint = (id: string) => api.delete(`/llm/endpoints/${id}`)
+export const setDefaultEndpoint = (endpointId: string, purpose: string): Promise<any> =>
+    api.put(`/llm/endpoints/${endpointId}/default/${purpose}`).then(r => r.data)
+
+// ── LLM Virtual Providers ──
+export const listVirtualProviders = (): Promise<any> => api.get('/llm/virtual-providers').then(r => r.data)
+export const createVirtualProvider = (data: object): Promise<any> =>
+    api.post('/llm/virtual-providers', data).then(r => r.data)
+export const getVirtualProvider = (id: string): Promise<any> =>
+    api.get(`/llm/virtual-providers/${id}`).then(r => r.data)
+export const updateVirtualProvider = (id: string, data: object): Promise<any> =>
+    api.put(`/llm/virtual-providers/${id}`, data).then(r => r.data)
+export const deleteVirtualProvider = (id: string) => api.delete(`/llm/virtual-providers/${id}`)
 
 // ── Workspaces ──
 export const listWorkspaces = (): Promise<any> => api.get('/workspaces').then(r => r.data)
@@ -178,32 +196,41 @@ export const logout = (): Promise<any> =>
     fetch('/api/auth/logout', { method: 'POST' }).then(r => r.json())
 
 // ── Router/Council/Optimizer configs ──
-export const getRouterConfig = (providerId: string): Promise<any> =>
-    api.get(`/llm/virtual/${providerId}/router-config`).then(r => r.data).catch(() => null)
+export const getRouterConfig = (vpId: string): Promise<any> =>
+    api.get(`/llm/virtual/${vpId}/router-config`).then(r => r.data).catch(() => null)
 
-export const createRouterConfig = (providerId: string, data: object): Promise<any> =>
-    api.post(`/llm/virtual/${providerId}/router-config`, data).then(r => r.data)
+export const createRouterConfig = (vpId: string, data: object): Promise<any> =>
+    api.post(`/llm/virtual/${vpId}/router-config`, data).then(r => r.data)
 
-export const updateRouterConfig = (providerId: string, data: object): Promise<any> =>
-    api.put(`/llm/virtual/${providerId}/router-config`, data).then(r => r.data)
+export const updateRouterConfig = (vpId: string, data: object): Promise<any> =>
+    api.put(`/llm/virtual/${vpId}/router-config`, data).then(r => r.data)
 
-export const getCouncilConfig = (providerId: string): Promise<any> =>
-    api.get(`/llm/virtual/${providerId}/council-config`).then(r => r.data).catch(() => null)
+export const deleteRouterConfig = (vpId: string) =>
+    api.delete(`/llm/virtual/${vpId}/router-config`)
 
-export const createCouncilConfig = (providerId: string, data: object): Promise<any> =>
-    api.post(`/llm/virtual/${providerId}/council-config`, data).then(r => r.data)
+export const getCouncilConfig = (vpId: string): Promise<any> =>
+    api.get(`/llm/virtual/${vpId}/council-config`).then(r => r.data).catch(() => null)
 
-export const updateCouncilConfig = (providerId: string, data: object): Promise<any> =>
-    api.put(`/llm/virtual/${providerId}/council-config`, data).then(r => r.data)
+export const createCouncilConfig = (vpId: string, data: object): Promise<any> =>
+    api.post(`/llm/virtual/${vpId}/council-config`, data).then(r => r.data)
 
-export const getOptimizerConfig = (providerId: string): Promise<any> =>
-    api.get(`/llm/virtual/${providerId}/optimizer-config`).then(r => r.data).catch(() => null)
+export const updateCouncilConfig = (vpId: string, data: object): Promise<any> =>
+    api.put(`/llm/virtual/${vpId}/council-config`, data).then(r => r.data)
 
-export const createOptimizerConfig = (providerId: string, data: object): Promise<any> =>
-    api.post(`/llm/virtual/${providerId}/optimizer-config`, data).then(r => r.data)
+export const deleteCouncilConfig = (vpId: string) =>
+    api.delete(`/llm/virtual/${vpId}/council-config`)
 
-export const updateOptimizerConfig = (providerId: string, data: object): Promise<any> =>
-    api.put(`/llm/virtual/${providerId}/optimizer-config`, data).then(r => r.data)
+export const getOptimizerConfig = (vpId: string): Promise<any> =>
+    api.get(`/llm/virtual/${vpId}/optimizer-config`).then(r => r.data).catch(() => null)
+
+export const createOptimizerConfig = (vpId: string, data: object): Promise<any> =>
+    api.post(`/llm/virtual/${vpId}/optimizer-config`, data).then(r => r.data)
+
+export const updateOptimizerConfig = (vpId: string, data: object): Promise<any> =>
+    api.put(`/llm/virtual/${vpId}/optimizer-config`, data).then(r => r.data)
+
+export const deleteOptimizerConfig = (vpId: string) =>
+    api.delete(`/llm/virtual/${vpId}/optimizer-config`)
 
 // ── Agents ──
 export const listAgents = (): Promise<any> => api.get('/agents').then(r => r.data)
@@ -219,6 +246,19 @@ export const approveHITL = (id: string, note?: string): Promise<any> =>
     api.post(`/hitl/${id}/approve`, { resolution_note: note }).then(r => r.data)
 export const denyHITL = (id: string, note?: string): Promise<any> =>
     api.post(`/hitl/${id}/deny`, { resolution_note: note }).then(r => r.data)
+
+// ── Embedding Config ──
+export const getEmbeddingConfig = (): Promise<any> =>
+    api.get('/llm/embedding-config').then(r => r.data)
+
+export const setEmbeddingConfig = (data: {
+    mode: string
+    native_model?: string
+    provider_endpoint_id?: string
+}): Promise<any> => api.put('/llm/embedding-config', data).then(r => r.data)
+
+export const reindexAllEmbeddings = (): Promise<any> =>
+    api.post('/llm/reindex-embeddings').then(r => r.data)
 
 // ── Visual Search ──
 export const visualSearch = (wid: string, file: File): Promise<any> => {

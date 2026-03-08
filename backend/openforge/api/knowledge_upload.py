@@ -293,7 +293,7 @@ async def upload_knowledge(
 async def _get_vision_provider_config(db: AsyncSession, workspace_id: UUID) -> dict:
     """Get vision provider config for workspace."""
     from openforge.services.llm_service import llm_service
-    provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
+    provider_name, api_key, model, base_url, _ = await llm_service.get_provider_for_workspace(db, workspace_id)
 
     return {
         "provider_id": provider_name,
@@ -305,7 +305,7 @@ async def _get_vision_provider_config(db: AsyncSession, workspace_id: UUID) -> d
 async def _get_title_provider_config(db: AsyncSession, workspace_id: UUID) -> dict:
     """Get title provider config for workspace."""
     from openforge.services.llm_service import llm_service
-    provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
+    provider_name, api_key, model, base_url, _ = await llm_service.get_provider_for_workspace(db, workspace_id)
 
     return {
         "provider_id": provider_name,

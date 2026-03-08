@@ -1,0 +1,258 @@
+# Development compose with watch for live code reloading.
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up --watch
+#
+# Frontend runs a Vite dev server with HMR on http://localhost:5173
+# Backend API is available at http://localhost:3100
+#
+# Code changes are synced into containers automatically:
+#   - Backend Python changes:  synced + uvicorn auto-reloads
+#   - Tool server changes:     synced + uvicorn auto-reloads
+#   - Celery worker changes:   synced + worker restarts
+#   - Frontend changes:        Vite HMR (instant, no rebuild)
+#   - Dependency file changes: triggers full image rebuild
+
+services:
+  openforge:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    ports:
+      - "${PORT:-3100}:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://openforge:${DB_PASSWORD:-changeme}@postgres:5432/openforge
+      - QDRANT_URL=http://qdrant:6333
+      - REDIS_URL=redis://redis:6379/0
+      - WORKSPACE_ROOT=${WORKSPACE_ROOT:-/workspace}
+      - UPLOADS_ROOT=/uploads
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
+    volumes:
+      - ${WORKSPACE_HOST_PATH:-./data/workspace}:/workspace
+      - ${UPLOADS_HOST_PATH:-./data/uploads}:/uploads
+      - ${MODELS_HOST_PATH:-./data/models}:/models
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${SKILLS_HOST_PATH:-./data/skills}:/skills:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    command:
+      [
+        "uvicorn",
+        "openforge.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "3000",
+        "--reload",
+        "--reload-dir",
+        "/app/backend",
+      ]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+    develop:
+      watch:
+        - action: sync
+          path: ./backend
+          target: /app/backend
+          ignore:
+            - "**/__pycache__/"
+            - "**/*.pyc"
+        - action: rebuild
+          path: ./backend/requirements.txt
+
+  frontend-dev:
+    build:
+      context: ./frontend
+      dockerfile: ../docker/Dockerfile.frontend-dev
+    ports:
+      - "${FRONTEND_DEV_PORT:-5173}:5173"
+    environment:
+      - API_TARGET=http://openforge:3000
+      - WS_TARGET=ws://openforge:3000
+    depends_on:
+      - openforge
+    develop:
+      watch:
+        - action: sync
+          path: ./frontend/src
+          target: /app/src
+        - action: sync
+          path: ./frontend/public
+          target: /app/public
+        - action: rebuild
+          path: ./frontend/package.json
+        - action: rebuild
+          path: ./frontend/package-lock.json
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  celery-worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://openforge:${DB_PASSWORD:-changeme}@postgres:5432/openforge
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_URL=http://qdrant:6333
+      - TOOL_SERVER_URL=http://tool-server:3001
+      - MAIN_APP_URL=http://openforge:3000
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
+      - HF_HOME=/models
+      - SENTENCE_TRANSFORMERS_HOME=/models
+    volumes:
+      - ${MODELS_HOST_PATH:-./data/models}:/models
+      - ${SKILLS_HOST_PATH:-./data/skills}:/skills:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      tool-server:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "celery -A openforge.worker.celery_app inspect ping 2>&1 | grep -q pong || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 2G
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./backend
+          target: /app/backend
+          ignore:
+            - "**/__pycache__/"
+            - "**/*.pyc"
+        - action: rebuild
+          path: ./backend/requirements.txt
+
+  tool-server:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.tools
+    ports:
+      - "${TOOL_SERVER_PORT:-3001}:3001"
+      - "${MCP_PORT:-3002}:3002"
+    environment:
+      - WORKSPACE_ROOT=/workspace
+      - MAIN_APP_URL=http://openforge:3000
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - ${WORKSPACE_HOST_PATH:-./data/workspace}:/workspace
+      - ${SKILLS_HOST_PATH:-./data/skills}:/skills:rw
+    depends_on:
+      redis:
+        condition: service_healthy
+    command:
+      [
+        "uvicorn",
+        "tool_server.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "3001",
+        "--reload",
+        "--reload-dir",
+        "/app/tool_server",
+      ]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/tools/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    develop:
+      watch:
+        - action: sync
+          path: ./tool_server
+          target: /app/tool_server
+          ignore:
+            - "**/__pycache__/"
+            - "**/*.pyc"
+        - action: rebuild
+          path: ./tool_server/requirements.txt
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: openforge
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: openforge
+    volumes:
+      - ${POSTGRES_DATA_PATH:-./data/postgres}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openforge"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.2
+    volumes:
+      - ${QDRANT_DATA_PATH:-./data/qdrant}:/qdrant/storage
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - ${REDIS_DATA_PATH:-./data/redis}:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
