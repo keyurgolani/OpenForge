@@ -22,6 +22,8 @@ export interface TimelineThinking {
     type: 'thinking'
     content: string
     done?: boolean
+    startedAt?: number   // epoch ms when this thinking block started
+    durationMs?: number  // ms from startedAt → done; set when done becomes true
 }
 
 export interface TimelineToolCall {
@@ -61,6 +63,14 @@ export function useStreamingChat(conversationId: string | null) {
     const { on, send, isConnected } = useWorkspaceWebSocket(workspaceId)
     const queryClient = useQueryClient()
 
+    // ── Jitter-buffer state ────────────────────────────────────────────────────
+    // Incoming tokens are pushed to tokenQueueRef; a RAF loop drains the queue
+    // at a velocity proportional to its depth, creating a smooth reading cadence
+    // instead of the default bursty rendering.
+    const tokenQueueRef = useRef('')          // chars waiting to be displayed
+    const displayedContentRef = useRef('')    // mirrored ref of streamingContent
+    const activeStreamRef = useRef(false)     // guards the RAF loop after reset
+
     const [streamingContent, setStreamingContent] = useState('')
     const [isStreaming, setIsStreaming] = useState(false)
     const [isInterrupted, setIsInterrupted] = useState(false)
@@ -74,6 +84,11 @@ export function useStreamingChat(conversationId: string | null) {
     const timelineRef = useRef<TimelineEntry[]>([])
 
     const resetStreamState = (interrupted = false) => {
+        // Stop the jitter buffer loop immediately and discard any pending queue.
+        // The persisted message from the API re-fetch provides the complete text.
+        activeStreamRef.current = false
+        tokenQueueRef.current = ''
+        displayedContentRef.current = ''
         setStreamingContent('')
         setIsStreaming(false)
         setIsInterrupted(interrupted)
@@ -84,6 +99,31 @@ export function useStreamingChat(conversationId: string | null) {
         timelineRef.current = []
         latestThinkingRef.current = ''
     }
+
+    // RAF drain loop — runs only while isStreaming is true.
+    // Dynamic velocity: take ceil(queue.length / 15) chars per frame so the
+    // buffer catches up quickly when bursting and slows to 1 char/frame when
+    // nearly empty, giving a natural, consistent reading cadence at ~60 fps.
+    useEffect(() => {
+        if (!isStreaming) return
+        activeStreamRef.current = true
+        let rafId: number
+        const drain = () => {
+            if (!activeStreamRef.current) return
+            const queue = tokenQueueRef.current
+            if (queue.length > 0) {
+                const take = Math.max(1, Math.ceil(queue.length / 15))
+                const chunk = queue.slice(0, take)
+                tokenQueueRef.current = queue.slice(take)
+                const next = displayedContentRef.current + chunk
+                displayedContentRef.current = next
+                setStreamingContent(next)
+            }
+            rafId = requestAnimationFrame(drain)
+        }
+        rafId = requestAnimationFrame(drain)
+        return () => { cancelAnimationFrame(rafId) }
+    }, [isStreaming])
 
     useEffect(() => {
         resetStreamState()
@@ -119,7 +159,11 @@ export function useStreamingChat(conversationId: string | null) {
                 }
                 setTimeline(reconstructed)
                 timelineRef.current = reconstructed
-                setStreamingContent(snapshot.content ?? '')
+                // Bypass jitter buffer for snapshot — we have the full content already
+                const content = snapshot.content ?? ''
+                tokenQueueRef.current = ''
+                displayedContentRef.current = content
+                setStreamingContent(content)
                 setAttachmentsProcessed(Array.isArray(snapshot.attachments_processed) ? snapshot.attachments_processed : [])
                 setSources(Array.isArray(snapshot.sources) ? snapshot.sources : [])
                 setIsStreaming(true)
@@ -134,12 +178,14 @@ export function useStreamingChat(conversationId: string | null) {
             on('chat_token', (msg) => {
                 const m = msg as { conversation_id: string; data: string }
                 if (m.conversation_id !== conversationId) return
-                setStreamingContent(prev => prev + m.data)
-                // Mark the last thinking entry as done when response text starts
+                // Push to jitter-buffer queue; the RAF loop drains it smoothly
+                tokenQueueRef.current += m.data
+                // Mark the last thinking entry as done and record duration
                 setTimeline(prev => {
                     const last = prev[prev.length - 1]
                     if (last?.type === 'thinking' && !last.done) {
-                        const updated = [...prev.slice(0, -1), { ...last, done: true }]
+                        const durationMs = last.startedAt != null ? Date.now() - last.startedAt : undefined
+                        const updated = [...prev.slice(0, -1), { ...last, done: true, durationMs }]
                         timelineRef.current = updated
                         return updated
                     }
@@ -154,12 +200,13 @@ export function useStreamingChat(conversationId: string | null) {
                 setTimeline(prev => {
                     const last = prev[prev.length - 1]
                     if (last?.type === 'thinking') {
-                        // Extend the latest thinking entry
-                        const updated = [...prev.slice(0, -1), { type: 'thinking' as const, content: last.content + chunk }]
+                        // Extend the latest entry; preserve startedAt for duration tracking
+                        const updated = [...prev.slice(0, -1), { type: 'thinking' as const, content: last.content + chunk, startedAt: last.startedAt }]
                         timelineRef.current = updated
                         return updated
                     }
-                    const updated = [...prev, { type: 'thinking' as const, content: chunk }]
+                    // New thinking block — record start time now
+                    const updated = [...prev, { type: 'thinking' as const, content: chunk, startedAt: Date.now() }]
                     timelineRef.current = updated
                     return updated
                 })

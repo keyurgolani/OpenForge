@@ -754,11 +754,39 @@ class KnowledgeProcessingService:
         except Exception as e:
             logger.warning(f"Failed to emit workspace update for knowledge {knowledge_id}: {e}")
 
-    async def _fetch_url_content_raw(self, url: str) -> tuple[str | None, str | None, str]:
+    async def _resolve_final_url(self, client, url: str) -> str:
+        """Follow redirects and return the final destination URL.
+
+        Tries HEAD first (cheap); falls back to a streaming GET for servers
+        that reject HEAD requests.  Returns the original URL on any error so
+        callers can continue without interruption.
+        """
+        try:
+            response = await client.head(url, follow_redirects=True)
+            final = str(response.url)
+            if final and final != url:
+                logger.info("URL %s resolved via redirect to %s", url, final)
+            return final or url
+        except Exception:
+            pass
+
+        try:
+            async with client.stream("GET", url, follow_redirects=True) as response:
+                final = str(response.url)
+                if final and final != url:
+                    logger.info("URL %s resolved via redirect to %s", url, final)
+                return final or url
+        except Exception as e:
+            logger.warning("Failed to resolve redirect for %s: %s", url, e)
+            return url
+
+    async def _fetch_url_content_raw(self, url: str) -> tuple[str | None, str | None, str, str]:
         """Fetch and parse URL content without any DB persistence.
 
-        Returns ``(title, description, content)`` where *content* is the best
-        readable text we could extract (may be empty string if all strategies failed).
+        Returns ``(title, description, content, resolved_url)`` where
+        *content* is the best readable text we could extract and
+        *resolved_url* is the final URL after following any redirects
+        (may equal *url* if no redirect occurred or resolution failed).
         """
         import httpx
 
@@ -774,10 +802,13 @@ class KnowledgeProcessingService:
             follow_redirects=True,
             headers={"User-Agent": "Mozilla/5.0 (compatible; OpenForge/1.0; +https://github.com/openforge)"},
         ) as client:
-            domain_override_strategy, domain_override_content = await self._try_fetch_domain_override_bookmark_content(client, url)
-            raw_markdown_file = await self._try_fetch_raw_markdown_file(client, url)
-            cloudflare_markdown = await self._try_fetch_cloudflare_markdown(client, url)
-            raw_html = await self._try_fetch_html(client, url)
+            # Resolve short/redirect URLs first so domain-override matching
+            # and all extraction strategies operate on the canonical URL.
+            resolved_url = await self._resolve_final_url(client, url)
+            domain_override_strategy, domain_override_content = await self._try_fetch_domain_override_bookmark_content(client, resolved_url)
+            raw_markdown_file = await self._try_fetch_raw_markdown_file(client, resolved_url)
+            cloudflare_markdown = await self._try_fetch_cloudflare_markdown(client, resolved_url)
+            raw_html = await self._try_fetch_html(client, resolved_url)
 
         title, description = self._extract_metadata_from_html(raw_html)
         markdown_from_html = self._convert_html_to_markdown(raw_html)
@@ -790,11 +821,11 @@ class KnowledgeProcessingService:
                 follow_redirects=True,
                 headers={"User-Agent": "Mozilla/5.0 (compatible; OpenForge/1.0; +https://github.com/openforge)"},
             ) as client:
-                jina_reader_markdown = await self._try_fetch_jina_reader_markdown(client, url)
+                jina_reader_markdown = await self._try_fetch_jina_reader_markdown(client, resolved_url)
 
         chrome_fallback_text = ""
         if not any(x.strip() for x in [domain_override_content, raw_markdown_file, cloudflare_markdown, markdown_from_html, jina_reader_markdown]):
-            rendered_html = await self._try_fetch_rendered_html_with_chrome(url)
+            rendered_html = await self._try_fetch_rendered_html_with_chrome(resolved_url)
             if rendered_html:
                 chrome_title, chrome_description = self._extract_metadata_from_html(rendered_html)
                 title = title or chrome_title
@@ -817,11 +848,11 @@ class KnowledgeProcessingService:
         strategy, readable_text = self._pick_bookmark_content(candidates)
         if readable_text:
             readable_text = readable_text[:self._BOOKMARK_CONTENT_MAX_CHARS]
-            logger.info("URL %s scraped via %s", url, strategy)
+            logger.info("URL %s scraped via %s", resolved_url, strategy)
         else:
-            logger.warning("URL %s scraping produced empty content", url)
+            logger.warning("URL %s scraping produced empty content", resolved_url)
 
-        return title, description, readable_text
+        return title, description, readable_text, resolved_url
 
     async def extract_url_content_raw(self, url: str) -> dict:
         """Extract URL content without saving to Knowledge.
@@ -831,11 +862,11 @@ class KnowledgeProcessingService:
         ``run_bookmark_content_extraction_job`` when you want the result saved.
         """
         try:
-            title, description, content = await self._fetch_url_content_raw(url)
-            return {"title": title, "description": description, "content": content}
+            title, description, content, resolved_url = await self._fetch_url_content_raw(url)
+            return {"title": title, "description": description, "content": content, "resolved_url": resolved_url}
         except Exception as exc:
             logger.warning("extract_url_content_raw failed for %s: %s", url, exc)
-            return {"title": None, "description": None, "content": ""}
+            return {"title": None, "description": None, "content": "", "resolved_url": url}
 
     async def _fetch_url_metadata(self, knowledge_id: UUID, url: str, workspace_id: UUID | None = None):
         """Fetch URL content and persist it to the Knowledge bookmark record."""
@@ -864,13 +895,17 @@ class KnowledgeProcessingService:
                 except Exception as e:
                     logger.warning(f"Failed to emit bookmark scraping start for knowledge {knowledge_id}: {e}")
 
-            title, description, readable_text = await self._fetch_url_content_raw(url)
+            title, description, readable_text, resolved_url = await self._fetch_url_content_raw(url)
 
             changed_fields: list[str] = []
             async with AsyncSessionLocal() as db:
                 result = await db.execute(select(Knowledge).where(Knowledge.id == knowledge_id))
                 knowledge_record = result.scalar_one_or_none()
                 if knowledge_record:
+                    # Update to the canonical URL if the original was a redirect.
+                    if resolved_url and resolved_url != url:
+                        knowledge_record.url = resolved_url
+                        changed_fields.append("url")
                     if title:
                         knowledge_record.url_title = title[:500]
                         changed_fields.append("url_title")

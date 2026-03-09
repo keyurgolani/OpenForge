@@ -8,11 +8,11 @@ interface WsManager {
     isConnected: boolean
 }
 
-const managers = new Map<string, { ws: WebSocket; handlers: Map<string, Set<WsHandler>>; reconnectTimer: ReturnType<typeof setTimeout> | null; statusListeners: Set<(connected: boolean) => void>; isConnected: boolean }>()
+const managers = new Map<string, { ws: WebSocket; handlers: Map<string, Set<WsHandler>>; reconnectTimer: ReturnType<typeof setTimeout> | null; statusListeners: Set<(connected: boolean) => void>; isConnected: boolean; reconnectAttempt: number }>()
 
 function getOrCreateManager(workspaceId: string) {
     if (!managers.has(workspaceId)) {
-        managers.set(workspaceId, { ws: null as unknown as WebSocket, handlers: new Map(), reconnectTimer: null, statusListeners: new Set(), isConnected: false })
+        managers.set(workspaceId, { ws: null as unknown as WebSocket, handlers: new Map(), reconnectTimer: null, statusListeners: new Set(), isConnected: false, reconnectAttempt: 0 })
     }
     return managers.get(workspaceId)!
 }
@@ -35,6 +35,7 @@ export function useWorkspaceWebSocket(workspaceId: string): WsManager {
 
         ws.onopen = () => {
             manager.isConnected = true
+            manager.reconnectAttempt = 0
             manager.statusListeners.forEach(l => l(true))
             if (manager.reconnectTimer) {
                 clearTimeout(manager.reconnectTimer)
@@ -60,7 +61,12 @@ export function useWorkspaceWebSocket(workspaceId: string): WsManager {
         ws.onclose = () => {
             manager.isConnected = false
             manager.statusListeners.forEach(l => l(false))
-            manager.reconnectTimer = setTimeout(connect, 3000)
+            // Exponential backoff with jitter: min(30s, 1s × 2^attempt) + up to 1s random
+            const attempt = manager.reconnectAttempt
+            const baseDelay = Math.min(30000, 1000 * Math.pow(2, attempt))
+            const jitter = Math.random() * 1000
+            manager.reconnectAttempt = attempt + 1
+            manager.reconnectTimer = setTimeout(connect, baseDelay + jitter)
         }
 
         ws.onerror = () => {

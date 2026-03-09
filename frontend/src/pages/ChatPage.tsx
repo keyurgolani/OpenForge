@@ -507,6 +507,11 @@ export default function ChatPage() {
             .reduce((sum, entry) => sum + (entry.content?.length ?? 0), 0)
     }, [streamingTimeline])
 
+    // Pre-render streaming markdown once per content change instead of inline
+    // on every render cycle — avoids redundant md.render() calls when only
+    // unrelated state (scroll position, tool results, etc.) changes.
+    const renderedStreamingContent = useMemo(() => md.render(streamingContent), [streamingContent])
+
     useEffect(() => {
         if (!isStreaming || !stickToBottom) return
         const target = streamingMessageRef.current
@@ -963,6 +968,7 @@ export default function ChatPage() {
                                                             content={entry.content}
                                                             requestVisibility={() => ensureExpandedBlockVisible(streamingMessageRef.current)}
                                                             isActiveStream={isStreaming && i === streamingTimeline.length - 1 && !entry.done}
+                                                            durationMs={entry.durationMs}
                                                         />
                                                     ) : (
                                                         <div key={entry.call_id} className="chat-workflow-step chat-section-reveal">
@@ -1010,7 +1016,7 @@ export default function ChatPage() {
                                                                 className={`min-h-0 ${streamResponseExpanded ? 'overflow-visible' : 'overflow-y-auto'}`}
                                                                 style={streamResponseExpanded ? undefined : { maxHeight: `${streamingBubbleMaxHeight}px` }}
                                                             >
-                                                                <div className={`markdown-content ${isInterrupted ? '' : 'streaming-cursor'}`} dangerouslySetInnerHTML={{ __html: md.render(streamingContent) }} />
+                                                                <div className={`markdown-content ${isInterrupted ? '' : 'streaming-cursor'}`} dangerouslySetInnerHTML={{ __html: renderedStreamingContent }} />
                                                                 {isInterrupted && (
                                                                     <span className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground/50 italic">
                                                                         …Interrupted
@@ -1560,10 +1566,12 @@ function ThinkingBlock({
     content,
     requestVisibility,
     isActiveStream = false,
+    durationMs,
 }: {
     content: string
     requestVisibility?: (el: HTMLElement | null) => void
     isActiveStream?: boolean
+    durationMs?: number
 }) {
     // Start open when streaming, closed when static (persisted)
     const [open, setOpen] = useState(isActiveStream)
@@ -1639,7 +1647,11 @@ function ThinkingBlock({
                 <Brain className="w-3 h-3" />
                 {isActiveStream
                     ? <><span>Thinking</span><span className="animate-pulse text-accent/50">•••</span></>
-                    : open ? 'Thinking' : 'Thought'
+                    : open
+                    ? 'Thinking'
+                    : durationMs != null
+                    ? `Thought for ${durationMs >= 60000 ? Math.round(durationMs / 60000) + 'm' : durationMs >= 1000 ? (durationMs / 1000).toFixed(durationMs < 10000 ? 1 : 0) + 's' : durationMs + 'ms'}`
+                    : 'Thought'
                 }
             </button>
             <div ref={blockRef} className={`chat-collapse w-full ${open ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>

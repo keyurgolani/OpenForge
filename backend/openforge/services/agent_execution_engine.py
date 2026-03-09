@@ -347,9 +347,11 @@ class AgentExecutionEngine:
 
                 title = result.get("title") or None
                 content = (result.get("content") or "").strip()
-                display_name = title or url
+                resolved_url = result.get("resolved_url") or url
+                display_name = title or resolved_url
 
-                # Store as MessageAttachment so user can "Save to Knowledge" later
+                # Store as MessageAttachment so user can "Save to Knowledge" later.
+                # Use the resolved (canonical) URL so short links are unwound.
                 attachment_id = uuid.uuid4()
                 async with AsyncSessionLocal() as att_db:
                     att_db.add(MessageAttachment(
@@ -359,7 +361,7 @@ class AgentExecutionEngine:
                         content_type="text/url-extract",
                         file_size=len(content.encode()),
                         file_path="",
-                        source_url=url,
+                        source_url=resolved_url,
                         extracted_text=content or None,
                     ))
                     await att_db.commit()
