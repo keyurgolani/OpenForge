@@ -67,6 +67,7 @@ interface AttachmentProcessed {
     pipeline: string
     details?: string
     source_url?: string | null
+    extracted_text?: string | null
 }
 
 interface Conversation {
@@ -1774,7 +1775,7 @@ function ThinkingBlock({
                 }
             </button>
             <div ref={blockRef} className={`chat-collapse w-full ${open ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
-                <div className="chat-collapse-inner">
+                <div className="chat-collapse-inner pb-px">
                     <div className="relative mt-1 w-full rounded-2xl border border-accent/20 bg-accent/6 px-4 py-3 chat-section-reveal">
                         {isActiveStream && !fullyExpanded && hasHiddenTop && (
                             <>
@@ -1812,9 +1813,11 @@ function ThinkingBlock({
 function AttachmentCard({ att, workspaceId }: { att: AttachmentProcessed; workspaceId: string }) {
     const [saved, setSaved] = useState(false)
     const [saving, setSaving] = useState(false)
+    const [expanded, setExpanded] = useState(false)
     const { success: toastSuccess, error: toastError } = useToast()
 
     const canSave = att.status === 'processed' && !saved
+    const hasContent = !!att.extracted_text?.trim()
 
     async function handleSave() {
         if (saving || saved) return
@@ -1836,8 +1839,18 @@ function AttachmentCard({ att, workspaceId }: { att: AttachmentProcessed; worksp
                 <span className="truncate font-medium text-foreground/90">{att.filename}</span>
                 <div className="flex items-center gap-2 shrink-0">
                     <span className={`text-[10px] ${att.status === 'processed' ? 'text-emerald-300' : att.status === 'deferred' ? 'text-amber-300' : 'text-muted-foreground'}`}>
-                        {att.pipeline}
+                        {att.pipeline === 'url_extract' ? 'URL Extract' : att.pipeline}
                     </span>
+                    {hasContent && (
+                        <button
+                            onClick={() => setExpanded(p => !p)}
+                            title={expanded ? 'Hide content' : 'View extracted content'}
+                            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                        >
+                            {expanded ? <ChevronDown className="h-2.5 w-2.5" /> : <ChevronRight className="h-2.5 w-2.5" />}
+                            {expanded ? 'Hide' : 'View'}
+                        </button>
+                    )}
                     {canSave && (
                         <button
                             onClick={handleSave}
@@ -1859,6 +1872,11 @@ function AttachmentCard({ att, workspaceId }: { att: AttachmentProcessed; worksp
             </div>
             {att.details && (
                 <p className="text-[11px] text-muted-foreground">{att.details}</p>
+            )}
+            {expanded && att.extracted_text && (
+                <pre className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap break-words rounded border border-border/50 bg-background/60 p-2 text-[11px] text-foreground/80 leading-relaxed">
+                    {att.extracted_text}
+                </pre>
             )}
         </div>
     )

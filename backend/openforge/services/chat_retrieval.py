@@ -35,7 +35,14 @@ def select_relevant_rag_results(
     seen_knowledge_ids: set[str] = set()
 
     for result in sorted_results:
-        knowledge_id = str(result.get("knowledge_id", "")).strip()
+        # Skip chat embeddings — they are not knowledge items
+        if result.get("knowledge_type") == "chat":
+            continue
+
+        kid = result.get("knowledge_id")
+        if not kid:
+            continue
+        knowledge_id = str(kid).strip()
         if not knowledge_id or knowledge_id in seen_knowledge_ids:
             continue
 

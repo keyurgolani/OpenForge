@@ -41,6 +41,7 @@ def _attachment_to_processed_summary(attachment: MessageAttachment) -> dict:
             "pipeline": "url_extract",
             "details": f"Extracted {len(extracted_text)} chars" if extracted_text else "No content extracted",
             "source_url": source_url,
+            "extracted_text": extracted_text[:5000] if extracted_text else None,
         }
 
     pipeline = resolve_attachment_pipeline(
@@ -49,6 +50,7 @@ def _attachment_to_processed_summary(attachment: MessageAttachment) -> dict:
     )
     status = "deferred"
     details = "Pipeline not available yet for this file type"
+    extracted_text = ""
 
     if pipeline == "text":
         extracted_text = (attachment.extracted_text or "").strip()
@@ -66,6 +68,7 @@ def _attachment_to_processed_summary(attachment: MessageAttachment) -> dict:
         "pipeline": pipeline,
         "details": details,
         "source_url": None,
+        "extracted_text": extracted_text[:5000] if extracted_text else None,
     }
 
 
@@ -287,6 +290,29 @@ class ConversationService:
             )
         await db.delete(conv)
         await db.commit()
+        # Remove chat embeddings from Qdrant so deleted conversations no
+        # longer surface as RAG context in future chats.
+        try:
+            from openforge.db.qdrant_client import get_qdrant
+            from openforge.config import get_settings
+            from qdrant_client import models as qdrant_models
+            client = get_qdrant()
+            settings = get_settings()
+            client.delete(
+                collection_name=settings.qdrant_collection,
+                points_selector=qdrant_models.FilterSelector(
+                    filter=qdrant_models.Filter(
+                        must=[
+                            qdrant_models.FieldCondition(
+                                key="conversation_id",
+                                match=qdrant_models.MatchValue(value=str(conversation_id)),
+                            )
+                        ]
+                    )
+                ),
+            )
+        except Exception as e:
+            logger.warning("Failed to delete Qdrant chat embeddings for conversation %s: %s", conversation_id, e)
 
     async def add_message(
         self,

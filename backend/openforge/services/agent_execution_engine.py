@@ -268,6 +268,7 @@ class AgentExecutionEngine:
                 "status": attachment_status,
                 "pipeline": pipeline,
                 "details": details,
+                "extracted_text": (attachment.extracted_text or "")[:5000] or None,
             })
 
         if db_updated:
@@ -393,6 +394,7 @@ class AgentExecutionEngine:
                     "pipeline": "url_extract",
                     "details": details,
                     "source_url": url,
+                    "extracted_text": content[:5000] if content else None,
                 })
 
             except Exception as exc:
@@ -417,7 +419,12 @@ class AgentExecutionEngine:
 
         if not context_blocks:
             return "", url_attachments
-        return "\n\nThe user shared the following URLs:\n" + "\n".join(context_blocks), url_attachments
+        header = (
+            "\n\nThe following URLs were shared by the user. Their content has already been "
+            "extracted and is provided below. Do NOT call any fetch, browse, or URL tool to "
+            "re-fetch these URLs — use the extracted content directly.\n"
+        )
+        return header + "\n".join(context_blocks), url_attachments
 
     async def send_stream_snapshot(
         self,
@@ -900,10 +907,10 @@ class AgentExecutionEngine:
                         "content": tr["content"],
                     })
 
-            # 9a. If the loop exhausted all iterations on tool calls and never produced a
-            #     text response, do one final tools-disabled turn to force a summary.
+            # 9a. If the model produced no text response (only thinking, or only tool calls),
+            #     do one final tools-disabled, thinking-disabled turn to force a text summary.
             #     Skip this if the user cancelled — we don't want to start another LLM call.
-            if not was_cancelled and not full_response.strip() and all_tool_calls_made:
+            if not was_cancelled and not full_response.strip() and (all_tool_calls_made or full_thinking.strip()):
                 try:
                     async for event in llm_gateway.stream_with_tools(
                         messages=loop_messages,

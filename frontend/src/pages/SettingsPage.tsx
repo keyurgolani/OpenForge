@@ -675,47 +675,13 @@ function ChatModelsTab() {
 }
 
 function VisionModelsTab() {
-    const { data: providers = [] } = useQuery({ queryKey: ['providers'], queryFn: listProviders })
-    const visionProviders = (providers as ProviderRow[]).filter(p =>
-        ['openai', 'anthropic', 'gemini', 'openrouter', 'custom-openai'].some(n =>
-            p.provider_name?.includes(n)
-        )
-    )
-
     return (
         <div className="space-y-3">
-            <div>
-                <h3 className="font-semibold text-sm">Vision Model Providers</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                    Providers with vision-capable models for image and document content extraction. Configure vision providers per workspace in the Workspaces tab.
-                </p>
+            <div className="flex items-start gap-2 rounded-lg border border-sky-500/25 bg-sky-500/8 px-3 py-2 text-[11px] text-sky-300">
+                <Eye className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                <span>Vision providers use the same list as Chat. Add a provider here, then assign it per workspace in the <span className="font-medium">Workspaces</span> tab under Visual Model.</span>
             </div>
-
-            {visionProviders.length > 0 ? (
-                <div className="space-y-2">
-                    {visionProviders.map(p => (
-                        <div key={p.id} className="glass-card px-4 py-3 flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center flex-shrink-0">
-                                <ProviderIcon providerId={p.provider_name} className="w-4 h-4" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium">{sanitizeProviderDisplayName(p.display_name)}</p>
-                                <p className="text-xs text-muted-foreground">{p.enabled_models?.length ?? 0} models enabled</p>
-                            </div>
-                            <span className="chip text-[10px] bg-sky-500/10 border-sky-500/20 text-sky-300">Vision Ready</span>
-                        </div>
-                    ))}
-                    <p className="text-xs text-muted-foreground pt-1">
-                        To assign a vision model to a workspace, go to <span className="text-accent">Workspaces</span> and select a Visual Model provider.
-                    </p>
-                </div>
-            ) : (
-                <div className="text-center py-12 text-muted-foreground text-sm">
-                    <Eye className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                    <p>No vision-capable providers detected.</p>
-                    <p className="text-xs mt-1 opacity-70">Add an OpenAI, Anthropic, or Gemini provider in the Chat Models tab.</p>
-                </div>
-            )}
+            <ChatModelsTab />
         </div>
     )
 }
@@ -779,6 +745,8 @@ function EmbeddingTab() {
     const [model, setModel] = useState('')
     const [saving, setSaving] = useState(false)
     const [saved, setSaved] = useState(false)
+    const [expanded, setExpanded] = useState(true)
+    const [showAdd, setShowAdd] = useState(false)
 
     useEffect(() => {
         setModel(embeddingModel)
@@ -794,36 +762,75 @@ function EmbeddingTab() {
 
     return (
         <div className="space-y-3">
-            <div>
-                <h3 className="font-semibold text-sm">Embedding Model</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                    The embedding model is used to index knowledge for semantic search.
-                </p>
+            <div className="flex items-center justify-between">
+                <div>
+                    <h3 className="font-semibold text-sm">Embedding Model Providers</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                        Manage providers and models used for semantic indexing and search.
+                    </p>
+                </div>
+                <button className="btn-primary text-xs py-1.5 px-3" onClick={() => setShowAdd(p => !p)}>
+                    <Plus className="w-3.5 h-3.5" /> {showAdd ? 'Close' : 'Add Provider'}
+                </button>
             </div>
 
-            <div className="glass-card p-4 space-y-3">
-                <div>
-                    <label className="text-xs text-muted-foreground mb-1 block">Embedding Model ID</label>
-                    <input
-                        className="input text-sm"
-                        placeholder="e.g. text-embedding-3-small, nomic-embed-text"
-                        value={model}
-                        onChange={e => setModel(e.target.value)}
-                    />
+            {showAdd && (
+                <AddProviderPanel onAdded={() => setShowAdd(false)} />
+            )}
+
+            {/* Built-in local embedding provider card */}
+            <div className="glass-card-hover transition-all duration-300">
+                <div
+                    className="flex items-center gap-3 px-4 py-3 cursor-pointer"
+                    onClick={() => setExpanded(p => !p)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(p => !p) } }}
+                >
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center border bg-lime-500/10 border-lime-500/20">
+                        <Database className="w-4 h-4 text-lime-300" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm">Local / Built-in</span>
+                            <span className="chip-muted text-[10px]">sentence-transformers</span>
+                            <span className="chip-muted text-[10px]">Local provider</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                            {model || 'No model configured'}{model ? ' · 1 model' : ''}
+                        </p>
+                    </div>
+                    <button className="btn-ghost p-1.5" onClick={(e) => { e.stopPropagation(); setExpanded(p => !p) }}>
+                        {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    </button>
                 </div>
 
-                <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
-                    <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
-                    <span>Changing the embedding model will require re-indexing all existing knowledge. Semantic search results will be unavailable until re-indexing completes.</span>
-                </div>
+                {expanded && (
+                    <div className="border-t border-border/50 px-4 py-4 space-y-3 animate-fade-in">
+                        <div>
+                            <label className="text-xs text-muted-foreground mb-1.5 block font-medium">Default Model</label>
+                            <input
+                                className="input text-sm"
+                                placeholder="e.g. text-embedding-3-small, nomic-embed-text"
+                                value={model}
+                                onChange={e => { setModel(e.target.value); setSaved(false) }}
+                            />
+                        </div>
 
-                <button className="btn-primary text-xs py-1.5 px-3" onClick={handleSave} disabled={saving || !model.trim()}>
-                    {saved
-                        ? <><CheckCircle2 className="w-3.5 h-3.5" /> Saved</>
-                        : saving
-                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            : <><Save className="w-3.5 h-3.5" /> Save</>}
-                </button>
+                        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
+                            <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                            <span>Changing the embedding model requires re-indexing all knowledge. Search results will be unavailable until re-indexing completes.</span>
+                        </div>
+
+                        <button className="btn-primary text-xs py-1.5 px-3" onClick={handleSave} disabled={saving || !model.trim()}>
+                            {saved
+                                ? <><CheckCircle2 className="w-3.5 h-3.5" /> Saved</>
+                                : saving
+                                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    : <><Save className="w-3.5 h-3.5" /> Save</>}
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     )

@@ -356,225 +356,282 @@ export default function AppShell() {
         <div className="relative flex h-screen gap-3 overflow-hidden p-3">
             <CommandPalette />
             {/* Sidebar */}
-            <aside className={`${sidebarOpen ? 'w-72' : 'w-0'} flex-shrink-0 transition-[width] duration-300 overflow-hidden flex flex-col glass-card`}>
-                <div className="flex-shrink-0">
-                    {/* Workspace selector + switcher */}
-                    <div ref={workspaceMenuRef} className="relative">
-                        <button
-                            type="button"
-                            className="w-full border-b border-border/60 bg-card/45 px-4 py-3 text-left transition-colors hover:bg-card/60"
-                            onClick={() => setWorkspaceMenuOpen(prev => !prev)}
-                            aria-expanded={workspaceMenuOpen}
-                            aria-label="Choose workspace"
-                        >
-                            <div className="flex items-center gap-2.5">
-                                <div className="w-8 h-8 rounded-lg bg-accent/12 border border-accent/25 flex items-center justify-center flex-shrink-0">
-                                    {getWorkspaceIcon(ws?.icon ?? null)}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-semibold truncate">{ws?.name ?? 'Select workspace'}</p>
-                                    <p className="text-[11px] text-muted-foreground truncate">
-                                        {workspaceList.length} workspace{workspaceList.length === 1 ? '' : 's'}
-                                    </p>
-                                </div>
-                                <div className="flex items-center gap-2 pl-1">
-                                    <div
-                                        className={`w-2 h-2 rounded-full flex-shrink-0 ${isConnected ? 'bg-emerald-400' : 'bg-amber-400'}`}
-                                        title={isConnected ? 'Connected' : 'Reconnecting…'}
-                                    />
-                                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${workspaceMenuOpen ? 'rotate-180' : ''}`} />
-                                </div>
-                            </div>
-                        </button>
+            <aside className={`${sidebarOpen ? 'w-72' : 'w-14'} flex-shrink-0 transition-[width] duration-300 overflow-hidden flex flex-col glass-card`}>
+                {sidebarOpen ? (
+                    <>
+                        <div className="flex-shrink-0">
+                            {/* Workspace selector + switcher */}
+                            <div ref={workspaceMenuRef} className="relative">
+                                <button
+                                    type="button"
+                                    className="w-full border-b border-border/60 bg-card/45 px-4 py-3 text-left transition-colors hover:bg-card/60"
+                                    onClick={() => setWorkspaceMenuOpen(prev => !prev)}
+                                    aria-expanded={workspaceMenuOpen}
+                                    aria-label="Choose workspace"
+                                >
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="w-8 h-8 rounded-lg bg-accent/12 border border-accent/25 flex items-center justify-center flex-shrink-0">
+                                            {getWorkspaceIcon(ws?.icon ?? null)}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-sm font-semibold truncate">{ws?.name ?? 'Select workspace'}</p>
+                                            <p className="text-[11px] text-muted-foreground truncate">
+                                                {workspaceList.length} workspace{workspaceList.length === 1 ? '' : 's'}
+                                            </p>
+                                        </div>
+                                        <div className="flex items-center gap-2 pl-1">
+                                            <div
+                                                className={`w-2 h-2 rounded-full flex-shrink-0 ${isConnected ? 'bg-emerald-400' : 'bg-amber-400'}`}
+                                                title={isConnected ? 'Connected' : 'Reconnecting…'}
+                                            />
+                                            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${workspaceMenuOpen ? 'rotate-180' : ''}`} />
+                                        </div>
+                                    </div>
+                                </button>
 
-                        {workspaceMenuOpen && (
-                            <div className="absolute top-full left-2 right-2 mt-2 z-[180] glass-card p-2 rounded-xl">
-                                <div className="relative mb-2">
-                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-                                    <input
-                                        className="input h-8 pl-8 text-xs"
-                                        placeholder="Search workspace..."
-                                        value={workspaceQuery}
-                                        onChange={e => setWorkspaceQuery(e.target.value)}
-                                        autoFocus
-                                    />
-                                </div>
-                                <div className="max-h-56 overflow-y-auto pr-1 space-y-1">
-                                    {filteredWorkspaces.length === 0 ? (
-                                        <p className="px-2 py-2 text-xs text-muted-foreground">No workspaces found.</p>
-                                    ) : (
-                                        filteredWorkspaces.map(workspace => (
+                                {workspaceMenuOpen && (
+                                    <div className="absolute top-full left-2 right-2 mt-2 z-[180] glass-card p-2 rounded-xl">
+                                        <div className="relative mb-2">
+                                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                                            <input
+                                                className="input h-8 pl-8 text-xs"
+                                                placeholder="Search workspace..."
+                                                value={workspaceQuery}
+                                                onChange={e => setWorkspaceQuery(e.target.value)}
+                                                autoFocus
+                                            />
+                                        </div>
+                                        <div className="max-h-56 overflow-y-auto pr-1 space-y-1">
+                                            {filteredWorkspaces.length === 0 ? (
+                                                <p className="px-2 py-2 text-xs text-muted-foreground">No workspaces found.</p>
+                                            ) : (
+                                                filteredWorkspaces.map(workspace => (
+                                                    <button
+                                                        key={workspace.id}
+                                                        type="button"
+                                                        className={`w-full rounded-lg px-2.5 py-2 text-left transition-colors ${workspace.id === workspaceId
+                                                            ? 'bg-accent/14 border border-accent/35'
+                                                            : 'hover:bg-muted/45 border border-transparent'}`}
+                                                        onClick={() => {
+                                                            setWorkspaceMenuOpen(false)
+                                                            setWorkspaceQuery('')
+                                                            if (workspace.id !== workspaceId) {
+                                                                navigate(`/w/${workspace.id}`)
+                                                            }
+                                                        }}
+                                                    >
+                                                        <div className="flex items-center gap-2.5">
+                                                            <div className="w-7 h-7 rounded-md bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0">
+                                                                {getWorkspaceIcon(workspace.icon)}
+                                                            </div>
+                                                            <div className="min-w-0 flex-1">
+                                                                <p className="text-sm font-medium truncate">{workspace.name}</p>
+                                                            </div>
+                                                            {workspace.id === workspaceId && (
+                                                                <span className="chip-accent text-[10px]">Current</span>
+                                                            )}
+                                                        </div>
+                                                    </button>
+                                                ))
+                                            )}
+                                        </div>
+                                        <div className="mt-2 border-t border-border/60 pt-2">
                                             <button
-                                                key={workspace.id}
                                                 type="button"
-                                                className={`w-full rounded-lg px-2.5 py-2 text-left transition-colors ${workspace.id === workspaceId
-                                                    ? 'bg-accent/14 border border-accent/35'
-                                                    : 'hover:bg-muted/45 border border-transparent'}`}
+                                                className="w-full rounded-lg border border-transparent px-2.5 py-2 text-left text-xs font-medium transition-colors hover:bg-muted/45 hover:border-border/60"
                                                 onClick={() => {
                                                     setWorkspaceMenuOpen(false)
                                                     setWorkspaceQuery('')
-                                                    if (workspace.id !== workspaceId) {
-                                                        navigate(`/w/${workspace.id}`)
-                                                    }
+                                                    navigate(`/w/${workspaceId}/settings?tab=workspaces&newWorkspace=1`)
                                                 }}
                                             >
-                                                <div className="flex items-center gap-2.5">
-                                                    <div className="w-7 h-7 rounded-md bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0">
-                                                        {getWorkspaceIcon(workspace.icon)}
-                                                    </div>
-                                                    <div className="min-w-0 flex-1">
-                                                        <p className="text-sm font-medium truncate">{workspace.name}</p>
-                                                    </div>
-                                                    {workspace.id === workspaceId && (
-                                                        <span className="chip-accent text-[10px]">Current</span>
-                                                    )}
-                                                </div>
+                                                <span className="inline-flex items-center gap-2">
+                                                    <Plus className="w-3.5 h-3.5" />
+                                                    Add Workspace
+                                                </span>
                                             </button>
-                                        ))
-                                    )}
-                                </div>
-                                <div className="mt-2 border-t border-border/60 pt-2">
-                                    <button
-                                        type="button"
-                                        className="w-full rounded-lg border border-transparent px-2.5 py-2 text-left text-xs font-medium transition-colors hover:bg-muted/45 hover:border-border/60"
-                                        onClick={() => {
-                                            setWorkspaceMenuOpen(false)
-                                            setWorkspaceQuery('')
-                                            navigate(`/w/${workspaceId}/settings?tab=workspaces&newWorkspace=1`)
-                                        }}
-                                    >
-                                        <span className="inline-flex items-center gap-2">
-                                            <Plus className="w-3.5 h-3.5" />
-                                            Add Workspace
-                                        </span>
-                                    </button>
-                                </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
-                        )}
-                    </div>
 
-                    <div className="px-4 pt-3 pb-3">
-                        {/* Nav */}
-                        <nav className="space-y-1">
-                            <Link to={`/w/${workspaceId}`} className={`sidebar-item ${location.pathname === `/w/${workspaceId}` ? 'active' : ''}`}>
-                                <Home className="w-4 h-4" /> Knowledge
+                            <div className="px-4 pt-3 pb-3">
+                                {/* Nav */}
+                                <nav className="space-y-1">
+                                    <Link to={`/w/${workspaceId}`} className={`sidebar-item ${location.pathname === `/w/${workspaceId}` ? 'active' : ''}`}>
+                                        <Home className="w-4 h-4" /> Knowledge
+                                    </Link>
+                                    <Link to={`/w/${workspaceId}/search`} className={`sidebar-item ${isActive('/search') ? 'active' : ''}`}>
+                                        <Search className="w-4 h-4" /> Search
+                                    </Link>
+                                    <Link to={`/w/${workspaceId}/chat`} className={`sidebar-item ${isActive('/chat') ? 'active' : ''}`}>
+                                        <MessageSquare className="w-4 h-4" /> Chat
+                                    </Link>
+                                </nav>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-4">
+                            {/* Pinned knowledge */}
+                            {pinnedKnowledgeItems.length > 0 && (
+                                <div>
+                                    <div className="flex items-center gap-1 px-2 mb-1">
+                                        <Pin className="w-3 h-3 text-muted-foreground" />
+                                        <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Pinned</span>
+                                    </div>
+                                    {pinnedKnowledgeItems.slice(0, 5).map((n: { id: string; title: string; ai_title: string; type: string }) => (
+                                        <Link
+                                            key={n.id}
+                                            to={`/w/${workspaceId}/knowledge/${n.id}`}
+                                            className={`sidebar-item text-xs ${(isActive(`/knowledge/${n.id}`) || isActive(`/knowledge/${n.id}`)) ? 'active' : ''}`}
+                                        >
+                                            <KnowledgeTypeIcon type={n.type} />
+                                            <span className="truncate">{n.title || n.ai_title || 'Untitled'}</span>
+                                        </Link>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Recent conversations */}
+                            {recentConversations.length > 0 && (
+                                <div>
+                                    <div className="flex items-center gap-1 px-2 mb-1">
+                                        <MessageSquare className="w-3 h-3 text-muted-foreground" />
+                                        <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Recent Chats</span>
+                                    </div>
+                                    {recentConversations.slice(0, 5).map(c => {
+                                        const isRenaming = renamingConversationId === c.id
+                                        return (
+                                        <ContextMenu key={c.id}>
+                                            <ContextMenuTrigger asChild>
+                                                {isRenaming ? (
+                                                    <div className={`sidebar-item text-xs ${isActive(`/chat/${c.id}`) ? 'active' : ''}`}>
+                                                        <MessageSquare className="w-3 h-3" />
+                                                        <input
+                                                            ref={conversationRenameInputRef}
+                                                            className="w-full bg-transparent text-xs outline-none border-b border-accent/45"
+                                                            value={renamingConversationDraft}
+                                                            onChange={(event) => setRenamingConversationDraft(event.target.value)}
+                                                            onBlur={() => { void commitRenameConversation() }}
+                                                            onKeyDown={(event) => {
+                                                                if (event.key === 'Enter') {
+                                                                    event.preventDefault()
+                                                                    void commitRenameConversation()
+                                                                    return
+                                                                }
+                                                                if (event.key === 'Escape') {
+                                                                    event.preventDefault()
+                                                                    cancelRenameConversation()
+                                                                }
+                                                            }}
+                                                            onClick={(event) => event.stopPropagation()}
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <Link to={`/w/${workspaceId}/chat/${c.id}`} className={`sidebar-item text-xs ${isActive(`/chat/${c.id}`) ? 'active' : ''}`}>
+                                                        <MessageSquare className="w-3 h-3" />
+                                                        <span className="truncate">{c.title ?? 'New Chat'}</span>
+                                                    </Link>
+                                                )}
+                                            </ContextMenuTrigger>
+                                            <ContextMenuContent className="w-48">
+                                                <ContextMenuItem
+                                                    onSelect={(event) => {
+                                                        event.preventDefault()
+                                                        beginRenameConversation(c.id, c.title ?? null)
+                                                    }}
+                                                    className="gap-2"
+                                                >
+                                                    <Pencil className="w-4 h-4" /> Rename Chat
+                                                </ContextMenuItem>
+                                                <ContextMenuSeparator />
+                                                <ContextMenuItem
+                                                    onSelect={(event) => {
+                                                        event.preventDefault()
+                                                        void handleTrashConversation(c.id)
+                                                    }}
+                                                    className="gap-2 text-red-500 focus:text-red-400 focus:bg-red-500/10"
+                                                >
+                                                    <Trash2 className="w-4 h-4" /> Move to Trash
+                                                </ContextMenuItem>
+                                            </ContextMenuContent>
+                                        </ContextMenu>
+                                        )
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Settings — bottom of sidebar, same style as workspace selector */}
+                        <div className="flex-shrink-0 border-t border-border/60">
+                            <Link
+                                to={`/w/${workspaceId}/settings`}
+                                className={`flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-card/60 ${isSettingsPage ? 'bg-card/55' : 'bg-card/45'}`}
+                            >
+                                <div className={`w-8 h-8 rounded-lg border flex items-center justify-center flex-shrink-0 ${isSettingsPage ? 'bg-accent/15 border-accent/30' : 'bg-muted/40 border-border/50'}`}>
+                                    <Settings className={`w-4 h-4 ${isSettingsPage ? 'text-accent' : 'text-muted-foreground'}`} />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <p className={`text-sm font-semibold truncate ${isSettingsPage ? 'text-accent' : ''}`}>Settings</p>
+                                    <p className="text-[11px] text-muted-foreground truncate">Providers, prompts & more</p>
+                                </div>
                             </Link>
-                            <Link to={`/w/${workspaceId}/search`} className={`sidebar-item ${isActive('/search') ? 'active' : ''}`}>
-                                <Search className="w-4 h-4" /> Search
+                        </div>
+                    </>
+                ) : (
+                    /* Collapsed siderail — icon-only navigation */
+                    <div className="flex flex-col h-full items-center py-3 gap-1">
+                        {/* Workspace icon */}
+                        <button
+                            type="button"
+                            onClick={() => setSidebarOpen(true)}
+                            title={ws?.name ?? 'Open sidebar'}
+                            className="w-9 h-9 rounded-lg bg-accent/12 border border-accent/25 flex items-center justify-center mb-1 hover:bg-accent/20 transition-colors relative"
+                        >
+                            {getWorkspaceIcon(ws?.icon ?? null)}
+                            <span
+                                className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-background ${isConnected ? 'bg-emerald-400' : 'bg-amber-400'}`}
+                                title={isConnected ? 'Connected' : 'Reconnecting…'}
+                            />
+                        </button>
+
+                        {/* Nav icons */}
+                        <nav className="flex flex-col gap-1 w-full items-center mt-1">
+                            <Link
+                                to={`/w/${workspaceId}`}
+                                title="Knowledge"
+                                className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${location.pathname === `/w/${workspaceId}` ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
+                            >
+                                <Home className="w-4 h-4" />
                             </Link>
-                            <Link to={`/w/${workspaceId}/chat`} className={`sidebar-item ${isActive('/chat') ? 'active' : ''}`}>
-                                <MessageSquare className="w-4 h-4" /> Chat
+                            <Link
+                                to={`/w/${workspaceId}/search`}
+                                title="Search"
+                                className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isActive('/search') ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
+                            >
+                                <Search className="w-4 h-4" />
+                            </Link>
+                            <Link
+                                to={`/w/${workspaceId}/chat`}
+                                title="Chat"
+                                className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isActive('/chat') ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
+                            >
+                                <MessageSquare className="w-4 h-4" />
                             </Link>
                         </nav>
+
+                        <div className="flex-1" />
+
+                        {/* Settings */}
+                        <Link
+                            to={`/w/${workspaceId}/settings`}
+                            title="Settings"
+                            className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isSettingsPage ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
+                        >
+                            <Settings className="w-4 h-4" />
+                        </Link>
                     </div>
-                </div>
-
-                <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-4">
-                    {/* Pinned knowledge */}
-                    {pinnedKnowledgeItems.length > 0 && (
-                        <div>
-                            <div className="flex items-center gap-1 px-2 mb-1">
-                                <Pin className="w-3 h-3 text-muted-foreground" />
-                                <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Pinned</span>
-                            </div>
-                            {pinnedKnowledgeItems.slice(0, 5).map((n: { id: string; title: string; ai_title: string; type: string }) => (
-                                <Link
-                                    key={n.id}
-                                    to={`/w/${workspaceId}/knowledge/${n.id}`}
-                                    className={`sidebar-item text-xs ${(isActive(`/knowledge/${n.id}`) || isActive(`/knowledge/${n.id}`)) ? 'active' : ''}`}
-                                >
-                                    <KnowledgeTypeIcon type={n.type} />
-                                    <span className="truncate">{n.title || n.ai_title || 'Untitled'}</span>
-                                </Link>
-                            ))}
-                        </div>
-                    )}
-
-                    {/* Recent conversations */}
-                    {recentConversations.length > 0 && (
-                        <div>
-                            <div className="flex items-center gap-1 px-2 mb-1">
-                                <MessageSquare className="w-3 h-3 text-muted-foreground" />
-                                <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Recent Chats</span>
-                            </div>
-                            {recentConversations.slice(0, 5).map(c => {
-                                const isRenaming = renamingConversationId === c.id
-                                return (
-                                <ContextMenu key={c.id}>
-                                    <ContextMenuTrigger asChild>
-                                        {isRenaming ? (
-                                            <div className={`sidebar-item text-xs ${isActive(`/chat/${c.id}`) ? 'active' : ''}`}>
-                                                <MessageSquare className="w-3 h-3" />
-                                                <input
-                                                    ref={conversationRenameInputRef}
-                                                    className="w-full bg-transparent text-xs outline-none border-b border-accent/45"
-                                                    value={renamingConversationDraft}
-                                                    onChange={(event) => setRenamingConversationDraft(event.target.value)}
-                                                    onBlur={() => { void commitRenameConversation() }}
-                                                    onKeyDown={(event) => {
-                                                        if (event.key === 'Enter') {
-                                                            event.preventDefault()
-                                                            void commitRenameConversation()
-                                                            return
-                                                        }
-                                                        if (event.key === 'Escape') {
-                                                            event.preventDefault()
-                                                            cancelRenameConversation()
-                                                        }
-                                                    }}
-                                                    onClick={(event) => event.stopPropagation()}
-                                                />
-                                            </div>
-                                        ) : (
-                                            <Link to={`/w/${workspaceId}/chat/${c.id}`} className={`sidebar-item text-xs ${isActive(`/chat/${c.id}`) ? 'active' : ''}`}>
-                                                <MessageSquare className="w-3 h-3" />
-                                                <span className="truncate">{c.title ?? 'New Chat'}</span>
-                                            </Link>
-                                        )}
-                                    </ContextMenuTrigger>
-                                    <ContextMenuContent className="w-48">
-                                        <ContextMenuItem
-                                            onSelect={(event) => {
-                                                event.preventDefault()
-                                                beginRenameConversation(c.id, c.title ?? null)
-                                            }}
-                                            className="gap-2"
-                                        >
-                                            <Pencil className="w-4 h-4" /> Rename Chat
-                                        </ContextMenuItem>
-                                        <ContextMenuSeparator />
-                                        <ContextMenuItem
-                                            onSelect={(event) => {
-                                                event.preventDefault()
-                                                void handleTrashConversation(c.id)
-                                            }}
-                                            className="gap-2 text-red-500 focus:text-red-400 focus:bg-red-500/10"
-                                        >
-                                            <Trash2 className="w-4 h-4" /> Move to Trash
-                                        </ContextMenuItem>
-                                    </ContextMenuContent>
-                                </ContextMenu>
-                                )
-                            })}
-                        </div>
-                    )}
-                </div>
-
-                {/* Settings — bottom of sidebar, same style as workspace selector */}
-                <div className="flex-shrink-0 border-t border-border/60">
-                    <Link
-                        to={`/w/${workspaceId}/settings`}
-                        className={`flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-card/60 ${isSettingsPage ? 'bg-card/55' : 'bg-card/45'}`}
-                    >
-                        <div className={`w-8 h-8 rounded-lg border flex items-center justify-center flex-shrink-0 ${isSettingsPage ? 'bg-accent/15 border-accent/30' : 'bg-muted/40 border-border/50'}`}>
-                            <Settings className={`w-4 h-4 ${isSettingsPage ? 'text-accent' : 'text-muted-foreground'}`} />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                            <p className={`text-sm font-semibold truncate ${isSettingsPage ? 'text-accent' : ''}`}>Settings</p>
-                            <p className="text-[11px] text-muted-foreground truncate">Providers, prompts & more</p>
-                        </div>
-                    </Link>
-                </div>
+                )}
             </aside>
 
             {/* Main */}
@@ -590,19 +647,7 @@ export default function AppShell() {
                         <PanelLeft className="w-4 h-4" />
                     </button>
 
-                    {(!sidebarOpen && ws) && (
-                        <div className="min-w-0 max-w-[min(34vw,260px)] flex items-center gap-2.5 rounded-xl border border-border/60 bg-card/55 px-3 py-1.5">
-                            <div className="w-6 h-6 rounded-md bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0">
-                                {getWorkspaceIcon(ws.icon)}
-                            </div>
-                            <div className="min-w-0">
-                                <p className="text-sm font-semibold leading-tight truncate">{ws.name}</p>
-                                <p className="text-[11px] text-muted-foreground/90 leading-tight">Workspace</p>
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="min-w-0 max-w-[min(56vw,720px)] flex flex-col leading-tight">
+<div className="min-w-0 max-w-[min(56vw,720px)] flex flex-col leading-tight">
                         <p className="text-sm font-semibold truncate">{currentSectionMeta.title}</p>
                         <p className="hidden sm:block text-xs text-muted-foreground/90 truncate">
                             {currentSectionMeta.description}
