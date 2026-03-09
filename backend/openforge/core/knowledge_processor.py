@@ -1,11 +1,11 @@
 from uuid import uuid4, UUID
-from openforge.core.embedding import embed_texts
+from openforge.core.embedding import embed_texts, sparse_encode
 from openforge.core.embedding_document import build_knowledge_embedding_document
 from openforge.core.markdown_utils import chunk_markdown
 from openforge.db.qdrant_client import get_qdrant
 from openforge.config import get_settings
 from openforge.utils.title import normalize_knowledge_title
-from qdrant_client.models import PointStruct, Filter, FieldCondition, MatchValue
+from qdrant_client.models import PointStruct, Filter, FieldCondition, MatchValue, SparseVector
 import logging
 from datetime import datetime, timezone
 
@@ -60,9 +60,16 @@ class KnowledgeProcessor:
         normalized_title = normalize_knowledge_title(title) or ""
         points = []
         for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+            sparse_indices, sparse_values = sparse_encode(chunk["text"])
+            vector: dict = {"dense": embedding}
+            if sparse_indices:
+                vector["sparse"] = SparseVector(
+                    indices=sparse_indices,
+                    values=sparse_values,
+                )
             points.append(PointStruct(
                 id=str(uuid4()),
-                vector=embedding,
+                vector=vector,
                 payload={
                     "knowledge_id": str(knowledge_id),
                     "workspace_id": str(workspace_id),

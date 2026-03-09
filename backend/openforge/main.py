@@ -35,9 +35,10 @@ async def lifespan(app: FastAPI):
         raise
 
     # Initialize Qdrant collection
+    needs_reindex = False
     try:
         from openforge.db.qdrant_client import init_qdrant_collection
-        await init_qdrant_collection()
+        needs_reindex = await init_qdrant_collection()
     except Exception as e:
         logger.warning(f"Qdrant initialization failed (continuing): {e}")
 
@@ -47,6 +48,34 @@ async def lifespan(app: FastAPI):
         get_embedding_model()
     except Exception as e:
         logger.warning(f"Embedding model pre-load failed (will load on first use): {e}")
+
+    # If the Qdrant collection was migrated, re-index all existing knowledge in background
+    if needs_reindex:
+        import asyncio
+
+        async def _reindex_all():
+            try:
+                from openforge.db.postgres import AsyncSessionLocal
+                from openforge.db.models import Knowledge
+                from sqlalchemy import select
+
+                logger.info("Starting background re-indexing of all knowledge items after Qdrant migration.")
+                async with AsyncSessionLocal() as db:
+                    rows = (await db.execute(select(Knowledge))).scalars().all()
+
+                from openforge.services.knowledge_processing_service import knowledge_processing_service
+                for k in rows:
+                    try:
+                        await knowledge_processing_service._process_knowledge_background(
+                            k.id, k.workspace_id, k.content or "", k.type or "standard", k.title
+                        )
+                    except Exception as ke:
+                        logger.warning("Re-index failed for knowledge %s: %s", k.id, ke)
+                logger.info("Background re-indexing complete (%d items).", len(rows))
+            except Exception as e:
+                logger.error("Background re-indexing failed: %s", e)
+
+        asyncio.create_task(_reindex_all())
 
     logger.info("OpenForge ready.")
     await task_scheduler.start()

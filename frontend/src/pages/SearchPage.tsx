@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import type { ReactElement } from 'react'
 import { searchKnowledge } from '@/lib/api'
-import { Search, Loader2, FileText, Bookmark, Code2, Zap, ExternalLink, Copy, SearchX } from 'lucide-react'
+import { Search, Loader2, FileText, Bookmark, Code2, Zap, ExternalLink, Copy, SearchX, MessageSquare } from 'lucide-react'
 import { KnowledgeModal } from '@/components/shared/KnowledgeModal'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem
@@ -31,7 +31,8 @@ const TYPE_META: Record<string, { label: string; color: string }> = {
 const KNOWLEDGE_TYPES = ['', 'standard', 'fleeting', 'bookmark', 'gist']
 
 interface SearchResult {
-    knowledge_id: string
+    knowledge_id: string | null
+    conversation_id?: string | null
     title: string
     knowledge_type: string
     chunk_text: string
@@ -81,13 +82,20 @@ export default function SearchPage() {
 
     const results: SearchResult[] = data?.results ?? []
 
-    // Group by knowledge item
-    const grouped = useMemo(() => {
-        return results.reduce<Record<string, SearchResult[]>>((acc, r) => {
-            if (!acc[r.knowledge_id]) acc[r.knowledge_id] = []
-            acc[r.knowledge_id].push(r)
-            return acc
-        }, {})
+    // Split chat results from knowledge results, group knowledge by item
+    const { chatResults, grouped } = useMemo(() => {
+        const chat: SearchResult[] = []
+        const knowledgeMap: Record<string, SearchResult[]> = {}
+        for (const r of results) {
+            if (r.knowledge_type === 'chat') {
+                chat.push(r)
+            } else {
+                const key = r.knowledge_id ?? ''
+                if (!knowledgeMap[key]) knowledgeMap[key] = []
+                knowledgeMap[key].push(r)
+            }
+        }
+        return { chatResults: chat, grouped: knowledgeMap }
     }, [results])
 
     return (
@@ -155,73 +163,128 @@ export default function SearchPage() {
                     {results.length > 0 && (
                         <div className="space-y-4">
                             <p className="text-xs text-muted-foreground">{results.length} result{results.length !== 1 ? 's' : ''}</p>
-                            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
-                                {Object.entries(grouped).map(([knowledgeId, chunks]) => {
-                                    const first = chunks[0]
-                                    const typeKey = first.knowledge_type in TYPE_META ? first.knowledge_type : 'standard'
-                                    const typeMeta = TYPE_META[typeKey]
-                                    const typeIcon = TYPE_ICONS[typeKey] ?? TYPE_ICONS.standard
-                                    const hasTitle = !!first.title?.trim()
-                                    return (
-                                        <ContextMenu key={knowledgeId}>
-                                            <ContextMenuTrigger asChild>
-                                                <div
-                                                    className="glass-card-hover h-fit rounded-2xl p-4 cursor-pointer animate-fade-in space-y-3"
-                                                    onClick={() => setModalKnowledgeId(knowledgeId)}
-                                                >
-                                                    <div className="flex items-start justify-between gap-3">
-                                                        <div className="min-w-0 space-y-2">
-                                                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border border-border/60 bg-muted/40 ${typeMeta.color}`}>
-                                                                {typeIcon}
-                                                                {typeMeta.label}
-                                                            </span>
-                                                            {hasTitle && (
-                                                                <h3 className="text-sm font-semibold leading-snug text-foreground truncate">
-                                                                    {first.title}
-                                                                </h3>
-                                                            )}
-                                                        </div>
-                                                        <ExternalLink className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+
+                            {/* Chat results */}
+                            {chatResults.length > 0 && (
+                                <div className="space-y-3">
+                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">From Conversations</p>
+                                    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+                                        {chatResults.map((r) => (
+                                            <div
+                                                key={r.conversation_id}
+                                                className="glass-card-hover h-fit rounded-2xl p-4 cursor-pointer animate-fade-in space-y-3"
+                                                onClick={() => r.conversation_id && navigate(`/w/${workspaceId}/chat/${r.conversation_id}`)}
+                                            >
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="min-w-0 space-y-2">
+                                                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border border-border/60 bg-muted/40 text-violet-400">
+                                                            <MessageSquare className="w-3.5 h-3.5" />
+                                                            Chat
+                                                        </span>
+                                                        {r.title && (
+                                                            <h3 className="text-sm font-semibold leading-snug text-foreground truncate">
+                                                                {r.title}
+                                                            </h3>
+                                                        )}
                                                     </div>
-
-                                                    {chunks.map((chunk, i) => (
-                                                        <div key={i} className={`${i > 0 ? 'pt-3 border-t border-border/50' : ''} space-y-2`}>
-                                                            {chunk.header_path && (
-                                                                <p className="text-[11px] text-muted-foreground">{chunk.header_path}</p>
-                                                            )}
-
-                                                            <div
-                                                                className="markdown-content text-xs text-foreground/88 leading-relaxed line-clamp-4 [&_p]:mb-1 [&_h1]:text-sm [&_h2]:text-sm [&_h3]:text-sm [&_pre]:text-[11px] [&_code]:text-[11px]"
-                                                                dangerouslySetInnerHTML={renderSearchMarkdown(chunk.chunk_text || chunk.highlighted_text)}
-                                                            />
-
-                                                            <div className="flex items-center gap-3 pt-1">
-                                                                <div className="flex items-center gap-1.5">
-                                                                    <div className="w-16 h-1 bg-border rounded overflow-hidden">
-                                                                        <div className="h-full bg-accent rounded" style={{ width: `${Math.round(chunk.score * 100)}%` }} />
-                                                                    </div>
-                                                                    <span className="text-xs text-muted-foreground">{Math.round(chunk.score * 100)}%</span>
-                                                                </div>
-                                                                {chunk.tags.slice(0, 3).map(t => (
-                                                                    <span key={t} className="chip-muted text-xs">{t}</span>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    ))}
+                                                    <ExternalLink className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
                                                 </div>
-                                            </ContextMenuTrigger>
-                                            <ContextMenuContent className="w-48">
-                                                <ContextMenuItem onClick={() => navigate(`/w/${workspaceId}/knowledge/${knowledgeId}`)} className="gap-2">
-                                                    <ExternalLink className="w-4 h-4" /> Open Knowledge
-                                                </ContextMenuItem>
-                                                <ContextMenuItem onClick={() => navigator.clipboard.writeText(first.title || first.chunk_text || '')} className="gap-2">
-                                                    <Copy className="w-4 h-4" /> Copy Title
-                                                </ContextMenuItem>
-                                            </ContextMenuContent>
-                                        </ContextMenu>
-                                    )
-                                })}
-                            </div>
+
+                                                <div
+                                                    className="text-xs text-foreground/88 leading-relaxed line-clamp-4 whitespace-pre-wrap"
+                                                >
+                                                    {r.highlighted_text || r.chunk_text}
+                                                </div>
+
+                                                <div className="flex items-center gap-3 pt-1">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <div className="w-16 h-1 bg-border rounded overflow-hidden">
+                                                            <div className="h-full bg-accent rounded" style={{ width: `${Math.round(r.score * 100)}%` }} />
+                                                        </div>
+                                                        <span className="text-xs text-muted-foreground">{Math.round(r.score * 100)}%</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Knowledge results */}
+                            {Object.keys(grouped).length > 0 && (
+                                <div className="space-y-3">
+                                    {chatResults.length > 0 && (
+                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">From Knowledge</p>
+                                    )}
+                                    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+                                        {Object.entries(grouped).map(([knowledgeId, chunks]) => {
+                                            const first = chunks[0]
+                                            const typeKey = first.knowledge_type in TYPE_META ? first.knowledge_type : 'standard'
+                                            const typeMeta = TYPE_META[typeKey]
+                                            const typeIcon = TYPE_ICONS[typeKey] ?? TYPE_ICONS.standard
+                                            const hasTitle = !!first.title?.trim()
+                                            return (
+                                                <ContextMenu key={knowledgeId}>
+                                                    <ContextMenuTrigger asChild>
+                                                        <div
+                                                            className="glass-card-hover h-fit rounded-2xl p-4 cursor-pointer animate-fade-in space-y-3"
+                                                            onClick={() => setModalKnowledgeId(knowledgeId)}
+                                                        >
+                                                            <div className="flex items-start justify-between gap-3">
+                                                                <div className="min-w-0 space-y-2">
+                                                                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border border-border/60 bg-muted/40 ${typeMeta.color}`}>
+                                                                        {typeIcon}
+                                                                        {typeMeta.label}
+                                                                    </span>
+                                                                    {hasTitle && (
+                                                                        <h3 className="text-sm font-semibold leading-snug text-foreground truncate">
+                                                                            {first.title}
+                                                                        </h3>
+                                                                    )}
+                                                                </div>
+                                                                <ExternalLink className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                                                            </div>
+
+                                                            {chunks.map((chunk, i) => (
+                                                                <div key={i} className={`${i > 0 ? 'pt-3 border-t border-border/50' : ''} space-y-2`}>
+                                                                    {chunk.header_path && (
+                                                                        <p className="text-[11px] text-muted-foreground">{chunk.header_path}</p>
+                                                                    )}
+
+                                                                    <div
+                                                                        className="markdown-content text-xs text-foreground/88 leading-relaxed line-clamp-4 [&_p]:mb-1 [&_h1]:text-sm [&_h2]:text-sm [&_h3]:text-sm [&_pre]:text-[11px] [&_code]:text-[11px]"
+                                                                        dangerouslySetInnerHTML={renderSearchMarkdown(chunk.chunk_text || chunk.highlighted_text)}
+                                                                    />
+
+                                                                    <div className="flex items-center gap-3 pt-1">
+                                                                        <div className="flex items-center gap-1.5">
+                                                                            <div className="w-16 h-1 bg-border rounded overflow-hidden">
+                                                                                <div className="h-full bg-accent rounded" style={{ width: `${Math.round(chunk.score * 100)}%` }} />
+                                                                            </div>
+                                                                            <span className="text-xs text-muted-foreground">{Math.round(chunk.score * 100)}%</span>
+                                                                        </div>
+                                                                        {chunk.tags.slice(0, 3).map(t => (
+                                                                            <span key={t} className="chip-muted text-xs">{t}</span>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </ContextMenuTrigger>
+                                                    <ContextMenuContent className="w-48">
+                                                        <ContextMenuItem onClick={() => navigate(`/w/${workspaceId}/knowledge/${knowledgeId}`)} className="gap-2">
+                                                            <ExternalLink className="w-4 h-4" /> Open Knowledge
+                                                        </ContextMenuItem>
+                                                        <ContextMenuItem onClick={() => navigator.clipboard.writeText(first.title || first.chunk_text || '')} className="gap-2">
+                                                            <Copy className="w-4 h-4" /> Copy Title
+                                                        </ContextMenuItem>
+                                                    </ContextMenuContent>
+                                                </ContextMenu>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

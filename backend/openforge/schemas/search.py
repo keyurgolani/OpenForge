@@ -4,7 +4,8 @@ from uuid import UUID
 
 
 class SearchResult(BaseModel):
-    knowledge_id: UUID
+    knowledge_id: Optional[UUID] = None
+    conversation_id: Optional[UUID] = None
     title: str
     knowledge_type: str
     chunk_text: str

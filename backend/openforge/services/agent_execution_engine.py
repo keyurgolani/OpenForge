@@ -983,6 +983,32 @@ class AgentExecutionEngine:
 
                 asyncio.create_task(_refresh_title())
 
+            # Embed the chat exchange for searchability (fire-and-forget)
+            if not was_cancelled and full_response and isinstance(user_content, str):
+                from openforge.services.chat_embedding_service import chat_embedding_service
+
+                _conv_title = conversation.title or ""
+                _msg_id = msg.id
+
+                async def _embed_chat() -> None:
+                    try:
+                        await chat_embedding_service.embed_exchange(
+                            conversation_id=conversation_id,
+                            workspace_id=workspace_id,
+                            user_message=user_content,
+                            assistant_response=full_response,
+                            conversation_title=_conv_title,
+                            message_id=_msg_id,
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            "Chat embedding failed for conversation %s: %s",
+                            conversation_id,
+                            e,
+                        )
+
+                asyncio.create_task(_embed_chat())
+
         except Exception as e:
             logger.error(
                 "Agent pipeline error for conversation %s: %s", conversation_id, e

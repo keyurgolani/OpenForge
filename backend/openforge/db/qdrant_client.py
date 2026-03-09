@@ -15,8 +15,12 @@ def get_qdrant() -> QdrantClient:
     return _client
 
 
-async def init_qdrant_collection():
-    """Create the knowledge collection if it doesn't exist. Called on app startup."""
+async def init_qdrant_collection() -> bool:
+    """Create or migrate the knowledge collection on app startup.
+
+    Returns True if the collection was newly created or migrated (indicating
+    that existing knowledge items should be re-indexed in the background).
+    """
     settings = get_settings()
     client = get_qdrant()
     collection_name = settings.qdrant_collection
@@ -24,37 +28,56 @@ async def init_qdrant_collection():
     collections = client.get_collections().collections
     exists = any(c.name == collection_name for c in collections)
 
+    needs_reindex = False
+
+    if exists:
+        # Check whether the collection already uses named vectors with sparse support.
+        # Old collections used a single unnamed VectorParams; new ones use a dict.
+        info = client.get_collection(collection_name)
+        vectors_cfg = info.config.params.vectors
+        is_named = isinstance(vectors_cfg, dict)
+        has_sparse = bool(info.config.params.sparse_vectors)
+
+        if not is_named or not has_sparse:
+            logger.info(
+                "Migrating Qdrant collection '%s' to named vectors + sparse for hybrid search.",
+                collection_name,
+            )
+            client.delete_collection(collection_name)
+            exists = False
+            needs_reindex = True
+
     if not exists:
-        logger.info(f"Creating Qdrant collection: {collection_name}")
+        logger.info("Creating Qdrant collection: %s", collection_name)
         client.create_collection(
             collection_name=collection_name,
-            vectors_config=models.VectorParams(
-                size=settings.embedding_dimension,
-                distance=models.Distance.COSINE,
-            ),
+            vectors_config={
+                "dense": models.VectorParams(
+                    size=settings.embedding_dimension,
+                    distance=models.Distance.COSINE,
+                ),
+            },
+            sparse_vectors_config={
+                "sparse": models.SparseVectorParams(
+                    modifier=models.Modifier.IDF,
+                ),
+            },
         )
 
-        # Create payload indexes for filtering
-        client.create_payload_index(
-            collection_name=collection_name,
-            field_name="workspace_id",
-            field_schema=models.PayloadSchemaType.KEYWORD,
-        )
-        client.create_payload_index(
-            collection_name=collection_name,
-            field_name="knowledge_type",
-            field_schema=models.PayloadSchemaType.KEYWORD,
-        )
-        client.create_payload_index(
-            collection_name=collection_name,
-            field_name="tags",
-            field_schema=models.PayloadSchemaType.KEYWORD,
-        )
-        client.create_payload_index(
-            collection_name=collection_name,
-            field_name="knowledge_id",
-            field_schema=models.PayloadSchemaType.KEYWORD,
-        )
-        logger.info(f"Collection {collection_name} created with payload indexes.")
-    else:
-        logger.info(f"Qdrant collection {collection_name} already exists.")
+        # Payload indexes for filtering
+        for field, schema in [
+            ("workspace_id", models.PayloadSchemaType.KEYWORD),
+            ("knowledge_type", models.PayloadSchemaType.KEYWORD),
+            ("tags", models.PayloadSchemaType.KEYWORD),
+            ("knowledge_id", models.PayloadSchemaType.KEYWORD),
+            ("conversation_id", models.PayloadSchemaType.KEYWORD),
+        ]:
+            client.create_payload_index(
+                collection_name=collection_name,
+                field_name=field,
+                field_schema=schema,
+            )
+
+        logger.info("Collection '%s' created with payload indexes.", collection_name)
+
+    return needs_reindex

@@ -1,5 +1,8 @@
 from sentence_transformers import SentenceTransformer
 from openforge.config import get_settings
+from collections import Counter
+import re
+import zlib
 import logging
 
 logger = logging.getLogger("openforge.embedding")
@@ -30,3 +33,19 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     model = get_embedding_model()
     embeddings = model.encode(texts, normalize_embeddings=True, batch_size=32)
     return embeddings.tolist()
+
+
+def sparse_encode(text: str) -> tuple[list[int], list[float]]:
+    """BM25-style sparse encoding for keyword matching.
+
+    Tokenizes text into lowercase words, counts term frequencies, and maps
+    each token to a stable non-negative CRC32-based index.
+    Returns (indices, values) suitable for Qdrant SparseVector.
+    """
+    tokens = re.findall(r'\b\w+\b', text.lower())
+    if not tokens:
+        return [], []
+    token_counts = Counter(tokens)
+    indices = [zlib.crc32(tok.encode()) & 0x7FFFFFFF for tok in token_counts]
+    values = [float(v) for v in token_counts.values()]
+    return indices, values

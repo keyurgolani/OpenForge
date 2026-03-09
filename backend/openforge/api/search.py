@@ -32,7 +32,8 @@ async def search(
     for r in raw_results:
         highlighted = highlight_query_terms(r["chunk_text"], q)
         results.append(SearchResult(
-            knowledge_id=r["knowledge_id"],
+            knowledge_id=r.get("knowledge_id"),
+            conversation_id=r.get("conversation_id"),
             title=r["title"],
             knowledge_type=r["knowledge_type"],
             chunk_text=r["chunk_text"],
