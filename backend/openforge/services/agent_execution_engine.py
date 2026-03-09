@@ -795,7 +795,24 @@ class AgentExecutionEngine:
                     tool_started_at = datetime.now(timezone.utc)
                     call_start_perf = time.perf_counter()
 
-                    if tool_info and tool_info["type"] == "mcp":
+                    if not tool_info:
+                        # fn_name was not in the registered tool schema — the model
+                        # hallucinated a tool name.  Return a clear error so the model
+                        # can recover using an actual tool instead of spiraling into
+                        # repeated 404 errors.
+                        available = ", ".join(
+                            _fn_name_to_tool_id(k)
+                            for k in sorted(fn_name_to_tool_info.keys())
+                        )
+                        result = {
+                            "success": False,
+                            "error": (
+                                f"Tool '{tool_id}' is not available — it was not included "
+                                f"in the tool schema provided to you. Only call tools that "
+                                f"appear in your schema. Available tools: {available}"
+                            ),
+                        }
+                    elif tool_info["type"] == "mcp":
                         from openforge.services.mcp_service import execute_mcp_tool
                         result = await execute_mcp_tool(
                             server=tool_info["server"],

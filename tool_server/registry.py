@@ -50,6 +50,32 @@ TOOL_ALIASES: dict[str, str] = {
     "shell.git_diff":         "git.diff",
     "shell.git_add":          "git.add",
     "shell.git_commit":       "git.commit",
+
+    # Unprefixed shorthands — models sometimes omit the category prefix
+    "search_files":           "filesystem.search_files",
+    "find_files":             "filesystem.search_files",
+    "file_search":            "filesystem.search_files",
+    "read_file":              "filesystem.read_file",
+    "write_file":             "filesystem.write_file",
+    "list_directory":         "filesystem.list_directory",
+    "list_dir":               "filesystem.list_directory",
+    "open_file":              "filesystem.read_file",
+
+    # repo_browser.* — models sometimes invent this namespace
+    "repo_browser.open_file":     "filesystem.read_file",
+    "repo_browser.read_file":     "filesystem.read_file",
+    "repo_browser.list_files":    "filesystem.list_directory",
+    "repo_browser.list":          "filesystem.list_directory",
+    "repo_browser.search_files":  "filesystem.search_files",
+    "repo_browser.search":        "filesystem.search_files",
+    "repo_browser.find":          "filesystem.search_files",
+    "repo_browser.write_file":    "filesystem.write_file",
+
+    # editor.* and code_editor.* aliases
+    "editor.open":            "filesystem.read_file",
+    "editor.read":            "filesystem.read_file",
+    "code_editor.open":       "filesystem.read_file",
+    "code_editor.read":       "filesystem.read_file",
 }
 
 

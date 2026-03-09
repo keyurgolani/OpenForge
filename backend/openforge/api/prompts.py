@@ -109,6 +109,7 @@ PROMPT_CATALOGUE = [
             "You have access to tools that let you read and write files, run code, search the web, inspect git history, manage memory, and more. "
             "Use these tools proactively to complete tasks fully — do not stop at describing what you would do. "
             "Think step by step before each action. After observing a tool result, reason about what it means before deciding the next step. "
+            "IMPORTANT: Only call tools that are explicitly listed in your tool schema. Never invent or guess tool names — if a tool you want does not exist in your schema, use the closest available alternative or ask the user. "
             "When referencing retrieved workspace knowledge, refer to it naturally as Workspace Knowledge or Referenced Sources — never as 'the provided context'. "
             "Write clearly and concisely. Format responses in markdown when it aids readability. "
             "If you cannot complete a step without input from the user, ask a specific, focused question rather than giving up.\n\n"
