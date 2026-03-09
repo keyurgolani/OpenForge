@@ -29,6 +29,8 @@ from openforge.services.attachment_pipeline import (
 )
 from openforge.services.chat_stream_registry import ChatStreamRegistry
 from openforge.services.tool_dispatcher import tool_dispatcher
+from openforge.services.policy_engine import policy_engine
+from openforge.services.hitl_service import hitl_service
 from openforge.api.websocket import ws_manager
 from openforge.db.models import Config, Conversation, Knowledge, MessageAttachment, TaskLog, ToolCallLog, Workspace
 
@@ -449,6 +451,59 @@ class AgentExecutionEngine:
                 **snapshot,
             })
 
+    async def _resolve_mentions(
+        self,
+        db: AsyncSession,
+        mentions: list[dict],
+    ) -> str:
+        """
+        Resolve @mention references into context strings injected into the prompt.
+
+        - @workspace mention → injects the workspace_id so the LLM can use agent.invoke
+        - @chat mention → injects the referenced conversation's message history as context
+        """
+        if not mentions:
+            return ""
+
+        parts: list[str] = []
+        for mention in mentions:
+            mtype = mention.get("type", "")
+            mid = mention.get("id", "")
+            mname = mention.get("name", "")
+
+            if mtype == "workspace" and mid:
+                try:
+                    ws = await db.get(Workspace, UUID(mid))
+                    if ws:
+                        parts.append(
+                            f"\n## Referenced Workspace @{mname}\n"
+                            f"The user has mentioned workspace '@{mname}'. "
+                            f"Its workspace_id is '{mid}'. "
+                            f"If the user's request involves content or tasks in that workspace, "
+                            f"use the agent.invoke tool with workspace_id='{mid}' to delegate the task to that workspace's agent."
+                        )
+                except Exception:
+                    pass
+
+            elif mtype == "chat" and mid:
+                try:
+                    messages = await conversation_service.get_recent_messages(db, UUID(mid), limit=20)
+                    if messages:
+                        history_lines = [
+                            f"[{m.get('role', 'user').upper()}]: {(m.get('content') or '')[:600]}"
+                            for m in messages
+                        ]
+                        parts.append(
+                            f"\n## Referenced Chat @{mname}\n"
+                            f"The user has referenced a previous conversation '@{mname}'. "
+                            f"Here is that conversation's history for context:\n\n"
+                            + "\n".join(history_lines)
+                        )
+                except Exception:
+                    pass
+
+        return "\n".join(parts)
+
     async def run(
         self,
         workspace_id: UUID,
@@ -458,6 +513,7 @@ class AgentExecutionEngine:
         attachment_ids: Optional[List[str]] = None,
         provider_id: Optional[str] = None,
         model_id: Optional[str] = None,
+        mentions: Optional[List[dict]] = None,
     ):
         """Full agent execution pipeline, replacing the old chat_service pipeline."""
         workspace_key = str(workspace_id)
@@ -512,6 +568,11 @@ class AgentExecutionEngine:
                     user_message_id=user_message.id,
                     urls=chat_urls,
                 )
+
+            # 3b. Resolve @mentions into additional context
+            mention_context = ""
+            if mentions:
+                mention_context = await self._resolve_mentions(db, mentions)
 
             all_attachments_processed = attachments_processed + url_attachments_processed
             if all_attachments_processed:
@@ -584,7 +645,7 @@ class AgentExecutionEngine:
                         skills_section += skill["content"].strip() + "\n\n"
                 system_prompt = system_prompt + skills_section
 
-            extra_context_parts = [p for p in [attachment_context, url_context] if p]
+            extra_context_parts = [p for p in [attachment_context, url_context, mention_context] if p]
             assembled = context_assembler.assemble(
                 system_prompt=system_prompt,
                 conversation_messages=history,
@@ -622,7 +683,11 @@ class AgentExecutionEngine:
                         ]
                     for t in raw_tools:
                         fn = _tool_id_to_fn_name(t["id"])
-                        fn_name_to_tool_info[fn] = {"type": "builtin", "tool_id": t["id"]}
+                        fn_name_to_tool_info[fn] = {
+                            "type": "builtin",
+                            "tool_id": t["id"],
+                            "risk_level": t.get("risk_level", "low"),
+                        }
                     all_tool_defs = raw_tools
                     openai_tools = _tools_to_openai_schema(raw_tools)
                 except Exception as e:
@@ -791,7 +856,89 @@ class AgentExecutionEngine:
                         "data": call_record,
                     })
 
-                    # Execute via the appropriate backend (timed)
+                    # ── HITL policy check ───────────────────────────────────
+                    risk_level = (
+                        tool_info.get("risk_level", "low")
+                        if tool_info and tool_info.get("type") == "builtin"
+                        else "medium"
+                    )
+                    hitl_approved = True
+                    if tool_info and policy_engine.evaluate(tool_id, risk_level) == "hitl_required":
+                        action_summary = (
+                            f"Agent wants to execute '{tool_id}' with: "
+                            f"{json.dumps(arguments, default=str)[:300]}"
+                        )
+                        from openforge.db.postgres import AsyncSessionLocal
+                        async with AsyncSessionLocal() as hitl_db:
+                            hitl_req = await hitl_service.create_request(
+                                hitl_db,
+                                workspace_id=workspace_id,
+                                conversation_id=conversation_id,
+                                tool_id=tool_id,
+                                tool_input=arguments,
+                                action_summary=action_summary,
+                                risk_level=risk_level,
+                            )
+                        hitl_id = str(hitl_req.id)
+
+                        # Register event BEFORE sending WS (avoids race where user
+                        # approves before we start waiting)
+                        hitl_event_obj = hitl_service.register_event(hitl_id)
+
+                        hitl_entry = {
+                            "type": "hitl_request",
+                            "hitl_id": hitl_id,
+                            "tool_id": tool_id,
+                            "action_summary": action_summary,
+                            "risk_level": risk_level,
+                            "status": "pending",
+                        }
+                        timeline.append(hitl_entry)
+
+                        await ws_manager.send_to_workspace(workspace_key, {
+                            "type": "chat_hitl_request",
+                            "conversation_id": str(conversation_id),
+                            "data": {
+                                "hitl_id": hitl_id,
+                                "tool_id": tool_id,
+                                "tool_input": arguments,
+                                "action_summary": action_summary,
+                                "risk_level": risk_level,
+                            },
+                        })
+
+                        hitl_approved = await hitl_service.wait_for_decision(hitl_id, timeout=300.0)
+
+                        # Update timeline entry with resolution
+                        for i, entry in enumerate(timeline):
+                            if entry.get("type") == "hitl_request" and entry.get("hitl_id") == hitl_id:
+                                timeline[i] = {
+                                    **entry,
+                                    "status": "approved" if hitl_approved else "denied",
+                                }
+                                break
+
+                        await ws_manager.send_to_workspace(workspace_key, {
+                            "type": "chat_hitl_resolved",
+                            "conversation_id": str(conversation_id),
+                            "data": {
+                                "hitl_id": hitl_id,
+                                "status": "approved" if hitl_approved else "denied",
+                            },
+                        })
+
+                        if not hitl_approved:
+                            result = {
+                                "success": False,
+                                "error": f"Tool '{tool_id}' was denied by user approval check.",
+                            }
+                            tool_results_for_messages.append({
+                                "tool_call_id": call_id,
+                                "content": f"Tool error: {result['error']}",
+                            })
+                            continue
+
+                    # ── Execute via the appropriate backend (timed) ──────────
                     tool_started_at = datetime.now(timezone.utc)
                     call_start_perf = time.perf_counter()
 
@@ -829,6 +976,57 @@ class AgentExecutionEngine:
 
                     call_duration_ms = int((time.perf_counter() - call_start_perf) * 1000)
                     tool_finished_at = datetime.now(timezone.utc)
+
+                    # ── Special handling: agent.invoke → subagent_invocation ─
+                    if tool_id == "agent.invoke" and result.get("success"):
+                        subagent_out = result.get("output") or {}
+                        subagent_response = subagent_out.get("response", "")
+                        subagent_timeline = subagent_out.get("timeline", [])
+                        subagent_conv_id = subagent_out.get("conversation_id")
+
+                        invocation_entry = {
+                            "type": "subagent_invocation",
+                            "call_id": call_id,
+                            "tool_name": tool_id,
+                            "arguments": arguments,
+                            "success": True,
+                            "subagent_response": subagent_response,
+                            "subagent_timeline": subagent_timeline,
+                            "subagent_conversation_id": subagent_conv_id,
+                        }
+                        timeline.append(invocation_entry)
+
+                        await ws_manager.send_to_workspace(workspace_key, {
+                            "type": "chat_subagent_invocation",
+                            "conversation_id": str(conversation_id),
+                            "data": invocation_entry,
+                        })
+
+                        result_content = (
+                            f"Subagent completed. Response:\n\n{subagent_response}"
+                            if subagent_response
+                            else "Subagent completed with no text response."
+                        )
+                        tool_results_for_messages.append({
+                            "tool_call_id": call_id,
+                            "content": result_content,
+                        })
+                        asyncio.create_task(
+                            _persist_tool_call_log(
+                                workspace_id=workspace_id,
+                                conversation_id=conversation_id,
+                                call_id=call_id,
+                                tool_name=tool_id,
+                                arguments=arguments,
+                                success=True,
+                                output=result_content[:_MAX_OUTPUT_LOG_CHARS],
+                                error=None,
+                                duration_ms=call_duration_ms,
+                                started_at=tool_started_at,
+                                finished_at=tool_finished_at,
+                            )
+                        )
+                        continue  # skip the regular timeline/WS handling below
 
                     result_record = {
                         "call_id": call_id,
@@ -1045,6 +1243,238 @@ class AgentExecutionEngine:
         finally:
             self.stream_registry.finish(conversation_id)
             self._cancel_events.pop(str(conversation_id), None)
+
+    async def execute_subagent(
+        self,
+        *,
+        workspace_id: UUID,
+        instruction: str,
+        db: AsyncSession,
+        parent_execution_id: Optional[str] = None,
+    ) -> dict:
+        """
+        Run a subagent in collect mode — no WebSocket streaming.
+
+        Creates a temporary (archived) conversation in the target workspace,
+        runs the full agent loop, and returns the collected response + timeline.
+        Used by the agent.invoke tool for subagent delegation.
+        """
+        execution_id = parent_execution_id or str(uuid.uuid4())
+
+        # Create a temporary, archived conversation
+        temp_conv = Conversation(
+            workspace_id=workspace_id,
+            title=f"[subagent] {instruction[:80]}",
+            is_archived=True,
+        )
+        db.add(temp_conv)
+        await db.commit()
+        await db.refresh(temp_conv)
+        conv_id = temp_conv.id
+
+        try:
+            # Save user instruction as message
+            await conversation_service.add_message(db, conv_id, role="user", content=instruction)
+
+            # Load LLM provider
+            try:
+                provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(
+                    db, workspace_id
+                )
+            except Exception as exc:
+                return {
+                    "response": f"Error: could not get LLM provider: {exc}",
+                    "timeline": [],
+                    "conversation_id": str(conv_id),
+                }
+
+            # Load tools
+            openai_tools: list[dict] = []
+            fn_name_to_tool_info_sub: dict[str, dict] = {}
+            try:
+                raw_tools = await tool_dispatcher.list_tools()
+                for t in raw_tools:
+                    fn = _tool_id_to_fn_name(t["id"])
+                    fn_name_to_tool_info_sub[fn] = {
+                        "type": "builtin",
+                        "tool_id": t["id"],
+                        "risk_level": t.get("risk_level", "low"),
+                    }
+                openai_tools = _tools_to_openai_schema(raw_tools)
+            except Exception:
+                pass
+
+            # Load agent system prompt
+            from openforge.api.prompts import PROMPT_CATALOGUE
+            _entry = next((p for p in PROMPT_CATALOGUE if p["id"] == "agent_system"), None)
+            system_prompt = _entry["default"] if _entry else "You are a helpful AI agent."
+            _cfg = await db.execute(select(Config).where(Config.key == "prompt.agent_system"))
+            _row = _cfg.scalar_one_or_none()
+            if _row and _row.value and "text" in _row.value:
+                system_prompt = _row.value["text"]
+
+            # RAG context
+            rag_results: list = []
+            try:
+                raw_rag = search_engine.search(
+                    query=instruction, workspace_id=str(workspace_id), limit=5, score_threshold=0.35
+                )
+                rag_results = select_relevant_rag_results(raw_rag, limit=5)
+            except Exception:
+                pass
+
+            loop_messages = list(
+                context_assembler.assemble(
+                    system_prompt=system_prompt,
+                    conversation_messages=[{"role": "user", "content": instruction}],
+                    rag_results=rag_results,
+                )
+            )
+
+            full_response = ""
+            timeline: list[dict] = []
+            max_loops = 10  # subagents get fewer loops
+
+            for _ in range(max_loops):
+                tool_calls_this_turn: list[dict] = []
+                response_this_turn = ""
+                finish_reason = "stop"
+
+                try:
+                    async for event in llm_gateway.stream_with_tools(
+                        messages=loop_messages,
+                        tools=openai_tools,
+                        provider_name=provider_name,
+                        api_key=api_key,
+                        model=model,
+                        base_url=base_url,
+                        include_thinking=False,
+                    ):
+                        etype = event.get("type")
+                        if etype == "token":
+                            tok = event.get("content", "")
+                            full_response += tok
+                            response_this_turn += tok
+                        elif etype == "tool_calls":
+                            tool_calls_this_turn = event.get("calls", [])
+                        elif etype == "done":
+                            finish_reason = event.get("finish_reason", "stop")
+                except Exception as exc:
+                    logger.warning("Subagent LLM error: %s", exc)
+                    break
+
+                if not tool_calls_this_turn or finish_reason == "stop":
+                    break
+
+                tool_results_msgs: list[dict] = []
+                for call in tool_calls_this_turn:
+                    call_id = call.get("id") or str(uuid.uuid4())
+                    fn_name = call.get("name", "")
+                    args = call.get("arguments", {})
+
+                    sub_tool_info = fn_name_to_tool_info_sub.get(fn_name)
+                    sub_tool_id = sub_tool_info["tool_id"] if sub_tool_info else _fn_name_to_tool_id(fn_name)
+
+                    timeline.append({
+                        "type": "tool_call",
+                        "call_id": call_id,
+                        "tool_name": sub_tool_id,
+                        "arguments": args,
+                    })
+
+                    if not sub_tool_info:
+                        sub_result = {"success": False, "error": f"Tool '{sub_tool_id}' not available"}
+                    else:
+                        sub_result = await tool_dispatcher.execute(
+                            tool_id=sub_tool_id,
+                            params=args,
+                            workspace_id=str(workspace_id),
+                            execution_id=execution_id,
+                        )
+
+                    # Update timeline entry
+                    for i, entry in enumerate(timeline):
+                        if entry.get("call_id") == call_id:
+                            _out = sub_result.get("output")
+                            if isinstance(_out, (dict, list)):
+                                _out = json.dumps(_out, default=str)
+                            if isinstance(_out, str) and len(_out) > 500:
+                                _out = _out[:500] + "…"
+                            timeline[i] = {
+                                **entry,
+                                "success": sub_result.get("success", False),
+                                "output": _out,
+                                "error": sub_result.get("error"),
+                            }
+                            break
+
+                    if sub_result.get("success"):
+                        out = sub_result.get("output")
+                        if out is None:
+                            rc = "Tool executed successfully with no output."
+                        elif isinstance(out, (dict, list)):
+                            rc = json.dumps(out, indent=2, default=str)
+                        else:
+                            rc = str(out)
+                    else:
+                        rc = f"Tool error: {sub_result.get('error', 'Unknown error')}"
+
+                    tool_results_msgs.append({"tool_call_id": call_id, "content": rc})
+
+                asst_msg: dict = {"role": "assistant", "content": response_this_turn or ""}
+                asst_msg["tool_calls"] = [
+                    {
+                        "id": c.get("id") or c.get("call_id", ""),
+                        "type": "function",
+                        "function": {
+                            "name": _tool_id_to_fn_name(c.get("name") or c.get("tool_name", "")),
+                            "arguments": json.dumps(c.get("arguments", {}), default=str),
+                        },
+                    }
+                    for c in tool_calls_this_turn
+                ]
+                loop_messages.append(asst_msg)
+                for tr in tool_results_msgs:
+                    loop_messages.append({
+                        "role": "tool",
+                        "tool_call_id": tr["tool_call_id"],
+                        "content": tr["content"],
+                    })
+
+            # Final summary turn if no text response yet
+            if not full_response.strip():
+                try:
+                    async for event in llm_gateway.stream_with_tools(
+                        messages=loop_messages,
+                        tools=[],
+                        provider_name=provider_name,
+                        api_key=api_key,
+                        model=model,
+                        base_url=base_url,
+                        include_thinking=False,
+                    ):
+                        if event.get("type") == "token":
+                            full_response += event.get("content", "")
+                except Exception:
+                    pass
+
+            # Save assistant message
+            await conversation_service.add_message(
+                db, conv_id, role="assistant", content=full_response, timeline=timeline
+            )
+
+            return {
+                "response": full_response,
+                "timeline": timeline,
+                "conversation_id": str(conv_id),
+            }
+        except Exception as exc:
+            logger.error("Subagent execution error: %s", exc)
+            return {
+                "response": f"Subagent error: {exc}",
+                "timeline": [],
+                "conversation_id": str(conv_id),
+            }
 
 
 agent_engine = AgentExecutionEngine()

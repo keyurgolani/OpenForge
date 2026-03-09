@@ -76,6 +76,7 @@ async def workspace_websocket(websocket: WebSocket, workspace_id: str):
                 attachment_ids = data.get("attachment_ids", [])
                 provider_id = data.get("provider_id")
                 model_id = data.get("model_id")
+                mentions = data.get("mentions", [])
                 if not conversation_id or not content:
                     await ws_manager.send_to_connection(websocket, {
                         "type": "chat_error",
@@ -94,6 +95,7 @@ async def workspace_websocket(websocket: WebSocket, workspace_id: str):
                 _att = attachment_ids
                 _pid = provider_id
                 _mid = model_id
+                _mentions = mentions
 
                 async def _run_agent():
                     async with AsyncSessionLocal() as db:
@@ -105,6 +107,7 @@ async def workspace_websocket(websocket: WebSocket, workspace_id: str):
                             attachment_ids=_att,
                             provider_id=_pid,
                             model_id=_mid,
+                            mentions=_mentions,
                         )
 
                 _asyncio.create_task(_run_agent())

@@ -125,6 +125,11 @@ class Knowledge(Base):
     insights: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     ai_title: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     ai_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    file_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    file_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    mime_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    thumbnail_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    file_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     embedding_status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     word_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
@@ -335,6 +340,33 @@ class MCPToolOverride(Base):
 
     __table_args__ = (
         UniqueConstraint("mcp_server_id", "tool_name", name="uq_mcp_tool_overrides"),
+    )
+
+
+class HITLRequest(Base):
+    """Human-in-the-loop approval request for a high-risk agent tool call."""
+    __tablename__ = "hitl_requests"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False
+    )
+    tool_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    tool_input: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    action_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    risk_level: Mapped[str] = mapped_column(String(20), nullable=False, default="high")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    resolution_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("idx_hitl_requests_workspace_status", "workspace_id", "status"),
+        Index("idx_hitl_requests_conversation", "conversation_id"),
+        Index("idx_hitl_requests_status", "status", "created_at"),
     )
 
 

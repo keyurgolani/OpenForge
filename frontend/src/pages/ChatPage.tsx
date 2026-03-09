@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -10,16 +10,19 @@ import {
     updateConversation,
     listProviders,
     getWorkspace,
+    listWorkspaces,
     saveAttachmentToKnowledge,
     exportConversation,
+    approveHITL,
+    denyHITL,
 } from '@/lib/api'
-import { useStreamingChat } from '@/hooks/useStreamingChat'
+import { useStreamingChat, type Mention, type TimelineSubagentInvocation, type TimelineHITLRequest } from '@/hooks/useStreamingChat'
 import { useToast } from '@/components/shared/ToastProvider'
 import { ConfirmModal } from '@/components/ui/confirm-modal'
 import {
     Plus, Send, Square, Loader2, MessageSquare, Trash2, Bot, User,
     ChevronDown, ChevronRight, ChevronLeft, ChevronUp, ChevronsUp, ExternalLink, Check, Pencil,
-    Paperclip, X, Copy, Search, Brain, Wrench, BookmarkPlus
+    Paperclip, X, Copy, Search, Brain, Wrench, BookmarkPlus, Network, ShieldAlert, ShieldCheck, ShieldX, AtSign
 } from 'lucide-react'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem,
@@ -55,6 +58,8 @@ interface Message {
     timeline?: Array<
         | { type: 'thinking'; content: string }
         | { type: 'tool_call'; call_id: string; tool_name: string; arguments: Record<string, unknown>; success?: boolean; output?: unknown; error?: string }
+        | TimelineSubagentInvocation
+        | TimelineHITLRequest
     > | null
     is_interrupted?: boolean
     created_at: string
@@ -141,6 +146,13 @@ export default function ChatPage() {
     const modelPickerSearchRef = useRef<HTMLInputElement>(null)
     const lastToastedErrorRef = useRef<string | null>(null)
 
+    // Mentions (@workspace / @chat)
+    const [mentions, setMentions] = useState<Mention[]>([])
+    const [mentionQuery, setMentionQuery] = useState('')
+    const [mentionOpen, setMentionOpen] = useState(false)
+    const [mentionCursorPos, setMentionCursorPos] = useState(0)
+    const mentionDropdownRef = useRef<HTMLDivElement>(null)
+
     // File attachments
     const [attachments, setAttachments] = useState<File[]>([])
     const [uploadingFiles, setUploadingFiles] = useState(false)
@@ -158,6 +170,12 @@ export default function ChatPage() {
         queryKey: ['workspace', workspaceId],
         queryFn: () => getWorkspace(workspaceId),
         enabled: !!workspaceId,
+    })
+
+    const { data: allWorkspaces = [] } = useQuery({
+        queryKey: ['workspaces'],
+        queryFn: listWorkspaces,
+        staleTime: 60_000,
     })
 
     const { data: conversations = [] } = useQuery({
@@ -778,9 +796,13 @@ export default function ChatPage() {
             navigate(`/w/${workspaceId}/chat/${conv.id}`)
         }
 
-        const override = selectedOption
-            ? { provider_id: selectedOption.providerId, model_id: selectedOption.modelId, attachment_ids: attachmentIds }
-            : attachmentIds.length > 0 ? { attachment_ids: attachmentIds } : undefined
+        const override: { provider_id?: string; model_id?: string; attachment_ids?: string[]; mentions?: Mention[] } = {}
+        if (selectedOption) {
+            override.provider_id = selectedOption.providerId
+            override.model_id = selectedOption.modelId
+        }
+        if (attachmentIds.length > 0) override.attachment_ids = attachmentIds
+        if (mentions.length > 0) override.mentions = mentions
 
         const sent = sendMessage(msg, override, targetCid)
         if (!sent) {
@@ -791,6 +813,8 @@ export default function ChatPage() {
 
         pushOptimisticUserMessage(targetCid, msg)
         setInput('')
+        setMentions([])
+        setMentionOpen(false)
         if (attachments.length > 0) setAttachments([])
         if (textareaRef.current) textareaRef.current.style.height = 'auto'
         scheduleComposerFocus()
@@ -825,9 +849,37 @@ export default function ChatPage() {
 
     const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
         if (lastError) clearLastError()
-        setInput(e.target.value)
+        const value = e.target.value
+        setInput(value)
         e.target.style.height = 'auto'
         e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px'
+
+        // Detect @mention trigger
+        const cursor = e.target.selectionStart ?? value.length
+        const textBeforeCursor = value.slice(0, cursor)
+        const atMatch = textBeforeCursor.match(/@([\w\s]*)$/)
+        if (atMatch) {
+            setMentionQuery(atMatch[1])
+            setMentionCursorPos(cursor - atMatch[0].length)
+            setMentionOpen(true)
+        } else {
+            setMentionOpen(false)
+        }
+    }
+
+    const handleMentionSelect = (mention: Mention) => {
+        // Replace @query in input with @name
+        const textBefore = input.slice(0, mentionCursorPos)
+        const textAfter = input.slice(mentionCursorPos + mentionQuery.length + 1) // +1 for @
+        const newText = `${textBefore}@${mention.name} ${textAfter}`
+        setInput(newText)
+        setMentionOpen(false)
+        setMentionQuery('')
+        setMentions(prev => {
+            if (prev.find(m => m.id === mention.id)) return prev
+            return [...prev, mention]
+        })
+        textareaRef.current?.focus()
     }
 
     const handleMessagesScroll = (event: React.UIEvent<HTMLDivElement>) => {
@@ -1007,6 +1059,19 @@ export default function ChatPage() {
                                                             isActiveStream={isStreaming && i === streamingTimeline.length - 1 && !entry.done}
                                                             durationMs={entry.durationMs}
                                                         />
+                                                    ) : entry.type === 'subagent_invocation' ? (
+                                                        <SubagentCard
+                                                            key={entry.call_id}
+                                                            entry={entry}
+                                                            requestVisibility={() => ensureExpandedBlockVisible(streamingMessageRef.current)}
+                                                        />
+                                                    ) : entry.type === 'hitl_request' ? (
+                                                        <HITLCard
+                                                            key={entry.hitl_id}
+                                                            entry={entry}
+                                                            workspaceId={workspaceId}
+                                                            conversationId={activeCid ?? ''}
+                                                        />
                                                     ) : (
                                                         <div key={entry.call_id} className="chat-workflow-step chat-section-reveal">
                                                             <ToolCallCard
@@ -1102,7 +1167,36 @@ export default function ChatPage() {
                                     </div>
                                 )}
 
-                                <div className="chat-composer-panel">
+                                <div className="chat-composer-panel relative">
+                                    {/* @mention dropdown */}
+                                    {mentionOpen && (
+                                        <MentionDropdown
+                                            ref={mentionDropdownRef}
+                                            query={mentionQuery}
+                                            workspaces={(allWorkspaces as { id: string; name: string }[]).map(w => ({ type: 'workspace' as const, id: w.id, name: w.name }))}
+                                            conversations={(conversations as Conversation[]).map(c => ({ type: 'chat' as const, id: c.id, name: c.title || 'Untitled Chat' }))}
+                                            onSelect={handleMentionSelect}
+                                            onClose={() => setMentionOpen(false)}
+                                        />
+                                    )}
+                                    {mentions.length > 0 && (
+                                        <div className="mb-2 flex flex-wrap gap-1.5">
+                                            {mentions.map(m => (
+                                                <div key={m.id} className="flex items-center gap-1.5 rounded-full border border-accent/35 bg-accent/10 px-2.5 py-0.5 text-xs text-accent">
+                                                    {m.type === 'workspace' ? <Network className="h-3 w-3" /> : <MessageSquare className="h-3 w-3" />}
+                                                    <span>@{m.name}</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setMentions(prev => prev.filter(x => x.id !== m.id))}
+                                                        className="rounded p-0.5 text-accent/60 hover:text-accent"
+                                                        aria-label={`Remove @${m.name}`}
+                                                    >
+                                                        <X className="h-2.5 w-2.5" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                     {attachments.length > 0 && (
                                         <div className="mb-3 flex flex-wrap gap-2">
                                             {attachments.map((file, index) => (
@@ -1232,6 +1326,29 @@ export default function ChatPage() {
                                                 Attach
                                                 {attachments.length > 0 && (
                                                     <span className="rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent">{attachments.length}</span>
+                                                )}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="chat-control-pill disabled:opacity-50"
+                                                onClick={() => {
+                                                    const cursor = textareaRef.current?.selectionStart ?? input.length
+                                                    const before = input.slice(0, cursor)
+                                                    const after = input.slice(cursor)
+                                                    const newText = `${before}@${after}`
+                                                    setInput(newText)
+                                                    setMentionQuery('')
+                                                    setMentionCursorPos(cursor)
+                                                    setMentionOpen(true)
+                                                    textareaRef.current?.focus()
+                                                }}
+                                                disabled={composerDisabled}
+                                                title="Mention a workspace or chat"
+                                            >
+                                                <AtSign className="h-3.5 w-3.5" />
+                                                Mention
+                                                {mentions.length > 0 && (
+                                                    <span className="rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent">{mentions.length}</span>
                                                 )}
                                             </button>
                                         </div>
@@ -1809,6 +1926,259 @@ function ThinkingBlock({
     )
 }
 
+// ── Subagent invocation card ─────────────────────────────────────────────────
+function SubagentCard({
+    entry,
+    requestVisibility,
+}: {
+    entry: TimelineSubagentInvocation
+    requestVisibility?: (el: HTMLElement | null) => void
+}) {
+    const [open, setOpen] = useState(false)
+    const [fullyExpanded, setFullyExpanded] = useState(false)
+    const blockRef = useRef<HTMLDivElement>(null)
+    const scrollRef = useRef<HTMLDivElement>(null)
+
+    const instruction = (entry.arguments?.instruction as string) || 'Subagent task'
+    const truncated = instruction.length > 80 ? `${instruction.slice(0, 80)}…` : instruction
+
+    const toggle = () => {
+        setOpen(prev => {
+            const next = !prev
+            if (next) {
+                window.requestAnimationFrame(() => {
+                    window.requestAnimationFrame(() => requestVisibility?.(blockRef.current))
+                })
+                window.setTimeout(() => requestVisibility?.(blockRef.current), 220)
+            }
+            return next
+        })
+    }
+
+    return (
+        <div className="chat-workflow-step chat-section-reveal">
+            <button className="chat-subsection-toggle" onClick={toggle}>
+                {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                <Network className="w-3 h-3" />
+                <span>Subagent</span>
+                <span className="text-muted-foreground/60 font-normal ml-1 truncate max-w-[280px]">{truncated}</span>
+            </button>
+            <div ref={blockRef} className={`chat-collapse w-full ${open ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
+                <div className="chat-collapse-inner pb-px">
+                    <div className="relative mt-1 w-full rounded-2xl border border-accent/20 bg-accent/4 chat-section-reveal">
+                        {/* Subagent response */}
+                        <div className="px-4 pt-3 pb-2">
+                            <div className="mb-2 text-[10px] uppercase tracking-wide text-muted-foreground">Response</div>
+                            <div
+                                ref={scrollRef}
+                                className="text-xs leading-relaxed text-foreground/85 markdown-content overflow-y-auto"
+                                style={fullyExpanded ? undefined : { maxHeight: '200px' }}
+                                dangerouslySetInnerHTML={{ __html: md.render(entry.subagent_response || '') }}
+                            />
+                            {!fullyExpanded && entry.subagent_response && entry.subagent_response.length > 400 && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setFullyExpanded(true)
+                                        window.requestAnimationFrame(() => requestVisibility?.(blockRef.current))
+                                    }}
+                                    className="mt-1 text-[11px] text-accent/70 hover:text-accent"
+                                >
+                                    Show more
+                                </button>
+                            )}
+                        </div>
+                        {/* Subagent timeline */}
+                        {(entry.subagent_timeline?.length ?? 0) > 0 && (
+                            <div className="border-t border-accent/15 px-4 py-2">
+                                <div className="mb-2 text-[10px] uppercase tracking-wide text-muted-foreground">Subagent Timeline</div>
+                                <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                                    {(entry.subagent_timeline as Array<{ type: string; tool_name?: string; call_id?: string; content?: string }>).map((step, idx) =>
+                                        step.type === 'thinking' ? (
+                                            <div key={idx} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                                                <Brain className="h-3 w-3 flex-shrink-0" />
+                                                <span className="italic">Thought</span>
+                                            </div>
+                                        ) : step.type === 'tool_call' || step.type === 'subagent_invocation' ? (
+                                            <div key={step.call_id ?? idx} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                                                <Wrench className="h-3 w-3 flex-shrink-0" />
+                                                <span className="font-mono">{step.tool_name}</span>
+                                            </div>
+                                        ) : null
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// ── HITL approval card ────────────────────────────────────────────────────────
+function HITLCard({
+    entry,
+    workspaceId: _workspaceId,
+    conversationId: _conversationId,
+    readonly = false,
+}: {
+    entry: TimelineHITLRequest
+    workspaceId: string
+    conversationId: string
+    readonly?: boolean
+}) {
+    const [loading, setLoading] = useState(false)
+    const [localStatus, setLocalStatus] = useState<'pending' | 'approved' | 'denied'>(entry.status)
+    const { success: toastSuccess, error: toastError } = useToast()
+
+    // Keep local status in sync when entry status changes (e.g. from WS event)
+    useEffect(() => { setLocalStatus(entry.status) }, [entry.status])
+
+    const riskColors: Record<string, string> = {
+        high: 'text-amber-300 border-amber-400/40 bg-amber-500/10',
+        critical: 'text-red-300 border-red-400/40 bg-red-500/10',
+    }
+    const containerClass = riskColors[entry.risk_level] ?? 'text-foreground border-border/50 bg-muted/20'
+
+    const handleApprove = async () => {
+        setLoading(true)
+        try {
+            await approveHITL(entry.hitl_id)
+            setLocalStatus('approved')
+            toastSuccess('Tool approved')
+        } catch {
+            toastError('Failed to approve')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleDeny = async () => {
+        setLoading(true)
+        try {
+            await denyHITL(entry.hitl_id)
+            setLocalStatus('denied')
+            toastSuccess('Tool denied')
+        } catch {
+            toastError('Failed to deny')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    return (
+        <div className={`chat-workflow-step chat-section-reveal rounded-xl border px-4 py-3 ${containerClass}`}>
+            <div className="flex items-center gap-2 mb-1.5">
+                <ShieldAlert className="h-3.5 w-3.5 flex-shrink-0" />
+                <span className="text-[11px] uppercase tracking-wide font-semibold">Approval Required</span>
+                <span className={`ml-auto rounded-full border px-2 py-0.5 text-[10px] font-medium capitalize ${localStatus === 'pending' ? 'border-amber-400/40 text-amber-300' : localStatus === 'approved' ? 'border-emerald-400/40 text-emerald-300' : 'border-red-400/40 text-red-300'}`}>
+                    {localStatus}
+                </span>
+            </div>
+            <div className="text-xs mb-1 font-medium">{entry.action_summary || entry.tool_id}</div>
+            <div className="text-[11px] text-muted-foreground mb-2">
+                Tool: <span className="font-mono">{entry.tool_id}</span>
+                {entry.risk_level && <> · Risk: <span className="capitalize">{entry.risk_level}</span></>}
+            </div>
+            {!readonly && localStatus === 'pending' && (
+                <div className="flex gap-2 mt-2">
+                    <button
+                        type="button"
+                        onClick={handleApprove}
+                        disabled={loading}
+                        className="flex items-center gap-1.5 rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-[11px] text-emerald-300 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
+                    >
+                        {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
+                        Approve
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleDeny}
+                        disabled={loading}
+                        className="flex items-center gap-1.5 rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-1 text-[11px] text-red-300 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                    >
+                        {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldX className="h-3 w-3" />}
+                        Deny
+                    </button>
+                </div>
+            )}
+            {localStatus !== 'pending' && (
+                <div className={`flex items-center gap-1.5 text-[11px] ${localStatus === 'approved' ? 'text-emerald-300' : 'text-red-300'}`}>
+                    {localStatus === 'approved' ? <ShieldCheck className="h-3 w-3" /> : <ShieldX className="h-3 w-3" />}
+                    {localStatus === 'approved' ? 'Tool execution approved' : 'Tool execution denied'}
+                </div>
+            )}
+        </div>
+    )
+}
+
+// ── @mention dropdown ─────────────────────────────────────────────────────────
+const MentionDropdown = React.forwardRef<HTMLDivElement, {
+    query: string
+    workspaces: Mention[]
+    conversations: Mention[]
+    onSelect: (m: Mention) => void
+    onClose: () => void
+}>(function MentionDropdown({ query, workspaces, conversations, onSelect, onClose }, ref) {
+    const q = query.toLowerCase()
+    const filteredWs = workspaces.filter(w => w.name.toLowerCase().includes(q)).slice(0, 5)
+    const filteredConvs = conversations.filter(c => c.name.toLowerCase().includes(q)).slice(0, 5)
+    const all = [...filteredWs, ...filteredConvs]
+
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (ref && 'current' in ref && ref.current && !ref.current.contains(e.target as Node)) {
+                onClose()
+            }
+        }
+        document.addEventListener('mousedown', handler)
+        return () => document.removeEventListener('mousedown', handler)
+    }, [onClose, ref])
+
+    if (all.length === 0) return null
+
+    return (
+        <div
+            ref={ref}
+            className="absolute bottom-full left-0 z-[200] mb-2 w-[min(22rem,90vw)] rounded-xl border border-border/80 bg-popover/95 shadow-2xl backdrop-blur-md overflow-hidden"
+        >
+            {filteredWs.length > 0 && (
+                <>
+                    <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border/40">Workspaces</div>
+                    {filteredWs.map(w => (
+                        <button
+                            key={w.id}
+                            type="button"
+                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/40 transition-colors"
+                            onMouseDown={e => { e.preventDefault(); onSelect(w) }}
+                        >
+                            <Network className="h-3.5 w-3.5 text-accent flex-shrink-0" />
+                            <span className="truncate">{w.name}</span>
+                        </button>
+                    ))}
+                </>
+            )}
+            {filteredConvs.length > 0 && (
+                <>
+                    <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border/40 border-t border-t-border/40">Chats</div>
+                    {filteredConvs.map(c => (
+                        <button
+                            key={c.id}
+                            type="button"
+                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/40 transition-colors"
+                            onMouseDown={e => { e.preventDefault(); onSelect(c) }}
+                        >
+                            <MessageSquare className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                            <span className="truncate">{c.name}</span>
+                        </button>
+                    ))}
+                </>
+            )}
+        </div>
+    )
+})
+
 // ── Attachment card ──────────────────────────────────────────────────────────
 function AttachmentCard({ att, workspaceId }: { att: AttachmentProcessed; workspaceId: string }) {
     const [saved, setSaved] = useState(false)
@@ -2059,6 +2429,20 @@ function ChatMessageCard({
                                                 key={i}
                                                 content={entry.content}
                                                 requestVisibility={requestVisibility}
+                                            />
+                                        ) : entry.type === 'subagent_invocation' ? (
+                                            <SubagentCard
+                                                key={entry.call_id}
+                                                entry={entry}
+                                                requestVisibility={requestVisibility}
+                                            />
+                                        ) : entry.type === 'hitl_request' ? (
+                                            <HITLCard
+                                                key={entry.hitl_id}
+                                                entry={entry}
+                                                workspaceId={workspaceId}
+                                                conversationId={msg.id}
+                                                readonly
                                             />
                                         ) : (
                                             <div key={entry.call_id} className="chat-workflow-step chat-section-reveal">

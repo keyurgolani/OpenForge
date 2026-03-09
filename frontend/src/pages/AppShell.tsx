@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Outlet, useNavigate, useParams, Link, useLocation } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { listWorkspaces, listKnowledge, listConversations, updateConversation, deleteConversation, permanentlyDeleteConversation, exportConversation } from '@/lib/api'
+import { listWorkspaces, listKnowledge, listConversations, updateConversation, deleteConversation, permanentlyDeleteConversation, exportConversation, countPendingHITL } from '@/lib/api'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import { useUIStore } from '@/stores/uiStore'
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
@@ -18,7 +18,7 @@ import MarkdownIt from 'markdown-it'
 import {
     Home, MessageSquare, Search, Settings, Plus, Folder,
     FileText, Pin, Archive, Bookmark, Code2, Zap, WifiOff,
-    PanelLeft, ChevronDown, ChevronLeft, ChevronRight, Brain, CheckSquare, Calendar, Star, Pencil, Trash2, Download
+    PanelLeft, ChevronDown, ChevronLeft, ChevronRight, Brain, CheckSquare, Calendar, Star, Pencil, Trash2, Download, ShieldAlert
 } from 'lucide-react'
 import { getWorkspaceIcon } from '@/pages/SettingsPage'
 
@@ -112,6 +112,11 @@ export default function AppShell() {
     const qc = useQueryClient()
 
     const { data: workspaces = [] } = useQuery({ queryKey: ['workspaces'], queryFn: listWorkspaces })
+    const { data: hitlCount = 0 } = useQuery({
+        queryKey: ['hitl-count'],
+        queryFn: async () => { const r = await countPendingHITL(); return r.pending ?? 0 },
+        refetchInterval: 5000,
+    })
     const { data: knowledgeData } = useQuery({
         queryKey: ['knowledge', workspaceId],
         queryFn: () => listKnowledge(workspaceId, { page_size: 200 }),
@@ -865,6 +870,23 @@ export default function AppShell() {
                     )}
                 </div>
             </div>
+
+            {/* HITL Approval FAB */}
+            {(hitlCount as number) > 0 && (
+                <Link
+                    to={`/w/${workspaceId}/chat`}
+                    className="fixed bottom-6 right-6 z-[300] flex items-center gap-2.5 rounded-2xl border border-amber-400/50 bg-amber-500/15 px-4 py-2.5 text-amber-200 shadow-2xl backdrop-blur-sm transition-all hover:bg-amber-500/25 hover:border-amber-400/70"
+                    title="Pending tool approvals require your attention"
+                >
+                    <ShieldAlert className="h-4 w-4 flex-shrink-0" />
+                    <span className="text-sm font-medium">
+                        {hitlCount} Approval{(hitlCount as number) !== 1 ? 's' : ''} Pending
+                    </span>
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/30 text-[11px] font-bold text-amber-100">
+                        {hitlCount as number}
+                    </span>
+                </Link>
+            )}
         </div>
     )
 }

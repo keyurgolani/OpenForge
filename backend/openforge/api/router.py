@@ -12,6 +12,8 @@ from openforge.api import skills
 from openforge.api import tools as tools_api
 from openforge.api import mcp as mcp_api
 from openforge.api import export as export_api
+from openforge.api import hitl as hitl_api
+from openforge.api import agent as agent_api
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -29,3 +31,5 @@ api_router.include_router(skills.router, prefix="/skills", tags=["skills"])
 api_router.include_router(tools_api.router, prefix="/tools", tags=["tools"])
 api_router.include_router(mcp_api.router, prefix="/mcp", tags=["mcp"])
 api_router.include_router(export_api.router, prefix="/export", tags=["export"])
+api_router.include_router(hitl_api.router, prefix="/hitl", tags=["hitl"])
+api_router.include_router(agent_api.router, prefix="/agent", tags=["agent"])

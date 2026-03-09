@@ -147,6 +147,16 @@ export const exportAllData = (): Promise<Blob> =>
 export const exportWorkspaceData = (workspaceId: string): Promise<Blob> =>
     api.get(`/export/workspace/${workspaceId}`, { responseType: 'blob' }).then(r => r.data)
 
+// ── HITL ─────────────────────────────────────────────────────────────────────
+export const listPendingHITL = (): Promise<any> => api.get('/hitl/pending').then(r => r.data)
+export const countPendingHITL = (): Promise<any> => api.get('/hitl/pending/count').then(r => r.data)
+export const getHITLHistory = (params?: { workspace_id?: string; limit?: number }): Promise<any> =>
+    api.get('/hitl/history', { params }).then(r => r.data)
+export const approveHITL = (hitlId: string, note?: string): Promise<any> =>
+    api.post(`/hitl/${hitlId}/approve`, { resolution_note: note }).then(r => r.data)
+export const denyHITL = (hitlId: string, note?: string): Promise<any> =>
+    api.post(`/hitl/${hitlId}/deny`, { resolution_note: note }).then(r => r.data)
+
 // ── MCP Servers ───────────────────────────────────────────────────────────────
 export const listMCPServers = (): Promise<any> => api.get('/mcp/servers').then(r => r.data)
 export const createMCPServer = (data: object): Promise<any> => api.post('/mcp/servers', data).then(r => r.data)

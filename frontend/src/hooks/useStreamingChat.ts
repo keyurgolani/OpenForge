@@ -37,7 +37,27 @@ export interface TimelineToolCall {
     error?: string
 }
 
-export type TimelineEntry = TimelineThinking | TimelineToolCall
+export interface TimelineSubagentInvocation {
+    type: 'subagent_invocation'
+    call_id: string
+    tool_name: string
+    arguments: Record<string, unknown>
+    success: boolean
+    subagent_response: string
+    subagent_timeline: unknown[]
+    subagent_conversation_id?: string | null
+}
+
+export interface TimelineHITLRequest {
+    type: 'hitl_request'
+    hitl_id: string
+    tool_id: string
+    action_summary: string
+    risk_level: string
+    status: 'pending' | 'approved' | 'denied'
+}
+
+export type TimelineEntry = TimelineThinking | TimelineToolCall | TimelineSubagentInvocation | TimelineHITLRequest
 
 // Legacy aliases kept for any callers that still reference them
 export type ToolCall = { call_id: string; tool_name: string; arguments: Record<string, unknown> }
@@ -52,10 +72,17 @@ interface StreamSnapshot {
     tool_results?: Record<string, ToolResult>
 }
 
+export interface Mention {
+    type: 'workspace' | 'chat'
+    id: string
+    name: string
+}
+
 interface SendMessageOptions {
     provider_id?: string
     model_id?: string
     attachment_ids?: string[]
+    mentions?: Mention[]
 }
 
 export function useStreamingChat(conversationId: string | null) {
@@ -242,6 +269,45 @@ export function useStreamingChat(conversationId: string | null) {
                     return updated
                 })
             }),
+            on('chat_subagent_invocation', (msg) => {
+                const m = msg as { conversation_id: string; data: TimelineSubagentInvocation }
+                if (m.conversation_id !== conversationId) return
+                setTimeline(prev => {
+                    const updated = [...prev, m.data]
+                    timelineRef.current = updated
+                    return updated
+                })
+            }),
+            on('chat_hitl_request', (msg) => {
+                const m = msg as { conversation_id: string; data: { hitl_id: string; tool_id: string; action_summary: string; risk_level: string } }
+                if (m.conversation_id !== conversationId) return
+                const entry: TimelineHITLRequest = {
+                    type: 'hitl_request',
+                    hitl_id: m.data.hitl_id,
+                    tool_id: m.data.tool_id,
+                    action_summary: m.data.action_summary,
+                    risk_level: m.data.risk_level,
+                    status: 'pending',
+                }
+                setTimeline(prev => {
+                    const updated = [...prev, entry]
+                    timelineRef.current = updated
+                    return updated
+                })
+            }),
+            on('hitl_resolved', (msg) => {
+                const m = msg as { data: { id: string; conversation_id: string; status: 'approved' | 'denied' } }
+                if (m.data.conversation_id !== conversationId) return
+                setTimeline(prev => {
+                    const updated = prev.map(entry =>
+                        entry.type === 'hitl_request' && entry.hitl_id === m.data.id
+                            ? { ...entry, status: m.data.status }
+                            : entry
+                    )
+                    timelineRef.current = updated
+                    return updated
+                })
+            }),
             on('chat_done', (msg) => {
                 const m = msg as { conversation_id: string; message_id: string; interrupted?: boolean }
                 if (m.conversation_id !== conversationId) return
@@ -303,7 +369,12 @@ export function useStreamingChat(conversationId: string | null) {
         resetStreamState(false)
         setIsStreaming(true)
         setSources([])
-        const sent = send({ type: 'chat_message', conversation_id: targetConversationId, content, ...(options || {}) })
+        const payload: Record<string, unknown> = { type: 'chat_message', conversation_id: targetConversationId, content }
+        if (options?.provider_id) payload.provider_id = options.provider_id
+        if (options?.model_id) payload.model_id = options.model_id
+        if (options?.attachment_ids?.length) payload.attachment_ids = options.attachment_ids
+        if (options?.mentions?.length) payload.mentions = options.mentions
+        const sent = send(payload)
         if (!sent) {
             setIsStreaming(false)
             setLastError('Failed to send message. Reconnecting to chat server...')
