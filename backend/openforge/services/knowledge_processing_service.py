@@ -754,10 +754,92 @@ class KnowledgeProcessingService:
         except Exception as e:
             logger.warning(f"Failed to emit workspace update for knowledge {knowledge_id}: {e}")
 
-    async def _fetch_url_metadata(self, knowledge_id: UUID, url: str, workspace_id: UUID | None = None):
-        """Background task: fetch URL title, description, and readable content for bookmarks."""
+    async def _fetch_url_content_raw(self, url: str) -> tuple[str | None, str | None, str]:
+        """Fetch and parse URL content without any DB persistence.
+
+        Returns ``(title, description, content)`` where *content* is the best
+        readable text we could extract (may be empty string if all strategies failed).
+        """
+        import httpx
+
+        domain_override_strategy = "none"
+        domain_override_content = ""
+        raw_markdown_file = ""
+        cloudflare_markdown = ""
+        raw_html = ""
+        jina_reader_markdown = ""
+
+        async with httpx.AsyncClient(
+            timeout=15.0,
+            follow_redirects=True,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; OpenForge/1.0; +https://github.com/openforge)"},
+        ) as client:
+            domain_override_strategy, domain_override_content = await self._try_fetch_domain_override_bookmark_content(client, url)
+            raw_markdown_file = await self._try_fetch_raw_markdown_file(client, url)
+            cloudflare_markdown = await self._try_fetch_cloudflare_markdown(client, url)
+            raw_html = await self._try_fetch_html(client, url)
+
+        title, description = self._extract_metadata_from_html(raw_html)
+        markdown_from_html = self._convert_html_to_markdown(raw_html)
+        if self._looks_like_bot_challenge_text(markdown_from_html):
+            markdown_from_html = ""
+
+        if not any(x.strip() for x in [domain_override_content, raw_markdown_file, cloudflare_markdown, markdown_from_html]):
+            async with httpx.AsyncClient(
+                timeout=self._JINA_READER_TIMEOUT_SECONDS,
+                follow_redirects=True,
+                headers={"User-Agent": "Mozilla/5.0 (compatible; OpenForge/1.0; +https://github.com/openforge)"},
+            ) as client:
+                jina_reader_markdown = await self._try_fetch_jina_reader_markdown(client, url)
+
+        chrome_fallback_text = ""
+        if not any(x.strip() for x in [domain_override_content, raw_markdown_file, cloudflare_markdown, markdown_from_html, jina_reader_markdown]):
+            rendered_html = await self._try_fetch_rendered_html_with_chrome(url)
+            if rendered_html:
+                chrome_title, chrome_description = self._extract_metadata_from_html(rendered_html)
+                title = title or chrome_title
+                description = description or chrome_description
+                chrome_fallback_text = self._extract_readable_text_from_html(rendered_html)
+
+        metadata_fallback_text = self._build_bookmark_metadata_fallback_text(title, description)
+
+        candidates: list[tuple[str, str]] = []
+        if domain_override_content.strip():
+            candidates.append((domain_override_strategy, domain_override_content))
+        candidates.extend([
+            ("raw_markdown_file", raw_markdown_file),
+            ("cloudflare_markdown", cloudflare_markdown),
+            ("html_to_markdown", markdown_from_html),
+            ("jina_reader_markdown", jina_reader_markdown),
+            ("chrome_readable_text", chrome_fallback_text),
+            ("metadata_fallback", metadata_fallback_text),
+        ])
+        strategy, readable_text = self._pick_bookmark_content(candidates)
+        if readable_text:
+            readable_text = readable_text[:self._BOOKMARK_CONTENT_MAX_CHARS]
+            logger.info("URL %s scraped via %s", url, strategy)
+        else:
+            logger.warning("URL %s scraping produced empty content", url)
+
+        return title, description, readable_text
+
+    async def extract_url_content_raw(self, url: str) -> dict:
+        """Extract URL content without saving to Knowledge.
+
+        Returns ``{"title": str|None, "description": str|None, "content": str}``.
+        Intended for temporary chat context injection; use
+        ``run_bookmark_content_extraction_job`` when you want the result saved.
+        """
         try:
-            import httpx
+            title, description, content = await self._fetch_url_content_raw(url)
+            return {"title": title, "description": description, "content": content}
+        except Exception as exc:
+            logger.warning("extract_url_content_raw failed for %s: %s", url, exc)
+            return {"title": None, "description": None, "content": ""}
+
+    async def _fetch_url_metadata(self, knowledge_id: UUID, url: str, workspace_id: UUID | None = None):
+        """Fetch URL content and persist it to the Knowledge bookmark record."""
+        try:
             from openforge.db.postgres import AsyncSessionLocal
             from openforge.api.websocket import ws_manager
 
@@ -782,75 +864,7 @@ class KnowledgeProcessingService:
                 except Exception as e:
                     logger.warning(f"Failed to emit bookmark scraping start for knowledge {knowledge_id}: {e}")
 
-            domain_override_strategy = "none"
-            domain_override_content = ""
-            raw_markdown_file = ""
-            cloudflare_markdown = ""
-            raw_html = ""
-            jina_reader_markdown = ""
-
-            async with httpx.AsyncClient(
-                timeout=15.0,
-                follow_redirects=True,
-                headers={"User-Agent": "Mozilla/5.0 (compatible; OpenForge/1.0; +https://github.com/openforge)"},
-            ) as client:
-                domain_override_strategy, domain_override_content = await self._try_fetch_domain_override_bookmark_content(client, url)
-                raw_markdown_file = await self._try_fetch_raw_markdown_file(client, url)
-                cloudflare_markdown = await self._try_fetch_cloudflare_markdown(client, url)
-                raw_html = await self._try_fetch_html(client, url)
-
-            title, description = self._extract_metadata_from_html(raw_html)
-            markdown_from_html = self._convert_html_to_markdown(raw_html)
-            if self._looks_like_bot_challenge_text(markdown_from_html):
-                logger.info("Bookmark %s HTML conversion looked like a bot challenge page", knowledge_id)
-                markdown_from_html = ""
-
-            if (
-                not domain_override_content.strip()
-                and not raw_markdown_file.strip()
-                and not cloudflare_markdown.strip()
-                and not markdown_from_html.strip()
-            ):
-                async with httpx.AsyncClient(
-                    timeout=self._JINA_READER_TIMEOUT_SECONDS,
-                    follow_redirects=True,
-                    headers={"User-Agent": "Mozilla/5.0 (compatible; OpenForge/1.0; +https://github.com/openforge)"},
-                ) as client:
-                    jina_reader_markdown = await self._try_fetch_jina_reader_markdown(client, url)
-
-            chrome_fallback_text = ""
-            if (
-                not domain_override_content.strip()
-                and not raw_markdown_file.strip()
-                and not cloudflare_markdown.strip()
-                and not markdown_from_html.strip()
-                and not jina_reader_markdown.strip()
-            ):
-                rendered_html = await self._try_fetch_rendered_html_with_chrome(url)
-                if rendered_html:
-                    chrome_title, chrome_description = self._extract_metadata_from_html(rendered_html)
-                    title = title or chrome_title
-                    description = description or chrome_description
-                    chrome_fallback_text = self._extract_readable_text_from_html(rendered_html)
-            metadata_fallback_text = self._build_bookmark_metadata_fallback_text(title, description)
-
-            candidates: list[tuple[str, str]] = []
-            if domain_override_content.strip():
-                candidates.append((domain_override_strategy, domain_override_content))
-            candidates.extend([
-                ("raw_markdown_file", raw_markdown_file),
-                ("cloudflare_markdown", cloudflare_markdown),
-                ("html_to_markdown", markdown_from_html),
-                ("jina_reader_markdown", jina_reader_markdown),
-                ("chrome_readable_text", chrome_fallback_text),
-                ("metadata_fallback", metadata_fallback_text),
-            ])
-            strategy, readable_text = self._pick_bookmark_content(candidates)
-            if readable_text:
-                readable_text = readable_text[:self._BOOKMARK_CONTENT_MAX_CHARS]
-                logger.info("Bookmark %s scraped via %s", knowledge_id, strategy)
-            else:
-                logger.warning("Bookmark %s scraping produced empty content", knowledge_id)
+            title, description, readable_text = await self._fetch_url_content_raw(url)
 
             changed_fields: list[str] = []
             async with AsyncSessionLocal() as db:

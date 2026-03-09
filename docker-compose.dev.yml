@@ -1,0 +1,114 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev.backend
+    ports:
+      - "${BACKEND_PORT:-3000}:3000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://openforge:${DB_PASSWORD:-changeme}@postgres:5432/openforge
+      - QDRANT_URL=http://qdrant:6333
+      - WORKSPACE_ROOT=${WORKSPACE_ROOT:-/workspace}
+      - UPLOADS_ROOT=/uploads
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
+      - TOOL_SERVER_URL=http://tool-server:8001
+    volumes:
+      - ${WORKSPACE_HOST_PATH:-./data/workspace}:/workspace
+      - ${UPLOADS_HOST_PATH:-./data/uploads}:/uploads
+      - ${MODELS_HOST_PATH:-./data/models}:/models
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      tool-server:
+        condition: service_started
+    develop:
+      watch:
+        - action: sync
+          path: ./backend/openforge
+          target: /app/backend/openforge
+          ignore:
+            - "**/__pycache__"
+        - action: rebuild
+          path: ./backend/requirements.txt
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev.frontend
+    ports:
+      - "${PORT:-3100}:5173"
+    environment:
+      - API_PROXY_TARGET=http://backend:3000
+    depends_on:
+      - backend
+    develop:
+      watch:
+        - action: sync
+          path: ./frontend/src
+          target: /app/src
+        - action: sync
+          path: ./frontend/index.html
+          target: /app/index.html
+        - action: sync+restart
+          path: ./frontend/vite.config.ts
+          target: /app/vite.config.ts
+        - action: sync+restart
+          path: ./frontend/tailwind.config.js
+          target: /app/tailwind.config.js
+        - action: sync+restart
+          path: ./frontend/postcss.config.js
+          target: /app/postcss.config.js
+        - action: rebuild
+          path: ./frontend/package.json
+
+  tool-server:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.tool-server
+    command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+    environment:
+      - WORKSPACE_ROOT=${WORKSPACE_ROOT:-/workspace}
+      - MAIN_APP_URL=http://backend:3000
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
+    volumes:
+      - ${WORKSPACE_HOST_PATH:-./data/workspace}:/workspace
+      - ${SKILLS_HOST_PATH:-./data/skills}:/skills
+    depends_on:
+      - redis
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./tool_server
+          target: /app
+          ignore:
+            - "**/__pycache__"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: openforge
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: openforge
+    volumes:
+      - ${POSTGRES_DATA_PATH:-./data/postgres}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openforge"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.2
+    volumes:
+      - ${QDRANT_DATA_PATH:-./data/qdrant}:/qdrant/storage
+    restart: unless-stopped

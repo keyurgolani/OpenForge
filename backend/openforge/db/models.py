@@ -75,6 +75,9 @@ class Workspace(Base):
         UUID(as_uuid=True), ForeignKey("llm_providers.id", ondelete="SET NULL"), nullable=True
     )
     llm_model: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    agent_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    agent_tool_categories: Mapped[List[str]] = mapped_column(JSONB, nullable=False, default=list)
+    agent_max_tool_loops: Mapped[int] = mapped_column(Integer, nullable=False, default=20)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=now_utc
@@ -194,6 +197,10 @@ class Message(Base):
     token_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     generation_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     context_sources: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    tool_calls: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    timeline: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    provider_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    is_interrupted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=now_utc
     )
@@ -220,6 +227,7 @@ class MessageAttachment(Base):
     content_type: Mapped[str] = mapped_column(String(100), nullable=False)
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
     file_path: Mapped[str] = mapped_column(String(1000), nullable=False)
+    source_url: Mapped[Optional[str]] = mapped_column(String(2000), nullable=True)
     extracted_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=now_utc
@@ -242,6 +250,78 @@ class Onboarding(Base):
 
     __table_args__ = (
         CheckConstraint("id = 1", name="onboarding_singleton"),
+    )
+
+
+class ToolCallLog(Base):
+    """Audit log for individual agent tool call executions."""
+    __tablename__ = "tool_call_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False
+    )
+    call_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    tool_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    arguments: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    success: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    output: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    duration_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=now_utc
+    )
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("idx_tool_call_logs_conv", "conversation_id", "started_at"),
+        Index("idx_tool_call_logs_ws", "workspace_id", "started_at"),
+        Index("idx_tool_call_logs_name", "tool_name", "started_at"),
+    )
+
+
+class MCPServer(Base):
+    """External MCP server configuration."""
+    __tablename__ = "mcp_servers"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    url: Mapped[str] = mapped_column(String(500), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    transport: Mapped[str] = mapped_column(String(10), nullable=False, default="http")
+    auth_type: Mapped[str] = mapped_column(String(20), nullable=False, default="none")
+    auth_value_enc: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    discovered_tools: Mapped[Optional[List[Dict[str, Any]]]] = mapped_column(JSONB, nullable=True)
+    last_discovered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    default_risk_level: Mapped[str] = mapped_column(String(20), nullable=False, default="high")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+
+    tool_overrides: Mapped[list["MCPToolOverride"]] = relationship(
+        back_populates="server", cascade="all, delete-orphan"
+    )
+
+
+class MCPToolOverride(Base):
+    """Per-tool risk level / enabled overrides for an MCP server."""
+    __tablename__ = "mcp_tool_overrides"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    mcp_server_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("mcp_servers.id", ondelete="CASCADE"), nullable=False
+    )
+    tool_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    risk_level: Mapped[str] = mapped_column(String(20), nullable=False)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    server: Mapped["MCPServer"] = relationship(back_populates="tool_overrides")
+
+    __table_args__ = (
+        UniqueConstraint("mcp_server_id", "tool_name", name="uq_mcp_tool_overrides"),
     )
 
 

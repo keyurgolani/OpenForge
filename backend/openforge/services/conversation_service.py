@@ -29,6 +29,20 @@ MAX_CHAT_TRASH_RETENTION_DAYS = 365
 
 
 def _attachment_to_processed_summary(attachment: MessageAttachment) -> dict:
+    source_url = getattr(attachment, "source_url", None)
+
+    # URL-extracted attachments have a synthetic pipeline type
+    if source_url or attachment.content_type == "text/url-extract":
+        extracted_text = (attachment.extracted_text or "").strip()
+        return {
+            "id": str(attachment.id),
+            "filename": attachment.filename,
+            "status": "processed" if extracted_text else "empty",
+            "pipeline": "url_extract",
+            "details": f"Extracted {len(extracted_text)} chars" if extracted_text else "No content extracted",
+            "source_url": source_url,
+        }
+
     pipeline = resolve_attachment_pipeline(
         content_type=attachment.content_type,
         filename=attachment.filename,
@@ -51,6 +65,7 @@ def _attachment_to_processed_summary(attachment: MessageAttachment) -> dict:
         "status": status,
         "pipeline": pipeline,
         "details": details,
+        "source_url": None,
     }
 
 
@@ -67,6 +82,9 @@ def _msg_to_response(m: Message) -> MessageResponse:
         generation_ms=m.generation_ms,
         context_sources=m.context_sources,
         attachments_processed=[_attachment_to_processed_summary(att) for att in (m.attachments or [])],
+        tool_calls=m.tool_calls,
+        timeline=m.timeline,
+        is_interrupted=m.is_interrupted,
         created_at=m.created_at,
     )
 
@@ -283,6 +301,9 @@ class ConversationService:
         generation_ms: int | None = None,
         context_sources: list | None = None,
         trigger_auto_title: bool = True,
+        tool_calls: list | None = None,
+        timeline: list | None = None,
+        is_interrupted: bool = False,
     ) -> Message:
         msg = Message(
             conversation_id=conversation_id,
@@ -294,6 +315,9 @@ class ConversationService:
             token_count=token_count,
             generation_ms=generation_ms,
             context_sources=context_sources,
+            tool_calls=tool_calls,
+            timeline=timeline,
+            is_interrupted=is_interrupted,
         )
         db.add(msg)
 
@@ -333,7 +357,13 @@ class ConversationService:
             .limit(limit)
         )
         messages = result.scalars().all()
-        return [{"role": m.role, "content": m.content} for m in reversed(messages)]
+        history = []
+        for m in reversed(messages):
+            content = m.content
+            if m.role == "assistant" and getattr(m, "is_interrupted", False):
+                content = (content + "\n\n[Response was interrupted by the user before completion]").lstrip()
+            history.append({"role": m.role, "content": content})
+        return history
 
     async def refresh_conversation_title(
         self,

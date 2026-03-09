@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     # Encryption key for API keys (generated on first run if not set)
     encryption_key: str = ""
 
+    # Tool server
+    tool_server_url: str = "http://tool-server:8001"
+
+    # Self-referencing URL used when the tool server needs to call back into the main app
+    main_app_url: str = "http://backend:3000"
+
 @lru_cache()
 def get_settings() -> Settings:
     return Settings()

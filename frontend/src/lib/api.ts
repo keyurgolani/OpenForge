@@ -111,5 +111,38 @@ export const runTaskNow = (
     api.post(`/tasks/schedules/${id}/run`, data ?? {}).then(r => r.data)
 export const getTaskHistory = (params?: { task_type?: string; limit?: number }): Promise<any> =>
     api.get('/tasks/history', { params }).then(r => r.data)
+export const getToolCallLogs = (params?: { workspace_id?: string; tool_name?: string; limit?: number }): Promise<any> =>
+    api.get('/tasks/tool-call-logs', { params }).then(r => r.data)
+
+// ── Skills ───────────────────────────────────────────────────────────────────
+export const listInstalledSkills = (): Promise<any> => api.get('/skills').then(r => r.data)
+export const installSkill = (source: string, skill_names?: string[]): Promise<any> =>
+    api.post('/skills/install', { source, skill_names }).then(r => r.data)
+export const searchSkills = (source: string): Promise<any> =>
+    api.get('/skills/search', { params: { source } }).then(r => r.data)
+export const removeSkill = (name: string): Promise<any> =>
+    api.delete(`/skills/${encodeURIComponent(name)}`).then(r => r.data)
+
+// ── Attachments ──────────────────────────────────────────────────────────────
+export const saveAttachmentToKnowledge = (attachmentId: string, workspaceId: string): Promise<any> =>
+    api.post(`/attachments/${attachmentId}/save-to-knowledge`, { workspace_id: workspaceId }).then(r => r.data)
+
+// ── Tools registry ────────────────────────────────────────────────────────────
+export const getToolRegistry = (): Promise<any> => api.get('/tools/registry').then(r => r.data)
+
+// ── MCP Servers ───────────────────────────────────────────────────────────────
+export const listMCPServers = (): Promise<any> => api.get('/mcp/servers').then(r => r.data)
+export const createMCPServer = (data: object): Promise<any> => api.post('/mcp/servers', data).then(r => r.data)
+export const getMCPServer = (id: string): Promise<any> => api.get(`/mcp/servers/${id}`).then(r => r.data)
+export const updateMCPServer = (id: string, data: object): Promise<any> =>
+    api.put(`/mcp/servers/${id}`, data).then(r => r.data)
+export const deleteMCPServer = (id: string) => api.delete(`/mcp/servers/${id}`)
+export const discoverMCPServer = (id: string): Promise<any> =>
+    api.post(`/mcp/servers/${id}/discover`).then(r => r.data)
+export const updateMCPToolOverride = (
+    serverId: string,
+    toolName: string,
+    data: { risk_level?: string; is_enabled?: boolean },
+): Promise<any> => api.put(`/mcp/servers/${serverId}/tools/${encodeURIComponent(toolName)}`, data).then(r => r.data)
 
 export default api

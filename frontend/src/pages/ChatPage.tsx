@@ -10,13 +10,14 @@ import {
     updateConversation,
     listProviders,
     getWorkspace,
+    saveAttachmentToKnowledge,
 } from '@/lib/api'
 import { useStreamingChat } from '@/hooks/useStreamingChat'
 import { useToast } from '@/components/shared/ToastProvider'
 import {
-    Plus, Send, Loader2, MessageSquare, Trash2, Bot, User,
-    ChevronDown, ChevronRight, ChevronLeft, ChevronUp, ExternalLink, Check, Pencil,
-    Paperclip, X, Copy, Search, Brain
+    Plus, Send, Square, Loader2, MessageSquare, Trash2, Bot, User,
+    ChevronDown, ChevronRight, ChevronLeft, ChevronUp, ChevronsUp, ExternalLink, Check, Pencil,
+    Paperclip, X, Copy, Search, Brain, Wrench, BookmarkPlus
 } from 'lucide-react'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem,
@@ -24,6 +25,7 @@ import {
 } from '@/components/ui/context-menu'
 import MarkdownIt from 'markdown-it'
 import { sanitizeProviderDisplayName } from '@/lib/provider-display'
+import { ToolCallCard } from '@/components/shared/ToolCallCard'
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
 const MIN_CHAT_LIST_WIDTH = 280
@@ -47,6 +49,12 @@ interface Message {
     generation_ms?: number | null
     context_sources?: { knowledge_id: string; title: string; snippet: string; score: number }[]
     attachments_processed?: AttachmentProcessed[]
+    tool_calls?: { call_id: string; tool_name: string; arguments: Record<string, unknown> }[] | null
+    timeline?: Array<
+        | { type: 'thinking'; content: string }
+        | { type: 'tool_call'; call_id: string; tool_name: string; arguments: Record<string, unknown>; success?: boolean; output?: unknown; error?: string }
+    > | null
+    is_interrupted?: boolean
     created_at: string
 }
 
@@ -56,6 +64,7 @@ interface AttachmentProcessed {
     status: string
     pipeline: string
     details?: string
+    source_url?: string | null
 }
 
 interface Conversation {
@@ -132,7 +141,6 @@ export default function ChatPage() {
     // File attachments
     const [attachments, setAttachments] = useState<File[]>([])
     const [uploadingFiles, setUploadingFiles] = useState(false)
-    const [streamThinkingExpanded, setStreamThinkingExpanded] = useState(true)
     const [streamResponseExpanded, setStreamResponseExpanded] = useState(false)
     const [streamResponseHasHiddenTop, setStreamResponseHasHiddenTop] = useState(false)
 
@@ -166,11 +174,13 @@ export default function ChatPage() {
 
     const {
         streamingContent,
-        streamingThinking,
         isStreaming,
+        isInterrupted,
         attachmentsProcessed,
         sources,
+        timeline: streamingTimeline,
         sendMessage,
+        cancelStream,
         isConnected,
         lastError,
         clearLastError,
@@ -307,10 +317,6 @@ export default function ChatPage() {
     }, [activeCid])
 
     useEffect(() => {
-        setStreamThinkingExpanded(true)
-    }, [activeCid])
-
-    useEffect(() => {
         if (!isStreaming) {
             setStreamResponseExpanded(false)
             setStreamResponseHasHiddenTop(false)
@@ -326,7 +332,7 @@ export default function ChatPage() {
         const container = messagesContainerRef.current
         if (!container) return
         container.scrollTo({ top: container.scrollHeight, behavior: isStreaming ? 'auto' : 'smooth' })
-    }, [messages.length, streamingContent, streamingThinking, sources.length, isStreaming, stickToBottom])
+    }, [messages.length, streamingContent, streamingTimeline.length, sources.length, isStreaming, stickToBottom])
 
     useEffect(() => {
         if (!stickToBottom) return
@@ -360,11 +366,6 @@ export default function ChatPage() {
         lastToastedErrorRef.current = lastError
         showError('Chat request failed', lastError)
     }, [lastError, showError])
-
-    useEffect(() => {
-        if (!streamingThinking || !streamingContent) return
-        setStreamThinkingExpanded(false)
-    }, [streamingThinking, streamingContent])
 
     useEffect(() => {
         if (!activeCid) return
@@ -499,6 +500,13 @@ export default function ChatPage() {
         }
     }, [])
 
+    // Track thinking content length for scroll updates during streaming
+    const streamingThinkingContentLength = useMemo(() => {
+        return streamingTimeline
+            .filter((entry): entry is { type: 'thinking'; content: string } => entry.type === 'thinking')
+            .reduce((sum, entry) => sum + (entry.content?.length ?? 0), 0)
+    }, [streamingTimeline])
+
     useEffect(() => {
         if (!isStreaming || !stickToBottom) return
         const target = streamingMessageRef.current
@@ -523,9 +531,9 @@ export default function ChatPage() {
         stickToBottom,
         attachmentsProcessed.length,
         sources.length,
-        streamingThinking,
+        streamingTimeline.length,
+        streamingThinkingContentLength,
         streamingContent,
-        streamThinkingExpanded,
         ensureExpandedBlockVisible,
     ])
 
@@ -743,7 +751,6 @@ export default function ChatPage() {
         setInput('')
         if (attachments.length > 0) setAttachments([])
         if (textareaRef.current) textareaRef.current.style.height = 'auto'
-        setStreamThinkingExpanded(true)
         scheduleComposerFocus()
     }
 
@@ -906,17 +913,11 @@ export default function ChatPage() {
                                                             </div>
                                                             <div className="space-y-2">
                                                                 {attachmentsProcessed.map(att => (
-                                                                    <div key={att.id} className="rounded-lg border border-border/60 bg-muted/25 px-3 py-2 text-xs">
-                                                                        <div className="mb-1 flex items-center justify-between gap-2">
-                                                                            <span className="truncate font-medium text-foreground/90">{att.filename}</span>
-                                                                            <span className={`text-[10px] ${att.status === 'processed' ? 'text-emerald-300' : att.status === 'deferred' ? 'text-amber-300' : 'text-muted-foreground'}`}>
-                                                                                {att.pipeline}
-                                                                            </span>
-                                                                        </div>
-                                                                        {att.details && (
-                                                                            <p className="text-[11px] text-muted-foreground">{att.details}</p>
-                                                                        )}
-                                                                    </div>
+                                                                    <AttachmentCard
+                                                                        key={att.id}
+                                                                        att={att}
+                                                                        workspaceId={workspaceId}
+                                                                    />
                                                                 ))}
                                                             </div>
                                                         </div>
@@ -955,75 +956,53 @@ export default function ChatPage() {
                                                         </div>
                                                     </div>
                                                 )}
-                                                {streamingThinking && (
-                                                    <div className="chat-workflow-step">
-                                                        <div className="chat-section-reveal rounded-2xl border border-accent/25 bg-accent/8 px-4 py-3">
-                                                            <button
-                                                                type="button"
-                                                                className="mb-1.5 flex w-full items-center gap-1.5 text-left text-[11px] uppercase tracking-wide text-accent/90"
-                                                                onClick={() => {
-                                                                    setStreamThinkingExpanded(prev => {
-                                                                        const next = !prev
-                                                                        if (next) {
-                                                                            window.requestAnimationFrame(() => {
-                                                                                window.requestAnimationFrame(() => {
-                                                                                    ensureExpandedBlockVisible(streamingMessageRef.current)
-                                                                                })
-                                                                            })
-                                                                            window.setTimeout(() => {
-                                                                                ensureExpandedBlockVisible(streamingMessageRef.current)
-                                                                            }, 220)
-                                                                        }
-                                                                        return next
-                                                                    })
-                                                                }}
-                                                                aria-label={streamThinkingExpanded ? 'Collapse thinking' : 'Expand thinking'}
-                                                            >
-                                                                {streamThinkingExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                                                                <Brain className="h-3.5 w-3.5" />
-                                                                {streamThinkingExpanded ? 'Thinking' : 'Thought'}
-                                                            </button>
-                                                            <div className={`chat-collapse ${streamThinkingExpanded ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
-                                                                <div className="chat-collapse-inner">
-                                                                    <div className="text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap break-words">
-                                                                        {streamingThinking}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
+                                                {streamingTimeline.map((entry, i) =>
+                                                    entry.type === 'thinking' ? (
+                                                        <ThinkingBlock
+                                                            key={i}
+                                                            content={entry.content}
+                                                            requestVisibility={() => ensureExpandedBlockVisible(streamingMessageRef.current)}
+                                                            isActiveStream={isStreaming && i === streamingTimeline.length - 1 && !entry.done}
+                                                        />
+                                                    ) : (
+                                                        <div key={entry.call_id} className="chat-workflow-step chat-section-reveal">
+                                                            <ToolCallCard
+                                                                callId={entry.call_id}
+                                                                toolName={entry.tool_name}
+                                                                arguments={entry.arguments}
+                                                                result={entry.success !== undefined ? { success: entry.success, output: entry.output, error: entry.error } : undefined}
+                                                                isRunning={entry.success === undefined}
+                                                            />
                                                         </div>
-                                                    </div>
+                                                    )
                                                 )}
                                                 <div className={`chat-workflow-step chat-section-reveal ${streamingContent ? 'chat-workflow-step-live' : ''}`}>
                                                     <div className="chat-workflow-header">
                                                         <MessageSquare className="h-3.5 w-3.5" />
                                                         <span>Response</span>
-                                                        <span className="chat-workflow-status">{streamingContent ? 'Streaming' : 'Preparing'}</span>
+                                                        <span className="chat-workflow-status">{isInterrupted ? 'Interrupted' : streamingContent ? 'Streaming' : 'Preparing'}</span>
                                                     </div>
                                                     {streamingContent && (
                                                         <div className="chat-bubble-assistant relative mt-1.5 px-4 py-3">
                                                             {!streamResponseExpanded && streamResponseHasHiddenTop && (
                                                                 <>
-                                                                    <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-10 rounded-t-2xl bg-gradient-to-b from-card/92 via-card/66 to-transparent" />
-                                                                    <div className="pointer-events-none absolute left-4 top-1.5 z-[2] text-[10px] uppercase tracking-wide text-muted-foreground/85">
-                                                                        Earlier streamed text folded above
-                                                                    </div>
+                                                                    <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-12 rounded-t-2xl bg-gradient-to-b from-card/92 via-card/66 to-transparent" />
+                                                                    <button
+                                                                        type="button"
+                                                                        className="absolute left-1/2 top-0 z-[3] -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 rounded-full border border-accent/30 bg-card/95 px-2.5 py-0.5 text-[11px] text-accent/80 hover:border-accent/55 hover:text-accent shadow-sm"
+                                                                        onClick={() => {
+                                                                            setStreamResponseExpanded(true)
+                                                                            window.requestAnimationFrame(() => {
+                                                                                ensureExpandedBlockVisible(streamingMessageRef.current, 'auto')
+                                                                            })
+                                                                        }}
+                                                                        aria-label="Expand streaming response"
+                                                                        title="Show full response while streaming"
+                                                                    >
+                                                                        <ChevronsUp className="h-3 w-3" />
+                                                                        Expand
+                                                                    </button>
                                                                 </>
-                                                            )}
-                                                            {!streamResponseExpanded && streamResponseHasHiddenTop && (
-                                                                <button
-                                                                    type="button"
-                                                                    className="absolute right-3 top-0 z-[3] -translate-y-1/2 rounded-full border border-accent/35 bg-card/95 p-1 text-accent hover:border-accent/60 hover:text-accent/90"
-                                                                    onClick={() => {
-                                                                        setStreamResponseExpanded(true)
-                                                                        window.requestAnimationFrame(() => {
-                                                                            ensureExpandedBlockVisible(streamingMessageRef.current, 'auto')
-                                                                        })
-                                                                    }}
-                                                                    aria-label="Expand streaming response"
-                                                                    title="Show full response while streaming"
-                                                                >
-                                                                    <ChevronUp className="h-3.5 w-3.5" />
-                                                                </button>
                                                             )}
                                                             <div
                                                                 ref={streamingResponseViewportRef}
@@ -1031,7 +1010,12 @@ export default function ChatPage() {
                                                                 className={`min-h-0 ${streamResponseExpanded ? 'overflow-visible' : 'overflow-y-auto'}`}
                                                                 style={streamResponseExpanded ? undefined : { maxHeight: `${streamingBubbleMaxHeight}px` }}
                                                             >
-                                                                <div className="markdown-content streaming-cursor" dangerouslySetInnerHTML={{ __html: md.render(streamingContent) }} />
+                                                                <div className={`markdown-content ${isInterrupted ? '' : 'streaming-cursor'}`} dangerouslySetInnerHTML={{ __html: md.render(streamingContent) }} />
+                                                                {isInterrupted && (
+                                                                    <span className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground/50 italic">
+                                                                        …Interrupted
+                                                                    </span>
+                                                                )}
                                                             </div>
                                                         </div>
                                                     )}
@@ -1209,18 +1193,29 @@ export default function ChatPage() {
                                             </button>
                                         </div>
 
-                                        <button
-                                            type="button"
-                                            className="chat-send-button disabled:cursor-not-allowed disabled:opacity-50"
-                                            onClick={handleSend}
-                                            disabled={composerDisabled || !input.trim()}
-                                        >
-                                            {uploadingFiles || isStreaming ? (
-                                                <Loader2 className="h-4 w-4 animate-spin" />
-                                            ) : (
-                                                <Send className="h-4 w-4" />
-                                            )}
-                                        </button>
+                                        {isStreaming ? (
+                                            <button
+                                                type="button"
+                                                className="chat-send-button"
+                                                onClick={cancelStream}
+                                                title="Stop generation"
+                                            >
+                                                <Square className="h-4 w-4 fill-current" />
+                                            </button>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                className="chat-send-button disabled:cursor-not-allowed disabled:opacity-50"
+                                                onClick={handleSend}
+                                                disabled={uploadingFiles || activeConversationIsArchived || !input.trim()}
+                                            >
+                                                {uploadingFiles ? (
+                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                ) : (
+                                                    <Send className="h-4 w-4" />
+                                                )}
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -1558,6 +1553,184 @@ function TrashedConversationRow({
     )
 }
 
+// ── Reusable thinking block ──────────────────────────────────────────────────
+const THINKING_STREAM_MAX_HEIGHT = 160
+
+function ThinkingBlock({
+    content,
+    requestVisibility,
+    isActiveStream = false,
+}: {
+    content: string
+    requestVisibility?: (el: HTMLElement | null) => void
+    isActiveStream?: boolean
+}) {
+    // Start open when streaming, closed when static (persisted)
+    const [open, setOpen] = useState(isActiveStream)
+    // True once user explicitly clicks the expand-height button
+    const [fullyExpanded, setFullyExpanded] = useState(false)
+    // True if the user interacted with this block — prevents auto-collapse
+    const [userInteracted, setUserInteracted] = useState(false)
+    // True if the scrollable content has hidden content at the top
+    const [hasHiddenTop, setHasHiddenTop] = useState(false)
+
+    const blockRef = useRef<HTMLDivElement>(null)
+    const scrollRef = useRef<HTMLDivElement>(null)
+    // Tracks whether this block has ever been in streaming mode
+    const wasStreaming = useRef(isActiveStream)
+
+    // Auto-scroll to show the latest thinking text while streaming
+    useEffect(() => {
+        if (!isActiveStream || fullyExpanded) return
+        const el = scrollRef.current
+        if (el) el.scrollTop = el.scrollHeight
+    }, [content, isActiveStream, fullyExpanded])
+
+    // When streaming ends: auto-collapse if user never interacted
+    useEffect(() => {
+        if (isActiveStream) {
+            wasStreaming.current = true
+            return
+        }
+        if (wasStreaming.current && !userInteracted) {
+            setOpen(false)
+        }
+    }, [isActiveStream]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Reset hasHiddenTop when not streaming or when fully expanded
+    useEffect(() => {
+        if (!isActiveStream || fullyExpanded) {
+            setHasHiddenTop(false)
+        }
+    }, [isActiveStream, fullyExpanded])
+
+    const toggle = () => {
+        setUserInteracted(true)
+        setOpen(prev => {
+            const next = !prev
+            if (next) {
+                window.requestAnimationFrame(() => {
+                    window.requestAnimationFrame(() => requestVisibility?.(blockRef.current))
+                })
+                window.setTimeout(() => requestVisibility?.(blockRef.current), 220)
+            }
+            return next
+        })
+    }
+
+    const expandFully = () => {
+        setFullyExpanded(true)
+        setUserInteracted(true)
+        window.requestAnimationFrame(() => requestVisibility?.(blockRef.current))
+    }
+
+    const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
+        if (fullyExpanded) return
+        const viewport = event.currentTarget
+        const hasOverflow = viewport.scrollHeight - viewport.clientHeight > 2
+        const hiddenTop = hasOverflow && viewport.scrollTop > 2
+        setHasHiddenTop(prev => (prev === hiddenTop ? prev : hiddenTop))
+    }
+
+    return (
+        <div className="chat-workflow-step">
+            <button className="chat-subsection-toggle" onClick={toggle}>
+                {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                <Brain className="w-3 h-3" />
+                {isActiveStream
+                    ? <><span>Thinking</span><span className="animate-pulse text-accent/50">•••</span></>
+                    : open ? 'Thinking' : 'Thought'
+                }
+            </button>
+            <div ref={blockRef} className={`chat-collapse w-full ${open ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
+                <div className="chat-collapse-inner">
+                    <div className="relative mt-1 w-full rounded-2xl border border-accent/20 bg-accent/6 px-4 py-3 chat-section-reveal">
+                        {isActiveStream && !fullyExpanded && hasHiddenTop && (
+                            <>
+                                <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-10 rounded-t-2xl bg-gradient-to-b from-accent/6 via-accent/6/66 to-transparent" />
+                                <button
+                                    type="button"
+                                    className="absolute left-1/2 top-0 z-[3] -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 rounded-full border border-accent/30 bg-card/95 px-2.5 py-0.5 text-[11px] text-accent/80 hover:border-accent/55 hover:text-accent shadow-sm"
+                                    onClick={expandFully}
+                                    aria-label="Expand thinking"
+                                    title="Show full thinking while streaming"
+                                >
+                                    <ChevronsUp className="h-3 w-3" />
+                                    Expand
+                                </button>
+                            </>
+                        )}
+                        <div
+                            ref={scrollRef}
+                            onScroll={handleScroll}
+                            className="text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap break-words"
+                            style={isActiveStream && !fullyExpanded ? { maxHeight: `${THINKING_STREAM_MAX_HEIGHT}px`, overflowY: 'auto' } : undefined}
+                        >
+                            {content}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// ── Attachment card ──────────────────────────────────────────────────────────
+function AttachmentCard({ att, workspaceId }: { att: AttachmentProcessed; workspaceId: string }) {
+    const [saved, setSaved] = useState(false)
+    const [saving, setSaving] = useState(false)
+    const { success: toastSuccess, error: toastError } = useToast()
+
+    const canSave = att.status === 'processed' && !saved
+
+    async function handleSave() {
+        if (saving || saved) return
+        setSaving(true)
+        try {
+            await saveAttachmentToKnowledge(att.id, workspaceId)
+            setSaved(true)
+            toastSuccess('Saved to workspace knowledge')
+        } catch {
+            toastError('Failed to save to knowledge')
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    return (
+        <div className="rounded-lg border border-border/60 bg-muted/25 px-3 py-2 text-xs">
+            <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="truncate font-medium text-foreground/90">{att.filename}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                    <span className={`text-[10px] ${att.status === 'processed' ? 'text-emerald-300' : att.status === 'deferred' ? 'text-amber-300' : 'text-muted-foreground'}`}>
+                        {att.pipeline}
+                    </span>
+                    {canSave && (
+                        <button
+                            onClick={handleSave}
+                            disabled={saving}
+                            title="Save to workspace knowledge"
+                            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-accent/70 hover:text-accent hover:bg-accent/10 transition-colors disabled:opacity-50"
+                        >
+                            {saving ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <BookmarkPlus className="h-2.5 w-2.5" />}
+                            Save
+                        </button>
+                    )}
+                    {saved && (
+                        <span className="flex items-center gap-1 text-[10px] text-emerald-400">
+                            <Check className="h-2.5 w-2.5" />
+                            Saved
+                        </span>
+                    )}
+                </div>
+            </div>
+            {att.details && (
+                <p className="text-[11px] text-muted-foreground">{att.details}</p>
+            )}
+        </div>
+    )
+}
+
 // ── Chat message card ───────────────────────────────────────────────────────
 function ChatMessageCard({
     message: msg,
@@ -1576,11 +1749,9 @@ function ChatMessageCard({
 }) {
     const [attachmentsOpen, setAttachmentsOpen] = useState(false)
     const [sourcesOpen, setSourcesOpen] = useState(false)
-    const [thinkingOpen, setThinkingOpen] = useState(false)
     const [contextMenuOpen, setContextMenuOpen] = useState(false)
     const attachmentsBlockRef = useRef<HTMLDivElement>(null)
     const sourcesBlockRef = useRef<HTMLDivElement>(null)
-    const thinkingBlockRef = useRef<HTMLDivElement>(null)
     const navigate = useNavigate()
     const hasThinking = !!thinking?.trim()
     const generationSeconds = msg.generation_ms && msg.generation_ms > 0
@@ -1608,7 +1779,7 @@ function ChatMessageCard({
                         }`}>
                         {msg.role === 'user' && (
                             <div className="chat-bubble-user px-4 py-3">
-                                <p className="text-sm">{msg.content}</p>
+                                <div className="markdown-content text-sm" dangerouslySetInnerHTML={{ __html: md.render(msg.content) }} />
                             </div>
                         )}
                         {hasWorkflowSteps && (
@@ -1641,17 +1812,11 @@ function ChatMessageCard({
                                             <div className="chat-collapse-inner">
                                                 <div className="chat-section-reveal space-y-2 w-full pt-0.5">
                                                     {attachmentsProcessed.map(att => (
-                                                        <div key={att.id} className="rounded-lg border border-border/60 bg-muted/25 px-3 py-2 text-xs">
-                                                            <div className="mb-1 flex items-center justify-between gap-2">
-                                                                <span className="truncate font-medium text-foreground/90">{att.filename}</span>
-                                                                <span className={`text-[10px] ${att.status === 'processed' ? 'text-emerald-300' : att.status === 'deferred' ? 'text-amber-300' : 'text-muted-foreground'}`}>
-                                                                    {att.pipeline}
-                                                                </span>
-                                                            </div>
-                                                            {att.details && (
-                                                                <p className="text-[11px] text-muted-foreground">{att.details}</p>
-                                                            )}
-                                                        </div>
+                                                        <AttachmentCard
+                                                            key={att.id}
+                                                            att={att}
+                                                            workspaceId={workspaceId}
+                                                        />
                                                     ))}
                                                 </div>
                                             </div>
@@ -1720,49 +1885,73 @@ function ChatMessageCard({
                                         </div>
                                     </div>
                                 )}
-                                {hasThinking && (
-                                    <div className="chat-workflow-step">
-                                        <button
-                                            className="chat-subsection-toggle"
-                                            onClick={() => {
-                                                setThinkingOpen(prev => {
-                                                    const next = !prev
-                                                    if (next) {
-                                                        window.requestAnimationFrame(() => {
-                                                            window.requestAnimationFrame(() => {
-                                                                requestVisibility?.(thinkingBlockRef.current)
-                                                            })
-                                                        })
-                                                        window.setTimeout(() => {
-                                                            requestVisibility?.(thinkingBlockRef.current)
-                                                        }, 220)
-                                                    }
-                                                    return next
-                                                })
-                                            }}
-                                        >
-                                            {thinkingOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                                            <Brain className="w-3 h-3" />
-                                            {thinkingOpen ? 'Thinking' : 'Thought'}
-                                        </button>
-                                        <div ref={thinkingBlockRef} className={`chat-collapse w-full ${thinkingOpen ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
-                                            <div className="chat-collapse-inner">
-                                                <div className="chat-section-reveal w-full rounded-2xl border border-accent/20 bg-accent/6 px-4 py-3">
-                                                    <div className="text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap break-words">
-                                                        {thinking}
+                                {(msg.timeline?.length ?? 0) > 0
+                                    ? msg.timeline!.map((entry, i) =>
+                                        entry.type === 'thinking' ? (
+                                            <ThinkingBlock
+                                                key={i}
+                                                content={entry.content}
+                                                requestVisibility={requestVisibility}
+                                            />
+                                        ) : (
+                                            <div key={entry.call_id} className="chat-workflow-step chat-section-reveal">
+                                                <ToolCallCard
+                                                    callId={entry.call_id}
+                                                    toolName={entry.tool_name}
+                                                    arguments={entry.arguments}
+                                                    result={entry.success !== undefined ? { success: entry.success, output: entry.output, error: entry.error } : undefined}
+                                                    isRunning={false}
+                                                />
+                                            </div>
+                                        )
+                                    )
+                                    : <>
+                                        {(msg.tool_calls?.length ?? 0) > 0 && (
+                                            <div className="chat-workflow-step">
+                                                <div className="glass-card chat-section-reveal px-4 py-3">
+                                                    <div className="mb-2 flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
+                                                        <Wrench className="h-3 w-3" />
+                                                        Tool Calls
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        {msg.tool_calls!.map(call => (
+                                                            <ToolCallCard
+                                                                key={call.call_id}
+                                                                callId={call.call_id}
+                                                                toolName={call.tool_name}
+                                                                arguments={call.arguments}
+                                                                isRunning={false}
+                                                            />
+                                                        ))}
                                                     </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    </div>
-                                )}
+                                        )}
+                                        {hasThinking && (
+                                            <ThinkingBlock
+                                                content={thinking!}
+                                                requestVisibility={requestVisibility}
+                                            />
+                                        )}
+                                    </>
+                                }
                                 <div className="chat-workflow-step chat-section-reveal">
                                     <div className="chat-workflow-header">
                                         <MessageSquare className="h-3.5 w-3.5" />
                                         <span>Response</span>
+                                        {msg.is_interrupted && (
+                                            <span className="chat-workflow-status">Interrupted</span>
+                                        )}
                                     </div>
                                     <div className="chat-bubble-assistant mt-1.5 px-4 py-3">
-                                        <div className="markdown-content text-sm" dangerouslySetInnerHTML={{ __html: md.render(msg.content) }} />
+                                        {msg.content && (
+                                            <div className="markdown-content text-sm" dangerouslySetInnerHTML={{ __html: md.render(msg.content) }} />
+                                        )}
+                                        {msg.is_interrupted && (
+                                            <span className={`inline-flex items-center gap-1 text-xs text-muted-foreground/50 italic ${msg.content ? 'mt-1' : ''}`}>
+                                                …Interrupted
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="chat-workflow-step chat-section-reveal">

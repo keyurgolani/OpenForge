@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from openforge.db.postgres import get_db
-from openforge.db.models import Config, Knowledge, TaskLog
+from openforge.db.models import Config, Knowledge, TaskLog, ToolCallLog
 from typing import Optional, Literal
 from uuid import UUID
 from datetime import datetime
@@ -525,6 +525,58 @@ async def get_task_history(
             item_count=l.item_count,
             error_message=l.error_message,
             target_link=l.target_link,
+        )
+        for l in logs
+    ]
+
+
+class ToolCallLogOut(BaseModel):
+    id: str
+    workspace_id: Optional[str] = None
+    conversation_id: str
+    call_id: str
+    tool_name: str
+    arguments: Optional[dict] = None
+    success: Optional[bool] = None
+    output: Optional[str] = None
+    error: Optional[str] = None
+    duration_ms: Optional[int] = None
+    started_at: datetime
+    finished_at: Optional[datetime] = None
+
+
+@router.get("/tool-call-logs", response_model=list[ToolCallLogOut])
+async def get_tool_call_logs(
+    workspace_id: Optional[str] = None,
+    tool_name: Optional[str] = None,
+    limit: int = Query(default=50, le=200),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return recent tool call execution logs."""
+    query = select(ToolCallLog).order_by(desc(ToolCallLog.started_at)).limit(limit)
+    if workspace_id:
+        try:
+            query = query.where(ToolCallLog.workspace_id == UUID(workspace_id))
+        except ValueError:
+            pass
+    if tool_name:
+        query = query.where(ToolCallLog.tool_name == tool_name)
+    result = await db.execute(query)
+    logs = result.scalars().all()
+    return [
+        ToolCallLogOut(
+            id=str(l.id),
+            workspace_id=str(l.workspace_id) if l.workspace_id else None,
+            conversation_id=str(l.conversation_id),
+            call_id=l.call_id,
+            tool_name=l.tool_name,
+            arguments=l.arguments,
+            success=l.success,
+            output=l.output,
+            error=l.error,
+            duration_ms=l.duration_ms,
+            started_at=l.started_at,
+            finished_at=l.finished_at,
         )
         for l in logs
     ]

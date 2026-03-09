@@ -83,24 +83,35 @@ async def workspace_websocket(websocket: WebSocket, workspace_id: str):
                     })
                     continue
 
+                import asyncio as _asyncio
                 from uuid import UUID
                 from openforge.db.postgres import AsyncSessionLocal
-                from openforge.services.chat_service import chat_service
+                from openforge.services.agent_execution_engine import agent_engine
 
-                async with AsyncSessionLocal() as db:
-                    await chat_service.handle_chat_message(
-                        workspace_id=UUID(workspace_id),
-                        conversation_id=UUID(conversation_id),
-                        user_content=content,
-                        db=db,
-                        attachment_ids=attachment_ids,
-                        provider_id=provider_id,
-                        model_id=model_id,
-                    )
+                _cid = conversation_id
+                _wid = workspace_id
+                _content = content
+                _att = attachment_ids
+                _pid = provider_id
+                _mid = model_id
+
+                async def _run_agent():
+                    async with AsyncSessionLocal() as db:
+                        await agent_engine.run(
+                            workspace_id=UUID(_wid),
+                            conversation_id=UUID(_cid),
+                            user_content=_content,
+                            db=db,
+                            attachment_ids=_att,
+                            provider_id=_pid,
+                            model_id=_mid,
+                        )
+
+                _asyncio.create_task(_run_agent())
 
             elif msg_type == "chat_stream_resume":
                 from uuid import UUID
-                from openforge.services.chat_service import chat_service
+                from openforge.services.agent_execution_engine import agent_engine
 
                 conversation_id = data.get("conversation_id")
                 target_conversation_id = None
@@ -114,11 +125,21 @@ async def workspace_websocket(websocket: WebSocket, workspace_id: str):
                         })
                         continue
 
-                await chat_service.send_stream_snapshot(
+                await agent_engine.send_stream_snapshot(
                     websocket=websocket,
                     workspace_id=UUID(workspace_id),
                     conversation_id=target_conversation_id,
                 )
+
+            elif msg_type == "chat_cancel":
+                conversation_id = data.get("conversation_id")
+                if conversation_id:
+                    from uuid import UUID
+                    from openforge.services.agent_execution_engine import agent_engine
+                    try:
+                        agent_engine.cancel(UUID(conversation_id))
+                    except Exception:
+                        pass
 
             elif msg_type == "ping":
                 await ws_manager.send_to_connection(websocket, {"type": "pong"})

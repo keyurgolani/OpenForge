@@ -1,0 +1,22 @@
+FROM python:3.11-slim
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential curl && rm -rf /var/lib/apt/lists/*
+
+COPY backend/requirements.txt .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements.txt
+
+COPY backend/ ./backend/
+
+RUN mkdir -p /workspace /uploads /models
+
+ENV PYTHONPATH=/app/backend
+ENV PYTHONUNBUFFERED=1
+ENV HF_HOME=/models
+ENV SENTENCE_TRANSFORMERS_HOME=/models
+
+EXPOSE 3000
+
+CMD ["uvicorn", "openforge.main:app", "--host", "0.0.0.0", "--port", "3000", "--reload", "--reload-dir", "/app/backend"]

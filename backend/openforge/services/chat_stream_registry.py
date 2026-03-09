@@ -16,6 +16,8 @@ class _ActiveStream:
     thinking: str = ""
     attachments_processed: list[dict[str, Any]] = field(default_factory=list)
     sources: list[dict[str, Any]] = field(default_factory=list)
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    tool_results: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def to_snapshot(self) -> dict[str, Any]:
         return {
@@ -25,6 +27,8 @@ class _ActiveStream:
                 "thinking": self.thinking,
                 "attachments_processed": list(self.attachments_processed),
                 "sources": list(self.sources),
+                "tool_calls": list(self.tool_calls),
+                "tool_results": dict(self.tool_results),
                 "started_at": self.started_at.isoformat(),
                 "updated_at": self.updated_at.isoformat(),
             },
@@ -82,6 +86,20 @@ class ChatStreamRegistry:
         if not stream:
             return
         stream.content += chunk
+        stream.updated_at = datetime.now(UTC)
+
+    def append_tool_call(self, conversation_id: UUID, call: dict[str, Any]) -> None:
+        stream = self._streams.get(conversation_id)
+        if not stream:
+            return
+        stream.tool_calls.append(call)
+        stream.updated_at = datetime.now(UTC)
+
+    def set_tool_result(self, conversation_id: UUID, call_id: str, result: dict[str, Any]) -> None:
+        stream = self._streams.get(conversation_id)
+        if not stream:
+            return
+        stream.tool_results[call_id] = result
         stream.updated_at = datetime.now(UTC)
 
     def finish(self, conversation_id: UUID) -> None:

@@ -2,7 +2,7 @@
 Attachments API — file upload for chat messages.
 Supports PDFs, images, and text files.
 """
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
@@ -16,6 +16,8 @@ from typing import Optional
 from openforge.db.postgres import get_db
 from openforge.db.models import MessageAttachment, Message
 from openforge.config import get_settings
+from openforge.schemas.knowledge import KnowledgeCreate
+from openforge.services.knowledge_service import knowledge_service
 
 router = APIRouter()
 logger = logging.getLogger("openforge.attachments")
@@ -208,3 +210,52 @@ async def delete_attachment(
     await db.commit()
 
     return {"status": "deleted"}
+
+
+class SaveToKnowledgeRequest(BaseModel):
+    workspace_id: UUID
+
+
+class SaveToKnowledgeResponse(BaseModel):
+    knowledge_id: str
+
+
+@router.post("/{attachment_id}/save-to-knowledge", response_model=SaveToKnowledgeResponse)
+async def save_attachment_to_knowledge(
+    attachment_id: UUID,
+    body: SaveToKnowledgeRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """Save an attachment's extracted content to workspace knowledge."""
+    result = await db.execute(
+        select(MessageAttachment).where(MessageAttachment.id == attachment_id)
+    )
+    attachment = result.scalar_one_or_none()
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    if not attachment.extracted_text:
+        raise HTTPException(status_code=422, detail="Attachment has no extracted content to save")
+
+    source_url = getattr(attachment, "source_url", None)
+
+    if source_url:
+        data = KnowledgeCreate(
+            type="bookmark",
+            url=source_url,
+            title=attachment.filename or None,
+            content=attachment.extracted_text,
+        )
+    else:
+        data = KnowledgeCreate(
+            type="standard",
+            title=attachment.filename or None,
+            content=attachment.extracted_text,
+        )
+
+    knowledge = await knowledge_service.create_knowledge(
+        db, body.workspace_id, data, background_tasks
+    )
+
+    return SaveToKnowledgeResponse(knowledge_id=str(knowledge.id))

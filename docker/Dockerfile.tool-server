@@ -1,0 +1,23 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install git (git tools) and Node.js LTS (npx skills CLI)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git curl ca-certificates gnupg && \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY tool_server/requirements.txt .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements.txt
+
+COPY tool_server/ .
+
+# Pre-warm the npx skills cache so first run doesn't block
+RUN npx --yes skills --version 2>/dev/null || true
+
+EXPOSE 8001
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]

@@ -6,11 +6,15 @@ import {
     testConnection, listModels, setDefaultProvider,
     listWorkspaces, updateWorkspace, createWorkspace, deleteWorkspace,
     listPrompts, updatePrompt,
-    listSchedules, updateSchedule, runTaskNow, getTaskHistory, listSettings, updateSetting
+    listSchedules, updateSchedule, runTaskNow, getTaskHistory, getToolCallLogs, listSettings, updateSetting,
+    listInstalledSkills, installSkill, searchSkills, removeSkill, getToolRegistry,
+    listMCPServers, createMCPServer, updateMCPServer, deleteMCPServer, discoverMCPServer,
+    updateMCPToolOverride,
 } from '@/lib/api'
 import {
     Globe2, Loader2, Trash2, CheckCircle2, XCircle, Star, Plus,
-    ChevronDown, ChevronUp, Eye, EyeOff, RefreshCw, Zap, Server, Search, Check,
+    ChevronDown, ChevronUp, ChevronRight, Eye, EyeOff, RefreshCw, Zap, Server, Search, Check,
+    GitBranch,
     Layers, Bot, FolderOpen, Pencil, Save, X, Sliders, RotateCcw, MessageSquare,
     FileText, Timer, History, Play, Clock, CheckCircle, AlertCircle, Circle, Terminal,
     Brain, Folder, Briefcase, Microscope, BookOpen, Target, Globe, Lightbulb, Wrench,
@@ -62,8 +66,8 @@ export function getWorkspaceIcon(iconName: string | null): React.ReactNode {
     return <IconComponent className="w-4 h-4" />
 }
 
-type SettingsTab = 'workspaces' | 'llm' | 'prompts' | 'jobs' | 'audit'
-const SETTINGS_TABS: SettingsTab[] = ['workspaces', 'llm', 'prompts', 'jobs', 'audit']
+type SettingsTab = 'workspaces' | 'llm' | 'prompts' | 'jobs' | 'skills' | 'tools' | 'mcp' | 'audit'
+const SETTINGS_TABS: SettingsTab[] = ['workspaces', 'llm', 'prompts', 'jobs', 'skills', 'tools', 'mcp', 'audit']
 const toSettingsTab = (value: string | null): SettingsTab => {
     const normalized = value === 'schedules' ? 'jobs' : value
     return SETTINGS_TABS.includes(normalized as SettingsTab) ? (normalized as SettingsTab) : 'workspaces'
@@ -92,6 +96,9 @@ export default function SettingsPage() {
         { id: 'llm' as const, label: 'AI Providers', Icon: Bot },
         { id: 'prompts' as const, label: 'Prompts', Icon: Sliders },
         { id: 'jobs' as const, label: 'Jobs', Icon: Timer },
+        { id: 'skills' as const, label: 'Skills', Icon: Wrench },
+        { id: 'tools' as const, label: 'Tools', Icon: Settings2 },
+        { id: 'mcp' as const, label: 'MCP', Icon: Layers },
         { id: 'audit' as const, label: 'Audit', Icon: History },
     ]
 
@@ -137,6 +144,9 @@ export default function SettingsPage() {
             {activeTab === 'llm' && <LLMSettings />}
             {activeTab === 'prompts' && <PromptsTab />}
             {activeTab === 'jobs' && <JobsTab />}
+            {activeTab === 'skills' && <SkillsTab />}
+            {activeTab === 'tools' && <ToolsTab />}
+            {activeTab === 'mcp' && <MCPTab />}
             {activeTab === 'audit' && (
                 <div className="min-h-0 flex-1">
                     <AuditTab workspaceId={workspaceId} />
@@ -153,6 +163,9 @@ type WorkspaceRow = {
     llm_provider_id: string | null; llm_model: string | null
     knowledge_count: number
     conversation_count: number
+    agent_enabled: boolean
+    agent_tool_categories: string[]
+    agent_max_tool_loops: number
 }
 
 function WorkspacesSettings({
@@ -246,6 +259,9 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
     const [showIcons, setShowIcons] = useState(false)
     const [providerId, setProviderId] = useState(ws.llm_provider_id ?? '')
     const [model, setModel] = useState(ws.llm_model ?? '')
+    const [agentEnabled, setAgentEnabled] = useState(ws.agent_enabled ?? false)
+    const [agentToolCategories, setAgentToolCategories] = useState<string[]>(ws.agent_tool_categories ?? [])
+    const [agentMaxToolLoops, setAgentMaxToolLoops] = useState(ws.agent_max_tool_loops ?? 20)
     const [saving, setSaving] = useState(false)
     const [saved, setSaved] = useState(false)
     const [deleting, setDeleting] = useState(false)
@@ -260,6 +276,9 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
             icon: icon || null,
             llm_provider_id: providerId || null,
             llm_model: model || null,
+            agent_enabled: agentEnabled,
+            agent_tool_categories: agentToolCategories,
+            agent_max_tool_loops: agentMaxToolLoops,
         })
         setSaving(false); setSaved(true)
         setTimeout(() => setSaved(false), 2000)
@@ -395,6 +414,78 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
                                 />
                             </div>
                         </div>
+                    </div>
+
+                    <div className="border-t border-border/40 pt-3 space-y-3">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-xs font-medium">Agent Mode</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">Enable tool use for this workspace's chat.</p>
+                            </div>
+                            <button
+                                type="button"
+                                role="switch"
+                                aria-checked={agentEnabled}
+                                onClick={() => setAgentEnabled(v => !v)}
+                                className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none ${agentEnabled ? 'bg-accent' : 'bg-muted'}`}
+                            >
+                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${agentEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                            </button>
+                        </div>
+
+                        {agentEnabled && (
+                            <>
+                                <div className="space-y-2">
+                                    <p className="text-xs text-muted-foreground">Enabled tool categories:</p>
+                                    <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                                        {(['filesystem', 'http', 'shell', 'memory', 'git', 'task', 'language', 'skills'] as const).map(cat => {
+                                            const checked = agentToolCategories.includes(cat)
+                                            const isDangerous = cat === 'shell' || cat === 'git'
+                                            return (
+                                                <label
+                                                    key={cat}
+                                                    className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-colors ${checked ? 'border-accent/40 bg-accent/10 text-foreground' : 'border-border/50 bg-muted/20 text-muted-foreground hover:bg-muted/40'}`}
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        className="sr-only"
+                                                        checked={checked}
+                                                        onChange={() => setAgentToolCategories(prev =>
+                                                            checked ? prev.filter(c => c !== cat) : [...prev, cat]
+                                                        )}
+                                                    />
+                                                    <span className={`h-3.5 w-3.5 flex-shrink-0 rounded border ${checked ? 'border-accent bg-accent' : 'border-border'} flex items-center justify-center`}>
+                                                        {checked && <Check className="h-2.5 w-2.5 text-accent-foreground" />}
+                                                    </span>
+                                                    <span className="capitalize">{cat}</span>
+                                                    {isDangerous && <Shield className="h-3 w-3 text-amber-400 flex-shrink-0" aria-label="Elevated risk" />}
+                                                </label>
+                                            )
+                                        })}
+                                    </div>
+                                    {agentToolCategories.some(c => c === 'shell' || c === 'git') && (
+                                        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
+                                            <Shield className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                                            <span>Shell and Git tools can execute arbitrary commands in the workspace. Only enable if you trust the workspace content.</span>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="space-y-1.5 pt-1">
+                                    <p className="text-xs text-muted-foreground">Max tool loop iterations:</p>
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            max={100}
+                                            value={agentMaxToolLoops}
+                                            onChange={e => setAgentMaxToolLoops(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+                                            className="input w-20 text-sm"
+                                        />
+                                        <span className="text-xs text-muted-foreground">Maximum number of tool calls the agent can make per response before being forced to summarize.</span>
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
 
                     <button className="btn-primary text-xs py-1.5 px-3" onClick={handleSave} disabled={saving}>
@@ -1423,6 +1514,513 @@ function SchedulesTab() {
 }
 
 // ── Audit Tab ─────────────────────────────────────────────────────────────────
+// ── Tools Tab ─────────────────────────────────────────────────────────────────
+interface ToolParam {
+    name: string
+    type: string
+    description?: string
+    required: boolean
+    enumValues?: string[]
+    default?: unknown
+}
+
+interface ToolMeta {
+    id: string
+    category: string
+    display_name: string
+    description: string
+    input_schema: {
+        type: string
+        properties?: Record<string, {
+            type?: string
+            description?: string
+            enum?: string[]
+            default?: unknown
+            items?: { type?: string }
+        }>
+        required?: string[]
+    }
+    risk_level: string
+}
+
+const RISK_STYLES: Record<string, string> = {
+    low: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    medium: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    high: 'bg-red-500/10 text-red-400 border-red-500/20',
+    critical: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+}
+
+const CATEGORY_ICONS: Record<string, React.ReactNode> = {
+    filesystem: <FolderOpen className="w-4 h-4" />,
+    http: <Globe className="w-4 h-4" />,
+    shell: <Terminal className="w-4 h-4" />,
+    memory: <Brain className="w-4 h-4" />,
+    git: <GitBranch className="w-4 h-4" />,
+    task: <Target className="w-4 h-4" />,
+    language: <FileText className="w-4 h-4" />,
+    skills: <Wrench className="w-4 h-4" />,
+}
+
+function extractParams(tool: ToolMeta): ToolParam[] {
+    const props = tool.input_schema?.properties ?? {}
+    const required = new Set(tool.input_schema?.required ?? [])
+    return Object.entries(props).map(([name, schema]) => ({
+        name,
+        type: schema.type === 'array' && schema.items?.type ? `${schema.type}<${schema.items.type}>` : (schema.type ?? 'any'),
+        description: schema.description,
+        required: required.has(name),
+        enumValues: schema.enum,
+        default: schema.default,
+    }))
+}
+
+function ToolCard({ tool }: { tool: ToolMeta }) {
+    const [expanded, setExpanded] = useState(false)
+    const [showRaw, setShowRaw] = useState(false)
+    const params = extractParams(tool)
+    const action = tool.id.split('.').slice(1).join('.')
+
+    return (
+        <div className="glass-card rounded-xl border-border/50 overflow-hidden">
+            <button
+                type="button"
+                className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-muted/20 transition-colors"
+                onClick={() => setExpanded(v => !v)}
+            >
+                {expanded
+                    ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                    : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />}
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium">{tool.display_name}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${RISK_STYLES[tool.risk_level] ?? RISK_STYLES.low}`}>
+                            {tool.risk_level}
+                        </span>
+                        {params.length > 0 && (
+                            <span className="text-[10px] text-muted-foreground/60">{params.length} param{params.length !== 1 ? 's' : ''}</span>
+                        )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{tool.description}</p>
+                    <p className="text-[10px] font-mono text-accent/60 mt-0.5">
+                        <span className="text-muted-foreground/50">{tool.category}</span>
+                        <span className="text-muted-foreground/30">.</span>
+                        {action}
+                    </p>
+                </div>
+            </button>
+
+            {expanded && (
+                <div className="border-t border-border/40 px-4 py-3 space-y-3 animate-fade-in">
+                    {/* Full description */}
+                    <p className="text-xs text-foreground/70 leading-relaxed">{tool.description}</p>
+
+                    {/* Parameters table */}
+                    {params.length > 0 && (
+                        <div>
+                            <div className="mb-2 text-[10px] uppercase tracking-wide text-muted-foreground/70">Parameters</div>
+                            <div className="overflow-x-auto rounded-lg border border-border/40">
+                                <table className="w-full text-[11px]">
+                                    <thead>
+                                        <tr className="border-b border-border/40 bg-muted/20">
+                                            <th className="px-3 py-1.5 text-left font-medium text-muted-foreground/80">Name</th>
+                                            <th className="px-3 py-1.5 text-left font-medium text-muted-foreground/80">Type</th>
+                                            <th className="px-3 py-1.5 text-left font-medium text-muted-foreground/80">Req</th>
+                                            <th className="px-3 py-1.5 text-left font-medium text-muted-foreground/80">Description</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {params.map(p => (
+                                            <tr key={p.name} className="border-b border-border/30 last:border-0">
+                                                <td className="px-3 py-1.5 font-mono text-accent/80">{p.name}</td>
+                                                <td className="px-3 py-1.5 font-mono text-blue-400/80">{p.type}</td>
+                                                <td className="px-3 py-1.5">
+                                                    {p.required
+                                                        ? <span className="text-amber-400">●</span>
+                                                        : <span className="text-muted-foreground/40">○</span>}
+                                                </td>
+                                                <td className="px-3 py-1.5 text-muted-foreground">
+                                                    {p.description ?? '—'}
+                                                    {p.enumValues && (
+                                                        <span className="ml-1 text-purple-400/80">
+                                                            [{p.enumValues.join(', ')}]
+                                                        </span>
+                                                    )}
+                                                    {p.default !== undefined && (
+                                                        <span className="ml-1 text-muted-foreground/50">
+                                                            (default: {String(p.default)})
+                                                        </span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {params.length === 0 && (
+                        <p className="text-xs text-muted-foreground/50 italic">No parameters — call with empty object.</p>
+                    )}
+
+                    {/* Raw schema toggle */}
+                    <div>
+                        <button
+                            type="button"
+                            className="text-[10px] text-muted-foreground/60 hover:text-muted-foreground flex items-center gap-1 transition-colors"
+                            onClick={() => setShowRaw(v => !v)}
+                        >
+                            {showRaw ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                            Raw JSON schema
+                        </button>
+                        {showRaw && (
+                            <pre className="mt-1.5 overflow-x-auto whitespace-pre-wrap break-words text-[10px] text-foreground/60 bg-muted/30 rounded-lg p-3 border border-border/40 max-h-64">
+                                {JSON.stringify(tool.input_schema, null, 2)}
+                            </pre>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
+function ToolsTab() {
+    const [query, setQuery] = useState('')
+    const [activeCategory, setActiveCategory] = useState<string>('all')
+
+    const { data, isLoading } = useQuery({
+        queryKey: ['tool-registry'],
+        queryFn: getToolRegistry,
+        retry: false,
+        staleTime: 60_000,
+    })
+
+    const tools: ToolMeta[] = data?.tools ?? []
+    const available: boolean = data?.tool_server_available !== false
+
+    const categories = ['all', ...Array.from(new Set(tools.map(t => t.category))).sort()]
+
+    const filtered = tools.filter(t => {
+        const matchCat = activeCategory === 'all' || t.category === activeCategory
+        const q = query.toLowerCase()
+        const matchQ = !q || t.id.includes(q) || t.display_name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q)
+        return matchCat && matchQ
+    })
+
+    const grouped = filtered.reduce<Record<string, ToolMeta[]>>((acc, t) => {
+        ;(acc[t.category] ??= []).push(t)
+        return acc
+    }, {})
+
+    return (
+        <div className="space-y-5">
+            <div>
+                <h3 className="font-semibold text-sm">Agent Tools</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    All tools available to the agent. Tools are provided by the <span className="font-mono text-accent">tool-server</span> and executed in the workspace container.
+                </p>
+            </div>
+
+            {!available && !isLoading && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-300">
+                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                    <span>
+                        <span className="font-medium">Tool server not running.</span>{' '}
+                        Start the <span className="font-mono">tool-server</span> container to see registered tools.
+                    </span>
+                </div>
+            )}
+
+            {isLoading && (
+                <div className="flex items-center justify-center py-16">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+            )}
+
+            {!isLoading && available && (
+                <>
+                    {/* Search + category filter */}
+                    <div className="flex flex-col sm:flex-row gap-2">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                            <input
+                                className="input text-sm pl-8"
+                                placeholder="Search tools by name, ID, or description…"
+                                value={query}
+                                onChange={e => setQuery(e.target.value)}
+                            />
+                        </div>
+                        <div className="flex gap-1 flex-wrap">
+                            {categories.map(cat => (
+                                <button
+                                    key={cat}
+                                    type="button"
+                                    onClick={() => setActiveCategory(cat)}
+                                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors capitalize ${activeCategory === cat
+                                        ? 'bg-accent/20 text-accent ring-1 ring-accent/30'
+                                        : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
+                                >
+                                    {cat !== 'all' && (CATEGORY_ICONS[cat] ?? <Wrench className="w-3.5 h-3.5" />)}
+                                    {cat === 'all' ? `All (${tools.length})` : cat}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Tool groups */}
+                    {filtered.length === 0 && (
+                        <div className="text-center py-12 text-muted-foreground glass-card rounded-xl">
+                            <Settings2 className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                            <p className="text-sm">No tools match your search.</p>
+                        </div>
+                    )}
+
+                    {Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([cat, catTools]) => (
+                        <div key={cat} className="space-y-2">
+                            <div className="flex items-center gap-2 py-1">
+                                <span className="text-muted-foreground/60">{CATEGORY_ICONS[cat] ?? <Wrench className="w-4 h-4" />}</span>
+                                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground capitalize">{cat}</h4>
+                                <span className="text-[10px] text-muted-foreground/50">{catTools.length} tool{catTools.length !== 1 ? 's' : ''}</span>
+                                <div className="flex-1 h-px bg-border/40" />
+                            </div>
+                            {catTools.map(tool => (
+                                <ToolCard key={tool.id} tool={tool} />
+                            ))}
+                        </div>
+                    ))}
+                </>
+            )}
+        </div>
+    )
+}
+
+// ── Skills Tab ────────────────────────────────────────────────────────────────
+interface InstalledSkill {
+    name: string
+    description: string
+    path: string
+}
+
+function SkillsTab() {
+    const qc = useQueryClient()
+    const { data: skillsData, isLoading: loadingList } = useQuery({
+        queryKey: ['installed-skills'],
+        queryFn: listInstalledSkills,
+        retry: false,
+    })
+    const installedSkills: InstalledSkill[] = skillsData?.skills ?? []
+    const toolServerUnavailable = skillsData?.tool_server_available === false
+
+    // Install panel state
+    const [source, setSource] = useState('')
+    const [skillNames, setSkillNames] = useState('')
+    const [installing, setInstalling] = useState(false)
+    const [installResult, setInstallResult] = useState<{ ok: boolean; message: string } | null>(null)
+
+    // Search panel state
+    const [searchSource, setSearchSource] = useState('')
+    const [searching, setSearching] = useState(false)
+    const [searchOutput, setSearchOutput] = useState<string | null>(null)
+    const [searchError, setSearchError] = useState<string | null>(null)
+
+    const [removing, setRemoving] = useState<string | null>(null)
+
+    const handleInstall = async () => {
+        if (!source.trim()) return
+        setInstalling(true)
+        setInstallResult(null)
+        try {
+            const names = skillNames.split(',').map(s => s.trim()).filter(Boolean)
+            await installSkill(source.trim(), names.length ? names : undefined)
+            setInstallResult({ ok: true, message: 'Skills installed successfully.' })
+            setSource('')
+            setSkillNames('')
+            qc.invalidateQueries({ queryKey: ['installed-skills'] })
+        } catch (err: unknown) {
+            const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? String(err)
+            setInstallResult({ ok: false, message: msg })
+        } finally {
+            setInstalling(false)
+        }
+    }
+
+    const handleSearch = async () => {
+        if (!searchSource.trim()) return
+        setSearching(true)
+        setSearchOutput(null)
+        setSearchError(null)
+        try {
+            const result = await searchSkills(searchSource.trim())
+            setSearchOutput(result?.available_skills ?? JSON.stringify(result))
+        } catch (err: unknown) {
+            const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? String(err)
+            setSearchError(msg)
+        } finally {
+            setSearching(false)
+        }
+    }
+
+    const handleRemove = async (name: string) => {
+        if (!confirm(`Remove skill "${name}"?`)) return
+        setRemoving(name)
+        try {
+            await removeSkill(name)
+            qc.invalidateQueries({ queryKey: ['installed-skills'] })
+        } finally {
+            setRemoving(null)
+        }
+    }
+
+    return (
+        <div className="space-y-6">
+            <div>
+                <h3 className="font-semibold text-sm">Agent Skills</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    Install and manage reusable agent skill sets from GitHub repositories using the{' '}
+                    <span className="font-mono text-accent">skills.sh</span> CLI.
+                    Installed skills are shared across all workspaces.
+                </p>
+            </div>
+
+            {toolServerUnavailable && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-300">
+                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                    <span>
+                        <span className="font-medium">Tool server not running.</span> The skills feature requires the{' '}
+                        <span className="font-mono">tool-server</span> container. Start it with the full{' '}
+                        <span className="font-mono">docker-compose.yml</span> to manage skills.
+                    </span>
+                </div>
+            )}
+
+            {/* Install */}
+            <div className="glass-card p-4 space-y-3">
+                <h4 className="text-sm font-medium flex items-center gap-2"><Plus className="w-3.5 h-3.5 text-accent" /> Install Skills</h4>
+                <div className="space-y-2">
+                    <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">GitHub source</label>
+                        <input
+                            className="input text-sm"
+                            placeholder="owner/repo  or  https://github.com/owner/repo"
+                            value={source}
+                            onChange={e => setSource(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') void handleInstall() }}
+                        />
+                    </div>
+                    <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">
+                            Skill names <span className="opacity-60">(comma-separated, leave blank to install all)</span>
+                        </label>
+                        <input
+                            className="input text-sm"
+                            placeholder="react-best-practices, web-design-guidelines"
+                            value={skillNames}
+                            onChange={e => setSkillNames(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') void handleInstall() }}
+                        />
+                    </div>
+                </div>
+                <button
+                    className="btn-primary text-xs py-1.5 px-3"
+                    onClick={handleInstall}
+                    disabled={installing || !source.trim()}
+                >
+                    {installing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                    {installing ? 'Installing…' : 'Install'}
+                </button>
+                {installResult && (
+                    <div className={`flex items-start gap-2 rounded-lg px-3 py-2 text-xs ${installResult.ok ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                        {installResult.ok ? <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" /> : <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />}
+                        {installResult.message}
+                    </div>
+                )}
+            </div>
+
+            {/* Discover */}
+            <div className="glass-card p-4 space-y-3">
+                <h4 className="text-sm font-medium flex items-center gap-2"><Search className="w-3.5 h-3.5 text-accent" /> Discover Skills</h4>
+                <div className="flex gap-2">
+                    <input
+                        className="input text-sm flex-1"
+                        placeholder="owner/repo to browse available skills"
+                        value={searchSource}
+                        onChange={e => setSearchSource(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') void handleSearch() }}
+                    />
+                    <button
+                        className="btn-ghost text-xs py-1.5 px-3"
+                        onClick={handleSearch}
+                        disabled={searching || !searchSource.trim()}
+                    >
+                        {searching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                        Browse
+                    </button>
+                </div>
+                {searchOutput && (
+                    <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[11px] text-foreground/70 bg-muted/30 rounded-lg p-3 max-h-48 border border-border/40">
+                        {searchOutput}
+                    </pre>
+                )}
+                {searchError && (
+                    <p className="text-xs text-red-400">{searchError}</p>
+                )}
+            </div>
+
+            {/* Installed list */}
+            <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-medium">Installed Skills ({installedSkills.length})</h4>
+                    <button className="btn-ghost text-xs py-1.5 px-2.5 gap-1.5" onClick={() => qc.invalidateQueries({ queryKey: ['installed-skills'] })}>
+                        <RefreshCw className="w-3.5 h-3.5" /> Refresh
+                    </button>
+                </div>
+
+                {loadingList && (
+                    <div className="flex items-center justify-center py-12">
+                        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                    </div>
+                )}
+
+                {!loadingList && installedSkills.length === 0 && (
+                    <div className="text-center py-12 text-muted-foreground glass-card rounded-xl">
+                        <Wrench className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                        <p className="text-sm">No skills installed yet.</p>
+                        <p className="text-xs mt-1 opacity-60">Use the install panel above or ask the agent to install a skill.</p>
+                    </div>
+                )}
+
+                {!loadingList && installedSkills.length > 0 && (
+                    <div className="space-y-2">
+                        {installedSkills.map(skill => (
+                            <div key={skill.name} className="glass-card px-4 py-3 flex items-start gap-3 rounded-xl border-border/50">
+                                <Wrench className="w-4 h-4 text-accent/60 flex-shrink-0 mt-0.5" />
+                                <div className="flex-1 min-w-0">
+                                    <span className="font-medium text-sm">{skill.name}</span>
+                                    {skill.description && (
+                                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{skill.description}</p>
+                                    )}
+                                    <p className="text-[10px] font-mono text-muted-foreground/50 mt-1 truncate">{skill.path}</p>
+                                </div>
+                                <button
+                                    className="btn-ghost p-1.5 text-red-400 hover:bg-destructive/10 flex-shrink-0"
+                                    onClick={() => void handleRemove(skill.name)}
+                                    disabled={removing === skill.name}
+                                    title="Remove skill"
+                                >
+                                    {removing === skill.name
+                                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        : <Trash2 className="w-3.5 h-3.5" />}
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    )
+}
+
 interface TaskLogEntry {
     id: string
     task_type: string
@@ -1440,6 +2038,8 @@ const TASK_LABELS: Record<string, string> = {
     embed_knowledge: 'Embed Knowledge',
     generate_knowledge_intelligence: 'Generate Knowledge Intelligence',
     extract_bookmark_content: 'Extract Bookmark Content',
+    extract_url_content: 'Extract URL Content',
+    extract_attachment_content: 'Extract Attachment Content',
     generate_titles: 'Generate Titles',
     extract_insights: 'Extract Insights',
     scrape_bookmarks: 'Scrape Bookmarks',
@@ -1493,7 +2093,7 @@ function StatusIcon({ status }: { status: string }) {
 }
 
 function AuditTab({ workspaceId }: { workspaceId: string }) {
-    const [subTab, setSubTab] = useState<'history' | 'logs'>('history')
+    const [subTab, setSubTab] = useState<'history' | 'tool-calls' | 'logs'>('history')
 
     return (
         <div className={subTab === 'logs' ? 'h-full min-h-0 flex flex-col gap-6' : 'space-y-6'}>
@@ -1508,6 +2108,15 @@ function AuditTab({ workspaceId }: { workspaceId: string }) {
                     <History className="w-4 h-4" /> Job History
                 </button>
                 <button
+                    onClick={() => setSubTab('tool-calls')}
+                    className={`flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-300 whitespace-nowrap ${subTab === 'tool-calls'
+                        ? 'bg-accent/20 text-accent ring-1 ring-accent/30'
+                        : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
+                        }`}
+                >
+                    <Wrench className="w-4 h-4" /> Tool Calls
+                </button>
+                <button
                     onClick={() => setSubTab('logs')}
                     className={`flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-300 whitespace-nowrap ${subTab === 'logs'
                         ? 'bg-accent/20 text-accent ring-1 ring-accent/30'
@@ -1518,9 +2127,9 @@ function AuditTab({ workspaceId }: { workspaceId: string }) {
                 </button>
             </div>
 
-            {subTab === 'history' ? (
-                <JobHistorySubTab />
-            ) : (
+            {subTab === 'history' && <JobHistorySubTab />}
+            {subTab === 'tool-calls' && <ToolCallLogsSubTab workspaceId={workspaceId} />}
+            {subTab === 'logs' && (
                 <div className="min-h-0 flex-1">
                     <ContainerLogsSubTab workspaceId={workspaceId} />
                 </div>
@@ -1630,6 +2239,159 @@ function JobHistorySubTab() {
                             </div>
                         </div>
                     ))}
+                </div>
+            )}
+        </div>
+    )
+}
+
+interface ToolCallLogEntry {
+    id: string
+    workspace_id: string | null
+    conversation_id: string
+    call_id: string
+    tool_name: string
+    arguments: Record<string, unknown> | null
+    success: boolean | null
+    output: string | null
+    error: string | null
+    duration_ms: number | null
+    started_at: string
+    finished_at: string | null
+}
+
+function ToolCallLogsSubTab({ workspaceId }: { workspaceId: string }) {
+    const [filterTool, setFilterTool] = useState('')
+    const [expanded, setExpanded] = useState<string | null>(null)
+
+    const { data: logs = [], isLoading, refetch } = useQuery<ToolCallLogEntry[]>({
+        queryKey: ['tool-call-logs', workspaceId, filterTool],
+        queryFn: () => getToolCallLogs({ workspace_id: workspaceId || undefined, tool_name: filterTool || undefined, limit: 100 }),
+        refetchInterval: false,
+    })
+
+    const formatDuration = (ms: number | null) => {
+        if (!ms) return '—'
+        if (ms < 1000) return `${ms}ms`
+        return `${(ms / 1000).toFixed(1)}s`
+    }
+
+    const toolNames = Array.from(new Set((logs as ToolCallLogEntry[]).map(l => l.tool_name))).sort()
+
+    return (
+        <div className="space-y-5 animate-fade-in">
+            <div className="flex items-center justify-between gap-3">
+                <h3 className="font-semibold text-sm">Agent Tool Call Executions</h3>
+                <div className="flex items-center gap-2">
+                    <select
+                        className="input text-xs py-1.5 pr-7 w-auto"
+                        value={filterTool}
+                        onChange={e => setFilterTool(e.target.value)}
+                    >
+                        <option value="">All tools</option>
+                        {toolNames.map(name => (
+                            <option key={name} value={name}>{name}</option>
+                        ))}
+                    </select>
+                    <button className="btn-ghost text-xs py-1.5 px-2.5 gap-1.5" onClick={() => refetch()}>
+                        <RefreshCw className="w-3.5 h-3.5" /> Refresh
+                    </button>
+                </div>
+            </div>
+
+            {isLoading && (
+                <div className="flex items-center justify-center py-20">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+            )}
+
+            {!isLoading && (logs as ToolCallLogEntry[]).length === 0 && (
+                <div className="text-center py-14 text-muted-foreground glass-card rounded-xl">
+                    <Wrench className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                    <p className="text-sm">No tool calls logged yet. Enable agent mode and run a chat to see logs here.</p>
+                </div>
+            )}
+
+            {!isLoading && (logs as ToolCallLogEntry[]).length > 0 && (
+                <div className="space-y-2">
+                    {(logs as ToolCallLogEntry[]).map(log => {
+                        const isOpen = expanded === log.id
+                        const category = log.tool_name.split('.')[0] ?? log.tool_name
+                        const action = log.tool_name.split('.').slice(1).join('.')
+                        return (
+                            <div key={log.id} className="glass-card rounded-xl border-border/50 overflow-hidden">
+                                <button
+                                    type="button"
+                                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/20 transition-colors"
+                                    onClick={() => setExpanded(isOpen ? null : log.id)}
+                                >
+                                    {isOpen
+                                        ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                                        : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />}
+                                    {log.success === true
+                                        ? <CheckCircle className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                                        : log.success === false
+                                            ? <AlertCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                                            : <Circle className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />}
+                                    <div className="flex-1 min-w-0">
+                                        <span className="text-sm font-medium">
+                                            <span className="text-muted-foreground">{category}</span>
+                                            {action && <><span className="text-muted-foreground/50">.</span><span>{action}</span></>}
+                                        </span>
+                                        <div className="flex items-center gap-3 mt-0.5 text-[10px] text-muted-foreground flex-wrap">
+                                            <span>{new Date(log.started_at).toLocaleString()}</span>
+                                            {log.duration_ms !== null && <span>{formatDuration(log.duration_ms)}</span>}
+                                            <span className="font-mono truncate max-w-[180px]" title={log.conversation_id}>
+                                                conv: {log.conversation_id.slice(0, 8)}…
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 ${log.success === true ? 'bg-emerald-500/10 text-emerald-400' : log.success === false ? 'bg-red-500/10 text-red-400' : 'bg-muted text-muted-foreground'}`}>
+                                        {log.success === true ? 'success' : log.success === false ? 'failed' : 'unknown'}
+                                    </span>
+                                </button>
+
+                                {isOpen && (
+                                    <div className="border-t border-border/40 px-4 py-3 space-y-3 animate-fade-in">
+                                        <div className="grid gap-2 text-[11px] text-muted-foreground sm:grid-cols-2">
+                                            <div><span className="text-foreground/60">Call ID:</span> <span className="font-mono">{log.call_id}</span></div>
+                                            <div><span className="text-foreground/60">Conversation:</span> <span className="font-mono">{log.conversation_id}</span></div>
+                                            {log.started_at && <div><span className="text-foreground/60">Started:</span> {new Date(log.started_at).toLocaleString()}</div>}
+                                            {log.finished_at && <div><span className="text-foreground/60">Finished:</span> {new Date(log.finished_at).toLocaleString()}</div>}
+                                            {log.duration_ms !== null && <div><span className="text-foreground/60">Duration:</span> {formatDuration(log.duration_ms)}</div>}
+                                        </div>
+
+                                        {log.arguments && Object.keys(log.arguments).length > 0 && (
+                                            <div>
+                                                <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground/70">Request (Arguments)</div>
+                                                <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[11px] text-foreground/70 bg-muted/30 rounded-lg p-3 max-h-48 border border-border/40">
+                                                    {JSON.stringify(log.arguments, null, 2)}
+                                                </pre>
+                                            </div>
+                                        )}
+
+                                        {log.success && log.output !== null && (
+                                            <div>
+                                                <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground/70">Response (Output)</div>
+                                                <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[11px] text-foreground/70 bg-muted/30 rounded-lg p-3 max-h-64 border border-border/40">
+                                                    {log.output}
+                                                </pre>
+                                            </div>
+                                        )}
+
+                                        {!log.success && log.error && (
+                                            <div>
+                                                <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground/70">Response (Error)</div>
+                                                <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[11px] text-red-400 bg-red-500/10 rounded-lg p-3 max-h-32 border border-red-500/20">
+                                                    {log.error}
+                                                </pre>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )
+                    })}
                 </div>
             )}
         </div>
@@ -1807,6 +2569,420 @@ function ContainerLogsSubTab({ workspaceId }: { workspaceId: string }) {
                     })
                 )}
                 <div ref={logsEndRef} />
+            </div>
+        </div>
+    )
+}
+
+// ── MCP Tab ───────────────────────────────────────────────────────────────────
+interface MCPToolDef {
+    name: string
+    description: string
+    inputSchema?: object
+}
+
+interface MCPServerRow {
+    id: string
+    name: string
+    url: string
+    description: string | null
+    transport: string
+    auth_type: string
+    has_auth: boolean
+    is_enabled: boolean
+    discovered_tools: MCPToolDef[]
+    tool_count: number
+    last_discovered_at: string | null
+    default_risk_level: string
+    created_at: string
+    updated_at: string
+}
+
+const RISK_LEVELS = ['low', 'medium', 'high', 'critical']
+const RISK_BADGE: Record<string, string> = {
+    low: 'bg-green-500/15 text-green-300 border-green-500/30',
+    medium: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/30',
+    high: 'bg-orange-500/15 text-orange-300 border-orange-500/30',
+    critical: 'bg-red-500/15 text-red-300 border-red-500/30',
+}
+
+const EMPTY_FORM = {
+    name: '', url: '', description: '', transport: 'http',
+    auth_type: 'none', auth_value: '', is_enabled: true, default_risk_level: 'high',
+}
+
+function MCPServerForm({
+    initial, onSave, onCancel, saving,
+}: {
+    initial: typeof EMPTY_FORM
+    onSave: (data: typeof EMPTY_FORM) => void
+    onCancel: () => void
+    saving: boolean
+}) {
+    const [form, setForm] = useState(initial)
+    const set = (k: string, v: unknown) => setForm(f => ({ ...f, [k]: v }))
+
+    return (
+        <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Name</label>
+                    <input className="input text-sm" placeholder="My GitHub Tools" value={form.name} onChange={e => set('name', e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Transport</label>
+                    <select className="input text-sm" value={form.transport} onChange={e => set('transport', e.target.value)}>
+                        <option value="http">HTTP Streamable (newer)</option>
+                        <option value="sse">SSE (older)</option>
+                    </select>
+                </div>
+            </div>
+            <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Server URL</label>
+                <input className="input text-sm font-mono" placeholder="https://mcp.example.com/sse" value={form.url} onChange={e => set('url', e.target.value)} />
+            </div>
+            <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Description <span className="opacity-50">(optional)</span></label>
+                <input className="input text-sm" placeholder="GitHub repository and PR tools" value={form.description} onChange={e => set('description', e.target.value)} />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Authentication</label>
+                    <select className="input text-sm" value={form.auth_type} onChange={e => set('auth_type', e.target.value)}>
+                        <option value="none">None</option>
+                        <option value="bearer">Bearer Token</option>
+                        <option value="api_key">API Key (X-API-Key)</option>
+                        <option value="header">Custom Header (Name: value)</option>
+                    </select>
+                </div>
+                <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Default Risk Level</label>
+                    <select className="input text-sm capitalize" value={form.default_risk_level} onChange={e => set('default_risk_level', e.target.value)}>
+                        {RISK_LEVELS.map(r => <option key={r} value={r} className="capitalize">{r}</option>)}
+                    </select>
+                </div>
+            </div>
+            {form.auth_type !== 'none' && (
+                <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">
+                        {form.auth_type === 'bearer' ? 'Bearer Token' : form.auth_type === 'api_key' ? 'API Key' : 'Header (Name: value)'}
+                    </label>
+                    <input
+                        type="password"
+                        className="input text-sm font-mono"
+                        placeholder={form.auth_type === 'header' ? 'X-Custom-Header: my-secret' : 'sk-…'}
+                        value={form.auth_value}
+                        onChange={e => set('auth_value', e.target.value)}
+                    />
+                </div>
+            )}
+            <div className="flex items-center justify-between pt-1">
+                <label className="flex items-center gap-2 text-xs cursor-pointer">
+                    <input type="checkbox" className="rounded" checked={form.is_enabled} onChange={e => set('is_enabled', e.target.checked)} />
+                    <span>Enabled</span>
+                </label>
+                <div className="flex gap-2">
+                    <button className="btn-ghost text-xs py-1.5 px-3" onClick={onCancel}>Cancel</button>
+                    <button
+                        className="btn-primary text-xs py-1.5 px-3 gap-1.5"
+                        onClick={() => onSave(form)}
+                        disabled={!form.name.trim() || !form.url.trim() || saving}
+                    >
+                        {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                        Save &amp; Discover
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+function MCPServerCard({ server, onUpdated, onDeleted }: {
+    server: MCPServerRow
+    onUpdated: (s: MCPServerRow) => void
+    onDeleted: (id: string) => void
+}) {
+    const [expanded, setExpanded] = useState(false)
+    const [editing, setEditing] = useState(false)
+    const [discovering, setDiscovering] = useState(false)
+    const [savingEdit, setSavingEdit] = useState(false)
+    const [confirmDelete, setConfirmDelete] = useState(false)
+    const [overrideSaving, setOverrideSaving] = useState<string | null>(null)
+
+    const handleDiscover = async () => {
+        setDiscovering(true)
+        try {
+            const updated = await discoverMCPServer(server.id)
+            onUpdated(updated)
+        } catch {
+            /* error shown via toast or ignored */
+        } finally {
+            setDiscovering(false)
+        }
+    }
+
+    const handleToggleEnabled = async () => {
+        try {
+            const updated = await updateMCPServer(server.id, { is_enabled: !server.is_enabled })
+            onUpdated(updated)
+        } catch { /* ignore */ }
+    }
+
+    const handleSaveEdit = async (data: typeof EMPTY_FORM) => {
+        setSavingEdit(true)
+        try {
+            const payload: Record<string, unknown> = { ...data }
+            if (!payload.auth_value) delete payload.auth_value
+            const updated = await updateMCPServer(server.id, payload)
+            onUpdated(updated)
+            setEditing(false)
+        } finally {
+            setSavingEdit(false)
+        }
+    }
+
+    const handleDelete = async () => {
+        await deleteMCPServer(server.id)
+        onDeleted(server.id)
+    }
+
+    const handleToolToggle = async (toolName: string, enabled: boolean) => {
+        setOverrideSaving(toolName)
+        try {
+            await updateMCPToolOverride(server.id, toolName, { is_enabled: enabled })
+        } finally {
+            setOverrideSaving(null)
+        }
+    }
+
+    const handleRiskChange = async (toolName: string, risk: string) => {
+        setOverrideSaving(toolName)
+        try {
+            await updateMCPToolOverride(server.id, toolName, { risk_level: risk })
+        } finally {
+            setOverrideSaving(null)
+        }
+    }
+
+    return (
+        <div className="glass-card rounded-xl border border-border/50 overflow-hidden">
+            {/* Header row */}
+            <div className="flex items-start gap-3 p-4">
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-sm">{server.name}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${RISK_BADGE[server.default_risk_level] ?? RISK_BADGE.high}`}>
+                            {server.default_risk_level}
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-border/40 text-muted-foreground uppercase tracking-wide">
+                            {server.transport}
+                        </span>
+                        {server.tool_count > 0 && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/10 border border-accent/20 text-accent">
+                                {server.tool_count} tool{server.tool_count !== 1 ? 's' : ''}
+                            </span>
+                        )}
+                        {!server.is_enabled && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/40 border border-border/40 text-muted-foreground">disabled</span>
+                        )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5 font-mono truncate">{server.url}</p>
+                    {server.description && <p className="text-xs text-muted-foreground/70 mt-0.5 truncate">{server.description}</p>}
+                    {server.last_discovered_at && (
+                        <p className="text-[10px] text-muted-foreground/50 mt-1">
+                            Last discovered {new Date(server.last_discovered_at).toLocaleString()}
+                        </p>
+                    )}
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                    {/* enabled toggle */}
+                    <button
+                        onClick={handleToggleEnabled}
+                        className={`w-8 h-4.5 relative rounded-full transition-colors ${server.is_enabled ? 'bg-accent/70' : 'bg-muted/60'}`}
+                        title={server.is_enabled ? 'Disable' : 'Enable'}
+                    >
+                        <span className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow transition-all ${server.is_enabled ? 'left-4' : 'left-0.5'}`} />
+                    </button>
+                    <button
+                        className="btn-ghost p-1.5"
+                        onClick={handleDiscover}
+                        disabled={discovering}
+                        title="Refresh tools"
+                    >
+                        <RefreshCw className={`w-3.5 h-3.5 ${discovering ? 'animate-spin' : ''}`} />
+                    </button>
+                    <button className="btn-ghost p-1.5" onClick={() => setEditing(e => !e)} title="Edit">
+                        <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    {confirmDelete ? (
+                        <div className="flex items-center gap-1">
+                            <button className="btn-ghost text-[10px] py-1 px-2 text-red-400 hover:bg-red-900/20" onClick={handleDelete}>Delete</button>
+                            <button className="btn-ghost text-[10px] py-1 px-2" onClick={() => setConfirmDelete(false)}>Cancel</button>
+                        </div>
+                    ) : (
+                        <button className="btn-ghost p-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/20" onClick={() => setConfirmDelete(true)} title="Delete">
+                            <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                    )}
+                    {server.tool_count > 0 && (
+                        <button className="btn-ghost p-1.5" onClick={() => setExpanded(e => !e)}>
+                            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* Edit form */}
+            {editing && (
+                <div className="px-4 pb-4 border-t border-border/30 pt-4">
+                    <MCPServerForm
+                        initial={{
+                            name: server.name, url: server.url,
+                            description: server.description ?? '',
+                            transport: server.transport, auth_type: server.auth_type,
+                            auth_value: '', is_enabled: server.is_enabled,
+                            default_risk_level: server.default_risk_level,
+                        }}
+                        onSave={handleSaveEdit}
+                        onCancel={() => setEditing(false)}
+                        saving={savingEdit}
+                    />
+                </div>
+            )}
+
+            {/* Tool list */}
+            {expanded && !editing && server.discovered_tools.length > 0 && (
+                <div className="border-t border-border/30">
+                    <div className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/60">
+                        Discovered Tools
+                    </div>
+                    <div className="divide-y divide-border/20">
+                        {server.discovered_tools.map(tool => (
+                            <div key={tool.name} className="px-4 py-2.5 flex items-start gap-3">
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-mono font-medium">{tool.name}</p>
+                                    {tool.description && (
+                                        <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">{tool.description}</p>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <select
+                                        className="text-[10px] bg-muted/30 border border-border/40 rounded px-1.5 py-0.5 capitalize cursor-pointer"
+                                        defaultValue={server.default_risk_level}
+                                        disabled={overrideSaving === tool.name}
+                                        onChange={e => handleRiskChange(tool.name, e.target.value)}
+                                    >
+                                        {RISK_LEVELS.map(r => <option key={r} value={r} className="capitalize">{r}</option>)}
+                                    </select>
+                                    <button
+                                        className={`w-7 h-4 relative rounded-full transition-colors ${overrideSaving === tool.name ? 'opacity-50' : 'bg-accent/70'}`}
+                                        onClick={() => handleToolToggle(tool.name, false)}
+                                        title="Disable this tool"
+                                        disabled={overrideSaving === tool.name}
+                                    >
+                                        <span className="absolute top-0.5 left-3.5 w-3 h-3 rounded-full bg-white shadow" />
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
+function MCPTab() {
+    const qc = useQueryClient()
+    const { data, isLoading } = useQuery({
+        queryKey: ['mcp-servers'],
+        queryFn: listMCPServers,
+        staleTime: 30_000,
+    })
+    const servers: MCPServerRow[] = data?.servers ?? []
+
+    const [showAdd, setShowAdd] = useState(false)
+    const [addSaving, setAddSaving] = useState(false)
+
+    const handleAdd = async (form: typeof EMPTY_FORM) => {
+        setAddSaving(true)
+        try {
+            const payload: Record<string, unknown> = { ...form }
+            if (!payload.auth_value) delete payload.auth_value
+            await createMCPServer(payload)
+            qc.invalidateQueries({ queryKey: ['mcp-servers'] })
+            setShowAdd(false)
+        } finally {
+            setAddSaving(false)
+        }
+    }
+
+    const handleUpdated = (updated: MCPServerRow) => {
+        qc.setQueryData(['mcp-servers'], (old: { servers: MCPServerRow[] } | undefined) => ({
+            servers: (old?.servers ?? []).map(s => s.id === updated.id ? updated : s),
+        }))
+    }
+
+    const handleDeleted = (id: string) => {
+        qc.setQueryData(['mcp-servers'], (old: { servers: MCPServerRow[] } | undefined) => ({
+            servers: (old?.servers ?? []).filter(s => s.id !== id),
+        }))
+    }
+
+    return (
+        <div className="space-y-5">
+            <div className="flex items-start justify-between gap-4">
+                <div>
+                    <h3 className="font-semibold text-sm">MCP Servers</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                        Connect external MCP (Model Context Protocol) servers to extend the agent with additional tools.
+                        Discovered tools appear alongside built-in tools during agent execution.
+                    </p>
+                </div>
+                <button
+                    className="btn-primary text-xs py-1.5 px-3 gap-1.5 shrink-0"
+                    onClick={() => setShowAdd(s => !s)}
+                >
+                    {showAdd ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                    {showAdd ? 'Cancel' : 'Add Server'}
+                </button>
+            </div>
+
+            {showAdd && (
+                <div className="glass-card rounded-xl border border-accent/20 p-4 space-y-1">
+                    <p className="text-xs font-semibold text-accent mb-3">New MCP Server</p>
+                    <MCPServerForm
+                        initial={EMPTY_FORM}
+                        onSave={handleAdd}
+                        onCancel={() => setShowAdd(false)}
+                        saving={addSaving}
+                    />
+                </div>
+            )}
+
+            {isLoading && (
+                <div className="flex items-center justify-center py-16">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+            )}
+
+            {!isLoading && servers.length === 0 && !showAdd && (
+                <div className="text-center py-16 glass-card rounded-xl text-muted-foreground">
+                    <Layers className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                    <p className="text-sm">No MCP servers configured.</p>
+                    <p className="text-xs mt-1 opacity-60">Add a server to extend the agent with external tools.</p>
+                </div>
+            )}
+
+            <div className="space-y-3">
+                {servers.map(server => (
+                    <MCPServerCard
+                        key={server.id}
+                        server={server}
+                        onUpdated={handleUpdated}
+                        onDeleted={handleDeleted}
+                    />
+                ))}
             </div>
         </div>
     )
