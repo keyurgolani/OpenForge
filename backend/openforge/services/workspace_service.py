@@ -24,6 +24,10 @@ def _to_response(workspace: Workspace, knowledge_count: int = 0, conv_count: int
         color=workspace.color,
         llm_provider_id=workspace.llm_provider_id,
         llm_model=workspace.llm_model,
+        knowledge_intelligence_provider_id=workspace.knowledge_intelligence_provider_id,
+        knowledge_intelligence_model=workspace.knowledge_intelligence_model,
+        vision_provider_id=workspace.vision_provider_id,
+        vision_model=workspace.vision_model,
         sort_order=workspace.sort_order,
         agent_enabled=workspace.agent_enabled,
         agent_tool_categories=list(workspace.agent_tool_categories or []),
@@ -118,6 +122,14 @@ class WorkspaceService:
             ws.llm_provider_id = data.llm_provider_id
         if data.llm_model is not None:
             ws.llm_model = data.llm_model
+        if data.knowledge_intelligence_provider_id is not None:
+            ws.knowledge_intelligence_provider_id = data.knowledge_intelligence_provider_id
+        if data.knowledge_intelligence_model is not None:
+            ws.knowledge_intelligence_model = data.knowledge_intelligence_model
+        if data.vision_provider_id is not None:
+            ws.vision_provider_id = data.vision_provider_id
+        if data.vision_model is not None:
+            ws.vision_model = data.vision_model
         if data.sort_order is not None:
             ws.sort_order = data.sort_order
         if data.agent_enabled is not None:

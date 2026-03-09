@@ -49,7 +49,10 @@ class LLMProvider(Base):
         DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc
     )
 
-    workspaces: Mapped[list["Workspace"]] = relationship(back_populates="llm_provider")
+    workspaces: Mapped[list["Workspace"]] = relationship(
+        back_populates="llm_provider",
+        foreign_keys="[Workspace.llm_provider_id]",
+    )
 
     __table_args__ = (
         Index(
@@ -75,6 +78,14 @@ class Workspace(Base):
         UUID(as_uuid=True), ForeignKey("llm_providers.id", ondelete="SET NULL"), nullable=True
     )
     llm_model: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    knowledge_intelligence_provider_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("llm_providers.id", ondelete="SET NULL"), nullable=True
+    )
+    knowledge_intelligence_model: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    vision_provider_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("llm_providers.id", ondelete="SET NULL"), nullable=True
+    )
+    vision_model: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     agent_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     agent_tool_categories: Mapped[List[str]] = mapped_column(JSONB, nullable=False, default=list)
     agent_max_tool_loops: Mapped[int] = mapped_column(Integer, nullable=False, default=20)
@@ -86,7 +97,9 @@ class Workspace(Base):
         DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc
     )
 
-    llm_provider: Mapped[Optional["LLMProvider"]] = relationship(back_populates="workspaces")
+    llm_provider: Mapped[Optional["LLMProvider"]] = relationship(
+        back_populates="workspaces", foreign_keys="[Workspace.llm_provider_id]"
+    )
     knowledge: Mapped[list["Knowledge"]] = relationship(back_populates="workspace", cascade="all, delete-orphan")
     conversations: Mapped[list["Conversation"]] = relationship(back_populates="workspace", cascade="all, delete-orphan")
 

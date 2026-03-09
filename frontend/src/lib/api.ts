@@ -82,6 +82,17 @@ export const deleteConversation = (wid: string, cid: string) =>
     api.delete(`/workspaces/${wid}/conversations/${cid}`)
 export const permanentlyDeleteConversation = (wid: string, cid: string) =>
     api.delete(`/workspaces/${wid}/conversations/${cid}/permanent`)
+export const exportConversation = (
+    wid: string,
+    cid: string,
+    format: 'json' | 'markdown' | 'txt' = 'json',
+): Promise<Blob> =>
+    api
+        .get(`/workspaces/${wid}/conversations/${cid}/export`, {
+            params: { format },
+            responseType: 'blob',
+        })
+        .then(r => r.data)
 
 // ── Search ──
 export const searchKnowledge = (wid: string, q: string, params?: object): Promise<any> =>
@@ -129,6 +140,12 @@ export const saveAttachmentToKnowledge = (attachmentId: string, workspaceId: str
 
 // ── Tools registry ────────────────────────────────────────────────────────────
 export const getToolRegistry = (): Promise<any> => api.get('/tools/registry').then(r => r.data)
+
+// ── Export ───────────────────────────────────────────────────────────────────
+export const exportAllData = (): Promise<Blob> =>
+    api.get('/export/all', { responseType: 'blob' }).then(r => r.data)
+export const exportWorkspaceData = (workspaceId: string): Promise<Blob> =>
+    api.get(`/export/workspace/${workspaceId}`, { responseType: 'blob' }).then(r => r.data)
 
 // ── MCP Servers ───────────────────────────────────────────────────────────────
 export const listMCPServers = (): Promise<any> => api.get('/mcp/servers').then(r => r.data)

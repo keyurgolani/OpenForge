@@ -9,7 +9,7 @@ import {
     listSchedules, updateSchedule, runTaskNow, getTaskHistory, getToolCallLogs, listSettings, updateSetting,
     listInstalledSkills, installSkill, searchSkills, removeSkill, getToolRegistry,
     listMCPServers, createMCPServer, updateMCPServer, deleteMCPServer, discoverMCPServer,
-    updateMCPToolOverride,
+    updateMCPToolOverride, exportAllData, exportWorkspaceData,
 } from '@/lib/api'
 import {
     Globe2, Loader2, Trash2, CheckCircle2, XCircle, Star, Plus,
@@ -19,10 +19,11 @@ import {
     FileText, Timer, History, Play, Clock, CheckCircle, AlertCircle, Circle, Terminal,
     Brain, Folder, Briefcase, Microscope, BookOpen, Target, Globe, Lightbulb, Wrench,
     Palette, BarChart3, Rocket, Shield, FlaskConical, Leaf, Key, Settings2, PenLine,
-    Database, Sprout
+    Database, Sprout, Download, Archive, FileArchive
 } from 'lucide-react'
 import { ProviderIcon } from '@/components/shared/ProviderIcon'
 import { ModelOverrideSelect } from '@/components/shared/ModelOverrideSelect'
+import { ConfirmModal } from '@/components/ui/confirm-modal'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import { isLocalProvider, sanitizeProviderDisplayName } from '@/lib/provider-display'
 
@@ -66,8 +67,8 @@ export function getWorkspaceIcon(iconName: string | null): React.ReactNode {
     return <IconComponent className="w-4 h-4" />
 }
 
-type SettingsTab = 'workspaces' | 'llm' | 'prompts' | 'jobs' | 'skills' | 'tools' | 'mcp' | 'audit'
-const SETTINGS_TABS: SettingsTab[] = ['workspaces', 'llm', 'prompts', 'jobs', 'skills', 'tools', 'mcp', 'audit']
+type SettingsTab = 'workspaces' | 'llm' | 'prompts' | 'jobs' | 'skills' | 'tools' | 'mcp' | 'audit' | 'export'
+const SETTINGS_TABS: SettingsTab[] = ['workspaces', 'llm', 'prompts', 'jobs', 'skills', 'tools', 'mcp', 'audit', 'export']
 const toSettingsTab = (value: string | null): SettingsTab => {
     const normalized = value === 'schedules' ? 'jobs' : value
     return SETTINGS_TABS.includes(normalized as SettingsTab) ? (normalized as SettingsTab) : 'workspaces'
@@ -97,9 +98,10 @@ export default function SettingsPage() {
         { id: 'prompts' as const, label: 'Prompts', Icon: Sliders },
         { id: 'jobs' as const, label: 'Jobs', Icon: Timer },
         { id: 'skills' as const, label: 'Skills', Icon: Wrench },
-        { id: 'tools' as const, label: 'Tools', Icon: Settings2 },
+        { id: 'tools' as const, label: 'Native Tools', Icon: Settings2 },
         { id: 'mcp' as const, label: 'MCP', Icon: Layers },
         { id: 'audit' as const, label: 'Audit', Icon: History },
+        { id: 'export' as const, label: 'Export', Icon: Download },
     ]
 
     return (
@@ -152,6 +154,7 @@ export default function SettingsPage() {
                     <AuditTab workspaceId={workspaceId} />
                 </div>
             )}
+            {activeTab === 'export' && <ExportTab workspaceId={workspaceId} />}
         </div>
     )
 }
@@ -161,6 +164,8 @@ type WorkspaceRow = {
     id: string; name: string; description: string | null
     icon: string | null; color: string | null
     llm_provider_id: string | null; llm_model: string | null
+    knowledge_intelligence_provider_id: string | null; knowledge_intelligence_model: string | null
+    vision_provider_id: string | null; vision_model: string | null
     knowledge_count: number
     conversation_count: number
     agent_enabled: boolean
@@ -259,14 +264,21 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
     const [showIcons, setShowIcons] = useState(false)
     const [providerId, setProviderId] = useState(ws.llm_provider_id ?? '')
     const [model, setModel] = useState(ws.llm_model ?? '')
+    const [kiProviderId, setKiProviderId] = useState(ws.knowledge_intelligence_provider_id ?? '')
+    const [kiModel, setKiModel] = useState(ws.knowledge_intelligence_model ?? '')
+    const [visionProviderId, setVisionProviderId] = useState(ws.vision_provider_id ?? '')
+    const [visionModel, setVisionModel] = useState(ws.vision_model ?? '')
     const [agentEnabled, setAgentEnabled] = useState(ws.agent_enabled ?? false)
     const [agentToolCategories, setAgentToolCategories] = useState<string[]>(ws.agent_tool_categories ?? [])
     const [agentMaxToolLoops, setAgentMaxToolLoops] = useState(ws.agent_max_tool_loops ?? 20)
     const [saving, setSaving] = useState(false)
     const [saved, setSaved] = useState(false)
     const [deleting, setDeleting] = useState(false)
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
 
     const selectedProvider = providers.find(p => p.id === providerId)
+    const selectedKiProvider = providers.find(p => p.id === kiProviderId)
+    const selectedVisionProvider = providers.find(p => p.id === visionProviderId)
 
     const handleSave = async () => {
         setSaving(true)
@@ -276,6 +288,10 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
             icon: icon || null,
             llm_provider_id: providerId || null,
             llm_model: model || null,
+            knowledge_intelligence_provider_id: kiProviderId || null,
+            knowledge_intelligence_model: kiModel || null,
+            vision_provider_id: visionProviderId || null,
+            vision_model: visionModel || null,
             agent_enabled: agentEnabled,
             agent_tool_categories: agentToolCategories,
             agent_max_tool_loops: agentMaxToolLoops,
@@ -285,8 +301,10 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
         onSaved()
     }
 
-    const handleDelete = async () => {
-        if (!confirm(`Delete workspace "${ws.name}"? This cannot be undone.`)) return
+    const handleDelete = () => setDeleteConfirmOpen(true)
+
+    const confirmDelete = async () => {
+        setDeleteConfirmOpen(false)
         setDeleting(true)
         await deleteWorkspace(ws.id)
         onDeleted()
@@ -386,20 +404,23 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
                         <textarea className="input text-sm resize-none" rows={2} value={description} onChange={e => setDescription(e.target.value)} />
                     </div>
 
-                    <div className="border-t border-border/40 pt-3 space-y-2">
-                        <p className="text-xs font-medium text-muted-foreground">AI Override <span className="text-xs font-normal opacity-60">(overrides global default for this workspace)</span></p>
-                        <div className="grid gap-3 md:grid-cols-2">
-                            <div>
-                                <label className="text-xs text-muted-foreground mb-1 block">Provider</label>
+                    <div className="border-t border-border/40 pt-3 space-y-3">
+                        <p className="text-xs font-medium text-muted-foreground">AI Models <span className="text-xs font-normal opacity-60">(override global defaults per category for this workspace)</span></p>
+
+                        {/* Workspace Agent */}
+                        <div className="space-y-1.5">
+                            <div className="flex items-center gap-1.5">
+                                <Bot className="w-3 h-3 text-accent" />
+                                <p className="text-xs font-medium">Workspace Agent</p>
+                                <span className="text-[10px] text-muted-foreground opacity-70">Used for chat and agent tool calls</span>
+                            </div>
+                            <div className="grid gap-2 md:grid-cols-2">
                                 <select className="input text-sm" value={providerId} onChange={e => { setProviderId(e.target.value); setModel('') }}>
                                     <option value="">Use global default</option>
                                     {providers.map(p => (
                                         <option key={p.id} value={p.id}>{sanitizeProviderDisplayName(p.display_name)}</option>
                                     ))}
                                 </select>
-                            </div>
-                            <div>
-                                <label className="text-xs text-muted-foreground mb-1 block">Model override</label>
                                 <ModelOverrideSelect
                                     models={selectedProvider?.enabled_models ?? []}
                                     value={model}
@@ -408,6 +429,64 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
                                     placeholder={providerId
                                         ? (selectedProvider?.default_model
                                             ? `Default: ${selectedProvider.default_model}`
+                                            : 'Select model override')
+                                        : 'Select provider first'}
+                                    inheritLabel="Inherit provider default"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Knowledge Intelligence */}
+                        <div className="space-y-1.5">
+                            <div className="flex items-center gap-1.5">
+                                <Brain className="w-3 h-3 text-violet-400" />
+                                <p className="text-xs font-medium">Knowledge Intelligence</p>
+                                <span className="text-[10px] text-muted-foreground opacity-70">Used for knowledge extraction and processing</span>
+                            </div>
+                            <div className="grid gap-2 md:grid-cols-2">
+                                <select className="input text-sm" value={kiProviderId} onChange={e => { setKiProviderId(e.target.value); setKiModel('') }}>
+                                    <option value="">Use global default</option>
+                                    {providers.map(p => (
+                                        <option key={p.id} value={p.id}>{sanitizeProviderDisplayName(p.display_name)}</option>
+                                    ))}
+                                </select>
+                                <ModelOverrideSelect
+                                    models={selectedKiProvider?.enabled_models ?? []}
+                                    value={kiModel}
+                                    onChange={setKiModel}
+                                    disabled={!kiProviderId}
+                                    placeholder={kiProviderId
+                                        ? (selectedKiProvider?.default_model
+                                            ? `Default: ${selectedKiProvider.default_model}`
+                                            : 'Select model override')
+                                        : 'Select provider first'}
+                                    inheritLabel="Inherit provider default"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Visual Model */}
+                        <div className="space-y-1.5">
+                            <div className="flex items-center gap-1.5">
+                                <Eye className="w-3 h-3 text-sky-400" />
+                                <p className="text-xs font-medium">Visual Model</p>
+                                <span className="text-[10px] text-muted-foreground opacity-70">Used for image and visual content extraction</span>
+                            </div>
+                            <div className="grid gap-2 md:grid-cols-2">
+                                <select className="input text-sm" value={visionProviderId} onChange={e => { setVisionProviderId(e.target.value); setVisionModel('') }}>
+                                    <option value="">Use global default</option>
+                                    {providers.map(p => (
+                                        <option key={p.id} value={p.id}>{sanitizeProviderDisplayName(p.display_name)}</option>
+                                    ))}
+                                </select>
+                                <ModelOverrideSelect
+                                    models={selectedVisionProvider?.enabled_models ?? []}
+                                    value={visionModel}
+                                    onChange={setVisionModel}
+                                    disabled={!visionProviderId}
+                                    placeholder={visionProviderId
+                                        ? (selectedVisionProvider?.default_model
+                                            ? `Default: ${selectedVisionProvider.default_model}`
                                             : 'Select model override')
                                         : 'Select provider first'}
                                     inheritLabel="Inherit provider default"
@@ -497,12 +576,60 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
                     </button>
                 </div>
             )}
+            <ConfirmModal
+                open={deleteConfirmOpen}
+                title={`Delete "${ws.name}"?`}
+                message="This will permanently delete the workspace, all its knowledge, and all chat history. This action cannot be undone."
+                confirmLabel="Delete Workspace"
+                variant="danger"
+                loading={deleting}
+                onConfirm={confirmDelete}
+                onCancel={() => setDeleteConfirmOpen(false)}
+            />
         </div>
     )
 }
 
 // ── LLM Settings Tab ──────────────────────────────────────────────────────────
+type LLMSubTab = 'chat' | 'vision' | 'audio' | 'embedding'
+
 function LLMSettings() {
+    const [subTab, setSubTab] = useState<LLMSubTab>('chat')
+
+    const LLM_SUB_TABS: { id: LLMSubTab; label: string; Icon: React.ElementType }[] = [
+        { id: 'chat', label: 'Chat Models', Icon: MessageSquare },
+        { id: 'vision', label: 'Vision Models', Icon: Eye },
+        { id: 'audio', label: 'Audio', Icon: Zap },
+        { id: 'embedding', label: 'Embedding', Icon: Database },
+    ]
+
+    return (
+        <div className="space-y-4">
+            <div className="flex gap-1.5 p-1 glass-card w-fit rounded-xl">
+                {LLM_SUB_TABS.map(({ id, label, Icon }) => (
+                    <button
+                        key={id}
+                        onClick={() => setSubTab(id)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${subTab === id
+                            ? 'bg-accent/20 text-accent ring-1 ring-accent/30'
+                            : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
+                        }`}
+                    >
+                        <Icon className="w-3.5 h-3.5" />
+                        {label}
+                    </button>
+                ))}
+            </div>
+
+            {subTab === 'chat' && <ChatModelsTab />}
+            {subTab === 'vision' && <VisionModelsTab />}
+            {subTab === 'audio' && <AudioTab />}
+            {subTab === 'embedding' && <EmbeddingTab />}
+        </div>
+    )
+}
+
+function ChatModelsTab() {
     const qc = useQueryClient()
     const { data: providers = [] } = useQuery({ queryKey: ['providers'], queryFn: listProviders })
     const [expanded, setExpanded] = useState<string | null>(null)
@@ -512,7 +639,7 @@ function LLMSettings() {
         <div className="space-y-3">
             <div className="flex items-center justify-between">
                 <div>
-                    <h3 className="font-semibold text-sm">AI Providers</h3>
+                    <h3 className="font-semibold text-sm">Chat Model Providers</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
                         Each entry is a provider + model pair. <Star className="w-3 h-3 inline-block text-amber-400" /> default is used for new chats.
                     </p>
@@ -543,6 +670,161 @@ function LLMSettings() {
                     <p>No AI providers configured yet.</p>
                 </div>
             )}
+        </div>
+    )
+}
+
+function VisionModelsTab() {
+    const { data: providers = [] } = useQuery({ queryKey: ['providers'], queryFn: listProviders })
+    const visionProviders = (providers as ProviderRow[]).filter(p =>
+        ['openai', 'anthropic', 'gemini', 'openrouter', 'custom-openai'].some(n =>
+            p.provider_name?.includes(n)
+        )
+    )
+
+    return (
+        <div className="space-y-3">
+            <div>
+                <h3 className="font-semibold text-sm">Vision Model Providers</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    Providers with vision-capable models for image and document content extraction. Configure vision providers per workspace in the Workspaces tab.
+                </p>
+            </div>
+
+            {visionProviders.length > 0 ? (
+                <div className="space-y-2">
+                    {visionProviders.map(p => (
+                        <div key={p.id} className="glass-card px-4 py-3 flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center flex-shrink-0">
+                                <ProviderIcon providerId={p.provider_name} className="w-4 h-4" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium">{sanitizeProviderDisplayName(p.display_name)}</p>
+                                <p className="text-xs text-muted-foreground">{p.enabled_models?.length ?? 0} models enabled</p>
+                            </div>
+                            <span className="chip text-[10px] bg-sky-500/10 border-sky-500/20 text-sky-300">Vision Ready</span>
+                        </div>
+                    ))}
+                    <p className="text-xs text-muted-foreground pt-1">
+                        To assign a vision model to a workspace, go to <span className="text-accent">Workspaces</span> and select a Visual Model provider.
+                    </p>
+                </div>
+            ) : (
+                <div className="text-center py-12 text-muted-foreground text-sm">
+                    <Eye className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                    <p>No vision-capable providers detected.</p>
+                    <p className="text-xs mt-1 opacity-70">Add an OpenAI, Anthropic, or Gemini provider in the Chat Models tab.</p>
+                </div>
+            )}
+        </div>
+    )
+}
+
+function AudioTab() {
+    return (
+        <div className="space-y-3">
+            <div>
+                <h3 className="font-semibold text-sm">Audio</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    Text-to-speech and speech-to-text model configuration.
+                </p>
+            </div>
+
+            <div className="glass-card p-6 space-y-6">
+                <div className="flex items-start gap-4 opacity-50">
+                    <div className="w-10 h-10 rounded-xl bg-muted/40 border border-border/50 flex items-center justify-center flex-shrink-0">
+                        <Zap className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                    <div className="flex-1">
+                        <p className="text-sm font-medium">Text-to-Speech (TTS)</p>
+                        <p className="text-xs text-muted-foreground mt-1">Configure voice synthesis models for reading responses aloud.</p>
+                        <div className="mt-3 flex items-center gap-2">
+                            <select className="input text-sm flex-1" disabled>
+                                <option>Coming soon</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="border-t border-border/40" />
+
+                <div className="flex items-start gap-4 opacity-50">
+                    <div className="w-10 h-10 rounded-xl bg-muted/40 border border-border/50 flex items-center justify-center flex-shrink-0">
+                        <Zap className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                    <div className="flex-1">
+                        <p className="text-sm font-medium">Speech-to-Text (STT)</p>
+                        <p className="text-xs text-muted-foreground mt-1">Configure transcription models for voice input in chat.</p>
+                        <div className="mt-3 flex items-center gap-2">
+                            <select className="input text-sm flex-1" disabled>
+                                <option>Coming soon</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex items-center gap-2 rounded-lg border border-border/40 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                Audio model support is coming in a future release.
+            </div>
+        </div>
+    )
+}
+
+function EmbeddingTab() {
+    const { data: settings = [] } = useQuery({ queryKey: ['settings'], queryFn: listSettings })
+    const qc = useQueryClient()
+    const embeddingModel = (settings as { key: string; value: string }[]).find(s => s.key === 'embedding_model')?.value ?? ''
+    const [model, setModel] = useState('')
+    const [saving, setSaving] = useState(false)
+    const [saved, setSaved] = useState(false)
+
+    useEffect(() => {
+        setModel(embeddingModel)
+    }, [embeddingModel])
+
+    const handleSave = async () => {
+        setSaving(true)
+        await updateSetting('embedding_model', { value: model })
+        qc.invalidateQueries({ queryKey: ['settings'] })
+        setSaving(false); setSaved(true)
+        setTimeout(() => setSaved(false), 2000)
+    }
+
+    return (
+        <div className="space-y-3">
+            <div>
+                <h3 className="font-semibold text-sm">Embedding Model</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    The embedding model is used to index knowledge for semantic search.
+                </p>
+            </div>
+
+            <div className="glass-card p-4 space-y-3">
+                <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Embedding Model ID</label>
+                    <input
+                        className="input text-sm"
+                        placeholder="e.g. text-embedding-3-small, nomic-embed-text"
+                        value={model}
+                        onChange={e => setModel(e.target.value)}
+                    />
+                </div>
+
+                <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
+                    <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                    <span>Changing the embedding model will require re-indexing all existing knowledge. Semantic search results will be unavailable until re-indexing completes.</span>
+                </div>
+
+                <button className="btn-primary text-xs py-1.5 px-3" onClick={handleSave} disabled={saving || !model.trim()}>
+                    {saved
+                        ? <><CheckCircle2 className="w-3.5 h-3.5" /> Saved</>
+                        : saving
+                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            : <><Save className="w-3.5 h-3.5" /> Save</>}
+                </button>
+            </div>
         </div>
     )
 }
@@ -816,13 +1098,23 @@ function ProviderCard({ provider, expanded, onToggle, onDelete, onSetDefault }: 
     const [savingModel, setSavingModel] = useState(false)
     const [modelSaved, setModelSaved] = useState(false)
     const [modelSearch, setModelSearch] = useState('')
+    const [enabledModels, setEnabledModels] = useState<{ id: string; name: string }[]>(provider.enabled_models ?? [])
+    const [newModelId, setNewModelId] = useState('')
+    const [newModelName, setNewModelName] = useState('')
+    const [addingModel, setAddingModel] = useState(false)
+    const [removingModel, setRemovingModel] = useState<string | null>(null)
 
     const meta = PROVIDER_META[provider.provider_name]
     const filteredModels = useMemo(() => {
-        const list = provider.enabled_models || []
+        const list = enabledModels
         const q = modelSearch.toLowerCase()
         return q ? list.filter(m => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)) : list
-    }, [provider.enabled_models, modelSearch])
+    }, [enabledModels, modelSearch])
+
+    // Sync enabledModels with provider changes
+    useEffect(() => {
+        setEnabledModels(provider.enabled_models ?? [])
+    }, [provider.enabled_models])
 
     const handleTest = async () => {
         setTesting(true); setTestResult(null)
@@ -831,7 +1123,7 @@ function ProviderCard({ provider, expanded, onToggle, onDelete, onSetDefault }: 
         finally { setTesting(false) }
     }
 
-    const handleSaveModel = async () => {
+    const handleSaveDefaultModel = async () => {
         setSavingModel(true)
         await updateProvider(provider.id, { default_model: selectedModel })
         qc.invalidateQueries({ queryKey: ['providers'] })
@@ -839,9 +1131,56 @@ function ProviderCard({ provider, expanded, onToggle, onDelete, onSetDefault }: 
         setTimeout(() => setModelSaved(false), 2000)
     }
 
+    const handleAddModel = async () => {
+        if (!newModelId.trim()) return
+        setAddingModel(true)
+        const modelToAdd = { id: newModelId.trim(), name: newModelName.trim() || newModelId.trim() }
+        const updatedModels = [...enabledModels, modelToAdd]
+        try {
+            await updateProvider(provider.id, { enabled_models: updatedModels })
+            setEnabledModels(updatedModels)
+            setNewModelId('')
+            setNewModelName('')
+            qc.invalidateQueries({ queryKey: ['providers'] })
+        } catch (err) {
+            console.error('Failed to add model:', err)
+        } finally {
+            setAddingModel(false)
+        }
+    }
+
+    const handleRemoveModel = async (modelId: string) => {
+        setRemovingModel(modelId)
+        const updatedModels = enabledModels.filter(m => m.id !== modelId)
+        try {
+            await updateProvider(provider.id, { enabled_models: updatedModels })
+            setEnabledModels(updatedModels)
+            // If the removed model was the default, clear it
+            if (selectedModel === modelId) {
+                setSelectedModel(updatedModels[0]?.id ?? '')
+            }
+            qc.invalidateQueries({ queryKey: ['providers'] })
+        } catch (err) {
+            console.error('Failed to remove model:', err)
+        } finally {
+            setRemovingModel(null)
+        }
+    }
+
     return (
         <div className="glass-card-hover transition-all duration-300">
-            <div className="flex items-center gap-3 px-4 py-3">
+            <div
+                className="flex items-center gap-3 px-4 py-3 cursor-pointer"
+                onClick={onToggle}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onToggle()
+                    }
+                }}
+            >
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${meta?.color ?? 'bg-muted border-border'}`}>
                     <ProviderIcon providerId={provider.provider_name} className="w-4 h-4" />
                 </div>
@@ -855,9 +1194,10 @@ function ProviderCard({ provider, expanded, onToggle, onDelete, onSetDefault }: 
                     <p className="text-xs text-muted-foreground mt-0.5 truncate">
                         {provider.has_api_key ? 'Key set' : provider.base_url ?? 'No credentials'}
                         {provider.default_model ? ` · ${provider.default_model}` : ''}
+                        {enabledModels.length > 0 && ` · ${enabledModels.length} model${enabledModels.length !== 1 ? 's' : ''}`}
                     </p>
                 </div>
-                <div className="flex gap-1 flex-shrink-0">
+                <div className="flex gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                     {!provider.is_system_default && (
                         <button className="btn-ghost p-1.5" title="Set as default" onClick={onSetDefault}><Star className="w-3.5 h-3.5" /></button>
                     )}
@@ -869,7 +1209,7 @@ function ProviderCard({ provider, expanded, onToggle, onDelete, onSetDefault }: 
             </div>
 
             {expanded && (
-                <div className="border-t border-border/50 px-4 py-4 space-y-3 animate-fade-in">
+                <div className="border-t border-border/50 px-4 py-4 space-y-4 animate-fade-in">
                     <button className="btn-ghost text-xs border border-border w-full justify-center py-2" onClick={handleTest} disabled={testing}>
                         {testing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe2 className="w-3.5 h-3.5" />}
                         {testing ? 'Testing…' : 'Test Connection'}
@@ -881,38 +1221,114 @@ function ProviderCard({ provider, expanded, onToggle, onDelete, onSetDefault }: 
                         </div>
                     )}
 
+                    {/* Enabled Models Section */}
                     <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                            <label className="text-xs font-medium text-muted-foreground">Enabled Models</label>
+                            <span className="text-[10px] text-muted-foreground">{enabledModels.length} model{enabledModels.length !== 1 ? 's' : ''}</span>
+                        </div>
+
+                        {enabledModels.length > 0 && (
+                            <>
+                                <div className="relative">
+                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                                    <input
+                                        className="input text-xs pl-7 w-full"
+                                        placeholder="Search models..."
+                                        value={modelSearch}
+                                        onChange={e => setModelSearch(e.target.value)}
+                                    />
+                                </div>
+                                <div className="max-h-40 overflow-y-auto rounded-lg border border-border/50 bg-background/30 divide-y divide-border/20">
+                                    {filteredModels.map(m => (
+                                        <div key={m.id} className="flex items-center justify-between px-3 py-2 text-xs hover:bg-muted/30 transition-colors">
+                                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                                                {selectedModel === m.id ? (
+                                                    <Zap className="w-3 h-3 flex-shrink-0 text-accent" />
+                                                ) : (
+                                                    <span className="w-3" />
+                                                )}
+                                                <span className="truncate">{m.name}</span>
+                                                <span className="text-muted-foreground/50 font-mono text-[10px] truncate">{m.id}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1 flex-shrink-0">
+                                                <button
+                                                    className="btn-ghost p-1 text-[10px] hover:text-accent"
+                                                    onClick={() => setSelectedModel(m.id)}
+                                                    title="Set as default"
+                                                >
+                                                    {selectedModel === m.id ? <Star className="w-3 h-3 text-accent" /> : <Star className="w-3 h-3" />}
+                                                </button>
+                                                <button
+                                                    className="btn-ghost p-1 text-red-400 hover:bg-red-500/10"
+                                                    onClick={() => handleRemoveModel(m.id)}
+                                                    disabled={removingModel === m.id}
+                                                    title="Remove model"
+                                                >
+                                                    {removingModel === m.id ? (
+                                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                                    ) : (
+                                                        <X className="w-3 h-3" />
+                                                    )}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+
+                        {/* Add new model */}
+                        <div className="flex flex-col gap-2 pt-2 border-t border-border/30">
+                            <p className="text-[10px] text-muted-foreground">Add a new model to this provider:</p>
+                            <div className="flex gap-2">
+                                <input
+                                    className="input text-xs flex-1 py-1.5"
+                                    placeholder="Model ID (e.g. gpt-4o)"
+                                    value={newModelId}
+                                    onChange={e => setNewModelId(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') handleAddModel() }}
+                                />
+                                <input
+                                    className="input text-xs flex-1 py-1.5"
+                                    placeholder="Display name (optional)"
+                                    value={newModelName}
+                                    onChange={e => setNewModelName(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') handleAddModel() }}
+                                />
+                                <button
+                                    className="btn-primary text-xs py-1.5 px-3 whitespace-nowrap"
+                                    onClick={handleAddModel}
+                                    disabled={addingModel || !newModelId.trim()}
+                                >
+                                    {addingModel ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Save Default Model */}
+                    <div className="space-y-2 pt-2 border-t border-border/30">
                         <div className="flex items-center justify-between">
                             <label className="text-xs font-medium text-muted-foreground">Default Model</label>
                             {modelSaved && <span className="text-[10px] text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Saved</span>}
                         </div>
-                        {provider.enabled_models && provider.enabled_models.length > 0 ? (
-                            <>
-                                <div className="max-h-36 overflow-y-auto rounded-lg border border-border/50 bg-background/30 divide-y divide-border/20">
-                                    {filteredModels.map(m => (
-                                        <button key={m.id} onClick={() => setSelectedModel(m.id)}
-                                            className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-muted/30 transition-colors ${selectedModel === m.id ? 'bg-accent/10 text-accent' : 'text-muted-foreground'}`}>
-                                            {selectedModel === m.id ? <Zap className="w-3 h-3 flex-shrink-0" /> : <span className="w-3" />}
-                                            <span className="truncate">{m.name}</span>
-                                        </button>
-                                    ))}
-                                </div>
-                                <div className="flex gap-2">
-                                    <input className="input text-xs flex-1 py-1.5" placeholder="Model ID…" value={selectedModel} onChange={e => setSelectedModel(e.target.value)} />
-                                    <button className="btn-primary text-xs py-1.5 px-3 whitespace-nowrap" onClick={handleSaveModel} disabled={savingModel || !selectedModel}>
-                                        {savingModel ? 'Saving…' : 'Save Default Model'}
-                                    </button>
-                                </div>
-                            </>
-                        ) : (
-                            <div className="flex gap-2 items-center">
-                                <input className="input text-xs flex-1 py-1.5" placeholder="Model ID…" value={selectedModel} onChange={e => setSelectedModel(e.target.value)} />
-                                <button className="btn-primary text-xs py-1.5 px-3" onClick={handleSaveModel} disabled={savingModel || !selectedModel}>
-                                    {modelSaved ? <CheckCircle2 className="w-3.5 h-3.5" /> : savingModel ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                                    {modelSaved ? 'Saved' : 'Set default'}
-                                </button>
-                            </div>
-                        )}
+                        <div className="flex gap-2">
+                            <input
+                                className="input text-xs flex-1 py-1.5"
+                                placeholder="Default model ID"
+                                value={selectedModel}
+                                onChange={e => setSelectedModel(e.target.value)}
+                            />
+                            <button
+                                className="btn-primary text-xs py-1.5 px-3 whitespace-nowrap"
+                                onClick={handleSaveDefaultModel}
+                                disabled={savingModel || !selectedModel.trim()}
+                            >
+                                {savingModel ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                                {savingModel ? 'Saving…' : 'Save Default'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
@@ -933,7 +1349,16 @@ interface PromptEntry {
     updated_at: string | null
 }
 
+type PromptsSubTab = 'agent' | 'knowledge' | 'extraction'
+
+const PROMPTS_SUB_TABS: Array<{ id: PromptsSubTab; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+    { id: 'agent', label: 'Agent Prompts', icon: Bot },
+    { id: 'knowledge', label: 'Knowledge Intelligence', icon: Brain },
+    { id: 'extraction', label: 'Content Extraction', icon: FileText },
+]
+
 function PromptsTab() {
+    const [activeSubTab, setActiveSubTab] = useState<PromptsSubTab>('agent')
     const qc = useQueryClient()
     const { data: prompts = [], isLoading } = useQuery<PromptEntry[]>({
         queryKey: ['prompts'],
@@ -974,11 +1399,34 @@ function PromptsTab() {
         setDrafts(d => ({ ...d, [promptId]: (d[promptId] ?? '') + variable }))
     }
 
-    const categories = ['knowledge', 'chat']
-    const categoryLabels: Record<string, string> = {
-        knowledge: 'Knowledge Intelligence',
-        chat: 'Chat & Retrieval',
-    }
+    // Map prompts to sub-tabs based on their role
+    const promptsBySubTab = useMemo(() => {
+        const result: Record<PromptsSubTab, PromptEntry[]> = {
+            agent: [],
+            knowledge: [],
+            extraction: [],
+        }
+        for (const p of (prompts as PromptEntry[])) {
+            // Categorize based on role field
+            if (p.role === 'agent' || p.role === 'chat') {
+                result.agent.push(p)
+            } else if (p.role === 'knowledge' || p.role === 'intelligence') {
+                result.knowledge.push(p)
+            } else if (p.role === 'extraction' || p.role === 'content') {
+                result.extraction.push(p)
+            } else {
+                // Fallback to category-based mapping
+                if (p.category === 'chat') {
+                    result.agent.push(p)
+                } else if (p.category === 'knowledge') {
+                    result.knowledge.push(p)
+                } else {
+                    result.extraction.push(p)
+                }
+            }
+        }
+        return result
+    }, [prompts])
 
     if (isLoading) {
         return (
@@ -989,7 +1437,30 @@ function PromptsTab() {
     }
 
     return (
-        <div className="space-y-8">
+        <div className="space-y-5">
+            <div className="flex shrink-0 gap-2 p-1.5 glass-card w-fit rounded-2xl overflow-x-auto min-h-[48px]">
+                {PROMPTS_SUB_TABS.map(tab => {
+                    const Icon = tab.icon
+                    const count = promptsBySubTab[tab.id].length
+                    return (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveSubTab(tab.id)}
+                            className={`flex min-h-8 items-center justify-center gap-2 px-4 py-1.5 text-sm font-medium rounded-xl transition-all duration-300 whitespace-nowrap ${activeSubTab === tab.id
+                                ? 'bg-accent/20 text-accent shadow-glass-inset ring-1 ring-accent/30'
+                                : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
+                                }`}
+                        >
+                            <Icon className="w-4 h-4" />
+                            {tab.label}
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeSubTab === tab.id ? 'bg-accent/20' : 'bg-muted/40'}`}>
+                                {count}
+                            </span>
+                        </button>
+                    )
+                })}
+            </div>
+
             <div className="glass-card p-4 border-accent/20 bg-accent/5">
                 <div className="flex items-start gap-3">
                     <Sliders className="w-4 h-4 text-accent mt-0.5 flex-shrink-0" />
@@ -1003,93 +1474,121 @@ function PromptsTab() {
                 </div>
             </div>
 
-            {categories.map(cat => {
-                const catPrompts = (prompts as PromptEntry[]).filter(p => p.category === cat)
-                if (!catPrompts.length) return null
-                const CatIcon = cat === 'knowledge' ? FileText : MessageSquare
+            <PromptsSubTabContent
+                prompts={promptsBySubTab[activeSubTab]}
+                drafts={drafts}
+                saving={saving}
+                saved={saved}
+                onSave={handleSave}
+                onReset={handleReset}
+                onInsertVariable={insertVariable}
+                setDrafts={setDrafts}
+            />
+        </div>
+    )
+}
+
+function PromptsSubTabContent({
+    prompts,
+    drafts,
+    saving,
+    saved,
+    onSave,
+    onReset,
+    onInsertVariable,
+    setDrafts,
+}: {
+    prompts: PromptEntry[]
+    drafts: Record<string, string>
+    saving: Record<string, boolean>
+    saved: Record<string, boolean>
+    onSave: (p: PromptEntry) => void
+    onReset: (p: PromptEntry) => void
+    onInsertVariable: (promptId: string, variable: string) => void
+    setDrafts: React.Dispatch<React.SetStateAction<Record<string, string>>>
+}) {
+    if (prompts.length === 0) {
+        return (
+            <div className="text-center py-14 text-muted-foreground glass-card rounded-xl">
+                <Sliders className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                <p className="text-sm">No prompts in this category.</p>
+            </div>
+        )
+    }
+
+    return (
+        <div className="space-y-5">
+            {prompts.map(p => {
+                const draft = drafts[p.id] ?? ''
+                const isModified = draft !== (p.override ?? '')
+                const hasOverride = !!p.override
                 return (
-                    <div key={cat}>
-                        <div className="flex items-center gap-2 mb-4">
-                            <CatIcon className="w-4 h-4 text-accent" />
-                            <h3 className="font-semibold text-sm">{categoryLabels[cat]}</h3>
-                            <div className="flex-1 h-px bg-border/50" />
+                    <div key={p.id} className="glass-card p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <div className="flex items-center gap-2 mb-0.5">
+                                    <span className="font-medium text-sm">{p.label}</span>
+                                    {hasOverride && (
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/15 text-accent font-medium">Custom</span>
+                                    )}
+                                </div>
+                                <p className="text-xs text-muted-foreground">{p.description}</p>
+                            </div>
                         </div>
-                        <div className="space-y-5">
-                            {catPrompts.map(p => {
-                                const draft = drafts[p.id] ?? ''
-                                const isModified = draft !== (p.override ?? '')
-                                const hasOverride = !!p.override
-                                return (
-                                    <div key={p.id} className="glass-card p-4 space-y-3">
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div>
-                                                <div className="flex items-center gap-2 mb-0.5">
-                                                    <span className="font-medium text-sm">{p.label}</span>
-                                                    {hasOverride && (
-                                                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/15 text-accent font-medium">Custom</span>
-                                                    )}
-                                                </div>
-                                                <p className="text-xs text-muted-foreground">{p.description}</p>
-                                            </div>
-                                        </div>
 
-                                        {p.variables.length > 0 && (
-                                            <div className="flex flex-wrap gap-1.5 items-center">
-                                                <span className="text-[10px] text-muted-foreground">Insert variable:</span>
-                                                {p.variables.map(v => (
-                                                    <button
-                                                        key={v}
-                                                        className="text-[10px] font-mono px-2 py-0.5 rounded bg-muted/50 border border-border/50 hover:bg-accent/20 hover:text-accent hover:border-accent/30 transition-colors"
-                                                        onClick={() => insertVariable(p.id, v)}
-                                                    >
-                                                        {v}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
+                        {p.variables.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 items-center">
+                                <span className="text-[10px] text-muted-foreground">Insert variable:</span>
+                                {p.variables.map(v => (
+                                    <button
+                                        key={v}
+                                        className="text-[10px] font-mono px-2 py-0.5 rounded bg-muted/50 border border-border/50 hover:bg-accent/20 hover:text-accent hover:border-accent/30 transition-colors"
+                                        onClick={() => onInsertVariable(p.id, v)}
+                                    >
+                                        {v}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
 
-                                        <div>
-                                            <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1.5">Default system prompt</p>
-                                            <div className="bg-muted/20 border border-border/40 rounded-lg p-3 text-xs text-muted-foreground font-mono whitespace-pre-wrap leading-relaxed max-h-32 overflow-y-auto">
-                                                {p.default}
-                                            </div>
-                                        </div>
+                        <div>
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1.5">Default system prompt</p>
+                            <div className="bg-muted/20 border border-border/40 rounded-lg p-3 text-xs text-muted-foreground font-mono whitespace-pre-wrap leading-relaxed max-h-32 overflow-y-auto">
+                                {p.default}
+                            </div>
+                        </div>
 
-                                        <div>
-                                            <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1.5">
-                                                Custom override {!hasOverride && '(leave blank to use default)'}
-                                            </p>
-                                            <textarea
-                                                className="input w-full text-xs font-mono resize-none leading-relaxed"
-                                                rows={5}
-                                                placeholder={p.default}
-                                                value={draft}
-                                                onChange={e => setDrafts(d => ({ ...d, [p.id]: e.target.value }))}
-                                            />
-                                        </div>
+                        <div>
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1.5">
+                                Custom override {!hasOverride && '(leave blank to use default)'}
+                            </p>
+                            <textarea
+                                className="input w-full text-xs font-mono resize-none leading-relaxed"
+                                rows={5}
+                                placeholder={p.default}
+                                value={draft}
+                                onChange={e => setDrafts(d => ({ ...d, [p.id]: e.target.value }))}
+                            />
+                        </div>
 
-                                        <div className="flex items-center gap-2">
-                                            <button
-                                                className="btn-primary text-xs py-1.5 px-3"
-                                                disabled={saving[p.id] || !isModified}
-                                                onClick={() => handleSave(p)}
-                                            >
-                                                {saving[p.id] ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : saved[p.id] ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
-                                                {saved[p.id] ? 'Saved!' : 'Save override'}
-                                            </button>
-                                            {hasOverride && (
-                                                <button
-                                                    className="btn-ghost text-xs py-1.5 px-3 text-muted-foreground"
-                                                    disabled={saving[p.id]}
-                                                    onClick={() => handleReset(p)}
-                                                >
-                                                    <RotateCcw className="w-3.5 h-3.5" /> Reset to default
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                )
-                            })}
+                        <div className="flex items-center gap-2">
+                            <button
+                                className="btn-primary text-xs py-1.5 px-3"
+                                disabled={saving[p.id] || !isModified}
+                                onClick={() => onSave(p)}
+                            >
+                                {saving[p.id] ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : saved[p.id] ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
+                                {saved[p.id] ? 'Saved!' : 'Save override'}
+                            </button>
+                            {hasOverride && (
+                                <button
+                                    className="btn-ghost text-xs py-1.5 px-3 text-muted-foreground"
+                                    disabled={saving[p.id]}
+                                    onClick={() => onReset(p)}
+                                >
+                                    <RotateCcw className="w-3.5 h-3.5" /> Reset to default
+                                </button>
+                            )}
                         </div>
                     </div>
                 )
@@ -2983,6 +3482,136 @@ function MCPTab() {
                         onDeleted={handleDeleted}
                     />
                 ))}
+            </div>
+        </div>
+    )
+}
+
+// ── Export Tab ────────────────────────────────────────────────────────────────
+function ExportTab({ workspaceId }: { workspaceId: string }) {
+    const { data: workspaces = [] } = useQuery({ queryKey: ['workspaces'], queryFn: listWorkspaces })
+    const [exporting, setExporting] = useState<'all' | string | null>(null)
+    const [exportError, setExportError] = useState<string | null>(null)
+
+    const handleExportAll = async () => {
+        setExporting('all')
+        setExportError(null)
+        try {
+            const blob = await exportAllData()
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `openforge-export-${new Date().toISOString().split('T')[0]}.zip`
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+            URL.revokeObjectURL(url)
+        } catch (err: unknown) {
+            const msg = (err as { response?: { data?: { detail?: string } }; message?: string })?.response?.data?.detail ?? (err as Error)?.message ?? 'Export failed'
+            setExportError(msg)
+        } finally {
+            setExporting(null)
+        }
+    }
+
+    const handleExportWorkspace = async (wsId: string) => {
+        setExporting(wsId)
+        setExportError(null)
+        try {
+            const blob = await exportWorkspaceData(wsId)
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            const ws = (workspaces as WorkspaceRow[]).find(w => w.id === wsId)
+            a.download = `${ws?.name ?? 'workspace'}-export-${new Date().toISOString().split('T')[0]}.zip`
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+            URL.revokeObjectURL(url)
+        } catch (err: unknown) {
+            const msg = (err as { response?: { data?: { detail?: string } }; message?: string })?.response?.data?.detail ?? (err as Error)?.message ?? 'Export failed'
+            setExportError(msg)
+        } finally {
+            setExporting(null)
+        }
+    }
+
+    return (
+        <div className="space-y-6">
+            <div>
+                <h3 className="font-semibold text-sm">Export Data</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    Download your data as ZIP archives. Exports include chat threads, knowledge, attachments, and settings.
+                </p>
+            </div>
+
+            {exportError && (
+                <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-xs text-red-300">
+                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                    <span>{exportError}</span>
+                </div>
+            )}
+
+            {/* Export All */}
+            <div className="glass-card p-4 border-accent/20 bg-accent/5">
+                <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-accent/15 border border-accent/30 flex items-center justify-center text-accent">
+                            <Archive className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <p className="font-medium text-sm">Export All Data</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                                Download a complete backup of all workspaces, including chat threads, knowledge, attachments, and settings configuration.
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        className="btn-primary text-xs py-2 px-4 gap-2 shrink-0"
+                        onClick={handleExportAll}
+                        disabled={exporting !== null}
+                    >
+                        {exporting === 'all' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                        {exporting === 'all' ? 'Exporting...' : 'Export All'}
+                    </button>
+                </div>
+            </div>
+
+            {/* Per-workspace exports */}
+            <div>
+                <h4 className="text-sm font-medium mb-3">Export Individual Workspaces</h4>
+                <div className="space-y-2">
+                    {(workspaces as WorkspaceRow[]).map(ws => (
+                        <div key={ws.id} className="glass-card px-4 py-3 flex items-center justify-between gap-3 rounded-xl border-border/50">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0">
+                                    {getWorkspaceIcon(ws.icon)}
+                                </div>
+                                <div>
+                                    <span className="font-medium text-sm">{ws.name}</span>
+                                    <p className="text-xs text-muted-foreground">
+                                        {ws.knowledge_count} knowledge · {ws.conversation_count} chats
+                                        {ws.id === workspaceId && <span className="ml-2 text-accent">(current)</span>}
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                className="btn-ghost text-xs py-1.5 px-3 gap-1.5 shrink-0"
+                                onClick={() => handleExportWorkspace(ws.id)}
+                                disabled={exporting !== null}
+                            >
+                                {exporting === ws.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileArchive className="w-3.5 h-3.5" />}
+                                {exporting === ws.id ? 'Exporting...' : 'Export'}
+                            </button>
+                        </div>
+                    ))}
+                    {(workspaces as WorkspaceRow[]).length === 0 && (
+                        <div className="text-center py-8 text-muted-foreground glass-card rounded-xl">
+                            <FolderOpen className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                            <p className="text-sm">No workspaces to export.</p>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     )

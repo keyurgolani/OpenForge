@@ -11,9 +11,11 @@ import {
     listProviders,
     getWorkspace,
     saveAttachmentToKnowledge,
+    exportConversation,
 } from '@/lib/api'
 import { useStreamingChat } from '@/hooks/useStreamingChat'
 import { useToast } from '@/components/shared/ToastProvider'
+import { ConfirmModal } from '@/components/ui/confirm-modal'
 import {
     Plus, Send, Square, Loader2, MessageSquare, Trash2, Bot, User,
     ChevronDown, ChevronRight, ChevronLeft, ChevronUp, ChevronsUp, ExternalLink, Check, Pencil,
@@ -143,6 +145,13 @@ export default function ChatPage() {
     const [uploadingFiles, setUploadingFiles] = useState(false)
     const [streamResponseExpanded, setStreamResponseExpanded] = useState(false)
     const [streamResponseHasHiddenTop, setStreamResponseHasHiddenTop] = useState(false)
+    const [confirmModal, setConfirmModal] = useState<{
+        open: boolean
+        title: string
+        message: string
+        onConfirm: () => void
+        variant: 'danger' | 'warning' | 'info' | 'success'
+    }>({ open: false, title: '', message: '', onConfirm: () => {}, variant: 'warning' })
 
     const { data: workspace } = useQuery({
         queryKey: ['workspace', workspaceId],
@@ -659,21 +668,48 @@ export default function ChatPage() {
         }
     }
 
-    const handlePermanentlyDeleteConv = async (cid: string) => {
-        if (!window.confirm('Permanently delete this chat? This cannot be undone.')) return
+    const handlePermanentlyDeleteConv = (cid: string) => {
+        setConfirmModal({
+            open: true,
+            title: 'Permanently Delete Chat?',
+            message: 'This action cannot be undone. The chat and all its messages will be permanently removed.',
+            variant: 'danger',
+            onConfirm: async () => {
+                setConfirmModal(prev => ({ ...prev, open: false }))
+                try {
+                    await permanentlyDeleteConversation(workspaceId, cid)
+                    qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
+                    qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'archived'] })
+                    qc.removeQueries({ queryKey: ['conversation', cid], exact: true })
+                    if (activeCid === cid) {
+                        suppressAutoSelectRef.current = true
+                        setActiveCid(null)
+                        navigate(`/w/${workspaceId}/chat`)
+                    }
+                } catch (err: any) {
+                    const detail = err?.response?.data?.detail || err?.message || 'Unable to permanently delete conversation.'
+                    showError('Permanent delete failed', detail)
+                }
+            },
+        })
+    }
+
+    const handleDownloadConv = async (cid: string, format: 'json' | 'markdown' | 'txt' = 'json') => {
         try {
-            await permanentlyDeleteConversation(workspaceId, cid)
-            qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
-            qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'archived'] })
-            qc.removeQueries({ queryKey: ['conversation', cid], exact: true })
-            if (activeCid === cid) {
-                suppressAutoSelectRef.current = true
-                setActiveCid(null)
-                navigate(`/w/${workspaceId}/chat`)
-            }
+            const blob = await exportConversation(workspaceId, cid, format)
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            const conv = [...(conversations as Conversation[]), ...(conversationsWithArchived as Conversation[])].find(c => c.id === cid)
+            const ext = format === 'markdown' ? 'md' : format === 'txt' ? 'txt' : 'json'
+            a.download = `${(conv?.title || 'chat').replace(/[^a-z0-9]/gi, '_')}.${ext}`
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+            URL.revokeObjectURL(url)
         } catch (err: any) {
-            const detail = err?.response?.data?.detail || err?.message || 'Unable to permanently delete conversation.'
-            showError('Permanent delete failed', detail)
+            const detail = err?.response?.data?.detail || err?.message || 'Unable to download conversation.'
+            showError('Download failed', detail)
         }
     }
 
@@ -1345,6 +1381,7 @@ export default function ChatPage() {
                                                         workspaceId={workspaceId}
                                                         onSelect={() => handleSelectConversation(c.id)}
                                                         onDelete={() => handleDeleteConv(c.id)}
+                                                        onDownload={(format) => handleDownloadConv(c.id, format)}
                                                         onRename={(title) => updateConversation(workspaceId, c.id, { title, title_locked: true }).then(() => {
                                                             qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
                                                             qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'archived'] })
@@ -1396,6 +1433,7 @@ export default function ChatPage() {
                                                     onSelect={() => handleSelectTrashedConversation(c.id)}
                                                     onRestore={() => handleRestoreConv(c.id)}
                                                     onPermanentDelete={() => handlePermanentlyDeleteConv(c.id)}
+                                                    onDownload={(format) => handleDownloadConv(c.id, format)}
                                                 />
                                             ))
                                         )}
@@ -1406,17 +1444,28 @@ export default function ChatPage() {
                     </>
                 )}
             </aside>
+            <ConfirmModal
+                open={confirmModal.open}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                variant={confirmModal.variant}
+                onConfirm={confirmModal.onConfirm}
+                onCancel={() => setConfirmModal(prev => ({ ...prev, open: false }))}
+            />
         </div>
     )
 }
 
 // ── Conversation row with inline rename ─────────────────────────────────────
-function ConversationRow({ conv, active, workspaceId, onSelect, onDelete, onRename }: {
+function ConversationRow({ conv, active, workspaceId, onSelect, onDelete, onDownload, onRename }: {
     conv: Conversation; active: boolean; workspaceId: string
-    onSelect: () => void; onDelete: () => void; onRename: (title: string) => void
+    onSelect: () => void; onDelete: () => void
+    onDownload: (format: 'json' | 'markdown' | 'txt') => void
+    onRename: (title: string) => void
 }) {
     const [editing, setEditing] = useState(false)
     const [draft, setDraft] = useState(conv.title ?? '')
+    const [showDownloadMenu, setShowDownloadMenu] = useState(false)
     const inputRef = useRef<HTMLInputElement>(null)
 
     const openRename = () => {
@@ -1461,7 +1510,7 @@ function ConversationRow({ conv, active, workspaceId, onSelect, onDelete, onRena
                         )}
                         <p className="text-[10px] text-muted-foreground/85 leading-tight">{conv.message_count} messages</p>
                     </div>
-                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5">
+                    <div className="relative opacity-0 group-hover:opacity-100 flex items-center gap-0.5">
                         <button
                             className="btn-ghost h-6 w-6 p-0 justify-center"
                             onClick={startEdit}
@@ -1470,6 +1519,27 @@ function ConversationRow({ conv, active, workspaceId, onSelect, onDelete, onRena
                         >
                             <Pencil className="w-2.5 h-2.5" />
                         </button>
+                        <button
+                            type="button"
+                            className="btn-ghost h-6 w-6 p-0 justify-center text-muted-foreground hover:text-foreground"
+                            onClick={(e) => { e.stopPropagation(); setShowDownloadMenu(m => !m) }}
+                            title="Download chat"
+                            aria-label="Download chat"
+                        >
+                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                        </button>
+                        {showDownloadMenu && (
+                            <div className="absolute right-0 top-full mt-1 z-50 min-w-[100px] rounded-lg border border-border/60 bg-popover py-1 shadow-lg">
+                                {(['json', 'markdown', 'txt'] as const).map(fmt => (
+                                    <button key={fmt} type="button" onClick={(e) => { e.stopPropagation(); onDownload(fmt); setShowDownloadMenu(false) }}
+                                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 capitalize">
+                                        {fmt === 'markdown' ? 'Markdown' : fmt === 'txt' ? 'Plain Text' : 'JSON'}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                         <button
                             className="btn-ghost h-6 w-6 p-0 justify-center"
                             onClick={e => { e.stopPropagation(); onDelete() }}
@@ -1482,23 +1552,15 @@ function ConversationRow({ conv, active, workspaceId, onSelect, onDelete, onRena
                 </div>
             </ContextMenuTrigger>
             <ContextMenuContent className="w-48">
-                <ContextMenuItem
-                    onSelect={(e) => {
-                        e.preventDefault()
-                        openRename()
-                    }}
-                    className="gap-2"
-                >
+                <ContextMenuItem onSelect={(e) => { e.preventDefault(); openRename() }} className="gap-2">
                     <Pencil className="w-4 h-4" /> Rename Chat
                 </ContextMenuItem>
+                <ContextMenuItem onSelect={(e) => { e.preventDefault(); onDownload('json') }} className="gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                    Download Chat
+                </ContextMenuItem>
                 <ContextMenuSeparator />
-                <ContextMenuItem
-                    onSelect={(e) => {
-                        e.preventDefault()
-                        onDelete()
-                    }}
-                    className="gap-2 text-red-500 focus:text-red-400 focus:bg-red-500/10"
-                >
+                <ContextMenuItem onSelect={(e) => { e.preventDefault(); onDelete() }} className="gap-2 text-red-500 focus:text-red-400 focus:bg-red-500/10">
                     <Trash2 className="w-4 h-4" /> Move to Trash
                 </ContextMenuItem>
             </ContextMenuContent>
@@ -1512,13 +1574,17 @@ function TrashedConversationRow({
     onSelect,
     onRestore,
     onPermanentDelete,
+    onDownload,
 }: {
     conv: Conversation
     active: boolean
     onSelect: () => void
     onRestore: () => void
     onPermanentDelete: () => void
+    onDownload: (format: 'json' | 'markdown' | 'txt') => void
 }) {
+    const [showDownloadMenu, setShowDownloadMenu] = useState(false)
+
     return (
         <div
             className={`group flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 cursor-pointer transition-colors ${active
@@ -1532,29 +1598,82 @@ function TrashedConversationRow({
                 <p className="text-[11px] font-medium truncate leading-tight">{conv.title ?? 'Untitled Chat'}</p>
                 <p className="text-[10px] text-muted-foreground/85 leading-tight">{conv.message_count} messages</p>
             </div>
-            <button
-                type="button"
-                onClick={(e) => {
-                    e.stopPropagation()
-                    onRestore()
-                }}
-                className="btn-ghost h-6 px-2 py-0 text-[10px] rounded-md"
-                aria-label="Restore chat"
-            >
-                Restore
-            </button>
-            <button
-                type="button"
-                onClick={(e) => {
-                    e.stopPropagation()
-                    onPermanentDelete()
-                }}
-                className="btn-ghost h-6 w-6 p-0 justify-center text-red-400 hover:bg-red-500/10"
-                aria-label="Delete permanently"
-                title="Delete permanently"
-            >
-                <Trash2 className="w-3 h-3" />
-            </button>
+            <div className="relative flex items-center gap-0.5">
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        setShowDownloadMenu(!showDownloadMenu)
+                    }}
+                    className="btn-ghost h-6 w-6 p-0 justify-center text-muted-foreground hover:text-foreground"
+                    aria-label="Download chat"
+                    title="Download chat"
+                >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                </button>
+                {showDownloadMenu && (
+                    <div className="absolute right-0 top-full mt-1 z-50 min-w-[100px] rounded-lg border border-border/60 bg-popover py-1 shadow-lg">
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                onDownload('json')
+                                setShowDownloadMenu(false)
+                            }}
+                            className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50"
+                        >
+                            JSON
+                        </button>
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                onDownload('markdown')
+                                setShowDownloadMenu(false)
+                            }}
+                            className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50"
+                        >
+                            Markdown
+                        </button>
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                onDownload('txt')
+                                setShowDownloadMenu(false)
+                            }}
+                            className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50"
+                        >
+                            Plain Text
+                        </button>
+                    </div>
+                )}
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        onRestore()
+                    }}
+                    className="btn-ghost h-6 px-2 py-0 text-[10px] rounded-md"
+                    aria-label="Restore chat"
+                >
+                    Restore
+                </button>
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        onPermanentDelete()
+                    }}
+                    className="btn-ghost h-6 w-6 p-0 justify-center text-red-400 hover:bg-red-500/10"
+                    aria-label="Delete permanently"
+                    title="Delete permanently"
+                >
+                    <Trash2 className="w-3 h-3" />
+                </button>
+            </div>
         </div>
     )
 }
@@ -1679,6 +1798,8 @@ function ThinkingBlock({
                             style={isActiveStream && !fullyExpanded ? { maxHeight: `${THINKING_STREAM_MAX_HEIGHT}px`, overflowY: 'auto' } : undefined}
                         >
                             {content}
+                            {/* Spacer so the last line of text is never clipped by the max-height boundary */}
+                            {isActiveStream && !fullyExpanded && <div className="h-6" aria-hidden />}
                         </div>
                     </div>
                 </div>
@@ -1762,6 +1883,13 @@ function ChatMessageCard({
     const [attachmentsOpen, setAttachmentsOpen] = useState(false)
     const [sourcesOpen, setSourcesOpen] = useState(false)
     const [contextMenuOpen, setContextMenuOpen] = useState(false)
+    const [copied, setCopied] = useState(false)
+
+    const handleCopy = async () => {
+        await navigator.clipboard.writeText(msg.content)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+    }
     const attachmentsBlockRef = useRef<HTMLDivElement>(null)
     const sourcesBlockRef = useRef<HTMLDivElement>(null)
     const navigate = useNavigate()
@@ -1790,8 +1918,17 @@ function ChatMessageCard({
                         : ''
                         }`}>
                         {msg.role === 'user' && (
-                            <div className="chat-bubble-user px-4 py-3">
+                            <div className="chat-bubble-user px-4 py-3 relative group">
                                 <div className="markdown-content text-sm" dangerouslySetInnerHTML={{ __html: md.render(msg.content) }} />
+                                <button
+                                    type="button"
+                                    onClick={handleCopy}
+                                    className="absolute bottom-2 right-2 p-1.5 rounded-lg bg-background/60 border border-border/40 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground hover:bg-background/80 transition-all"
+                                    aria-label="Copy message"
+                                    title="Copy message"
+                                >
+                                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                                </button>
                             </div>
                         )}
                         {hasWorkflowSteps && (
@@ -1955,7 +2092,7 @@ function ChatMessageCard({
                                             <span className="chat-workflow-status">Interrupted</span>
                                         )}
                                     </div>
-                                    <div className="chat-bubble-assistant mt-1.5 px-4 py-3">
+                                    <div className="chat-bubble-assistant mt-1.5 px-4 py-3 relative group">
                                         {msg.content && (
                                             <div className="markdown-content text-sm" dangerouslySetInnerHTML={{ __html: md.render(msg.content) }} />
                                         )}
@@ -1964,6 +2101,15 @@ function ChatMessageCard({
                                                 …Interrupted
                                             </span>
                                         )}
+                                        <button
+                                            type="button"
+                                            onClick={handleCopy}
+                                            className="absolute bottom-2 right-2 p-1.5 rounded-lg bg-background/60 border border-border/40 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground hover:bg-background/80 transition-all"
+                                            aria-label="Copy message"
+                                            title="Copy message"
+                                        >
+                                            {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                                        </button>
                                     </div>
                                 </div>
                                 <div className="chat-workflow-step chat-section-reveal">

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Outlet, useNavigate, useParams, Link, useLocation } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { listWorkspaces, listKnowledge, listConversations, updateConversation, deleteConversation } from '@/lib/api'
+import { listWorkspaces, listKnowledge, listConversations, updateConversation, deleteConversation, permanentlyDeleteConversation, exportConversation } from '@/lib/api'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import { useUIStore } from '@/stores/uiStore'
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
@@ -10,6 +10,7 @@ import { onQuickKnowledgeOpen, type QuickKnowledgeType } from '@/lib/quick-knowl
 import CommandPalette from '@/components/shared/CommandPalette'
 import { QuickKnowledgePanel } from '@/components/shared/QuickKnowledgePanel'
 import { ModeToggle } from '@/components/mode-toggle'
+import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator,
 } from '@/components/ui/context-menu'
@@ -17,7 +18,7 @@ import MarkdownIt from 'markdown-it'
 import {
     Home, MessageSquare, Search, Settings, Plus, Folder,
     FileText, Pin, Archive, Bookmark, Code2, Zap, WifiOff,
-    PanelLeft, ChevronDown, ChevronLeft, ChevronRight, Brain, CheckSquare, Calendar, Star, Pencil, Trash2
+    PanelLeft, ChevronDown, ChevronLeft, ChevronRight, Brain, CheckSquare, Calendar, Star, Pencil, Trash2, Download
 } from 'lucide-react'
 import { getWorkspaceIcon } from '@/pages/SettingsPage'
 
@@ -93,6 +94,9 @@ export default function AppShell() {
     const [activeInsightSection, setActiveInsightSection] = useState<InsightSectionKey | null>('tasks')
     const [renamingConversationId, setRenamingConversationId] = useState<string | null>(null)
     const [renamingConversationDraft, setRenamingConversationDraft] = useState('')
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+    const [conversationToDelete, setConversationToDelete] = useState<{ id: string; title: string | null } | null>(null)
+    const [deleteLoading, setDeleteLoading] = useState(false)
     const [isInsightsCollapsed, setIsInsightsCollapsed] = useState<boolean>(() => {
         if (typeof window === 'undefined') return false
         return window.localStorage.getItem(INSIGHTS_COLLAPSED_STORAGE_KEY) === '1'
@@ -461,9 +465,6 @@ export default function AppShell() {
                             <Link to={`/w/${workspaceId}/chat`} className={`sidebar-item ${isActive('/chat') ? 'active' : ''}`}>
                                 <MessageSquare className="w-4 h-4" /> Chat
                             </Link>
-                            <Link to={`/w/${workspaceId}/settings`} className={`sidebar-item ${isActive('/settings') ? 'active' : ''}`}>
-                                <Settings className="w-4 h-4" /> Settings
-                            </Link>
                         </nav>
                     </div>
                 </div>
@@ -557,6 +558,22 @@ export default function AppShell() {
                             })}
                         </div>
                     )}
+                </div>
+
+                {/* Settings — bottom of sidebar, same style as workspace selector */}
+                <div className="flex-shrink-0 border-t border-border/60">
+                    <Link
+                        to={`/w/${workspaceId}/settings`}
+                        className={`flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-card/60 ${isSettingsPage ? 'bg-card/55' : 'bg-card/45'}`}
+                    >
+                        <div className={`w-8 h-8 rounded-lg border flex items-center justify-center flex-shrink-0 ${isSettingsPage ? 'bg-accent/15 border-accent/30' : 'bg-muted/40 border-border/50'}`}>
+                            <Settings className={`w-4 h-4 ${isSettingsPage ? 'text-accent' : 'text-muted-foreground'}`} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <p className={`text-sm font-semibold truncate ${isSettingsPage ? 'text-accent' : ''}`}>Settings</p>
+                            <p className="text-[11px] text-muted-foreground truncate">Providers, prompts & more</p>
+                        </div>
+                    </Link>
                 </div>
             </aside>
 

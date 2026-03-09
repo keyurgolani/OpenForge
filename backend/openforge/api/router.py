@@ -11,6 +11,7 @@ from openforge.api import attachments
 from openforge.api import skills
 from openforge.api import tools as tools_api
 from openforge.api import mcp as mcp_api
+from openforge.api import export as export_api
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -27,3 +28,4 @@ api_router.include_router(attachments.router, prefix="/attachments", tags=["atta
 api_router.include_router(skills.router, prefix="/skills", tags=["skills"])
 api_router.include_router(tools_api.router, prefix="/tools", tags=["tools"])
 api_router.include_router(mcp_api.router, prefix="/mcp", tags=["mcp"])
+api_router.include_router(export_api.router, prefix="/export", tags=["export"])
