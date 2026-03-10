@@ -16,10 +16,14 @@ class InvokeAgentTool(BaseTool):
     def description(self):
         return (
             "Invoke an AI agent to perform a task in a workspace and return its response. "
-            "Use this to delegate work to another workspace's agent, or to get information "
-            "from a specific workspace. Provide a clear, complete instruction. "
-            "Optionally specify a workspace_id to target a different workspace — defaults to "
-            "the current workspace. Returns the agent's text response and execution timeline."
+            "THIS IS THE ONLY WAY to access content in another workspace — memory and filesystem "
+            "tools only reach the current workspace. "
+            "Use this when: (1) the user @mentions another workspace, (2) you need information "
+            "from a different workspace, or (3) you need to delegate a subtask to another workspace's agent. "
+            "Provide a clear, specific, self-contained instruction. "
+            "Specify workspace_id to target a specific workspace (required for cross-workspace access); "
+            "omit to run in the current workspace. "
+            "Returns the subagent's full text response and execution timeline."
         )
 
     @property

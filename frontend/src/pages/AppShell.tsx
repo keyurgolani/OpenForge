@@ -217,7 +217,8 @@ export default function AppShell() {
 
     // Keyboard shortcuts
     const openQuickPanel = useCallback((type: QuickKnowledgeType = 'standard') => {
-        setDefaultKnowledgeType(type)
+        const validTypes = ['standard', 'fleeting', 'bookmark', 'gist'] as const
+        setDefaultKnowledgeType(validTypes.includes(type as typeof validTypes[number]) ? (type as 'standard' | 'fleeting' | 'bookmark' | 'gist') : 'standard')
         setShowQuickKnowledge(true)
     }, [])
 

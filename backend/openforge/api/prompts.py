@@ -123,7 +123,16 @@ PROMPT_CATALOGUE = [
             "- **Skill**: A reusable agent capability script stored in the `/skills` directory. Use `skills.*` tools to manage skills.\n"
             "- **Tool**: A capability exposed to you (the agent) by the tool server. Tools are grouped by category (filesystem, memory, git, shell, web, language, skills).\n\n"
             "When a user asks to 'delete a knowledge', 'remove a note', or similar — they mean a Knowledge record in the database, not a file. "
-            "Use `memory.list_knowledge` to enumerate records, then `memory.delete_knowledge` with the correct ID."
+            "Use `memory.list_knowledge` to enumerate records, then `memory.delete_knowledge` with the correct ID.\n\n"
+            "## @Mention delegation\n"
+            "Users can @mention workspaces and chats in their messages. When @mention context is injected:\n"
+            "- **@WorkspaceName**: A specific workspace was mentioned. You MUST use `agent.invoke` with the provided `workspace_id` "
+            "to access that workspace's content or perform tasks there. Memory and filesystem tools only reach the CURRENT workspace — "
+            "they cannot access other workspaces. Call `agent.invoke` immediately with a well-formed instruction.\n"
+            "- **@ChatName**: The mentioned conversation has already been summarized by a subagent. The summary is injected as context above. "
+            "Use that summary directly to answer the user's question — no additional tool calls are needed for it.\n"
+            "When you see a section header like '## @Name Workspace — DELEGATION REQUIRED', "
+            "you MUST call `agent.invoke` with the specified `workspace_id` before attempting anything else."
         ),
     },
     {

@@ -587,6 +587,41 @@
     box-shadow: 0 0 0 2px hsla(var(--accent) / 0.14);
   }
 
+  /* Mention editor (contenteditable div replacing textarea) */
+  .mention-editor {
+    white-space: pre-wrap;
+    word-break: break-word;
+    cursor: text;
+    overflow-y: auto;
+  }
+
+  .mention-editor:focus {
+    outline: none;
+  }
+
+  .mention-editor:empty::before {
+    content: attr(data-placeholder);
+    color: hsl(var(--muted-foreground) / 0.9);
+    pointer-events: none;
+  }
+
+  /* Inline mention chip */
+  .mention-chip {
+    display: inline;
+    border-radius: 9999px;
+    border: 1px solid hsla(var(--accent) / 0.5);
+    background: hsla(var(--accent) / 0.18);
+    color: hsl(var(--accent));
+    padding: 0.05rem 0.45rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: default;
+    user-select: none;
+    line-height: inherit;
+    vertical-align: baseline;
+  }
+
   .chat-control-pill {
     @apply inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs transition-colors;
     border: 1px solid hsla(var(--border) / 0.72);
@@ -1063,3 +1098,6 @@
     animation: none !important;
   }
 }
+
+/* Knowledge file components */
+@import './styles/knowledge-files.css';

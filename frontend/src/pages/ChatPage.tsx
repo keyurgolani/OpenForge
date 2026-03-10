@@ -113,12 +113,12 @@ export default function ChatPage() {
     const navigate = useNavigate()
     const qc = useQueryClient()
     const { error: showError } = useToast()
-    const [input, setInput] = useState('')
+    const [inputText, setInputText] = useState('')
     const [activeCid, setActiveCid] = useState(conversationId ?? null)
     const messagesContainerRef = useRef<HTMLDivElement>(null)
     const streamingMessageRef = useRef<HTMLDivElement>(null)
     const streamingResponseViewportRef = useRef<HTMLDivElement>(null)
-    const textareaRef = useRef<HTMLTextAreaElement>(null)
+    const mentionEditorRef = useRef<MentionEditorHandle>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const composerShellRef = useRef<HTMLDivElement>(null)
     const [composerHeight, setComposerHeight] = useState(188)
@@ -145,13 +145,6 @@ export default function ChatPage() {
     const modelPickerRef = useRef<HTMLDivElement>(null)
     const modelPickerSearchRef = useRef<HTMLInputElement>(null)
     const lastToastedErrorRef = useRef<string | null>(null)
-
-    // Mentions (@workspace / @chat)
-    const [mentions, setMentions] = useState<Mention[]>([])
-    const [mentionQuery, setMentionQuery] = useState('')
-    const [mentionOpen, setMentionOpen] = useState(false)
-    const [mentionCursorPos, setMentionCursorPos] = useState(0)
-    const mentionDropdownRef = useRef<HTMLDivElement>(null)
 
     // File attachments
     const [attachments, setAttachments] = useState<File[]>([])
@@ -418,7 +411,7 @@ export default function ChatPage() {
             observer.disconnect()
             window.removeEventListener('resize', updateHeight)
         }
-    }, [activeCid, attachments.length, lastError, isConnected, input, modelPickerOpen, uploadingFiles])
+    }, [activeCid, attachments.length, lastError, isConnected, inputText, modelPickerOpen, uploadingFiles])
 
     useEffect(() => {
         if (!activeCid) return
@@ -447,11 +440,9 @@ export default function ChatPage() {
     }, [activeCid, composerHeight])
 
     const focusComposer = useCallback(() => {
-        const textarea = textareaRef.current
-        if (!textarea || textarea.disabled) return false
-        textarea.focus({ preventScroll: true })
-        const caretPos = textarea.value.length
-        textarea.setSelectionRange(caretPos, caretPos)
+        const editor = mentionEditorRef.current
+        if (!editor) return false
+        editor.focus()
         return true
     }, [])
 
@@ -748,12 +739,14 @@ export default function ChatPage() {
     }
 
     const handleSend = async () => {
-        if (!input.trim() || isStreaming || uploadingFiles) return
+        const rawText = mentionEditorRef.current?.getText() ?? inputText
+        if (!rawText.trim() || isStreaming || uploadingFiles) return
         if (conversationData?.is_archived || activeConversationRecord?.is_archived) {
             showError('Chat is archived', 'Restore this chat from Trash to continue messaging.')
             return
         }
-        const msg = input.trim()
+        const msg = rawText.trim()
+        const activeMentions = mentionEditorRef.current?.getMentions() ?? []
         clearLastError()
         setStickToBottom(true)
 
@@ -802,7 +795,7 @@ export default function ChatPage() {
             override.model_id = selectedOption.modelId
         }
         if (attachmentIds.length > 0) override.attachment_ids = attachmentIds
-        if (mentions.length > 0) override.mentions = mentions
+        if (activeMentions.length > 0) override.mentions = activeMentions
 
         const sent = sendMessage(msg, override, targetCid)
         if (!sent) {
@@ -812,11 +805,9 @@ export default function ChatPage() {
         }
 
         pushOptimisticUserMessage(targetCid, msg)
-        setInput('')
-        setMentions([])
-        setMentionOpen(false)
+        mentionEditorRef.current?.clear()
+        setInputText('')
         if (attachments.length > 0) setAttachments([])
-        if (textareaRef.current) textareaRef.current.style.height = 'auto'
         scheduleComposerFocus()
     }
 
@@ -845,41 +836,6 @@ export default function ChatPage() {
         if (bytes < 1024) return `${bytes} B`
         if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
         return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-    }
-
-    const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-        if (lastError) clearLastError()
-        const value = e.target.value
-        setInput(value)
-        e.target.style.height = 'auto'
-        e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px'
-
-        // Detect @mention trigger
-        const cursor = e.target.selectionStart ?? value.length
-        const textBeforeCursor = value.slice(0, cursor)
-        const atMatch = textBeforeCursor.match(/@([\w\s]*)$/)
-        if (atMatch) {
-            setMentionQuery(atMatch[1])
-            setMentionCursorPos(cursor - atMatch[0].length)
-            setMentionOpen(true)
-        } else {
-            setMentionOpen(false)
-        }
-    }
-
-    const handleMentionSelect = (mention: Mention) => {
-        // Replace @query in input with @name
-        const textBefore = input.slice(0, mentionCursorPos)
-        const textAfter = input.slice(mentionCursorPos + mentionQuery.length + 1) // +1 for @
-        const newText = `${textBefore}@${mention.name} ${textAfter}`
-        setInput(newText)
-        setMentionOpen(false)
-        setMentionQuery('')
-        setMentions(prev => {
-            if (prev.find(m => m.id === mention.id)) return prev
-            return [...prev, mention]
-        })
-        textareaRef.current?.focus()
     }
 
     const handleMessagesScroll = (event: React.UIEvent<HTMLDivElement>) => {
@@ -922,6 +878,7 @@ export default function ChatPage() {
 
     const activeConversationIsArchived = Boolean(conversationData?.is_archived || activeConversationRecord?.is_archived)
     const composerDisabled = isStreaming || uploadingFiles || activeConversationIsArchived
+    const canSend = !composerDisabled && inputText.trim().length > 0
     const streamingModelLabel = selectedOption?.label ?? defaultLabel
     const streamingBubbleMaxHeight = useMemo(() => {
         if (messagesViewportHeight <= 0) return 280
@@ -1167,36 +1124,7 @@ export default function ChatPage() {
                                     </div>
                                 )}
 
-                                <div className="chat-composer-panel relative">
-                                    {/* @mention dropdown */}
-                                    {mentionOpen && (
-                                        <MentionDropdown
-                                            ref={mentionDropdownRef}
-                                            query={mentionQuery}
-                                            workspaces={(allWorkspaces as { id: string; name: string }[]).map(w => ({ type: 'workspace' as const, id: w.id, name: w.name }))}
-                                            conversations={(conversations as Conversation[]).map(c => ({ type: 'chat' as const, id: c.id, name: c.title || 'Untitled Chat' }))}
-                                            onSelect={handleMentionSelect}
-                                            onClose={() => setMentionOpen(false)}
-                                        />
-                                    )}
-                                    {mentions.length > 0 && (
-                                        <div className="mb-2 flex flex-wrap gap-1.5">
-                                            {mentions.map(m => (
-                                                <div key={m.id} className="flex items-center gap-1.5 rounded-full border border-accent/35 bg-accent/10 px-2.5 py-0.5 text-xs text-accent">
-                                                    {m.type === 'workspace' ? <Network className="h-3 w-3" /> : <MessageSquare className="h-3 w-3" />}
-                                                    <span>@{m.name}</span>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setMentions(prev => prev.filter(x => x.id !== m.id))}
-                                                        className="rounded p-0.5 text-accent/60 hover:text-accent"
-                                                        aria-label={`Remove @${m.name}`}
-                                                    >
-                                                        <X className="h-2.5 w-2.5" />
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
+                                <div className="chat-composer-panel">
                                     {attachments.length > 0 && (
                                         <div className="mb-3 flex flex-wrap gap-2">
                                             {attachments.map((file, index) => (
@@ -1220,21 +1148,18 @@ export default function ChatPage() {
                                         </div>
                                     )}
 
-                                    <textarea
-                                        ref={textareaRef}
-                                        className="chat-composer-textarea"
-                                        rows={1}
-                                        value={input}
-                                        onChange={handleTextareaChange}
-                                        onKeyDown={e => {
-                                            if (e.key === 'Enter' && !e.shiftKey) {
-                                                e.preventDefault()
-                                                handleSend()
-                                            }
-                                        }}
+                                    <MentionEditor
+                                        ref={mentionEditorRef}
                                         disabled={composerDisabled}
-                                        placeholder={activeConversationIsArchived ? 'Restore this chat to continue messaging...' : 'Ask a question about your knowledge...'}
-                                        style={{ maxHeight: '160px' }}
+                                        placeholder={activeConversationIsArchived ? 'Restore this chat to continue messaging...' : 'Ask a question, or type @ to mention a workspace or chat…'}
+                                        workspaces={(allWorkspaces as { id: string; name: string }[]).map(w => ({ type: 'workspace' as const, id: w.id, name: w.name }))}
+                                        conversations={(conversations as Conversation[]).map(c => ({ type: 'chat' as const, id: c.id, name: c.title || 'Untitled Chat' }))}
+                                        onTextChange={(text) => {
+                                            setInputText(text)
+                                            if (lastError) clearLastError()
+                                        }}
+                                        onMentionsChange={() => {}}
+                                        onSubmit={handleSend}
                                     />
 
                                     <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
@@ -1332,24 +1257,14 @@ export default function ChatPage() {
                                                 type="button"
                                                 className="chat-control-pill disabled:opacity-50"
                                                 onClick={() => {
-                                                    const cursor = textareaRef.current?.selectionStart ?? input.length
-                                                    const before = input.slice(0, cursor)
-                                                    const after = input.slice(cursor)
-                                                    const newText = `${before}@${after}`
-                                                    setInput(newText)
-                                                    setMentionQuery('')
-                                                    setMentionCursorPos(cursor)
-                                                    setMentionOpen(true)
-                                                    textareaRef.current?.focus()
+                                                    mentionEditorRef.current?.insertText('@')
+                                                    mentionEditorRef.current?.focus()
                                                 }}
                                                 disabled={composerDisabled}
                                                 title="Mention a workspace or chat"
                                             >
                                                 <AtSign className="h-3.5 w-3.5" />
                                                 Mention
-                                                {mentions.length > 0 && (
-                                                    <span className="rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent">{mentions.length}</span>
-                                                )}
                                             </button>
                                         </div>
 
@@ -1367,7 +1282,7 @@ export default function ChatPage() {
                                                 type="button"
                                                 className="chat-send-button disabled:cursor-not-allowed disabled:opacity-50"
                                                 onClick={handleSend}
-                                                disabled={uploadingFiles || activeConversationIsArchived || !input.trim()}
+                                                disabled={!canSend}
                                             >
                                                 {uploadingFiles ? (
                                                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -1795,6 +1710,231 @@ function TrashedConversationRow({
         </div>
     )
 }
+
+// ── Mention editor handle ─────────────────────────────────────────────────────
+interface MentionEditorHandle {
+    getText: () => string
+    getMentions: () => Mention[]
+    clear: () => void
+    focus: () => void
+    insertText: (text: string) => void
+}
+
+// ── Mention editor (contenteditable with inline chips) ────────────────────────
+const MentionEditor = React.forwardRef<MentionEditorHandle, {
+    onTextChange: (text: string) => void
+    onMentionsChange: (mentions: Mention[]) => void
+    onSubmit: () => void
+    disabled?: boolean
+    placeholder?: string
+    workspaces: Mention[]
+    conversations: Mention[]
+}>(function MentionEditor({ onTextChange, onMentionsChange, onSubmit, disabled, placeholder, workspaces, conversations }, ref) {
+    const editorRef = useRef<HTMLDivElement>(null)
+    const [mentionOpen, setMentionOpen] = useState(false)
+    const [mentionQuery, setMentionQuery] = useState('')
+    const mentionDropdownRef = useRef<HTMLDivElement>(null)
+    const atPositionRef = useRef<{ node: Text; offset: number } | null>(null)
+
+    const getPlainText = (el: HTMLElement): string => {
+        let text = ''
+        el.childNodes.forEach(node => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                text += node.textContent?.replace(/\u00a0/g, ' ') ?? ''
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+                const elem = node as HTMLElement
+                if (elem.dataset.mentionId) {
+                    text += `@${elem.dataset.mentionName}`
+                } else if (elem.tagName === 'BR') {
+                    text += '\n'
+                } else if (elem.tagName === 'DIV') {
+                    text += '\n' + getPlainText(elem)
+                } else {
+                    text += getPlainText(elem)
+                }
+            }
+        })
+        return text
+    }
+
+    const getChipMentions = (el: HTMLElement): Mention[] => {
+        const seen = new Set<string>()
+        const result: Mention[] = []
+        el.querySelectorAll('[data-mention-id]').forEach(chip => {
+            const elem = chip as HTMLElement
+            const id = elem.dataset.mentionId || ''
+            if (!seen.has(id)) {
+                seen.add(id)
+                result.push({
+                    type: (elem.dataset.mentionType as 'workspace' | 'chat') || 'workspace',
+                    id,
+                    name: elem.dataset.mentionName || '',
+                })
+            }
+        })
+        return result
+    }
+
+    React.useImperativeHandle(ref, () => ({
+        getText: () => editorRef.current ? getPlainText(editorRef.current) : '',
+        getMentions: () => editorRef.current ? getChipMentions(editorRef.current) : [],
+        clear: () => {
+            if (editorRef.current) {
+                editorRef.current.innerHTML = ''
+                onTextChange('')
+                onMentionsChange([])
+            }
+        },
+        focus: () => {
+            const el = editorRef.current
+            if (!el) return
+            el.focus()
+            // Move cursor to end
+            const range = document.createRange()
+            range.selectNodeContents(el)
+            range.collapse(false)
+            const sel = window.getSelection()
+            sel?.removeAllRanges()
+            sel?.addRange(range)
+        },
+        insertText: (text: string) => {
+            const el = editorRef.current
+            if (!el) return
+            el.focus()
+            document.execCommand('insertText', false, text)
+        },
+    }))
+
+    const detectMentionTrigger = () => {
+        const sel = window.getSelection()
+        if (!sel || !sel.rangeCount) { setMentionOpen(false); return }
+        const range = sel.getRangeAt(0)
+        const node = range.startContainer
+        if (node.nodeType !== Node.TEXT_NODE) { setMentionOpen(false); return }
+        const textNode = node as Text
+        const textBefore = textNode.data.slice(0, range.startOffset)
+        const atMatch = textBefore.match(/@(\w*)$/)
+        if (atMatch) {
+            setMentionQuery(atMatch[1])
+            atPositionRef.current = { node: textNode, offset: range.startOffset - atMatch[0].length }
+            setMentionOpen(true)
+        } else {
+            setMentionOpen(false)
+            atPositionRef.current = null
+        }
+    }
+
+    const handleInput = () => {
+        const el = editorRef.current
+        if (!el) return
+        const text = getPlainText(el)
+        const mentions = getChipMentions(el)
+        onTextChange(text)
+        onMentionsChange(mentions)
+        detectMentionTrigger()
+        // Auto-resize
+        el.style.height = 'auto'
+        el.style.height = Math.min(el.scrollHeight, 160) + 'px'
+    }
+
+    const handleMentionSelect = (mention: Mention) => {
+        const el = editorRef.current
+        if (!el) { setMentionOpen(false); return }
+
+        const sel = window.getSelection()
+        const pos = atPositionRef.current
+        if (!pos || !sel) { setMentionOpen(false); return }
+
+        // Find current cursor offset in the same text node
+        const curRange = sel.rangeCount > 0 ? sel.getRangeAt(0) : null
+        const curOffset = (curRange?.startContainer === pos.node ? curRange.startOffset : null) ?? pos.node.data.length
+
+        // Delete @query from the text node
+        pos.node.deleteData(pos.offset, curOffset - pos.offset)
+
+        // Create insertion range at the deletion point
+        const insertRange = document.createRange()
+        insertRange.setStart(pos.node, pos.offset)
+        insertRange.collapse(true)
+
+        // Build the chip
+        const chip = document.createElement('span')
+        chip.contentEditable = 'false'
+        chip.className = 'mention-chip'
+        chip.dataset.mentionId = mention.id
+        chip.dataset.mentionType = mention.type
+        chip.dataset.mentionName = mention.name
+        chip.textContent = `@${mention.name}`
+
+        // Insert chip then a non-breaking space for cursor placement
+        insertRange.insertNode(chip)
+        const space = document.createTextNode('\u00a0')
+        chip.after(space)
+
+        // Move cursor after the space
+        const newRange = document.createRange()
+        newRange.setStartAfter(space)
+        newRange.collapse(true)
+        sel.removeAllRanges()
+        sel.addRange(newRange)
+
+        setMentionOpen(false)
+        atPositionRef.current = null
+
+        const text = getPlainText(el)
+        const mentions2 = getChipMentions(el)
+        onTextChange(text)
+        onMentionsChange(mentions2)
+        el.focus()
+    }
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        if (e.key === 'Escape') {
+            if (mentionOpen) { setMentionOpen(false); e.preventDefault() }
+            return
+        }
+        if (e.key === 'Enter' && !e.shiftKey) {
+            if (mentionOpen) { setMentionOpen(false); e.preventDefault(); return }
+            e.preventDefault()
+            onSubmit()
+        }
+    }
+
+    const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+        e.preventDefault()
+        const text = e.clipboardData.getData('text/plain')
+        document.execCommand('insertText', false, text)
+    }
+
+    return (
+        <div className="relative">
+            {mentionOpen && (
+                <MentionDropdown
+                    ref={mentionDropdownRef}
+                    query={mentionQuery}
+                    workspaces={workspaces}
+                    conversations={conversations}
+                    onSelect={handleMentionSelect}
+                    onClose={() => setMentionOpen(false)}
+                />
+            )}
+            <div
+                ref={editorRef}
+                contentEditable={!disabled}
+                suppressContentEditableWarning
+                onInput={handleInput}
+                onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
+                className="mention-editor chat-composer-textarea"
+                data-placeholder={disabled ? '' : placeholder}
+                style={{ minHeight: '2.6rem' }}
+                aria-label={placeholder}
+                aria-multiline="true"
+                role="textbox"
+            />
+        </div>
+    )
+})
 
 // ── Reusable thinking block ──────────────────────────────────────────────────
 const THINKING_STREAM_MAX_HEIGHT = 160

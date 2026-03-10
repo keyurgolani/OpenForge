@@ -454,13 +454,15 @@ class AgentExecutionEngine:
     async def _resolve_mentions(
         self,
         db: AsyncSession,
+        workspace_id: UUID,
         mentions: list[dict],
     ) -> str:
         """
         Resolve @mention references into context strings injected into the prompt.
 
-        - @workspace mention → injects the workspace_id so the LLM can use agent.invoke
-        - @chat mention → injects the referenced conversation's message history as context
+        - @workspace mention → injects workspace_id so the LLM can use agent.invoke
+        - @chat mention → spins up a subagent to summarize the conversation and
+          injects the summary as context (same pattern as @workspace delegation)
         """
         if not mentions:
             return ""
@@ -476,31 +478,52 @@ class AgentExecutionEngine:
                     ws = await db.get(Workspace, UUID(mid))
                     if ws:
                         parts.append(
-                            f"\n## Referenced Workspace @{mname}\n"
-                            f"The user has mentioned workspace '@{mname}'. "
-                            f"Its workspace_id is '{mid}'. "
-                            f"If the user's request involves content or tasks in that workspace, "
-                            f"use the agent.invoke tool with workspace_id='{mid}' to delegate the task to that workspace's agent."
+                            f"\n## @{mname} Workspace — DELEGATION REQUIRED\n"
+                            f"The user has explicitly mentioned workspace '@{mname}' (workspace_id: `{mid}`).\n"
+                            f"YOU MUST call the `agent.invoke` tool with `workspace_id=\"{mid}\"` to access "
+                            f"any information or perform any tasks in that workspace. "
+                            f"Do NOT attempt to use memory tools, filesystem tools, or any other tool to access "
+                            f"that workspace's content directly — those tools only access the CURRENT workspace.\n"
+                            f"Call `agent.invoke` immediately with a clear, complete instruction based on the user's request. "
+                            f"The subagent in that workspace has access to all its knowledge, files, and tools."
                         )
                 except Exception:
                     pass
 
             elif mtype == "chat" and mid:
                 try:
-                    messages = await conversation_service.get_recent_messages(db, UUID(mid), limit=20)
+                    messages = await conversation_service.get_recent_messages(db, UUID(mid), limit=40)
                     if messages:
                         history_lines = [
-                            f"[{m.get('role', 'user').upper()}]: {(m.get('content') or '')[:600]}"
+                            f"[{m.get('role', 'user').upper()}]: {(m.get('content') or '')[:800]}"
                             for m in messages
                         ]
-                        parts.append(
-                            f"\n## Referenced Chat @{mname}\n"
-                            f"The user has referenced a previous conversation '@{mname}'. "
-                            f"Here is that conversation's history for context:\n\n"
-                            + "\n".join(history_lines)
+                        history_text = "\n".join(history_lines)
+
+                        # Summarize via a dedicated subagent — same delegation pattern as @workspace
+                        summary_result = await self.execute_subagent(
+                            workspace_id=workspace_id,
+                            instruction=(
+                                f"You are given the complete history of a chat conversation called '{mname}'.\n\n"
+                                f"Conversation History:\n{history_text[:12000]}\n\n"
+                                f"Provide a comprehensive summary of this conversation including:\n"
+                                f"- Main topics discussed\n"
+                                f"- Key decisions or conclusions reached\n"
+                                f"- Important information, data, or facts mentioned\n"
+                                f"- Any action items or next steps if mentioned\n\n"
+                                f"Be thorough but concise. This summary will be used as context for another agent."
+                            ),
+                            db=db,
                         )
-                except Exception:
-                    pass
+                        parts.append(
+                            f"\n## Referenced Chat @{mname} (Subagent Summary)\n"
+                            f"The user referenced chat '@{mname}'. "
+                            f"A subagent analyzed and summarized that conversation:\n\n"
+                            f"{summary_result.get('response', 'Summary unavailable.')}\n\n"
+                            f"Use this summary to inform your response."
+                        )
+                except Exception as exc:
+                    logger.warning("Failed to resolve @chat mention %s: %s", mid, exc)
 
         return "\n".join(parts)
 
@@ -572,7 +595,7 @@ class AgentExecutionEngine:
             # 3b. Resolve @mentions into additional context
             mention_context = ""
             if mentions:
-                mention_context = await self._resolve_mentions(db, mentions)
+                mention_context = await self._resolve_mentions(db, workspace_id, mentions)
 
             all_attachments_processed = attachments_processed + url_attachments_processed
             if all_attachments_processed:
