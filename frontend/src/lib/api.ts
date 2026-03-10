@@ -66,6 +66,8 @@ export const generateKnowledgeIntelligence = (wid: string, nid: string): Promise
     api.post(`/workspaces/${wid}/knowledge/${nid}/generate-intelligence`).then(r => r.data)
 export const extractBookmarkContent = (wid: string, nid: string): Promise<any> =>
     api.post(`/workspaces/${wid}/knowledge/${nid}/extract-bookmark-content`).then(r => r.data)
+export const reprocessKnowledge = (wid: string, nid: string): Promise<any> =>
+    api.post(`/workspaces/${wid}/knowledge/${nid}/reprocess`).then(r => r.data)
 export const uploadKnowledge = (wid: string, file: File): Promise<any> => {
     const formData = new FormData()
     formData.append('file', file)
@@ -190,5 +192,22 @@ export const updateMCPToolOverride = (
     toolName: string,
     data: { risk_level?: string; is_enabled?: boolean },
 ): Promise<any> => api.put(`/mcp/servers/${serverId}/tools/${encodeURIComponent(toolName)}`, data).then(r => r.data)
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+export const checkAuth = (): Promise<{ authenticated: boolean; auth_enabled: boolean }> =>
+    fetch('/api/auth/check').then(r => r.json())
+
+export const loginAuth = (password: string): Promise<{ authenticated: boolean; auth_enabled: boolean }> =>
+    fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+    }).then(r => {
+        if (!r.ok) throw new Error('Invalid password')
+        return r.json()
+    })
+
+export const logoutAuth = (): Promise<void> =>
+    fetch('/api/auth/logout', { method: 'POST' }).then(() => undefined)
 
 export default api

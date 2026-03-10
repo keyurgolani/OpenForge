@@ -198,6 +198,8 @@ class LLMService:
         workspace_id: UUID,
     ) -> tuple[str, str, str, str | None]:
         """Returns (provider_name, decrypted_api_key, model, base_url) for vision tasks."""
+        from openforge.services.config_service import config_service
+
         ws_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
         workspace = ws_result.scalar_one_or_none()
 
@@ -212,15 +214,23 @@ class LLMService:
             provider = p_result.scalar_one_or_none()
             model = workspace.vision_model
 
-        # Fall back to workspace LLM provider
-        if not provider and workspace and workspace.llm_provider_id:
-            p_result = await db.execute(
-                select(LLMProvider).where(LLMProvider.id == workspace.llm_provider_id)
-            )
-            provider = p_result.scalar_one_or_none()
-            model = workspace.llm_model
+        # Fall back to system-level vision config (set via Settings > Vision tab)
+        if not provider:
+            try:
+                vision_pid = await config_service.get_config_raw(db, "system_vision_provider_id")
+                if vision_pid:
+                    from uuid import UUID as _UUID
+                    p_result = await db.execute(
+                        select(LLMProvider).where(LLMProvider.id == _UUID(str(vision_pid)))
+                    )
+                    provider = p_result.scalar_one_or_none()
+                    if provider:
+                        model = await config_service.get_config_raw(db, "system_vision_model") or ""
+            except Exception:
+                pass
 
-        # Fall back to system default
+        # Fall back to system default provider (NOT the workspace chat provider — to avoid
+        # accidentally sending vision requests to a chat-only model)
         if not provider:
             p_result = await db.execute(
                 select(LLMProvider).where(LLMProvider.is_system_default == True)

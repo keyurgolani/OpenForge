@@ -89,28 +89,7 @@ class AudioProcessor:
             except Exception as e:
                 logger.warning("Text embedding failed for %s: %s", knowledge_id, e)
 
-        # Build content from transcript
-        content_parts = []
-        if result["transcript"]:
-            content_parts.append(f"## Transcript\n\n{result['transcript']}")
-
-        metadata = result["metadata"]
-        if metadata:
-            meta_parts = []
-            if metadata.get("duration"):
-                minutes = int(metadata["duration"] // 60)
-                seconds = int(metadata["duration"] % 60)
-                meta_parts.append(f"- **Duration:** {minutes}:{seconds:02d}")
-            if metadata.get("format"):
-                meta_parts.append(f"- **Format:** {metadata['format']}")
-            if metadata.get("sample_rate"):
-                meta_parts.append(f"- **Sample Rate:** {metadata['sample_rate']} Hz")
-            if metadata.get("channels"):
-                meta_parts.append(f"- **Channels:** {metadata['channels']}")
-            if metadata.get("bitrate"):
-                meta_parts.append(f"- **Bitrate:** {metadata['bitrate']} kbps")
-            if meta_parts:
-                content_parts.append("## Audio Metadata\n\n" + "\n".join(meta_parts))
+        metadata = result["metadata"] or {}
 
         return {
             "file_metadata": {
@@ -124,7 +103,7 @@ class AudioProcessor:
                     for s in result["segments"][:500]  # Limit stored segments
                 ],
             },
-            "content": "\n\n".join(content_parts) if content_parts else "",
+            "content": result["transcript"] or "",
             "ai_title": result["ai_title"],
         }
 

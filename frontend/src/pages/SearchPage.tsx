@@ -26,6 +26,7 @@ const TYPE_ICONS: Record<string, ReactElement> = {
     docx: <FileText className="w-3.5 h-3.5" />,
     xlsx: <Table className="w-3.5 h-3.5" />,
     pptx: <Presentation className="w-3.5 h-3.5" />,
+    chat: <MessageSquare className="w-3.5 h-3.5" />,
 }
 
 const TYPE_META: Record<string, { label: string; color: string }> = {
@@ -39,6 +40,7 @@ const TYPE_META: Record<string, { label: string; color: string }> = {
     docx: { label: 'Word', color: 'text-blue-300' },
     xlsx: { label: 'Excel', color: 'text-green-300' },
     pptx: { label: 'Presentation', color: 'text-amber-400' },
+    chat: { label: 'Chat', color: 'text-violet-400' },
 }
 
 const KNOWLEDGE_TYPES = ['', 'standard', 'fleeting', 'bookmark', 'gist', 'image', 'audio', 'pdf', 'docx', 'xlsx', 'pptx']
@@ -55,6 +57,10 @@ interface SearchResult {
     highlighted_text: string
 }
 
+type CardItem =
+    | { kind: 'chat'; key: string; chunks: SearchResult[]; topScore: number }
+    | { kind: 'knowledge'; key: string; chunks: SearchResult[]; topScore: number }
+
 function renderSearchMarkdown(text: string) {
     return { __html: mdPreview.render(text || '') }
 }
@@ -69,7 +75,6 @@ export default function SearchPage() {
     const [searchTab, setSearchTab] = useState<'text' | 'visual'>('text')
     const searchLayoutRef = useRef<HTMLDivElement | null>(null)
 
-    // Debounce the query
     const [debouncedQuery, setDebouncedQuery] = useState(query)
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -83,9 +88,7 @@ export default function SearchPage() {
     }
 
     useEffect(() => {
-        return () => {
-            if (timerRef.current) clearTimeout(timerRef.current)
-        }
+        return () => { if (timerRef.current) clearTimeout(timerRef.current) }
     }, [])
 
     const { data, isFetching } = useQuery({
@@ -96,20 +99,32 @@ export default function SearchPage() {
 
     const results: SearchResult[] = data?.results ?? []
 
-    // Split chat results from knowledge results, group knowledge by item
-    const { chatResults, grouped } = useMemo(() => {
-        const chat: SearchResult[] = []
+    // Flatten all results into a single sorted list of cards
+    const cards = useMemo<CardItem[]>(() => {
+        const chatMap: Record<string, SearchResult[]> = {}
         const knowledgeMap: Record<string, SearchResult[]> = {}
         for (const r of results) {
             if (r.knowledge_type === 'chat') {
-                chat.push(r)
+                const key = r.conversation_id ?? ''
+                if (!chatMap[key]) chatMap[key] = []
+                chatMap[key].push(r)
             } else {
                 const key = r.knowledge_id ?? ''
                 if (!knowledgeMap[key]) knowledgeMap[key] = []
                 knowledgeMap[key].push(r)
             }
         }
-        return { chatResults: chat, grouped: knowledgeMap }
+        const all: CardItem[] = [
+            ...Object.entries(chatMap).map(([key, chunks]) => ({
+                kind: 'chat' as const, key, chunks,
+                topScore: Math.max(...chunks.map(c => c.score)),
+            })),
+            ...Object.entries(knowledgeMap).map(([key, chunks]) => ({
+                kind: 'knowledge' as const, key, chunks,
+                topScore: Math.max(...chunks.map(c => c.score)),
+            })),
+        ]
+        return all.sort((a, b) => b.topScore - a.topScore)
     }, [results])
 
     return (
@@ -169,7 +184,7 @@ export default function SearchPage() {
                 </div>
 
                 <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-                    {/* Empty state - no query */}
+                    {/* Empty state – no query */}
                     {!debouncedQuery.trim() && (
                         <div className="flex h-full min-h-[240px] items-center justify-center text-center">
                             <div>
@@ -182,7 +197,7 @@ export default function SearchPage() {
                         </div>
                     )}
 
-                    {/* Empty state - no results */}
+                    {/* Empty state – no results */}
                     {debouncedQuery.trim() && !isFetching && results.length === 0 && (
                         <div className="flex h-full min-h-[240px] items-center justify-center text-center">
                             <div>
@@ -195,21 +210,17 @@ export default function SearchPage() {
                         </div>
                     )}
 
-                    {/* Results */}
-                    {results.length > 0 && (
-                        <div className="space-y-4">
+                    {/* Masonry results grid */}
+                    {cards.length > 0 && (
+                        <div className="space-y-3">
                             <p className="text-xs text-muted-foreground">{results.length} result{results.length !== 1 ? 's' : ''}</p>
-
-                            {/* Chat results */}
-                            {chatResults.length > 0 && (
-                                <div className="space-y-3">
-                                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">From Conversations</p>
-                                    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
-                                        {chatResults.map((r) => (
+                            <div className="columns-1 sm:columns-2 xl:columns-3 gap-4">
+                                {cards.map(card =>
+                                    card.kind === 'chat' ? (
+                                        <div key={card.key} className="break-inside-avoid mb-4">
                                             <div
-                                                key={r.conversation_id}
-                                                className="glass-card-hover h-fit rounded-2xl p-4 cursor-pointer animate-fade-in space-y-3"
-                                                onClick={() => r.conversation_id && navigate(`/w/${workspaceId}/chat/${r.conversation_id}`)}
+                                                className="glass-card-hover rounded-2xl p-4 cursor-pointer animate-fade-in space-y-3"
+                                                onClick={() => card.chunks[0]?.conversation_id && navigate(`/w/${workspaceId}/chat/${card.chunks[0].conversation_id}`)}
                                             >
                                                 <div className="flex items-start justify-between gap-3">
                                                     <div className="min-w-0 space-y-2">
@@ -217,110 +228,95 @@ export default function SearchPage() {
                                                             <MessageSquare className="w-3.5 h-3.5" />
                                                             Chat
                                                         </span>
-                                                        {r.title && (
-                                                            <h3 className="text-sm font-semibold leading-snug text-foreground truncate">
-                                                                {r.title}
+                                                        {card.chunks[0]?.title && (
+                                                            <h3 className="text-sm font-semibold leading-snug text-foreground">
+                                                                {card.chunks[0].title}
                                                             </h3>
                                                         )}
                                                     </div>
-                                                    <ExternalLink className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                                                    <ExternalLink className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
                                                 </div>
-
-                                                <div
-                                                    className="text-xs text-foreground/88 leading-relaxed line-clamp-4 whitespace-pre-wrap"
-                                                >
-                                                    {r.highlighted_text || r.chunk_text}
+                                                <div className="text-xs text-foreground/80 leading-relaxed line-clamp-5 whitespace-pre-wrap">
+                                                    {card.chunks[0]?.highlighted_text || card.chunks[0]?.chunk_text}
                                                 </div>
-
-                                                <div className="flex items-center gap-3 pt-1">
-                                                    <div className="flex items-center gap-1.5">
-                                                        <div className="w-16 h-1 bg-border rounded overflow-hidden">
-                                                            <div className="h-full bg-accent rounded" style={{ width: `${Math.round(r.score * 100)}%` }} />
-                                                        </div>
-                                                        <span className="text-xs text-muted-foreground">{Math.round(r.score * 100)}%</span>
+                                                <div className="flex items-center gap-1.5 pt-1">
+                                                    <div className="w-16 h-1 bg-border rounded overflow-hidden">
+                                                        <div className="h-full bg-accent rounded" style={{ width: `${Math.round(card.topScore * 100)}%` }} />
                                                     </div>
+                                                    <span className="text-[11px] text-muted-foreground">{Math.round(card.topScore * 100)}%</span>
                                                 </div>
                                             </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Knowledge results */}
-                            {Object.keys(grouped).length > 0 && (
-                                <div className="space-y-3">
-                                    {chatResults.length > 0 && (
-                                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">From Knowledge</p>
-                                    )}
-                                    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
-                                        {Object.entries(grouped).map(([knowledgeId, chunks]) => {
-                                            const first = chunks[0]
-                                            const typeKey = first.knowledge_type in TYPE_META ? first.knowledge_type : 'standard'
-                                            const typeMeta = TYPE_META[typeKey]
-                                            const typeIcon = TYPE_ICONS[typeKey] ?? TYPE_ICONS.standard
-                                            const hasTitle = !!first.title?.trim()
-                                            return (
-                                                <ContextMenu key={knowledgeId}>
-                                                    <ContextMenuTrigger asChild>
-                                                        <div
-                                                            className="glass-card-hover h-fit rounded-2xl p-4 cursor-pointer animate-fade-in space-y-3"
-                                                            onClick={() => setModalKnowledgeId(knowledgeId)}
-                                                        >
-                                                            <div className="flex items-start justify-between gap-3">
-                                                                <div className="min-w-0 space-y-2">
-                                                                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border border-border/60 bg-muted/40 ${typeMeta.color}`}>
-                                                                        {typeIcon}
-                                                                        {typeMeta.label}
-                                                                    </span>
-                                                                    {hasTitle && (
-                                                                        <h3 className="text-sm font-semibold leading-snug text-foreground truncate">
-                                                                            {first.title}
-                                                                        </h3>
-                                                                    )}
-                                                                </div>
-                                                                <ExternalLink className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                                                            </div>
-
-                                                            {chunks.map((chunk, i) => (
-                                                                <div key={i} className={`${i > 0 ? 'pt-3 border-t border-border/50' : ''} space-y-2`}>
-                                                                    {chunk.header_path && (
-                                                                        <p className="text-[11px] text-muted-foreground">{chunk.header_path}</p>
-                                                                    )}
-
-                                                                    <div
-                                                                        className="markdown-content text-xs text-foreground/88 leading-relaxed line-clamp-4 [&_p]:mb-1 [&_h1]:text-sm [&_h2]:text-sm [&_h3]:text-sm [&_pre]:text-[11px] [&_code]:text-[11px]"
-                                                                        dangerouslySetInnerHTML={renderSearchMarkdown(chunk.chunk_text || chunk.highlighted_text)}
-                                                                    />
-
-                                                                    <div className="flex items-center gap-3 pt-1">
-                                                                        <div className="flex items-center gap-1.5">
-                                                                            <div className="w-16 h-1 bg-border rounded overflow-hidden">
-                                                                                <div className="h-full bg-accent rounded" style={{ width: `${Math.round(chunk.score * 100)}%` }} />
-                                                                            </div>
-                                                                            <span className="text-xs text-muted-foreground">{Math.round(chunk.score * 100)}%</span>
+                                        </div>
+                                    ) : (
+                                        <ContextMenu key={card.key}>
+                                            <ContextMenuTrigger asChild>
+                                                <div className="break-inside-avoid mb-4">
+                                                    <div
+                                                        className="glass-card-hover rounded-2xl p-4 cursor-pointer animate-fade-in space-y-3"
+                                                        onClick={() => setModalKnowledgeId(card.key)}
+                                                    >
+                                                        {(() => {
+                                                            const first = card.chunks[0]
+                                                            const typeKey = first.knowledge_type in TYPE_META ? first.knowledge_type : 'standard'
+                                                            const typeMeta = TYPE_META[typeKey]
+                                                            const typeIcon = TYPE_ICONS[typeKey] ?? TYPE_ICONS.standard
+                                                            return (
+                                                                <>
+                                                                    <div className="flex items-start justify-between gap-3">
+                                                                        <div className="min-w-0 space-y-2">
+                                                                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border border-border/60 bg-muted/40 ${typeMeta.color}`}>
+                                                                                {typeIcon}
+                                                                                {typeMeta.label}
+                                                                            </span>
+                                                                            {first.title?.trim() && (
+                                                                                <h3 className="text-sm font-semibold leading-snug text-foreground">
+                                                                                    {first.title}
+                                                                                </h3>
+                                                                            )}
                                                                         </div>
-                                                                        {chunk.tags.slice(0, 3).map(t => (
-                                                                            <span key={t} className="chip-muted text-xs">{t}</span>
-                                                                        ))}
+                                                                        <ExternalLink className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
                                                                     </div>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </ContextMenuTrigger>
-                                                    <ContextMenuContent className="w-48">
-                                                        <ContextMenuItem onClick={() => navigate(`/w/${workspaceId}/knowledge/${knowledgeId}`)} className="gap-2">
-                                                            <ExternalLink className="w-4 h-4" /> Open Knowledge
-                                                        </ContextMenuItem>
-                                                        <ContextMenuItem onClick={() => navigator.clipboard.writeText(first.title || first.chunk_text || '')} className="gap-2">
-                                                            <Copy className="w-4 h-4" /> Copy Title
-                                                        </ContextMenuItem>
-                                                    </ContextMenuContent>
-                                                </ContextMenu>
-                                            )
-                                        })}
-                                    </div>
-                                </div>
-                            )}
+
+                                                                    {card.chunks.map((chunk, i) => (
+                                                                        <div key={i} className={`${i > 0 ? 'pt-3 border-t border-border/40' : ''} space-y-2`}>
+                                                                            {chunk.header_path && (
+                                                                                <p className="text-[11px] text-muted-foreground font-medium">{chunk.header_path}</p>
+                                                                            )}
+                                                                            <div
+                                                                                className="markdown-content text-xs text-foreground/80 leading-relaxed line-clamp-5 [&_p]:mb-1 [&_h1]:text-sm [&_h2]:text-sm [&_h3]:text-sm [&_pre]:text-[11px] [&_code]:text-[11px]"
+                                                                                dangerouslySetInnerHTML={renderSearchMarkdown(chunk.chunk_text || chunk.highlighted_text)}
+                                                                            />
+                                                                            <div className="flex items-center gap-2 pt-0.5 flex-wrap">
+                                                                                <div className="flex items-center gap-1.5">
+                                                                                    <div className="w-16 h-1 bg-border rounded overflow-hidden">
+                                                                                        <div className="h-full bg-accent rounded" style={{ width: `${Math.round(chunk.score * 100)}%` }} />
+                                                                                    </div>
+                                                                                    <span className="text-[11px] text-muted-foreground">{Math.round(chunk.score * 100)}%</span>
+                                                                                </div>
+                                                                                {chunk.tags.slice(0, 3).map(t => (
+                                                                                    <span key={t} className="chip-muted text-[11px]">{t}</span>
+                                                                                ))}
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                </>
+                                                            )
+                                                        })()}
+                                                    </div>
+                                                </div>
+                                            </ContextMenuTrigger>
+                                            <ContextMenuContent className="w-48">
+                                                <ContextMenuItem onClick={() => navigate(`/w/${workspaceId}/knowledge/${card.key}`)} className="gap-2">
+                                                    <ExternalLink className="w-4 h-4" /> Open Knowledge
+                                                </ContextMenuItem>
+                                                <ContextMenuItem onClick={() => navigator.clipboard.writeText(card.chunks[0]?.title || card.chunks[0]?.chunk_text || '')} className="gap-2">
+                                                    <Copy className="w-4 h-4" /> Copy Title
+                                                </ContextMenuItem>
+                                            </ContextMenuContent>
+                                        </ContextMenu>
+                                    )
+                                )}
+                            </div>
                         </div>
                     )}
                 </div>

@@ -64,6 +64,22 @@ ws_router = APIRouter()
 
 @ws_router.websocket("/ws/workspace/{workspace_id}")
 async def workspace_websocket(websocket: WebSocket, workspace_id: str):
+    from openforge.config import get_settings
+    settings = get_settings()
+    if settings.admin_password:
+        token = websocket.cookies.get("openforge_session")
+        valid = False
+        if token:
+            try:
+                from jose import jwt, JWTError
+                secret = settings.encryption_key or "openforge-fallback-secret"
+                jwt.decode(token, secret, algorithms=["HS256"])
+                valid = True
+            except Exception:
+                pass
+        if not valid:
+            await websocket.close(code=4001)
+            return
     await ws_manager.connect(websocket, workspace_id)
     try:
         while True:

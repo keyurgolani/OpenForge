@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     # Encryption key for API keys (generated on first run if not set)
     encryption_key: str = ""
 
+    # Admin password authentication (disabled if empty)
+    admin_password: str = ""
+    session_expiry_hours: int = 168  # 7 days
+
     # Tool server
     tool_server_url: str = "http://tool-server:8001"
 

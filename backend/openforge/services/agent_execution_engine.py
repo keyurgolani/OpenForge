@@ -1071,12 +1071,11 @@ class AgentExecutionEngine:
                         "output": result.get("output"),
                         "error": result.get("error"),
                     }
-                    # Record in ordered timeline (truncate output for storage efficiency)
+                    # Record in ordered timeline (truncate string output for storage efficiency;
+                    # keep dict/list as-is so the frontend can render them as structured data)
                     _output = result.get("output")
-                    if isinstance(_output, (dict, list)):
-                        _output = json.dumps(_output, default=str)
-                    if isinstance(_output, str) and len(_output) > 500:
-                        _output = _output[:500] + "…"
+                    if isinstance(_output, str) and len(_output) > 2000:
+                        _output = _output[:2000] + "…"
                     timeline.append({
                         "type": "tool_call",
                         "call_id": call_id,
@@ -1446,14 +1445,13 @@ class AgentExecutionEngine:
                             execution_id=execution_id,
                         )
 
-                    # Update timeline entry
+                    # Update timeline entry (keep dict/list as-is for structured rendering;
+                    # only truncate string outputs)
                     for i, entry in enumerate(timeline):
                         if entry.get("call_id") == call_id:
                             _out = sub_result.get("output")
-                            if isinstance(_out, (dict, list)):
-                                _out = json.dumps(_out, default=str)
-                            if isinstance(_out, str) and len(_out) > 500:
-                                _out = _out[:500] + "…"
+                            if isinstance(_out, str) and len(_out) > 2000:
+                                _out = _out[:2000] + "…"
                             timeline[i] = {
                                 **entry,
                                 "success": sub_result.get("success", False),

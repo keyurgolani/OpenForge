@@ -301,8 +301,31 @@ class ImageProcessor:
             json_match = re.search(r"\{[\s\S]*\}", response)
             if json_match:
                 parsed = json.loads(json_match.group())
+                description = parsed.get("description", "")
+                # Discard descriptions that indicate the LLM didn't receive the image
+                _failure_phrases = (
+                    "not provided",
+                    "no image",
+                    "unable to analyze",
+                    "cannot see",
+                    "can't see",
+                    "don't see an image",
+                    "no visual",
+                    "image was not",
+                    "image is not",
+                    "didn't receive",
+                    "did not receive",
+                )
+                desc_lower = description.lower()
+                if any(phrase in desc_lower for phrase in _failure_phrases):
+                    logger.warning(
+                        "Vision LLM returned failure response for %s, discarding: %r",
+                        "image",
+                        description[:120],
+                    )
+                    return {"description": "", "tags": []}
                 return {
-                    "description": parsed.get("description", ""),
+                    "description": description,
                     "title": parsed.get("title", ""),
                     "tags": parsed.get("tags", []),
                 }
@@ -321,23 +344,15 @@ class ImageProcessor:
         return "\n\n".join(parts)
 
     def _build_content(self, result: dict) -> str:
-        """Build the content field for the knowledge record."""
+        """Build the content field for the knowledge record.
+        Stores vision description + OCR text for intelligence/search.
+        EXIF metadata is stored separately in file_metadata.
+        """
         parts = []
         if result.get("vision_description"):
-            parts.append(f"## Description\n\n{result['vision_description']}")
+            parts.append(result["vision_description"])
         if result.get("ocr_text"):
-            parts.append(f"## OCR Text\n\n{result['ocr_text']}")
-        if result.get("exif"):
-            exif = result["exif"]
-            meta_parts = []
-            if exif.get("width") and exif.get("height"):
-                meta_parts.append(f"- **Dimensions:** {exif['width']}×{exif['height']}")
-            if exif.get("Make"):
-                meta_parts.append(f"- **Camera:** {exif['Make']} {exif.get('Model', '')}")
-            if exif.get("DateTime"):
-                meta_parts.append(f"- **Date:** {exif['DateTime']}")
-            if meta_parts:
-                parts.append("## Image Metadata\n\n" + "\n".join(meta_parts))
+            parts.append(result["ocr_text"])
         return "\n\n".join(parts) if parts else ""
 
     def _derive_title(self, result: dict, file_path: str) -> Optional[str]:

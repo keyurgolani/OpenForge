@@ -2,11 +2,11 @@ import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
-    getOnboarding, advanceOnboarding, createProvider, updateProvider,
+    getOnboarding, advanceOnboarding, createProvider,
     testConnection, listModels, createWorkspace, listProviders,
     listSettings, updateSetting, listSchedules, updateSchedule,
 } from '@/lib/api'
-import { Play, FileText, Bookmark, Code2, Globe2, Eye, EyeOff, Loader2, Link, Bot, Star, X, Check, Search, CheckCircle2, XCircle, Sliders, Sparkles, ArrowRight, Plus, Trash2, MessageSquare, Lock, Brain, Folder, Briefcase, Microscope, BookOpen, Target, Globe, Lightbulb, Wrench, Palette, BarChart3, Rocket, Shield, FlaskConical, Leaf, Key, Settings2, PenLine, Database, Sprout } from 'lucide-react'
+import { Play, FileText, Eye, EyeOff, Loader2, Link, Star, X, Search, CheckCircle2, XCircle, Sliders, Sparkles, ArrowRight, Plus, Trash2, MessageSquare, Lock, Brain, Folder, Briefcase, Microscope, BookOpen, Target, Globe, Lightbulb, Wrench, Palette, BarChart3, Rocket, Shield, FlaskConical, Leaf, Key, Settings2, PenLine, Database, Sprout } from 'lucide-react'
 import { ProviderIcon } from '@/components/shared/ProviderIcon'
 import { ModelOverrideSelect } from '@/components/shared/ModelOverrideSelect'
 import { isLocalProvider, sanitizeProviderDisplayName } from '@/lib/provider-display'
@@ -28,7 +28,14 @@ const PROVIDERS = [
     { id: 'custom-anthropic', name: 'Custom Anthropic-compat.', color: 'from-rose-500/20 border-rose-500/30', needsKey: false, needsUrl: true },
 ]
 
-const STEPS = ['welcome', 'llm_setup', 'workspace_create', 'automation_preferences']
+const STEPS = ['welcome', 'providers_setup', 'models_setup', 'workspace_create', 'automation_preferences']
+
+interface TypedModel {
+    provider_id: string
+    model_id: string
+    model_name: string
+    is_default?: boolean
+}
 const AUTO_KNOWLEDGE_INTELLIGENCE_KEY = 'automation.auto_knowledge_intelligence_enabled'
 const AUTO_BOOKMARK_EXTRACTION_KEY = 'automation.auto_bookmark_content_extraction_enabled'
 
@@ -99,10 +106,13 @@ export default function OnboardingPage() {
                 </div>
 
                 {step === 'welcome' && (
-                    <WelcomeStep onNext={() => advance.mutate('llm_setup')} loading={advance.isPending} />
+                    <WelcomeStep onNext={() => advance.mutate('providers_setup')} loading={advance.isPending} />
                 )}
-                {step === 'llm_setup' && (
-                    <LLMSetupStep onNext={() => advance.mutate('workspace_create')} loading={advance.isPending} />
+                {step === 'providers_setup' && (
+                    <ProvidersSetupStep onNext={() => advance.mutate('models_setup')} loading={advance.isPending} />
+                )}
+                {step === 'models_setup' && (
+                    <ModelsSetupStep onNext={() => advance.mutate('workspace_create')} loading={advance.isPending} />
                 )}
                 {step === 'workspace_create' && (
                     <WorkspaceCreateStep onNext={async () => {
@@ -160,161 +170,66 @@ function WelcomeStep({ onNext, loading }: { onNext: () => void; loading: boolean
     )
 }
 
-function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolean }) {
-    // Configured providers (accumulated during this step)
+function ProvidersSetupStep({ onNext, loading }: { onNext: () => void; loading: boolean }) {
     const [configured, setConfigured] = useState<{ id: string; name: string }[]>([])
-
-    // Add-provider form state
     const [selected, setSelected] = useState<string | null>(null)
     const [apiKey, setApiKey] = useState('')
     const [showKey, setShowKey] = useState(false)
     const [baseUrl, setBaseUrl] = useState('')
     const [displayName, setDisplayName] = useState('')
-    const [createdProviderId, setCreatedProviderId] = useState<string | null>(null)
-
-    // Model fetch state
-    const [fetchingModels, setFetchingModels] = useState(false)
-    const [models, setModels] = useState<{ id: string; name: string }[] | null>(null)
-    const [modelError, setModelError] = useState<string | null>(null)
-    const [modelSearch, setModelSearch] = useState('')
-    const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set())
-    const [manualModel, setManualModel] = useState('')
-
-    // Save state
-    const [saving, setSaving] = useState(false)
-    const [saveError, setSaveError] = useState<string | null>(null)
+    const [showAdvanced, setShowAdvanced] = useState(false)
+    const [adding, setAdding] = useState(false)
+    const [addError, setAddError] = useState<string | null>(null)
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
     const provider = PROVIDERS.find(p => p.id === selected)
+    const canAdd = provider?.needsUrl ? !!baseUrl : !!apiKey
 
     const resetForm = () => {
         setSelected(null); setApiKey(''); setShowKey(false); setBaseUrl('')
-        setDisplayName(''); setModels(null); setModelError(null); setModelSearch('')
-        setSelectedModels(new Set()); setManualModel(''); setSaveError(null); setTestResult(null)
-        setCreatedProviderId(null); setShowAdvanced(false)
+        setDisplayName(''); setShowAdvanced(false); setAddError(null); setTestResult(null)
     }
 
     const handleSelectProvider = (id: string) => {
         setSelected(id); setApiKey(''); setShowKey(false)
         setBaseUrl(id === 'ollama' ? 'http://localhost:11434' : '')
-        setDisplayName(''); setModels(null); setModelError(null)
-        setSelectedModels(new Set()); setManualModel(''); setSaveError(null); setTestResult(null)
-        setCreatedProviderId(null); setShowAdvanced(false)
+        setDisplayName(''); setShowAdvanced(false); setAddError(null); setTestResult(null)
     }
 
-    const canFetch = provider?.needsUrl ? !!baseUrl : !!apiKey
-
-    const filteredModels = useMemo(() => {
-        if (!models) return []
-        const q = modelSearch.toLowerCase()
-        return q ? models.filter(m => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)) : models
-    }, [models, modelSearch])
-
-    const handleFetchModels = async () => {
-        if (!selected || !canFetch) return
-        setFetchingModels(true); setModelError(null); setModels(null)
-        setSelectedModels(new Set()); setTestResult(null)
+    const handleAdd = async () => {
+        if (!selected || !canAdd) return
+        setAdding(true); setAddError(null); setTestResult(null)
         try {
-            let pid = createdProviderId
-            if (!pid) {
-                const temp = await createProvider({
-                    provider_name: selected,
-                    display_name: displayName || provider?.name || selected,
-                    api_key: apiKey || undefined,
-                    base_url: baseUrl || undefined,
-                })
-                pid = temp.id
-                setCreatedProviderId(pid)
-            } else {
-                await updateProvider(pid, {
-                    display_name: displayName || provider?.name || selected,
-                    api_key: apiKey || undefined,
-                    base_url: baseUrl || undefined,
-                })
-            }
-            const result = await testConnection(pid)
-            setTestResult(result)
-            if (result.success) {
-                try {
-                    const list = await listModels(pid)
-                    setModels(list)
-                    if (list.length > 0 && list.length <= 20) {
-                        setSelectedModels(new Set(list.map((m: { id: string }) => m.id)))
-                    }
-                } catch (me: unknown) {
-                    const err = me as { response?: { data?: { detail?: string } }; message?: string }
-                    setModelError(err?.response?.data?.detail ?? err?.message ?? 'Could not fetch models')
-                    setModels([])
-                }
-            }
-        } catch (e: unknown) {
-            const err = e as { response?: { data?: { detail?: string } }; message?: string }
-            setTestResult({ success: false, message: err?.response?.data?.detail ?? err?.message ?? 'Connection failed' })
-        } finally {
-            setFetchingModels(false)
-        }
-    }
-
-    const toggleModel = (id: string) => setSelectedModels(prev => {
-        const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n
-    })
-
-    const [showAdvanced, setShowAdvanced] = useState(false)
-
-    const handleSave = async () => {
-        const modelsToAdd = models ? [...selectedModels] : manualModel.trim() ? [manualModel.trim()] : []
-        if (!modelsToAdd.length) { setSaveError('Select at least one model or enter a model ID.'); return }
-        setSaving(true); setSaveError(null)
-        try {
-            const enabledList = modelsToAdd.map(modelId => {
-                const label = models?.find(m => m.id === modelId)?.name ?? modelId
-                return { id: modelId, name: label }
+            const saved = await createProvider({
+                provider_name: selected,
+                display_name: displayName || provider?.name || selected,
+                api_key: apiKey || undefined,
+                base_url: baseUrl || undefined,
             })
-
-            if (createdProviderId) {
-                await updateProvider(createdProviderId, {
-                    display_name: displayName || provider?.name || selected,
-                    api_key: apiKey || undefined,
-                    base_url: baseUrl || undefined,
-                    default_model: modelsToAdd[0],
-                    enabled_models: enabledList,
-                })
-                setConfigured(c => [...c, { id: createdProviderId, name: sanitizeProviderDisplayName(displayName || provider?.name || selected!) }])
-            } else {
-                const saved = await createProvider({
-                    provider_name: selected!,
-                    display_name: displayName || provider?.name || selected,
-                    api_key: apiKey || undefined,
-                    base_url: baseUrl || undefined,
-                    default_model: modelsToAdd[0],
-                    enabled_models: enabledList,
-                })
-                setConfigured(c => [...c, { id: saved.id, name: sanitizeProviderDisplayName(saved.display_name) }])
-            }
-            resetForm()
+            const result = await testConnection(saved.id)
+            setTestResult(result)
+            setConfigured(c => [...c, { id: saved.id, name: sanitizeProviderDisplayName(saved.display_name) }])
+            if (result.success) resetForm()
         } catch (e: unknown) {
             const err = e as { response?: { data?: { detail?: string } }; message?: string }
-            setSaveError(err?.response?.data?.detail ?? err?.message ?? 'Save failed')
+            setAddError(err?.response?.data?.detail ?? err?.message ?? 'Failed to add provider')
         } finally {
-            setSaving(false)
+            setAdding(false)
         }
     }
-
-    const totalSelected = models ? selectedModels.size : (manualModel.trim() ? 1 : 0)
 
     return (
         <div className="glass-card shadow-glass-lg p-6 flex flex-col space-y-6 animate-slide-up border border-accent/20">
             <div>
-                <h2 className="text-xl font-bold mb-1">Connect AI Providers</h2>
+                <h2 className="text-xl font-bold mb-1">Configure AI Providers</h2>
                 <p className="text-muted-foreground text-sm">
-                    Configure one or more providers. You can add more in Settings later.
+                    Add one or more providers with your API credentials. You can add more in Settings later.
                 </p>
             </div>
 
-            {/* Configured providers list */}
             {configured.length > 0 && (
                 <div className="space-y-1.5">
-                    <p className="text-xs font-medium text-muted-foreground">Configured</p>
+                    <p className="text-xs font-medium text-muted-foreground">Added providers</p>
                     {configured.map(c => (
                         <div key={c.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/5 border border-emerald-500/20 text-xs">
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
@@ -324,11 +239,9 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
                 </div>
             )}
 
-            {/* Add-provider form */}
             <div className="space-y-4 rounded-xl border border-border/60 p-4 bg-muted/10">
-                {/* Step 1: Provider selection */}
                 <div className="relative">
-                    <p className="text-xs font-medium text-muted-foreground mb-2">1. Select provider</p>
+                    <p className="text-xs font-medium text-muted-foreground mb-2">1. Select provider type</p>
                     <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
                         {PROVIDERS.map(p => (
                             <button key={p.id} onClick={() => handleSelectProvider(p.id)}
@@ -351,19 +264,18 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
 
                 {selected && (
                     <>
-                        {/* Step 2 — Credentials */}
                         <div className="space-y-2">
                             <label className="text-xs text-muted-foreground font-medium block">2. Enter credentials</label>
                             {isLocalProvider(selected) && (
-                                <p className="text-[10px] text-lime-300/90">Local provider (runs on this machine)</p>
+                                <p className="text-[10px] text-lime-300/90">Local provider — runs on this machine</p>
                             )}
                             <input className="input text-sm" placeholder={`Display name (default: ${provider?.name})`} value={displayName} onChange={e => setDisplayName(e.target.value)} />
 
                             {provider?.needsUrl ? (
                                 <>
-                                    <input className="input text-sm" placeholder={(provider as any)?.urlPlaceholder ?? 'https://your-api.com'} value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
+                                    <input className="input text-sm" placeholder="https://your-api.com" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
                                     <div className="relative">
-                                        <input type={showKey ? 'text' : 'password'} className="input text-sm pr-10" placeholder={(provider as any)?.placeholder ?? 'API Key or Token'} value={apiKey} onChange={e => setApiKey(e.target.value)} autoComplete="off" />
+                                        <input type={showKey ? 'text' : 'password'} className="input text-sm pr-10" placeholder="API Key (optional)" value={apiKey} onChange={e => setApiKey(e.target.value)} autoComplete="off" />
                                         <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setShowKey(v => !v)}>
                                             {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                         </button>
@@ -372,7 +284,7 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
                             ) : (
                                 <>
                                     <div className="relative">
-                                        <input type={showKey ? 'text' : 'password'} className="input text-sm pr-10" placeholder={(provider as any)?.placeholder ?? 'API Key'} value={apiKey} onChange={e => setApiKey(e.target.value)} autoComplete="off" />
+                                        <input type={showKey ? 'text' : 'password'} className="input text-sm pr-10" placeholder="API Key" value={apiKey} onChange={e => setApiKey(e.target.value)} autoComplete="off" />
                                         <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setShowKey(v => !v)}>
                                             {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                         </button>
@@ -382,79 +294,28 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
                                         className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 mt-1 transition-colors"
                                         onClick={() => setShowAdvanced(!showAdvanced)}
                                     >
-                                        <Sliders className="w-3 h-3" /> {showAdvanced ? 'Hide advanced settings' : 'Show advanced settings (Custom Base URL)'}
+                                        <Sliders className="w-3 h-3" /> {showAdvanced ? 'Hide advanced settings' : 'Custom Base URL (API gateways)'}
                                     </button>
                                     {showAdvanced && (
                                         <div className="animate-fade-in pt-1">
-                                            <label className="text-[10px] text-muted-foreground mb-1 block">Base URL Override (e.g. for API gateways)</label>
                                             <input className="input text-sm" placeholder="https://api.openai.com/v1" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
                                         </div>
                                     )}
                                 </>
                             )}
                         </div>
-                        {/* Step 3: Test + fetch models */}
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                                <p className="text-xs font-medium text-muted-foreground">3. Test &amp; load models</p>
-                                <button className="btn-primary text-xs py-1.5 px-3" onClick={handleFetchModels} disabled={fetchingModels || !canFetch}>
-                                    {fetchingModels ? <Loader2 className="w-3 h-3 animate-spin" /> : <Globe2 className="w-3 h-3" />}
-                                    {models !== null ? 'Refresh' : 'Test & Fetch'}
-                                </button>
+
+                        {testResult && (
+                            <div className={`flex items-center gap-2 text-xs p-2.5 rounded-lg ${testResult.success ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' : 'bg-destructive/10 text-red-300 border border-destructive/20'}`}>
+                                {testResult.success ? <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" /> : <XCircle className="w-3.5 h-3.5 flex-shrink-0" />}
+                                {testResult.message}
                             </div>
+                        )}
+                        {addError && <p className="text-xs text-red-400">{addError}</p>}
 
-                            {testResult && (
-                                <div className={`flex items-center gap-2 text-xs p-2.5 rounded-lg ${testResult.success ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' : 'bg-destructive/10 text-red-300 border border-destructive/20'}`}>
-                                    {testResult.success ? <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" /> : <XCircle className="w-3.5 h-3.5 flex-shrink-0" />}
-                                    {testResult.message}
-                                </div>
-                            )}
-
-                            {modelError && (
-                                <div className="text-xs p-2.5 rounded-lg bg-muted/30 border border-border/50 space-y-1.5">
-                                    <p className="text-muted-foreground">{modelError}</p>
-                                    <input className="input text-xs" placeholder="Enter model ID manually (e.g. gpt-4o)" value={manualModel} onChange={e => setManualModel(e.target.value)} />
-                                </div>
-                            )}
-
-                            {models !== null && models.length > 0 && (
-                                <div className="space-y-1.5">
-                                    <div className="relative">
-                                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
-                                        <input className="input text-xs pl-7" placeholder={`Filter ${models.length} models…`} value={modelSearch} onChange={e => setModelSearch(e.target.value)} />
-                                    </div>
-                                    <div className="flex items-center justify-between px-0.5">
-                                        <span className="text-[10px] text-muted-foreground">{selectedModels.size} selected</span>
-                                        <button className="text-[10px] text-accent" onClick={() => selectedModels.size === filteredModels.length ? setSelectedModels(new Set()) : setSelectedModels(new Set(filteredModels.map(m => m.id)))}>
-                                            {selectedModels.size === filteredModels.length ? 'Deselect all' : 'Select all'}
-                                        </button>
-                                    </div>
-                                    <div className="max-h-48 overflow-y-auto rounded-lg border border-border/50 bg-background/30 divide-y divide-border/20">
-                                        {filteredModels.map(m => {
-                                            const checked = selectedModels.has(m.id)
-                                            return (
-                                                <button key={m.id} onClick={() => toggleModel(m.id)} className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/30 transition-colors ${checked ? 'bg-accent/5' : ''}`}>
-                                                    <div className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${checked ? 'bg-accent border-accent' : 'border-border'}`}>
-                                                        {checked && <CheckCircle2 className="w-2.5 h-2.5 text-accent-foreground" />}
-                                                    </div>
-                                                    <span className={checked ? 'text-foreground' : 'text-muted-foreground'}>{m.name}</span>
-                                                </button>
-                                            )
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-
-                            {models === null && !modelError && (
-                                <input className="input text-xs" placeholder="Or type model ID directly (e.g. gpt-4o)" value={manualModel} onChange={e => setManualModel(e.target.value)} />
-                            )}
-                        </div>
-
-                        {saveError && <p className="text-xs text-red-400">{saveError}</p>}
-
-                        <button className="btn-primary w-full justify-center py-2.5 text-sm" onClick={handleSave} disabled={saving || totalSelected === 0}>
-                            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                            {saving ? 'Saving…' : totalSelected > 0 ? `Save Provider with ${totalSelected} model${totalSelected > 1 ? 's' : ''}` : 'Select models above'}
+                        <button className="btn-primary w-full justify-center py-2.5 text-sm" onClick={handleAdd} disabled={adding || !canAdd}>
+                            {adding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                            {adding ? 'Adding…' : 'Add Provider'}
                         </button>
                     </>
                 )}
@@ -466,7 +327,248 @@ function LLMSetupStep({ onNext, loading }: { onNext: () => void; loading: boolea
                 disabled={loading || configured.length === 0}
             >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                {configured.length === 0 ? 'Configure at least one provider' : `Continue with ${configured.length} provider${configured.length > 1 ? 's' : ''}`}
+                {configured.length === 0 ? 'Add at least one provider to continue' : `Continue with ${configured.length} provider${configured.length > 1 ? 's' : ''}`}
+                <ArrowRight className="w-4 h-4" />
+            </button>
+        </div>
+    )
+}
+
+type ModelTypeKey = 'chat' | 'vision' | 'embedding'
+
+function ModelsSetupStep({ onNext, loading }: { onNext: () => void; loading: boolean }) {
+    const qc = useQueryClient()
+    const [activeType, setActiveType] = useState<ModelTypeKey>('chat')
+    const [chatModels, setChatModels] = useState<TypedModel[]>([])
+    const [visionModels, setVisionModels] = useState<TypedModel[]>([])
+    const [embeddingModels, setEmbeddingModels] = useState<TypedModel[]>([])
+    const [initialized, setInitialized] = useState(false)
+    const [saving, setSaving] = useState(false)
+    const [saveError, setSaveError] = useState<string | null>(null)
+
+    // Add-model form
+    const [addProviderId, setAddProviderId] = useState('')
+    const [providerModels, setProviderModels] = useState<{ id: string; name: string }[]>([])
+    const [fetchingModels, setFetchingModels] = useState(false)
+    const [selectedModelId, setSelectedModelId] = useState('')
+    const [modelSearch, setModelSearch] = useState('')
+    const [fetchError, setFetchError] = useState<string | null>(null)
+
+    const { data: providers = [] } = useQuery<ProviderOption[]>({ queryKey: ['providers'], queryFn: listProviders })
+    const { data: settings = [] } = useQuery<Array<{ key: string; value: unknown }>>({ queryKey: ['app-settings'], queryFn: listSettings })
+
+    useEffect(() => {
+        if (initialized || !settings.length) return
+        const parse = (key: string): TypedModel[] => {
+            const s = settings.find(x => x.key === key)
+            if (!s?.value) return []
+            try { return s.value as TypedModel[] } catch { return [] }
+        }
+        setChatModels(parse('system_chat_models'))
+        setVisionModels(parse('system_vision_models'))
+        setEmbeddingModels(parse('system_embedding_models'))
+        setInitialized(true)
+    }, [settings, initialized])
+
+    const currentModels = activeType === 'chat' ? chatModels : activeType === 'vision' ? visionModels : embeddingModels
+    const setCurrentModels = (m: TypedModel[]) => {
+        if (activeType === 'chat') setChatModels(m)
+        else if (activeType === 'vision') setVisionModels(m)
+        else setEmbeddingModels(m)
+    }
+
+    const handleFetchModels = async (pid: string) => {
+        if (!pid) { setProviderModels([]); setSelectedModelId(''); return }
+        setFetchingModels(true); setFetchError(null); setProviderModels([]); setSelectedModelId('')
+        try {
+            const list = await listModels(pid)
+            setProviderModels(list)
+        } catch (e: unknown) {
+            const err = e as { response?: { data?: { detail?: string } }; message?: string }
+            setFetchError(err?.response?.data?.detail ?? err?.message ?? 'Could not fetch models')
+        } finally {
+            setFetchingModels(false)
+        }
+    }
+
+    const handleProviderChange = (pid: string) => {
+        setAddProviderId(pid); setModelSearch(''); handleFetchModels(pid)
+    }
+
+    const handleAddModel = () => {
+        if (!addProviderId || !selectedModelId) return
+        const modelName = providerModels.find(m => m.id === selectedModelId)?.name ?? selectedModelId
+        const existing = currentModels
+        if (existing.some(m => m.provider_id === addProviderId && m.model_id === selectedModelId)) return
+        const newModel: TypedModel = {
+            provider_id: addProviderId,
+            model_id: selectedModelId,
+            model_name: modelName,
+            is_default: existing.length === 0,
+        }
+        setCurrentModels([...existing, newModel])
+        setSelectedModelId(''); setModelSearch('')
+    }
+
+    const handleRemoveModel = (providerId: string, modelId: string) => {
+        const updated = currentModels.filter(m => !(m.provider_id === providerId && m.model_id === modelId))
+        if (updated.length > 0 && !updated.some(m => m.is_default)) {
+            updated[0] = { ...updated[0], is_default: true }
+        }
+        setCurrentModels(updated)
+    }
+
+    const handleSetDefault = (providerId: string, modelId: string) => {
+        setCurrentModels(currentModels.map(m => ({ ...m, is_default: m.provider_id === providerId && m.model_id === modelId })))
+    }
+
+    const filteredProviderModels = useMemo(() => {
+        const q = modelSearch.toLowerCase()
+        return q ? providerModels.filter(m => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)) : providerModels
+    }, [providerModels, modelSearch])
+
+    const handleSaveAndContinue = async () => {
+        setSaving(true); setSaveError(null)
+        try {
+            const saves = [
+                updateSetting('system_chat_models', { value: chatModels, category: 'llm' }),
+                updateSetting('system_vision_models', { value: visionModels, category: 'llm' }),
+                updateSetting('system_embedding_models', { value: embeddingModels, category: 'llm' }),
+            ]
+            // Sync system_vision_provider_id / system_vision_model for backend fallback
+            const defaultVision = visionModels.find(m => m.is_default) ?? visionModels[0]
+            if (defaultVision) {
+                saves.push(updateSetting('system_vision_provider_id', { value: defaultVision.provider_id, category: 'llm' }))
+                saves.push(updateSetting('system_vision_model', { value: defaultVision.model_id, category: 'llm' }))
+            }
+            await Promise.all(saves)
+            qc.invalidateQueries({ queryKey: ['app-settings'] })
+            onNext()
+        } catch (e: unknown) {
+            const err = e as { response?: { data?: { detail?: string } }; message?: string }
+            setSaveError(err?.response?.data?.detail ?? err?.message ?? 'Save failed')
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    const TYPE_TABS: { key: ModelTypeKey; label: string; desc: string }[] = [
+        { key: 'chat', label: 'Chat', desc: 'Models for conversation and agent tasks' },
+        { key: 'vision', label: 'Vision', desc: 'Models for image analysis and description' },
+        { key: 'embedding', label: 'Embedding', desc: 'Models for semantic search and similarity' },
+    ]
+
+    const totalConfigured = chatModels.length + visionModels.length + embeddingModels.length
+
+    return (
+        <div className="glass-card shadow-glass-lg p-6 flex flex-col space-y-5 animate-slide-up border border-accent/20">
+            <div>
+                <h2 className="text-xl font-bold mb-1">Configure Models</h2>
+                <p className="text-muted-foreground text-sm">
+                    Pick system-wide default models for each type. Workspaces can override these later.
+                </p>
+            </div>
+
+            {/* Type tabs */}
+            <div className="flex gap-1 p-1 rounded-lg bg-muted/30 border border-border/50">
+                {TYPE_TABS.map(t => (
+                    <button
+                        key={t.key}
+                        onClick={() => { setActiveType(t.key); setAddProviderId(''); setProviderModels([]); setSelectedModelId(''); setModelSearch(''); setFetchError(null) }}
+                        className={`flex-1 py-1.5 px-2 rounded-md text-xs font-medium transition-all ${activeType === t.key ? 'bg-accent text-accent-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                        {t.label}
+                        {(activeType !== t.key) && (
+                            <span className="ml-1 text-[9px] opacity-60">
+                                {t.key === 'chat' ? chatModels.length : t.key === 'vision' ? visionModels.length : embeddingModels.length}
+                            </span>
+                        )}
+                    </button>
+                ))}
+            </div>
+
+            <p className="text-[11px] text-muted-foreground -mt-2">{TYPE_TABS.find(t => t.key === activeType)?.desc}</p>
+
+            {/* Current models list */}
+            {currentModels.length > 0 && (
+                <div className="space-y-1.5">
+                    {currentModels.map(m => {
+                        const prov = providers.find(p => p.id === m.provider_id)
+                        return (
+                            <div key={`${m.provider_id}:${m.model_id}`} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border/50 bg-muted/10 text-xs">
+                                <ProviderIcon providerId={prov?.provider_name ?? ''} className="w-3.5 h-3.5 flex-shrink-0" />
+                                <span className="text-muted-foreground truncate">{sanitizeProviderDisplayName(prov?.display_name ?? m.provider_id)}</span>
+                                <span className="text-foreground font-medium truncate flex-1">{m.model_name}</span>
+                                <button onClick={() => handleSetDefault(m.provider_id, m.model_id)} className={`p-1 rounded transition-colors ${m.is_default ? 'text-yellow-400' : 'text-muted-foreground hover:text-yellow-400'}`} title="Set as default">
+                                    <Star className="w-3 h-3" fill={m.is_default ? 'currentColor' : 'none'} />
+                                </button>
+                                <button onClick={() => handleRemoveModel(m.provider_id, m.model_id)} className="p-1 rounded text-muted-foreground hover:text-red-400 transition-colors">
+                                    <X className="w-3 h-3" />
+                                </button>
+                            </div>
+                        )
+                    })}
+                </div>
+            )}
+
+            {/* Add model */}
+            <div className="space-y-2 rounded-xl border border-border/60 p-3 bg-muted/10">
+                <p className="text-xs font-medium text-muted-foreground">Add a model</p>
+                <select
+                    className="input text-xs"
+                    value={addProviderId}
+                    onChange={e => handleProviderChange(e.target.value)}
+                >
+                    <option value="">Select provider…</option>
+                    {providers.map((p: ProviderOption) => (
+                        <option key={p.id} value={p.id}>{sanitizeProviderDisplayName(p.display_name)}</option>
+                    ))}
+                </select>
+
+                {fetchingModels && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
+                        <Loader2 className="w-3 h-3 animate-spin" /> Fetching models…
+                    </div>
+                )}
+
+                {fetchError && <p className="text-xs text-red-400">{fetchError}</p>}
+
+                {providerModels.length > 0 && (
+                    <>
+                        <div className="relative">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                            <input className="input text-xs pl-7" placeholder={`Filter ${providerModels.length} models…`} value={modelSearch} onChange={e => setModelSearch(e.target.value)} />
+                        </div>
+                        <div className="max-h-40 overflow-y-auto rounded-lg border border-border/50 bg-background/30 divide-y divide-border/20">
+                            {filteredProviderModels.map(m => (
+                                <button key={m.id} onClick={() => setSelectedModelId(m.id)}
+                                    className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/30 transition-colors ${selectedModelId === m.id ? 'bg-accent/10 text-foreground' : 'text-muted-foreground'}`}>
+                                    <div className={`w-3 h-3 rounded-full border flex-shrink-0 transition-colors ${selectedModelId === m.id ? 'bg-accent border-accent' : 'border-border'}`} />
+                                    {m.name}
+                                </button>
+                            ))}
+                        </div>
+                    </>
+                )}
+
+                <button
+                    className="btn-primary w-full justify-center py-2 text-xs"
+                    onClick={handleAddModel}
+                    disabled={!addProviderId || !selectedModelId}
+                >
+                    <Plus className="w-3 h-3" /> Add Model
+                </button>
+            </div>
+
+            {saveError && <p className="text-xs text-red-400">{saveError}</p>}
+
+            <button
+                className="btn-primary w-full justify-center py-3"
+                onClick={handleSaveAndContinue}
+                disabled={saving || loading || totalConfigured === 0}
+            >
+                {(saving || loading) ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                {totalConfigured === 0 ? 'Add at least one model to continue' : 'Save & Continue'}
                 <ArrowRight className="w-4 h-4" />
             </button>
         </div>

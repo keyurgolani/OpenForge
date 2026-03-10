@@ -9,9 +9,9 @@ import logging
 logger = logging.getLogger("openforge.onboarding")
 
 VALID_TRANSITIONS = {
-    "welcome": {"llm_setup"},
-    "llm_setup": {"workspace_create"},
-    # Allow "complete" for older onboarding clients that skip automation preferences.
+    "welcome": {"providers_setup"},
+    "providers_setup": {"models_setup"},
+    "models_setup": {"workspace_create"},
     "workspace_create": {"automation_preferences", "complete"},
     "automation_preferences": {"complete"},
 }

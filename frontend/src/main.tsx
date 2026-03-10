@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react'
+import React, { Suspense, lazy, useState, useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Route, Routes, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -6,8 +6,9 @@ import { ToastProvider, useToast } from '@/components/shared/ToastProvider'
 import ErrorBoundary from '@/components/shared/ErrorBoundary'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import SpatialBackdrop from '@/components/shared/SpatialBackdrop'
-import api from '@/lib/api'
+import api, { checkAuth } from '@/lib/api'
 import { ThemeProvider } from '@/components/theme-provider'
+import LoginPage from '@/pages/LoginPage'
 import '@mantine/core/styles.css'
 import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
@@ -43,6 +44,27 @@ function PageLoader() {
     )
 }
 
+/** AuthGuard: checks auth status on mount and listens for 401 events */
+function AuthGuard({ children }: { children: React.ReactNode }) {
+    const [status, setStatus] = useState<'loading' | 'ok' | 'login'>('loading')
+
+    useEffect(() => {
+        checkAuth()
+            .then(data => setStatus(data.authenticated ? 'ok' : 'login'))
+            .catch(() => setStatus('ok')) // if check fails, don't block access
+    }, [])
+
+    useEffect(() => {
+        const handler = () => setStatus('login')
+        window.addEventListener('openforge:unauthorized', handler)
+        return () => window.removeEventListener('openforge:unauthorized', handler)
+    }, [])
+
+    if (status === 'loading') return <PageLoader />
+    if (status === 'login') return <LoginPage onSuccess={() => setStatus('ok')} />
+    return <>{children}</>
+}
+
 /** Set up Axios response interceptor inside the Toast context */
 function AxiosInterceptorSetup() {
     const { error: showError } = useToast()
@@ -51,6 +73,10 @@ function AxiosInterceptorSetup() {
         const id = api.interceptors.response.use(
             res => res,
             err => {
+                if (err?.response?.status === 401) {
+                    window.dispatchEvent(new Event('openforge:unauthorized'))
+                    return Promise.reject(err)
+                }
                 const msg = err?.response?.data?.detail
                     ?? err?.message
                     ?? 'An unexpected error occurred'
@@ -75,6 +101,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                     <SpatialBackdrop />
                     <AxiosInterceptorSetup />
                     <BrowserRouter>
+                        <AuthGuard>
                         <Suspense fallback={<PageLoader />}>
                         <Routes>
                             <Route path="/onboarding" element={
@@ -121,6 +148,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                             <Route path="/" element={<Navigate to="/onboarding" replace />} />
                         </Routes>
                     </Suspense>
+                        </AuthGuard>
                 </BrowserRouter>
             </ToastProvider>
             </ThemeProvider>

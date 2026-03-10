@@ -11,6 +11,7 @@ import {
     listProviders,
     getWorkspace,
     listWorkspaces,
+    getKnowledge,
     saveAttachmentToKnowledge,
     exportConversation,
     approveHITL,
@@ -34,6 +35,144 @@ import { sanitizeProviderDisplayName } from '@/lib/provider-display'
 import { ToolCallCard } from '@/components/shared/ToolCallCard'
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
+
+// Knowledge subtype display labels (matches TYPE_META in SearchPage)
+const KNOWLEDGE_TYPE_LABELS: Record<string, string> = {
+    standard: 'Note', fleeting: 'Fleeting', bookmark: 'Bookmark', gist: 'Gist',
+    image: 'Image', audio: 'Audio', pdf: 'PDF', docx: 'Word', xlsx: 'Excel', pptx: 'Presentation',
+}
+
+interface MentionResolutionMaps {
+    workspacesById: Map<string, string>    // id → name
+    chatsById: Map<string, string>         // id → title
+    knowledgeById: Map<string, string>     // id → title
+    knowledgeTypeById: Map<string, string> // id → knowledge_type
+    workspacesByName: Map<string, string>  // name (lower) → id
+    chatsByName: Map<string, string>       // title (lower) → id
+}
+
+// Encode knowledge entity as label with embedded type: "K|{type}|{title}"
+// Workspace/Chat labels stay as "Workspace: {name}" / "Chat: {title}" for @mention compat
+function knLabel(title: string, type?: string) {
+    return `K\u200b${type || ''}\u200b${title}`
+}
+
+/** Pre-process agent response content to turn contextual IDs into markdown links. */
+function injectIdLinks(
+    content: string,
+    workspaceId: string,
+    maps?: MentionResolutionMaps,
+): string {
+    const U = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+    // knowledge_id / knowledge: <uuid>
+    let out = content.replace(
+        new RegExp(`(knowledge_id\\s*[:=]\\s*\`?)(${U})(\`?)`, 'gi'),
+        (_, pre, uuid, post) => {
+            const lc = uuid.toLowerCase()
+            const title = maps?.knowledgeById.get(lc)
+            const type = maps?.knowledgeTypeById.get(lc)
+            const label = title ? knLabel(title, type) : knLabel(uuid.slice(0, 8) + '…')
+            return `${pre}[${label}](/w/${workspaceId}/knowledge/${uuid})${post}`
+        }
+    )
+    // conversation_id / chat_id: <uuid>
+    out = out.replace(
+        new RegExp(`((?:conversation_id|chat_id)\\s*[:=]\\s*\`?)(${U})(\`?)`, 'gi'),
+        (_, pre, uuid, post) => {
+            const title = maps?.chatsById.get(uuid)
+            const label = title ? `Chat: ${title}` : `Chat: ${uuid.slice(0, 8)}…`
+            return `${pre}[${label}](/w/${workspaceId}/chat/${uuid})${post}`
+        }
+    )
+    // workspace_id: <uuid>
+    out = out.replace(
+        new RegExp(`(workspace_id\\s*[:=]\\s*\`?)(${U})(\`?)`, 'gi'),
+        (_, pre, uuid, post) => {
+            const name = maps?.workspacesById.get(uuid)
+            const label = name ? `Workspace: ${name}` : `Workspace: ${uuid.slice(0, 8)}…`
+            return `${pre}[${label}](/w/${uuid})${post}`
+        }
+    )
+    // @MentionName → clickable link (workspace or chat)
+    if (maps) {
+        const wsNames = [...maps.workspacesByName.entries()].sort((a, b) => b[0].length - a[0].length)
+        for (const [nameLower, wsId] of wsNames) {
+            const escapedName = nameLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+            out = out.replace(
+                new RegExp(`@(${escapedName})(?![^[]*\\])`, 'gi'),
+                (_, matched) => `[@${matched}](/w/${wsId})`
+            )
+        }
+        const chatNames = [...maps.chatsByName.entries()].sort((a, b) => b[0].length - a[0].length)
+        for (const [nameLower, chatId] of chatNames) {
+            const escapedName = nameLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+            out = out.replace(
+                new RegExp(`@(${escapedName})(?![^[]*\\])`, 'gi'),
+                (_, matched) => `[@${matched}](/w/${workspaceId}/chat/${chatId})`
+            )
+        }
+    }
+    // Final pass: bare UUIDs → link if they match known entities; default to knowledge.
+    if (maps) {
+        out = out.replace(
+            new RegExp(`(?<![/\\w-])(${U})(?![/\\w-])`, 'gi'),
+            (uuid) => {
+                const lc = uuid.toLowerCase()
+                const wsName = maps.workspacesById.get(lc)
+                if (wsName) return `[Workspace: ${wsName}](/w/${uuid})`
+                const chatTitle = maps.chatsById.get(lc)
+                if (chatTitle) return `[Chat: ${chatTitle}](/w/${workspaceId}/chat/${uuid})`
+                const knTitle = maps.knowledgeById.get(lc)
+                const knType = maps.knowledgeTypeById.get(lc)
+                const label = knTitle ? knLabel(knTitle, knType) : knLabel(uuid.slice(0, 8) + '…')
+                return `[${label}](/w/${workspaceId}/knowledge/${uuid})`
+            }
+        )
+    }
+    return out
+}
+
+// Zero-width space U+200B is used as separator in knowledge labels — safe since it
+// never appears in user-generated titles and survives markdown-it rendering unchanged.
+const ENTITY_CARD_RE = /<a href="([^"]*)">(Workspace: [^<]+|Chat: [^<]+|K\u200b[^\u200b]*\u200b[^<]+)<\/a>/g
+
+function entityCardHtml(href: string, label: string): string {
+    if (label.startsWith('Workspace: ')) {
+        const name = label.slice('Workspace: '.length)
+        return `<a href="${href}" class="entity-link entity-link--workspace">` +
+            `<span class="entity-link-meta"><span class="entity-link-badge">Workspace</span></span>` +
+            `<span class="entity-link-name">${name}</span></a>`
+    }
+    if (label.startsWith('Chat: ')) {
+        const title = label.slice('Chat: '.length)
+        return `<a href="${href}" class="entity-link entity-link--chat">` +
+            `<span class="entity-link-meta"><span class="entity-link-badge">Chat</span></span>` +
+            `<span class="entity-link-name">${title}</span></a>`
+    }
+    // Knowledge — label is "K\u200b{type}\u200b{title}"
+    const zw = '\u200b'
+    const first = label.indexOf(zw)
+    const second = label.indexOf(zw, first + 1)
+    const knType = label.slice(first + 1, second)
+    const knTitle = label.slice(second + 1)
+    const typeLabel = knType ? (KNOWLEDGE_TYPE_LABELS[knType] || knType) : ''
+    const typeChip = typeLabel
+        ? `<span class="entity-link-subtype">${typeLabel}</span>`
+        : ''
+    return `<a href="${href}" class="entity-link entity-link--knowledge">` +
+        `<span class="entity-link-meta"><span class="entity-link-badge">Knowledge</span>${typeChip}</span>` +
+        `<span class="entity-link-name">${knTitle}</span></a>`
+}
+
+function renderMessageContent(
+    content: string,
+    workspaceId: string,
+    maps?: MentionResolutionMaps,
+): string {
+    const html = md.render(injectIdLinks(content, workspaceId, maps))
+    return html.replace(ENTITY_CARD_RE, (_, href, label) => entityCardHtml(href, label))
+}
+
 const MIN_CHAT_LIST_WIDTH = 280
 const MAX_CHAT_LIST_WIDTH = 560
 const DEFAULT_CHAT_LIST_WIDTH = 320
@@ -219,6 +358,86 @@ export default function ChatPage() {
         () => (conversationsWithArchived as Conversation[]).filter(conv => conv.is_archived),
         [conversationsWithArchived]
     )
+    const [resolvedKnowledgeTitles, setResolvedKnowledgeTitles] = useState<Map<string, { title: string; knowledgeType: string }>>(new Map())
+    const fetchingKnowledgeIds = useRef<Set<string>>(new Set())
+
+    const mentionMaps = useMemo<MentionResolutionMaps>(() => {
+        const workspacesById = new Map<string, string>()
+        const workspacesByName = new Map<string, string>()
+        for (const ws of allWorkspaces as Array<{ id: string; name: string }>) {
+            workspacesById.set(ws.id, ws.name)
+            workspacesByName.set(ws.name.toLowerCase(), ws.id)
+        }
+        const chatsById = new Map<string, string>()
+        const chatsByName = new Map<string, string>()
+        for (const conv of conversationsWithArchived as Conversation[]) {
+            if (conv.title) {
+                chatsById.set(conv.id, conv.title)
+                chatsByName.set(conv.title.toLowerCase(), conv.id)
+            }
+        }
+        const knowledgeById = new Map<string, string>()
+        const knowledgeTypeById = new Map<string, string>()
+        for (const msg of messages) {
+            for (const src of msg.context_sources ?? []) {
+                if (src.knowledge_id && src.title) {
+                    knowledgeById.set(src.knowledge_id.toLowerCase(), src.title)
+                }
+            }
+        }
+        for (const [id, { title, knowledgeType }] of resolvedKnowledgeTitles) {
+            knowledgeById.set(id, title)
+            if (knowledgeType) knowledgeTypeById.set(id, knowledgeType)
+        }
+        return { workspacesById, chatsById, knowledgeById, knowledgeTypeById, workspacesByName, chatsByName }
+    }, [allWorkspaces, conversationsWithArchived, messages, resolvedKnowledgeTitles])
+
+    // Async-resolve titles for bare UUIDs in message content that aren't already known
+    const UUID_RE_GLOBAL = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi
+    useEffect(() => {
+        if (!workspaceId || messages.length === 0) return
+        const candidates = new Set<string>()
+        for (const msg of messages) {
+            const matches = msg.content.matchAll(UUID_RE_GLOBAL)
+            for (const [uuid] of matches) {
+                const lc = uuid.toLowerCase()
+                if (
+                    !mentionMaps.workspacesById.has(lc) &&
+                    !mentionMaps.chatsById.has(lc) &&
+                    !mentionMaps.knowledgeById.has(lc) &&
+                    !fetchingKnowledgeIds.current.has(lc)
+                ) {
+                    candidates.add(lc)
+                }
+            }
+        }
+        if (candidates.size === 0) return
+        for (const id of candidates) fetchingKnowledgeIds.current.add(id)
+        Promise.allSettled(
+            [...candidates].map(async (id) => {
+                try {
+                    const record = await getKnowledge(workspaceId, id)
+                    return { id, title: record?.title || null, knowledgeType: record?.knowledge_type || '' }
+                } catch {
+                    return { id, title: null, knowledgeType: '' }
+                }
+            })
+        ).then(results => {
+            const updates = new Map<string, { title: string; knowledgeType: string }>()
+            for (const r of results) {
+                if (r.status === 'fulfilled' && r.value.title) {
+                    updates.set(r.value.id, { title: r.value.title, knowledgeType: r.value.knowledgeType })
+                }
+            }
+            if (updates.size > 0) {
+                setResolvedKnowledgeTitles(prev => {
+                    const next = new Map(prev)
+                    for (const [k, v] of updates) next.set(k, v)
+                    return next
+                })
+            }
+        })
+    }, [messages, workspaceId]) // eslint-disable-line react-hooks/exhaustive-deps
     const activeConversationRecord = useMemo(
         () => (conversationsWithArchived as Conversation[]).find(conv => conv.id === activeCid) ?? null,
         [conversationsWithArchived, activeCid]
@@ -532,7 +751,7 @@ export default function ChatPage() {
     // Pre-render streaming markdown once per content change instead of inline
     // on every render cycle — avoids redundant md.render() calls when only
     // unrelated state (scroll position, tool results, etc.) changes.
-    const renderedStreamingContent = useMemo(() => md.render(streamingContent), [streamingContent])
+    const renderedStreamingContent = useMemo(() => renderMessageContent(streamingContent, workspaceId ?? '', mentionMaps), [streamingContent, workspaceId, mentionMaps])
 
     useEffect(() => {
         if (!isStreaming || !stickToBottom) return
@@ -950,6 +1169,7 @@ export default function ChatPage() {
                                             providerDisplayByName={providerDisplayByName}
                                             requestVisibility={ensureExpandedBlockVisible}
                                             attachmentsProcessed={previousUserAttachments}
+                                            mentionMaps={mentionMaps}
                                         />
                                     )
                                 })}
@@ -965,45 +1185,16 @@ export default function ChatPage() {
                                             </div>
                                             <div className="chat-workflow-stack w-full">
                                                 {attachmentsProcessed.length > 0 && (
-                                                    <div className="chat-workflow-step">
-                                                        <div className="glass-card chat-section-reveal px-4 py-3">
-                                                            <div className="mb-2 text-[11px] uppercase tracking-wide text-muted-foreground">
-                                                                {`Processed ${attachmentsProcessed.length} Attachment${attachmentsProcessed.length === 1 ? '' : 's'}`}
-                                                            </div>
-                                                            <div className="space-y-2">
-                                                                {attachmentsProcessed.map(att => (
-                                                                    <AttachmentCard
-                                                                        key={att.id}
-                                                                        att={att}
-                                                                        workspaceId={workspaceId}
-                                                                    />
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    </div>
+                                                    <StreamingAttachmentsBadge
+                                                        atts={attachmentsProcessed}
+                                                        workspaceId={workspaceId}
+                                                    />
                                                 )}
                                                 {sources.length > 0 && (
-                                                    <div className="chat-workflow-step">
-                                                        <div className="glass-card chat-section-reveal px-4 py-3">
-                                                            <div className="mb-2 text-[11px] uppercase tracking-wide text-muted-foreground">
-                                                                Sources
-                                                            </div>
-                                                            <div className="space-y-2">
-                                                                {sources.map(src => (
-                                                                    <div key={src.knowledge_id} className="rounded-lg border border-border/60 bg-muted/25 px-3 py-2">
-                                                                        <div className="mb-1 flex items-center justify-between gap-2">
-                                                                            <span className="truncate text-xs font-medium text-foreground/90">{src.title}</span>
-                                                                            <span className="text-[10px] text-muted-foreground">{Math.round(src.score * 100)}%</span>
-                                                                        </div>
-                                                                        <div
-                                                                            className="markdown-content max-h-20 overflow-hidden text-xs leading-relaxed text-muted-foreground [&_p]:mb-1 [&_ul]:mb-1 [&_ol]:mb-1 [&_h1]:text-xs [&_h2]:text-xs [&_h3]:text-xs [&_pre]:text-[11px] [&_code]:text-[11px]"
-                                                                            dangerouslySetInnerHTML={{ __html: md.render(src.snippet || '') }}
-                                                                        />
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    </div>
+                                                    <StreamingSourcesBadge
+                                                        sources={sources}
+                                                        workspaceId={workspaceId}
+                                                    />
                                                 )}
                                                 {streamingModelLabel && (
                                                     <div className="chat-workflow-step chat-section-reveal">
@@ -1095,7 +1286,14 @@ export default function ChatPage() {
                                                                 className={`min-h-0 ${streamResponseExpanded ? 'overflow-visible' : 'overflow-y-auto'}`}
                                                                 style={streamResponseExpanded ? undefined : { maxHeight: `${streamingBubbleMaxHeight}px` }}
                                                             >
-                                                                <div className={`markdown-content ${isInterrupted ? '' : 'streaming-cursor'}`} dangerouslySetInnerHTML={{ __html: renderedStreamingContent }} />
+                                                                <div
+                                                                    className={`markdown-content ${isInterrupted ? '' : 'streaming-cursor'}`}
+                                                                    dangerouslySetInnerHTML={{ __html: renderedStreamingContent }}
+                                                                    onClick={(e) => {
+                                                                        const a = (e.target as HTMLElement).closest('a')
+                                                                        if (a) { const h = a.getAttribute('href'); if (h?.startsWith('/')) { e.preventDefault(); navigate(h) } }
+                                                                    }}
+                                                                />
                                                                 {isInterrupted && (
                                                                     <span className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground/50 italic">
                                                                         …Interrupted
@@ -1264,7 +1462,7 @@ export default function ChatPage() {
                                                 type="button"
                                                 className="chat-control-pill disabled:opacity-50"
                                                 onClick={() => fileInputRef.current?.click()}
-                                                disabled={composerDisabled || attachments.length >= 5}
+                                                disabled={(uploadingFiles || activeConversationIsArchived) || attachments.length >= 5}
                                                 title="Attach files (PDF, images, text)"
                                             >
                                                 <Paperclip className="h-3.5 w-3.5" />
@@ -1823,7 +2021,7 @@ const MentionEditor = React.forwardRef<MentionEditorHandle, {
         const atMatch = textBefore.match(/@(\w*)$/)
         if (atMatch) {
             setMentionQuery(atMatch[1])
-            setMentionActiveIndex(-1)
+            setMentionActiveIndex(0)
             atPositionRef.current = { node: textNode, offset: range.startOffset - atMatch[0].length }
             setMentionOpen(true)
         } else {
@@ -2083,6 +2281,7 @@ function ThinkingBlock({
     const scrollRef = useRef<HTMLDivElement>(null)
     // Tracks whether this block has ever been in streaming mode
     const wasStreaming = useRef(isActiveStream)
+    const thinkingCollapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     // Auto-scroll to show the latest thinking text while streaming
     useEffect(() => {
@@ -2091,16 +2290,27 @@ function ThinkingBlock({
         if (el) el.scrollTop = el.scrollHeight
     }, [content, isActiveStream, fullyExpanded])
 
-    // When streaming ends: auto-collapse if user never interacted
+    // When streaming ends: auto-collapse after 3s if user never interacted
     useEffect(() => {
         if (isActiveStream) {
             wasStreaming.current = true
+            if (thinkingCollapseTimer.current) {
+                clearTimeout(thinkingCollapseTimer.current)
+                thinkingCollapseTimer.current = null
+            }
             return
         }
         if (wasStreaming.current && !userInteracted) {
-            setOpen(false)
+            thinkingCollapseTimer.current = setTimeout(() => {
+                setOpen(false)
+                thinkingCollapseTimer.current = null
+            }, 3000)
         }
     }, [isActiveStream]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => {
+        return () => { if (thinkingCollapseTimer.current) clearTimeout(thinkingCollapseTimer.current) }
+    }, [])
 
     // Reset hasHiddenTop when not streaming or when fully expanded
     useEffect(() => {
@@ -2110,6 +2320,10 @@ function ThinkingBlock({
     }, [isActiveStream, fullyExpanded])
 
     const toggle = () => {
+        if (thinkingCollapseTimer.current) {
+            clearTimeout(thinkingCollapseTimer.current)
+            thinkingCollapseTimer.current = null
+        }
         setUserInteracted(true)
         setOpen(prev => {
             const next = !prev
@@ -2228,7 +2442,7 @@ function SubagentCard({
                 autoCollapseTimer.current = setTimeout(() => {
                     setOpen(false)
                     autoCollapseTimer.current = null
-                }, 2000)
+                }, 3000)
             }
         }
         prevEntryRef.current = entry
@@ -2517,6 +2731,99 @@ const MentionDropdown = React.forwardRef<HTMLDivElement, {
     )
 })
 
+// ── Streaming badges (auto-collapse 3 s after first appearance) ───────────────
+type ContextSource = { knowledge_id: string; title: string; snippet: string; score: number }
+
+function StreamingAttachmentsBadge({ atts, workspaceId }: { atts: AttachmentProcessed[]; workspaceId: string }) {
+    const [open, setOpen] = useState(true)
+    const userInteracted = useRef(false)
+    const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+    useEffect(() => {
+        timer.current = setTimeout(() => {
+            if (!userInteracted.current) setOpen(false)
+            timer.current = null
+        }, 3000)
+        return () => { if (timer.current) clearTimeout(timer.current) }
+    }, [])
+    const toggle = () => {
+        if (timer.current) { clearTimeout(timer.current); timer.current = null }
+        userInteracted.current = true
+        setOpen(prev => !prev)
+    }
+    return (
+        <div className="chat-workflow-step">
+            <button className="chat-subsection-toggle" onClick={toggle}>
+                {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                {`Processed ${atts.length} Attachment${atts.length === 1 ? '' : 's'}`}
+            </button>
+            <div className={`chat-collapse w-full ${open ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
+                <div className="chat-collapse-inner">
+                    <div className="chat-section-reveal space-y-2 w-full pt-0.5">
+                        {atts.map(att => (
+                            <AttachmentCard key={att.id} att={att} workspaceId={workspaceId} />
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+function StreamingSourcesBadge({ sources, workspaceId }: { sources: ContextSource[]; workspaceId: string }) {
+    const [open, setOpen] = useState(true)
+    const userInteracted = useRef(false)
+    const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const navigate = useNavigate()
+    useEffect(() => {
+        timer.current = setTimeout(() => {
+            if (!userInteracted.current) setOpen(false)
+            timer.current = null
+        }, 3000)
+        return () => { if (timer.current) clearTimeout(timer.current) }
+    }, [])
+    const toggle = () => {
+        if (timer.current) { clearTimeout(timer.current); timer.current = null }
+        userInteracted.current = true
+        setOpen(prev => !prev)
+    }
+    return (
+        <div className="chat-workflow-step">
+            <button className="chat-subsection-toggle" onClick={toggle}>
+                {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                {`Used ${sources.length} Knowledge ${sources.length === 1 ? 'Record' : 'Records'}`}
+            </button>
+            <div className={`chat-collapse w-full ${open ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
+                <div className="chat-collapse-inner">
+                    <div className="chat-section-reveal space-y-2 w-full pt-0.5">
+                        {sources.map(src => (
+                            <div key={src.knowledge_id} className="chat-source-card p-3 text-xs">
+                                <div className="flex items-center justify-between mb-1">
+                                    <span className="font-medium text-foreground">{src.title}</span>
+                                    {src.knowledge_id && (
+                                        <button className="text-accent/60 hover:text-accent transition-colors" onClick={() => navigate(`/w/${workspaceId}/knowledge/${src.knowledge_id}`)}>
+                                            <ExternalLink className="w-3 h-3" />
+                                        </button>
+                                    )}
+                                </div>
+                                <div
+                                    className="markdown-content max-h-20 overflow-hidden text-xs leading-relaxed text-muted-foreground [&_p]:mb-1 [&_ul]:mb-1 [&_ol]:mb-1 [&_h1]:text-xs [&_h2]:text-xs [&_h3]:text-xs [&_pre]:text-[11px] [&_code]:text-[11px]"
+                                    dangerouslySetInnerHTML={{ __html: md.render(src.snippet || '') }}
+                                />
+                                <div className="mt-1.5 flex items-center gap-1">
+                                    <div className="flex-1 h-1 rounded bg-border overflow-hidden">
+                                        <div className="h-full bg-accent rounded" style={{ width: `${Math.round(src.score * 100)}%` }} />
+                                    </div>
+                                    <span className="text-muted-foreground">{Math.round(src.score * 100)}%</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
 // ── Attachment card ──────────────────────────────────────────────────────────
 function AttachmentCard({ att, workspaceId }: { att: AttachmentProcessed; workspaceId: string }) {
     const [saved, setSaved] = useState(false)
@@ -2598,6 +2905,7 @@ function ChatMessageCard({
     providerDisplayByName,
     requestVisibility,
     attachmentsProcessed = [],
+    mentionMaps,
 }: {
     message: Message
     workspaceId: string
@@ -2605,11 +2913,37 @@ function ChatMessageCard({
     providerDisplayByName?: Record<string, string>
     requestVisibility?: (element: HTMLElement | null) => void
     attachmentsProcessed?: AttachmentProcessed[]
+    mentionMaps?: MentionResolutionMaps
 }) {
-    const [attachmentsOpen, setAttachmentsOpen] = useState(false)
-    const [sourcesOpen, setSourcesOpen] = useState(false)
+    const [attachmentsOpen, setAttachmentsOpen] = useState(true)
+    const [sourcesOpen, setSourcesOpen] = useState(true)
     const [contextMenuOpen, setContextMenuOpen] = useState(false)
     const [copied, setCopied] = useState(false)
+
+    const attachmentsUserInteracted = useRef(false)
+    const sourcesUserInteracted = useRef(false)
+    const attachmentsCollapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const sourcesCollapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+    useEffect(() => {
+        if (attachmentsProcessed.length > 0) {
+            attachmentsCollapseTimer.current = setTimeout(() => {
+                if (!attachmentsUserInteracted.current) setAttachmentsOpen(false)
+                attachmentsCollapseTimer.current = null
+            }, 3000)
+        }
+        return () => { if (attachmentsCollapseTimer.current) clearTimeout(attachmentsCollapseTimer.current) }
+    }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => {
+        if (msg.context_sources && msg.context_sources.length > 0) {
+            sourcesCollapseTimer.current = setTimeout(() => {
+                if (!sourcesUserInteracted.current) setSourcesOpen(false)
+                sourcesCollapseTimer.current = null
+            }, 3000)
+        }
+        return () => { if (sourcesCollapseTimer.current) clearTimeout(sourcesCollapseTimer.current) }
+    }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleCopy = async () => {
         await navigator.clipboard.writeText(msg.content)
@@ -2644,17 +2978,15 @@ function ChatMessageCard({
                         : ''
                         }`}>
                         {msg.role === 'user' && (
-                            <div className="chat-bubble-user px-4 py-3 relative group">
-                                <div className="markdown-content text-sm" dangerouslySetInnerHTML={{ __html: md.render(msg.content) }} />
-                                <button
-                                    type="button"
-                                    onClick={handleCopy}
-                                    className="absolute bottom-2 right-2 p-1.5 rounded-lg bg-background/60 border border-border/40 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground hover:bg-background/80 transition-all"
-                                    aria-label="Copy message"
-                                    title="Copy message"
-                                >
-                                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                                </button>
+                            <div className="chat-bubble-user px-4 py-3">
+                                <div
+                                    className="markdown-content text-sm"
+                                    dangerouslySetInnerHTML={{ __html: renderMessageContent(msg.content, workspaceId, mentionMaps) }}
+                                    onClick={(e) => {
+                                        const a = (e.target as HTMLElement).closest('a')
+                                        if (a) { const h = a.getAttribute('href'); if (h?.startsWith('/')) { e.preventDefault(); navigate(h) } }
+                                    }}
+                                />
                             </div>
                         )}
                         {hasWorkflowSteps && (
@@ -2664,6 +2996,11 @@ function ChatMessageCard({
                                         <button
                                             className="chat-subsection-toggle"
                                             onClick={() => {
+                                                if (attachmentsCollapseTimer.current) {
+                                                    clearTimeout(attachmentsCollapseTimer.current)
+                                                    attachmentsCollapseTimer.current = null
+                                                }
+                                                attachmentsUserInteracted.current = true
                                                 setAttachmentsOpen(prev => {
                                                     const next = !prev
                                                     if (next) {
@@ -2703,6 +3040,11 @@ function ChatMessageCard({
                                         <button
                                             className="chat-subsection-toggle"
                                             onClick={() => {
+                                                if (sourcesCollapseTimer.current) {
+                                                    clearTimeout(sourcesCollapseTimer.current)
+                                                    sourcesCollapseTimer.current = null
+                                                }
+                                                sourcesUserInteracted.current = true
                                                 setSourcesOpen(prev => {
                                                     const next = !prev
                                                     if (next) {
@@ -2726,10 +3068,10 @@ function ChatMessageCard({
                                             <div className="chat-collapse-inner">
                                                 <div className="chat-section-reveal space-y-2 w-full pt-0.5">
                                                     {msg.context_sources.map(src => (
-                                                        <div key={src.knowledge_id} className="chat-source-card p-3 text-xs group">
+                                                        <div key={src.knowledge_id} className="chat-source-card p-3 text-xs">
                                                             <div className="flex items-center justify-between mb-1">
                                                                 <span className="font-medium text-foreground">{src.title}</span>
-                                                                <button className="opacity-0 group-hover:opacity-100 text-accent" onClick={() => navigate(`/w/${workspaceId}/knowledge/${src.knowledge_id}`)}>
+                                                                <button className="text-accent/60 hover:text-accent transition-colors" onClick={() => navigate(`/w/${workspaceId}/knowledge/${src.knowledge_id}`)}>
                                                                     <ExternalLink className="w-3 h-3" />
                                                                 </button>
                                                             </div>
@@ -2835,36 +3177,40 @@ function ChatMessageCard({
                                             <span className="chat-workflow-status">Interrupted</span>
                                         )}
                                     </div>
-                                    <div className="chat-bubble-assistant mt-1.5 px-4 py-3 relative group">
+                                    <div className="chat-bubble-assistant mt-1.5 px-4 py-3">
                                         {msg.content && (
-                                            <div className="markdown-content text-sm" dangerouslySetInnerHTML={{ __html: md.render(msg.content) }} />
+                                            <div
+                                                className="markdown-content text-sm"
+                                                dangerouslySetInnerHTML={{ __html: renderMessageContent(msg.content, workspaceId, mentionMaps) }}
+                                                onClick={(e) => {
+                                                    const a = (e.target as HTMLElement).closest('a')
+                                                    if (a) { const h = a.getAttribute('href'); if (h?.startsWith('/')) { e.preventDefault(); navigate(h) } }
+                                                }}
+                                            />
                                         )}
                                         {msg.is_interrupted && (
                                             <span className={`inline-flex items-center gap-1 text-xs text-muted-foreground/50 italic ${msg.content ? 'mt-1' : ''}`}>
                                                 …Interrupted
                                             </span>
                                         )}
-                                        <button
-                                            type="button"
-                                            onClick={handleCopy}
-                                            className="absolute bottom-2 right-2 p-1.5 rounded-lg bg-background/60 border border-border/40 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground hover:bg-background/80 transition-all"
-                                            aria-label="Copy message"
-                                            title="Copy message"
-                                        >
-                                            {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                                        </button>
                                     </div>
                                 </div>
                                 <div className="chat-workflow-step chat-section-reveal">
-                                    <span className="chat-message-meta">
+                                    <span className="chat-message-meta flex items-center gap-1.5 pl-1 pt-0.5">
                                         {new Date(msg.created_at).toLocaleTimeString()}
                                         {generationSeconds && ` · Took ${generationSeconds}s`}
+                                        <button type="button" onClick={handleCopy} className="p-0.5 rounded text-muted-foreground/40 hover:text-muted-foreground transition-colors" aria-label="Copy message" title="Copy message">
+                                            {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                        </button>
                                     </span>
                                 </div>
                             </div>
                         )}
                         {msg.role !== 'assistant' && (
-                            <span className="chat-message-meta">
+                            <span className="chat-message-meta flex items-center gap-1.5">
+                                <button type="button" onClick={handleCopy} className="p-0.5 rounded text-muted-foreground/40 hover:text-muted-foreground transition-colors" aria-label="Copy message" title="Copy message">
+                                    {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                </button>
                                 {new Date(msg.created_at).toLocaleTimeString()}
                             </span>
                         )}

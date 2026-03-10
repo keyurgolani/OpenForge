@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
@@ -10,6 +10,7 @@ import {
     listInstalledSkills, installSkill, searchSkills, removeSkill, getToolRegistry,
     listMCPServers, createMCPServer, updateMCPServer, deleteMCPServer, discoverMCPServer,
     updateMCPToolOverride, exportAllData, exportWorkspaceData,
+    checkAuth, logoutAuth,
 } from '@/lib/api'
 import {
     Globe2, Loader2, Trash2, CheckCircle2, XCircle, Star, Plus,
@@ -19,7 +20,7 @@ import {
     FileText, Timer, History, Play, Clock, CheckCircle, AlertCircle, Circle, Terminal,
     Brain, Folder, Briefcase, Microscope, BookOpen, Target, Globe, Lightbulb, Wrench,
     Palette, BarChart3, Rocket, Shield, FlaskConical, Leaf, Key, Settings2, PenLine,
-    Database, Sprout, Download, Archive, FileArchive
+    Database, Sprout, Download, Archive, FileArchive, Mic, ShieldAlert, LogOut
 } from 'lucide-react'
 import { ProviderIcon } from '@/components/shared/ProviderIcon'
 import { ModelOverrideSelect } from '@/components/shared/ModelOverrideSelect'
@@ -81,6 +82,8 @@ export default function SettingsPage() {
     const queryTab = searchParams.get('tab')
     const newWorkspaceRequested = searchParams.get('newWorkspace') === '1'
     const [activeTab, setActiveTab] = useState<SettingsTab>(() => toSettingsTab(queryTab))
+    const [authEnabled, setAuthEnabled] = useState(false)
+    const [loggingOut, setLoggingOut] = useState(false)
 
     useEffect(() => {
         const nextTab = toSettingsTab(queryTab)
@@ -91,6 +94,20 @@ export default function SettingsPage() {
         if (!newWorkspaceRequested) return
         setActiveTab('workspaces')
     }, [newWorkspaceRequested])
+
+    useEffect(() => {
+        checkAuth().then(d => setAuthEnabled(d.auth_enabled)).catch(() => {})
+    }, [])
+
+    const handleLogout = useCallback(async () => {
+        setLoggingOut(true)
+        try {
+            await logoutAuth()
+            window.dispatchEvent(new Event('openforge:unauthorized'))
+        } finally {
+            setLoggingOut(false)
+        }
+    }, [])
 
     const TABS = [
         { id: 'workspaces' as const, label: 'Workspaces', Icon: FolderOpen },
@@ -106,8 +123,9 @@ export default function SettingsPage() {
 
     return (
         <div className="w-full h-full min-h-0 p-6 lg:p-8 flex flex-col">
-            {/* Tabs */}
-            <div className="flex shrink-0 gap-2 mb-8 p-1.5 glass-card w-full sm:w-fit rounded-2xl overflow-x-auto min-h-[52px]">
+            {/* Tabs + logout */}
+            <div className="flex shrink-0 items-start gap-3 mb-8">
+            <div className="flex shrink-0 gap-2 p-1.5 glass-card w-full sm:w-fit rounded-2xl overflow-x-auto min-h-[52px]">
                 {TABS.map(({ id, label, Icon }) => (
                     <button
                         key={id}
@@ -129,6 +147,18 @@ export default function SettingsPage() {
                         {label}
                     </button>
                 ))}
+            </div>
+            {authEnabled && (
+                <button
+                    onClick={handleLogout}
+                    disabled={loggingOut}
+                    title="Sign out"
+                    className="flex shrink-0 items-center gap-2 h-[52px] px-4 rounded-2xl glass-card text-sm text-muted-foreground hover:text-red-400 hover:border-red-500/20 transition-all disabled:opacity-50"
+                >
+                    {loggingOut ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogOut className="w-4 h-4" />}
+                    <span className="hidden sm:inline">Sign out</span>
+                </button>
+            )}
             </div>
 
             {activeTab === 'workspaces' && (
@@ -273,6 +303,48 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
     const [agentMaxToolLoops, setAgentMaxToolLoops] = useState(ws.agent_max_tool_loops ?? 20)
     const [saving, setSaving] = useState(false)
 
+    const { data: settings = [] } = useQuery({ queryKey: ['settings'], queryFn: listSettings })
+
+    // Build combined model lists from per-type system configs
+    const chatModels = useMemo(() => {
+        const raw = (settings as { key: string; value: unknown }[]).find(s => s.key === 'system_chat_models')?.value
+        if (!Array.isArray(raw)) return []
+        return (raw as { provider_id: string; model_id: string; model_name: string }[]).map(m => {
+            const p = providers.find(pr => pr.id === m.provider_id)
+            return { value: `${m.provider_id}:${m.model_id}`, label: `${p ? sanitizeProviderDisplayName(p.display_name) : 'Unknown'} / ${m.model_name}`, provider_id: m.provider_id, model_id: m.model_id }
+        })
+    }, [settings, providers])
+
+    const visionModels = useMemo(() => {
+        const raw = (settings as { key: string; value: unknown }[]).find(s => s.key === 'system_vision_models')?.value
+        if (!Array.isArray(raw)) return []
+        return (raw as { provider_id: string; model_id: string; model_name: string }[]).map(m => {
+            const p = providers.find(pr => pr.id === m.provider_id)
+            return { value: `${m.provider_id}:${m.model_id}`, label: `${p ? sanitizeProviderDisplayName(p.display_name) : 'Unknown'} / ${m.model_name}`, provider_id: m.provider_id, model_id: m.model_id }
+        })
+    }, [settings, providers])
+
+    // Combined chat value for select
+    const chatSelectValue = providerId && model ? `${providerId}:${model}` : ''
+    const kiSelectValue = kiProviderId && kiModel ? `${kiProviderId}:${kiModel}` : ''
+    const visionSelectValue = visionProviderId && visionModel ? `${visionProviderId}:${visionModel}` : ''
+
+    const handleChatModelSelect = (val: string) => {
+        if (!val) { setProviderId(''); setModel(''); return }
+        const [pid, ...rest] = val.split(':')
+        setProviderId(pid); setModel(rest.join(':'))
+    }
+    const handleKiModelSelect = (val: string) => {
+        if (!val) { setKiProviderId(''); setKiModel(''); return }
+        const [pid, ...rest] = val.split(':')
+        setKiProviderId(pid); setKiModel(rest.join(':'))
+    }
+    const handleVisionModelSelect = (val: string) => {
+        if (!val) { setVisionProviderId(''); setVisionModel(''); return }
+        const [pid, ...rest] = val.split(':')
+        setVisionProviderId(pid); setVisionModel(rest.join(':'))
+    }
+
     const { data: toolRegistryData } = useQuery({
         queryKey: ['tool-registry'],
         queryFn: getToolRegistry,
@@ -294,9 +366,7 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
     const [deleting, setDeleting] = useState(false)
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
 
-    const selectedProvider = providers.find(p => p.id === providerId)
-    const selectedKiProvider = providers.find(p => p.id === kiProviderId)
-    const selectedVisionProvider = providers.find(p => p.id === visionProviderId)
+    // (provider lookups now happen via per-type model config in chatModels/visionModels)
 
     const handleSave = async () => {
         setSaving(true)
@@ -425,33 +495,24 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
                     <div className="border-t border-border/40 pt-3 space-y-3">
                         <p className="text-xs font-medium text-muted-foreground">AI Models <span className="text-xs font-normal opacity-60">(override global defaults per category for this workspace)</span></p>
 
+                        {chatModels.length === 0 && visionModels.length === 0 && (
+                            <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
+                                <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                                <span>No models configured yet. Go to <strong>AI Providers</strong> → <strong>Chat</strong> / <strong>Vision</strong> tabs to add models first.</span>
+                            </div>
+                        )}
+
                         {/* Workspace Agent */}
                         <div className="space-y-1.5">
                             <div className="flex items-center gap-1.5">
                                 <Bot className="w-3 h-3 text-accent" />
-                                <p className="text-xs font-medium">Workspace Agent</p>
+                                <p className="text-xs font-medium">Chat Model</p>
                                 <span className="text-[10px] text-muted-foreground opacity-70">Used for chat and agent tool calls</span>
                             </div>
-                            <div className="grid gap-2 md:grid-cols-2">
-                                <select className="input text-sm" value={providerId} onChange={e => { setProviderId(e.target.value); setModel('') }}>
-                                    <option value="">Use global default</option>
-                                    {providers.map(p => (
-                                        <option key={p.id} value={p.id}>{sanitizeProviderDisplayName(p.display_name)}</option>
-                                    ))}
-                                </select>
-                                <ModelOverrideSelect
-                                    models={selectedProvider?.enabled_models ?? []}
-                                    value={model}
-                                    onChange={setModel}
-                                    disabled={!providerId}
-                                    placeholder={providerId
-                                        ? (selectedProvider?.default_model
-                                            ? `Default: ${selectedProvider.default_model}`
-                                            : 'Select model override')
-                                        : 'Select provider first'}
-                                    inheritLabel="Inherit provider default"
-                                />
-                            </div>
+                            <select className="input text-sm" value={chatSelectValue} onChange={e => handleChatModelSelect(e.target.value)}>
+                                <option value="">Use system default</option>
+                                {chatModels.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                            </select>
                         </div>
 
                         {/* Knowledge Intelligence */}
@@ -461,55 +522,23 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
                                 <p className="text-xs font-medium">Knowledge Intelligence</p>
                                 <span className="text-[10px] text-muted-foreground opacity-70">Used for knowledge extraction and processing</span>
                             </div>
-                            <div className="grid gap-2 md:grid-cols-2">
-                                <select className="input text-sm" value={kiProviderId} onChange={e => { setKiProviderId(e.target.value); setKiModel('') }}>
-                                    <option value="">Use global default</option>
-                                    {providers.map(p => (
-                                        <option key={p.id} value={p.id}>{sanitizeProviderDisplayName(p.display_name)}</option>
-                                    ))}
-                                </select>
-                                <ModelOverrideSelect
-                                    models={selectedKiProvider?.enabled_models ?? []}
-                                    value={kiModel}
-                                    onChange={setKiModel}
-                                    disabled={!kiProviderId}
-                                    placeholder={kiProviderId
-                                        ? (selectedKiProvider?.default_model
-                                            ? `Default: ${selectedKiProvider.default_model}`
-                                            : 'Select model override')
-                                        : 'Select provider first'}
-                                    inheritLabel="Inherit provider default"
-                                />
-                            </div>
+                            <select className="input text-sm" value={kiSelectValue} onChange={e => handleKiModelSelect(e.target.value)}>
+                                <option value="">Use system default</option>
+                                {chatModels.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                            </select>
                         </div>
 
                         {/* Visual Model */}
                         <div className="space-y-1.5">
                             <div className="flex items-center gap-1.5">
                                 <Eye className="w-3 h-3 text-sky-400" />
-                                <p className="text-xs font-medium">Visual Model</p>
+                                <p className="text-xs font-medium">Vision Model</p>
                                 <span className="text-[10px] text-muted-foreground opacity-70">Used for image and visual content extraction</span>
                             </div>
-                            <div className="grid gap-2 md:grid-cols-2">
-                                <select className="input text-sm" value={visionProviderId} onChange={e => { setVisionProviderId(e.target.value); setVisionModel('') }}>
-                                    <option value="">Use global default</option>
-                                    {providers.map(p => (
-                                        <option key={p.id} value={p.id}>{sanitizeProviderDisplayName(p.display_name)}</option>
-                                    ))}
-                                </select>
-                                <ModelOverrideSelect
-                                    models={selectedVisionProvider?.enabled_models ?? []}
-                                    value={visionModel}
-                                    onChange={setVisionModel}
-                                    disabled={!visionProviderId}
-                                    placeholder={visionProviderId
-                                        ? (selectedVisionProvider?.default_model
-                                            ? `Default: ${selectedVisionProvider.default_model}`
-                                            : 'Select model override')
-                                        : 'Select provider first'}
-                                    inheritLabel="Inherit provider default"
-                                />
-                            </div>
+                            <select className="input text-sm" value={visionSelectValue} onChange={e => handleVisionModelSelect(e.target.value)}>
+                                <option value="">Use system default</option>
+                                {visionModels.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                            </select>
                         </div>
                     </div>
 
@@ -622,16 +651,17 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
 }
 
 // ── LLM Settings Tab ──────────────────────────────────────────────────────────
-type LLMSubTab = 'chat' | 'vision' | 'audio' | 'embedding'
+type LLMSubTab = 'providers' | 'chat' | 'vision' | 'embedding' | 'audio'
 
 function LLMSettings() {
-    const [subTab, setSubTab] = useState<LLMSubTab>('chat')
+    const [subTab, setSubTab] = useState<LLMSubTab>('providers')
 
     const LLM_SUB_TABS: { id: LLMSubTab; label: string; Icon: React.ElementType }[] = [
-        { id: 'chat', label: 'Chat Models', Icon: MessageSquare },
-        { id: 'vision', label: 'Vision Models', Icon: Eye },
-        { id: 'audio', label: 'Audio', Icon: Zap },
+        { id: 'providers', label: 'Providers', Icon: Server },
+        { id: 'chat', label: 'Chat', Icon: MessageSquare },
+        { id: 'vision', label: 'Vision', Icon: Eye },
         { id: 'embedding', label: 'Embedding', Icon: Database },
+        { id: 'audio', label: 'Audio', Icon: Zap },
     ]
 
     return (
@@ -652,15 +682,17 @@ function LLMSettings() {
                 ))}
             </div>
 
-            {subTab === 'chat' && <ChatModelsTab />}
-            {subTab === 'vision' && <VisionModelsTab />}
-            {subTab === 'audio' && <AudioTab />}
+            {subTab === 'providers' && <ProvidersTab />}
+            {subTab === 'chat' && <ModelTypeTab configType="chat" title="Chat Models" description="Models used for chat conversations. Configure the models available and set the system default." Icon={MessageSquare} />}
+            {subTab === 'vision' && <ModelTypeTab configType="vision" title="Vision Models" description="Models used for image analysis and visual content extraction. Must support multimodal input." Icon={Eye} />}
             {subTab === 'embedding' && <EmbeddingTab />}
+            {subTab === 'audio' && <AudioTab />}
         </div>
     )
 }
 
-function ChatModelsTab() {
+// ── Providers Tab ─────────────────────────────────────────────────────────────
+function ProvidersTab() {
     const qc = useQueryClient()
     const { data: providers = [] } = useQuery({ queryKey: ['providers'], queryFn: listProviders })
     const [expanded, setExpanded] = useState<string | null>(null)
@@ -670,9 +702,9 @@ function ChatModelsTab() {
         <div className="space-y-3">
             <div className="flex items-center justify-between">
                 <div>
-                    <h3 className="font-semibold text-sm">Chat Model Providers</h3>
+                    <h3 className="font-semibold text-sm">AI Providers</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                        Each entry is a provider + model pair. <Star className="w-3 h-3 inline-block text-amber-400" /> default is used for new chats.
+                        Configure provider credentials and endpoints. After adding a provider, assign models to Chat, Vision, Embedding, or Audio tabs.
                     </p>
                 </div>
                 <button className="btn-primary text-xs py-1.5 px-3" onClick={() => setShowAdd(p => !p)}>
@@ -681,7 +713,7 @@ function ChatModelsTab() {
             </div>
 
             {showAdd && (
-                <AddProviderPanel onAdded={() => qc.invalidateQueries({ queryKey: ['providers'] })} />
+                <AddProviderPanel onAdded={() => { qc.invalidateQueries({ queryKey: ['providers'] }); setShowAdd(false) }} />
             )}
 
             {(providers as ProviderRow[]).map(p => (
@@ -689,9 +721,8 @@ function ChatModelsTab() {
                     key={p.id}
                     provider={p}
                     expanded={expanded === p.id}
-                    onToggle={() => setExpanded(expanded === p.id ? null : p.id)}
+                    onToggle={() => setExpanded(prev => prev === p.id ? null : p.id)}
                     onDelete={() => deleteProvider(p.id).then(() => qc.invalidateQueries({ queryKey: ['providers'] }))}
-                    onSetDefault={() => setDefaultProvider(p.id).then(() => qc.invalidateQueries({ queryKey: ['providers'] }))}
                 />
             ))}
 
@@ -699,170 +730,1123 @@ function ChatModelsTab() {
                 <div className="text-center py-12 text-muted-foreground text-sm">
                     <Server className="w-10 h-10 mx-auto mb-3 opacity-30" />
                     <p>No AI providers configured yet.</p>
+                    <p className="text-xs mt-1 opacity-70">Add your first provider to start configuring models.</p>
                 </div>
             )}
         </div>
     )
 }
 
-function VisionModelsTab() {
+// ── Shared type for model items in per-type configs ────────────────────────────
+interface TypedModel { provider_id: string; model_id: string; model_name: string; is_default?: boolean }
+
+// ── Model Type Tab (Chat / Vision) ─────────────────────────────────────────────
+function ModelTypeTab({
+    configType,
+    title,
+    description,
+    Icon,
+}: {
+    configType: 'chat' | 'vision'
+    title: string
+    description: string
+    Icon: React.ElementType
+}) {
+    const { data: settings = [] } = useQuery({ queryKey: ['settings'], queryFn: listSettings })
+    const { data: providers = [] } = useQuery({ queryKey: ['providers'], queryFn: listProviders })
+    const qc = useQueryClient()
+
+    const configKey = `system_${configType}_models`
+    const configuredModels: TypedModel[] = useMemo(() => {
+        const raw = (settings as { key: string; value: unknown }[]).find(s => s.key === configKey)?.value
+        return Array.isArray(raw) ? (raw as TypedModel[]) : []
+    }, [settings, configKey])
+
+    // Form state for adding a model
+    const [showAdd, setShowAdd] = useState(false)
+    const [addProviderId, setAddProviderId] = useState('')
+    const [fetchedModels, setFetchedModels] = useState<{ id: string; name: string }[] | null>(null)
+    const [fetchingModels, setFetchingModels] = useState(false)
+    const [fetchError, setFetchError] = useState<string | null>(null)
+    const [modelSearch, setModelSearch] = useState('')
+    const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set())
+    const [manualModel, setManualModel] = useState('')
+    const [saving, setSaving] = useState(false)
+    const [removing, setRemoving] = useState<string | null>(null)
+
+    const filteredFetchedModels = useMemo(() => {
+        if (!fetchedModels) return []
+        const q = modelSearch.toLowerCase()
+        return q ? fetchedModels.filter(m => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)) : fetchedModels
+    }, [fetchedModels, modelSearch])
+
+    const handleFetchModels = async () => {
+        if (!addProviderId) return
+        setFetchingModels(true); setFetchError(null); setFetchedModels(null)
+        setSelectedModels(new Set()); setModelSearch('')
+        try {
+            const models = await listModels(addProviderId)
+            setFetchedModels(models)
+            if (models.length <= 10) setSelectedModels(new Set(models.map((m: { id: string }) => m.id)))
+        } catch (e: unknown) {
+            const err = e as { response?: { data?: { detail?: string } }; message?: string }
+            setFetchError(err?.response?.data?.detail ?? err?.message ?? 'Failed to fetch models')
+        } finally { setFetchingModels(false) }
+    }
+
+    const handleAddModels = async () => {
+        const modelsToAdd = fetchedModels
+            ? [...selectedModels].map(id => {
+                const label = fetchedModels.find(m => m.id === id)?.name ?? id
+                return { provider_id: addProviderId, model_id: id, model_name: label }
+            })
+            : manualModel.trim()
+                ? [{ provider_id: addProviderId, model_id: manualModel.trim(), model_name: manualModel.trim() }]
+                : []
+        if (!modelsToAdd.length) return
+        setSaving(true)
+        try {
+            // Merge with existing, dedup by model_id+provider_id
+            const existing = configuredModels.filter(
+                m => !modelsToAdd.some(n => n.provider_id === m.provider_id && n.model_id === m.model_id)
+            )
+            const updated = [...existing, ...modelsToAdd]
+            await updateSetting(configKey, { value: updated, category: 'llm' })
+            qc.invalidateQueries({ queryKey: ['settings'] })
+            setShowAdd(false)
+            setAddProviderId(''); setFetchedModels(null); setSelectedModels(new Set()); setManualModel('')
+        } finally { setSaving(false) }
+    }
+
+    const handleRemove = async (m: TypedModel) => {
+        const key = `${m.provider_id}:${m.model_id}`
+        setRemoving(key)
+        try {
+            const updated = configuredModels.filter(x => !(x.provider_id === m.provider_id && x.model_id === m.model_id))
+            await updateSetting(configKey, { value: updated, category: 'llm' })
+            qc.invalidateQueries({ queryKey: ['settings'] })
+        } finally { setRemoving(null) }
+    }
+
+    const handleSetDefault = async (m: TypedModel) => {
+        const updated = configuredModels.map(x => ({
+            ...x,
+            is_default: x.provider_id === m.provider_id && x.model_id === m.model_id,
+        }))
+        await updateSetting(configKey, { value: updated, category: 'llm' })
+        qc.invalidateQueries({ queryKey: ['settings'] })
+    }
+
+    const getProviderDisplay = (pid: string) => {
+        const p = (providers as ProviderRow[]).find(x => x.id === pid)
+        return p ? sanitizeProviderDisplayName(p.display_name) : pid.slice(0, 8)
+    }
+
+    const totalSelected = fetchedModels ? selectedModels.size : (manualModel.trim() ? 1 : 0)
+
     return (
         <div className="space-y-3">
-            <div className="flex items-start gap-2 rounded-lg border border-sky-500/25 bg-sky-500/8 px-3 py-2 text-[11px] text-sky-300">
-                <Eye className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
-                <span>Vision providers use the same list as Chat. Add a provider here, then assign it per workspace in the <span className="font-medium">Workspaces</span> tab under Visual Model.</span>
+            <div className="flex items-center justify-between">
+                <div>
+                    <h3 className="font-semibold text-sm">{title}</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+                </div>
+                <button className="btn-primary text-xs py-1.5 px-3" onClick={() => setShowAdd(p => !p)}>
+                    <Plus className="w-3.5 h-3.5" /> {showAdd ? 'Close' : 'Add Model'}
+                </button>
             </div>
-            <ChatModelsTab />
+
+            {/* Add model form */}
+            {showAdd && (
+                <div className="glass-card p-4 space-y-4 border border-accent/20 animate-fade-in">
+                    <h4 className="text-xs font-medium text-accent uppercase tracking-wide">Add Models</h4>
+
+                    {(providers as unknown[]).length === 0 ? (
+                        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
+                            <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                            <span>No providers configured. Go to the <strong>Providers</strong> tab to add one first.</span>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="space-y-1.5">
+                                <label className="text-xs text-muted-foreground font-medium">1. Select provider</label>
+                                <select
+                                    className="input text-sm"
+                                    value={addProviderId}
+                                    onChange={e => { setAddProviderId(e.target.value); setFetchedModels(null); setSelectedModels(new Set()); setFetchError(null); setModelSearch('') }}
+                                >
+                                    <option value="">Choose a provider…</option>
+                                    {(providers as ProviderRow[]).map(p => (
+                                        <option key={p.id} value={p.id}>{sanitizeProviderDisplayName(p.display_name)} ({p.provider_name})</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {addProviderId && (
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-xs text-muted-foreground font-medium">2. Fetch and select models</label>
+                                        <button className="btn-ghost text-xs py-1 px-2.5 gap-1" onClick={handleFetchModels} disabled={fetchingModels}>
+                                            {fetchingModels ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                                            {fetchedModels ? 'Refresh' : 'Fetch Models'}
+                                        </button>
+                                    </div>
+
+                                    {fetchError && (
+                                        <div className="text-xs p-2.5 rounded-lg bg-destructive/10 text-red-300 border border-destructive/20 space-y-1">
+                                            <p>{fetchError}</p>
+                                            <input className="input text-xs mt-1" placeholder="Or enter model ID manually (e.g. gpt-4o)" value={manualModel} onChange={e => setManualModel(e.target.value)} />
+                                        </div>
+                                    )}
+
+                                    {fetchedModels !== null && fetchedModels.length > 0 && (
+                                        <div className="space-y-1.5">
+                                            <div className="flex items-center justify-between px-1">
+                                                <div className="relative flex-1 mr-2">
+                                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                                                    <input className="input text-xs pl-8" placeholder={`Filter ${fetchedModels.length} models…`} value={modelSearch} onChange={e => setModelSearch(e.target.value)} />
+                                                </div>
+                                                <button className="text-[10px] text-accent hover:underline whitespace-nowrap" onClick={() => {
+                                                    selectedModels.size === filteredFetchedModels.length
+                                                        ? setSelectedModels(new Set())
+                                                        : setSelectedModels(new Set(filteredFetchedModels.map(m => m.id)))
+                                                }}>{selectedModels.size === filteredFetchedModels.length ? 'Deselect all' : 'Select all'}</button>
+                                            </div>
+                                            <div className="max-h-52 overflow-y-auto rounded-lg border border-border/50 bg-background/30 divide-y divide-border/20">
+                                                {filteredFetchedModels.map(m => {
+                                                    const checked = selectedModels.has(m.id)
+                                                    return (
+                                                        <button key={m.id} onClick={() => setSelectedModels(prev => { const n = new Set(prev); n.has(m.id) ? n.delete(m.id) : n.add(m.id); return n })}
+                                                            className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2.5 hover:bg-muted/30 transition-colors ${checked ? 'bg-accent/5' : ''}`}>
+                                                            <div className={`w-4 h-4 rounded flex-shrink-0 flex items-center justify-center border transition-colors ${checked ? 'bg-accent border-accent' : 'border-border'}`}>
+                                                                {checked && <Check className="w-2.5 h-2.5 text-accent-foreground" />}
+                                                            </div>
+                                                            <span className={checked ? 'text-foreground' : 'text-muted-foreground'}>{m.name}</span>
+                                                        </button>
+                                                    )
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {fetchedModels === null && !fetchError && (
+                                        <input className="input text-xs" placeholder="Or enter model ID manually (e.g. gpt-4o)" value={manualModel} onChange={e => setManualModel(e.target.value)} />
+                                    )}
+                                </div>
+                            )}
+
+                            <button
+                                className="btn-primary text-xs py-1.5 px-3 w-full justify-center"
+                                onClick={handleAddModels}
+                                disabled={saving || !addProviderId || totalSelected === 0}
+                            >
+                                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                                {saving ? 'Saving…' : totalSelected > 0 ? `Add ${totalSelected} model${totalSelected > 1 ? 's' : ''}` : 'Select models above'}
+                            </button>
+                        </>
+                    )}
+                </div>
+            )}
+
+            {/* Configured models list */}
+            {configuredModels.length > 0 ? (
+                <div className="space-y-2">
+                    {configuredModels.map(m => {
+                        const removeKey = `${m.provider_id}:${m.model_id}`
+                        const provider = (providers as ProviderRow[]).find(p => p.id === m.provider_id)
+                        const meta = provider ? PROVIDER_META[provider.provider_name] : undefined
+                        return (
+                            <div key={removeKey} className="glass-card px-4 py-3 flex items-center gap-3">
+                                {provider && (
+                                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center border flex-shrink-0 ${meta?.color ?? 'bg-muted border-border'}`}>
+                                        <ProviderIcon providerId={provider.provider_name} className="w-3.5 h-3.5" />
+                                    </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium truncate">{m.model_name}</p>
+                                    <p className="text-xs text-muted-foreground truncate">{getProviderDisplay(m.provider_id)}</p>
+                                </div>
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                    {m.is_default ? (
+                                        <span className="chip-accent text-[10px]"><Star className="w-2.5 h-2.5 mr-0.5 inline" />Default</span>
+                                    ) : (
+                                        <button className="btn-ghost p-1.5" title="Set as default" onClick={() => handleSetDefault(m)}>
+                                            <Star className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
+                                    <button
+                                        className="btn-ghost p-1.5 text-red-400"
+                                        onClick={() => handleRemove(m)}
+                                        disabled={removing === removeKey}
+                                    >
+                                        {removing === removeKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                    </button>
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
+            ) : !showAdd && (
+                <div className="text-center py-10 text-muted-foreground text-sm">
+                    <Icon className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                    <p>No {title.toLowerCase()} configured yet.</p>
+                    <p className="text-xs mt-1 opacity-70">Click &quot;Add Model&quot; to fetch models from a configured provider.</p>
+                </div>
+            )}
         </div>
     )
 }
 
-function AudioTab() {
+// ── Curated local model lists ──────────────────────────────────────────────────
+type ModelQuality = 'Fast' | 'Balanced' | 'Best'
+type VramTier = '≤2GB' | '≤4GB' | '≤8GB' | '≤16GB' | '32GB+'
+
+interface LocalModel {
+    id: string
+    name: string
+    /** Download/on-disk size */
+    diskSize: string
+    /** RAM/VRAM needed at inference */
+    vramReq: string
+    dims?: number
+    quality: ModelQuality
+    desc: string
+    /** VRAM tiers for which this model is recommended */
+    recommendedFor?: VramTier[]
+}
+
+const RECOMMENDED_EMBEDDING_MODELS: LocalModel[] = [
+    {
+        id: 'all-MiniLM-L6-v2', name: 'all-MiniLM-L6-v2',
+        diskSize: '80 MB', vramReq: '<1 GB', dims: 384, quality: 'Fast',
+        desc: 'Lightweight and fast. Great for real-time search with minimal resource usage.',
+        recommendedFor: ['≤2GB', '≤4GB'],
+    },
+    {
+        id: 'all-MiniLM-L12-v2', name: 'all-MiniLM-L12-v2',
+        diskSize: '120 MB', vramReq: '<1 GB', dims: 384, quality: 'Fast',
+        desc: 'Slightly deeper variant of L6. Better semantic accuracy at similar speed.',
+        recommendedFor: ['≤2GB', '≤4GB'],
+    },
+    {
+        id: 'BAAI/bge-small-en-v1.5', name: 'BGE Small EN v1.5',
+        diskSize: '130 MB', vramReq: '<1 GB', dims: 384, quality: 'Fast',
+        desc: 'State-of-the-art compact model by BAAI. Excellent accuracy for its size.',
+        recommendedFor: ['≤2GB', '≤4GB'],
+    },
+    {
+        id: 'intfloat/e5-small-v2', name: 'E5 Small v2',
+        diskSize: '130 MB', vramReq: '<1 GB', dims: 384, quality: 'Fast',
+        desc: 'Compact E5 model. Good quality-to-size ratio for resource-constrained systems.',
+        recommendedFor: ['≤2GB', '≤4GB'],
+    },
+    {
+        id: 'BAAI/bge-base-en-v1.5', name: 'BGE Base EN v1.5',
+        diskSize: '440 MB', vramReq: '~1 GB', dims: 768, quality: 'Balanced',
+        desc: 'Excellent retrieval performance. Recommended for most production deployments.',
+        recommendedFor: ['≤4GB', '≤8GB'],
+    },
+    {
+        id: 'all-mpnet-base-v2', name: 'all-mpnet-base-v2',
+        diskSize: '420 MB', vramReq: '~1 GB', dims: 768, quality: 'Balanced',
+        desc: 'Top-quality SBERT model. Best semantic search accuracy among base models.',
+        recommendedFor: ['≤4GB', '≤8GB'],
+    },
+    {
+        id: 'nomic-ai/nomic-embed-text-v1', name: 'Nomic Embed Text v1',
+        diskSize: '540 MB', vramReq: '~2 GB', dims: 768, quality: 'Balanced',
+        desc: 'Optimized for long documents. Excels at knowledge retrieval tasks.',
+        recommendedFor: ['≤8GB'],
+    },
+    {
+        id: 'intfloat/e5-base-v2', name: 'E5 Base v2',
+        diskSize: '440 MB', vramReq: '~1 GB', dims: 768, quality: 'Balanced',
+        desc: 'Strong retrieval performance in the E5 model family.',
+        recommendedFor: ['≤4GB', '≤8GB'],
+    },
+    {
+        id: 'thenlper/gte-base', name: 'GTE Base',
+        diskSize: '440 MB', vramReq: '~1 GB', dims: 768, quality: 'Balanced',
+        desc: 'General Text Embeddings from Alibaba DAMO. Competitive accuracy.',
+        recommendedFor: ['≤8GB'],
+    },
+    {
+        id: 'BAAI/bge-large-en-v1.5', name: 'BGE Large EN v1.5',
+        diskSize: '1.3 GB', vramReq: '~3 GB', dims: 1024, quality: 'Best',
+        desc: 'Highest quality BGE model. Best for accuracy-critical scenarios.',
+        recommendedFor: ['≤8GB', '≤16GB'],
+    },
+    {
+        id: 'intfloat/e5-large-v2', name: 'E5 Large v2',
+        diskSize: '1.3 GB', vramReq: '~3 GB', dims: 1024, quality: 'Best',
+        desc: 'Best quality in the E5 family. Top performance on retrieval benchmarks.',
+        recommendedFor: ['≤16GB', '32GB+'],
+    },
+]
+
+const RECOMMENDED_WHISPER_MODELS: LocalModel[] = [
+    {
+        id: 'openai/whisper-tiny', name: 'Whisper Tiny',
+        diskSize: '75 MB', vramReq: '<1 GB', quality: 'Fast',
+        desc: 'Fastest transcription. Suitable for low-resource machines or quick drafts.',
+        recommendedFor: ['≤2GB'],
+    },
+    {
+        id: 'openai/whisper-base', name: 'Whisper Base',
+        diskSize: '145 MB', vramReq: '<1 GB', quality: 'Fast',
+        desc: 'Small and fast. Good accuracy for clear audio in quiet environments.',
+        recommendedFor: ['≤2GB', '≤4GB'],
+    },
+    {
+        id: 'openai/whisper-small', name: 'Whisper Small',
+        diskSize: '460 MB', vramReq: '~2 GB', quality: 'Balanced',
+        desc: 'Good balance of speed and accuracy. Best all-round choice for most use cases.',
+        recommendedFor: ['≤4GB', '≤8GB'],
+    },
+    {
+        id: 'openai/whisper-medium', name: 'Whisper Medium',
+        diskSize: '1.5 GB', vramReq: '~5 GB', quality: 'Balanced',
+        desc: 'High accuracy. Handles challenging audio, accents, and background noise well.',
+        recommendedFor: ['≤8GB'],
+    },
+    {
+        id: 'openai/whisper-large-v2', name: 'Whisper Large v2',
+        diskSize: '3.1 GB', vramReq: '~10 GB', quality: 'Best',
+        desc: 'Near human-level transcription accuracy. Proven production model.',
+        recommendedFor: ['≤16GB'],
+    },
+    {
+        id: 'openai/whisper-large-v3', name: 'Whisper Large v3',
+        diskSize: '3.1 GB', vramReq: '~10 GB', quality: 'Best',
+        desc: 'Latest Whisper model. Highest accuracy across languages and audio conditions.',
+        recommendedFor: ['≤16GB', '32GB+'],
+    },
+]
+
+const QUALITY_COLORS: Record<ModelQuality, string> = {
+    Fast: 'bg-lime-500/15 text-lime-300 border-lime-500/30',
+    Balanced: 'bg-blue-500/15 text-blue-300 border-blue-500/30',
+    Best: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
+}
+
+const VRAM_TIER_COLORS: Record<VramTier, string> = {
+    '≤2GB': 'bg-lime-500/10 text-lime-300 border-lime-500/25',
+    '≤4GB': 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25',
+    '≤8GB': 'bg-cyan-500/10 text-cyan-300 border-cyan-500/25',
+    '≤16GB': 'bg-blue-500/10 text-blue-300 border-blue-500/25',
+    '32GB+': 'bg-violet-500/10 text-violet-300 border-violet-500/25',
+}
+
+function LocalModelPicker({ models, selected, onSelect }: {
+    models: LocalModel[]
+    selected: string
+    onSelect: (id: string) => void
+}) {
     return (
-        <div className="space-y-3">
-            <div>
-                <h3 className="font-semibold text-sm">Audio</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                    Text-to-speech and speech-to-text model configuration.
-                </p>
-            </div>
-
-            <div className="glass-card p-6 space-y-6">
-                <div className="flex items-start gap-4 opacity-50">
-                    <div className="w-10 h-10 rounded-xl bg-muted/40 border border-border/50 flex items-center justify-center flex-shrink-0">
-                        <Zap className="w-5 h-5 text-muted-foreground" />
-                    </div>
-                    <div className="flex-1">
-                        <p className="text-sm font-medium">Text-to-Speech (TTS)</p>
-                        <p className="text-xs text-muted-foreground mt-1">Configure voice synthesis models for reading responses aloud.</p>
-                        <div className="mt-3 flex items-center gap-2">
-                            <select className="input text-sm flex-1" disabled>
-                                <option>Coming soon</option>
-                            </select>
+        <div className="grid grid-cols-1 gap-1.5 max-h-72 overflow-y-auto pr-1">
+            {models.map(m => {
+                const isSelected = selected === m.id
+                return (
+                    <button
+                        key={m.id}
+                        onClick={() => onSelect(m.id)}
+                        className={`text-left p-3 rounded-xl border transition-all duration-200 ${isSelected
+                            ? 'border-accent bg-accent/10 shadow-glass-sm'
+                            : 'border-border/50 hover:border-border hover:bg-muted/20'
+                        }`}
+                    >
+                        <div className="flex items-start gap-2">
+                            <div className={`mt-0.5 w-3.5 h-3.5 rounded-full border flex-shrink-0 transition-colors ${isSelected ? 'bg-accent border-accent' : 'border-border'}`} />
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                                    <span className={`text-xs font-medium ${isSelected ? 'text-foreground' : 'text-foreground/80'}`}>{m.name}</span>
+                                    <span className={`text-[9px] px-1.5 py-0.5 rounded border font-medium ${QUALITY_COLORS[m.quality]}`}>{m.quality}</span>
+                                    <span className="text-[9px] text-muted-foreground border border-border/40 px-1.5 py-0.5 rounded">{m.diskSize} disk</span>
+                                    <span className="text-[9px] text-muted-foreground border border-border/40 px-1.5 py-0.5 rounded">{m.vramReq} VRAM</span>
+                                    {m.dims && <span className="text-[9px] text-muted-foreground">{m.dims}d</span>}
+                                </div>
+                                {m.recommendedFor && m.recommendedFor.length > 0 && (
+                                    <div className="flex items-center gap-1 flex-wrap mb-0.5">
+                                        <span className="text-[9px] text-muted-foreground">Recommended for:</span>
+                                        {m.recommendedFor.map(tier => (
+                                            <span key={tier} className={`text-[9px] px-1.5 py-0.5 rounded border font-medium ${VRAM_TIER_COLORS[tier]}`}>{tier} VRAM</span>
+                                        ))}
+                                    </div>
+                                )}
+                                <p className="text-[11px] text-muted-foreground leading-relaxed">{m.desc}</p>
+                            </div>
                         </div>
-                    </div>
-                </div>
-
-                <div className="border-t border-border/40" />
-
-                <div className="flex items-start gap-4 opacity-50">
-                    <div className="w-10 h-10 rounded-xl bg-muted/40 border border-border/50 flex items-center justify-center flex-shrink-0">
-                        <Zap className="w-5 h-5 text-muted-foreground" />
-                    </div>
-                    <div className="flex-1">
-                        <p className="text-sm font-medium">Speech-to-Text (STT)</p>
-                        <p className="text-xs text-muted-foreground mt-1">Configure transcription models for voice input in chat.</p>
-                        <div className="mt-3 flex items-center gap-2">
-                            <select className="input text-sm flex-1" disabled>
-                                <option>Coming soon</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div className="flex items-center gap-2 rounded-lg border border-border/40 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                Audio model support is coming in a future release.
-            </div>
+                    </button>
+                )
+            })}
         </div>
     )
 }
 
+// ── Embedding Tab ─────────────────────────────────────────────────────────────
 function EmbeddingTab() {
     const { data: settings = [] } = useQuery({ queryKey: ['settings'], queryFn: listSettings })
+    const { data: providers = [] } = useQuery({ queryKey: ['providers'], queryFn: listProviders })
     const qc = useQueryClient()
+
     const embeddingModel = (settings as { key: string; value: string }[]).find(s => s.key === 'embedding_model')?.value ?? ''
     const [model, setModel] = useState('')
     const [saving, setSaving] = useState(false)
     const [saved, setSaved] = useState(false)
-    const [expanded, setExpanded] = useState(true)
+    const [localExpanded, setLocalExpanded] = useState(true)
+    const [showEmbedConfirm, setShowEmbedConfirm] = useState(false)
+
+    // Provider-based embedding models
+    const configKey = 'system_embedding_models'
+    const configuredModels: TypedModel[] = useMemo(() => {
+        const raw = (settings as { key: string; value: unknown }[]).find(s => s.key === configKey)?.value
+        return Array.isArray(raw) ? (raw as TypedModel[]) : []
+    }, [settings])
+
     const [showAdd, setShowAdd] = useState(false)
+    const [addProviderId, setAddProviderId] = useState('')
+    const [fetchedModels, setFetchedModels] = useState<{ id: string; name: string }[] | null>(null)
+    const [fetchingModels, setFetchingModels] = useState(false)
+    const [fetchError, setFetchError] = useState<string | null>(null)
+    const [modelSearch, setModelSearch] = useState('')
+    const [selectedEmbModels, setSelectedEmbModels] = useState<Set<string>>(new Set())
+    const [manualModel, setManualModel] = useState('')
+    const [addSaving, setAddSaving] = useState(false)
+    const [removing, setRemoving] = useState<string | null>(null)
 
-    useEffect(() => {
-        setModel(embeddingModel)
-    }, [embeddingModel])
+    useEffect(() => { setModel(embeddingModel) }, [embeddingModel])
 
-    const handleSave = async () => {
-        setSaving(true)
+    const handleSaveLocal = () => {
+        // If changing an existing model, require confirmation
+        if (embeddingModel && embeddingModel !== model) {
+            setShowEmbedConfirm(true)
+        } else {
+            void doSaveLocal()
+        }
+    }
+
+    const doSaveLocal = async () => {
+        setSaving(true); setShowEmbedConfirm(false)
         await updateSetting('embedding_model', { value: model })
         qc.invalidateQueries({ queryKey: ['settings'] })
         setSaving(false); setSaved(true)
         setTimeout(() => setSaved(false), 2000)
     }
 
+    const filteredFetchedModels = useMemo(() => {
+        if (!fetchedModels) return []
+        const q = modelSearch.toLowerCase()
+        return q ? fetchedModels.filter(m => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)) : fetchedModels
+    }, [fetchedModels, modelSearch])
+
+    const handleFetchModels = async () => {
+        if (!addProviderId) return
+        setFetchingModels(true); setFetchError(null); setFetchedModels(null); setSelectedEmbModels(new Set())
+        try {
+            const models = await listModels(addProviderId)
+            setFetchedModels(models)
+            if (models.length <= 10) setSelectedEmbModels(new Set(models.map((m: { id: string }) => m.id)))
+        } catch (e: unknown) {
+            const err = e as { response?: { data?: { detail?: string } }; message?: string }
+            setFetchError(err?.response?.data?.detail ?? err?.message ?? 'Failed to fetch models')
+        } finally { setFetchingModels(false) }
+    }
+
+    const handleAddEmbModels = async () => {
+        const toAdd = fetchedModels
+            ? [...selectedEmbModels].map(id => ({
+                provider_id: addProviderId,
+                model_id: id,
+                model_name: fetchedModels.find(m => m.id === id)?.name ?? id,
+            }))
+            : manualModel.trim()
+                ? [{ provider_id: addProviderId, model_id: manualModel.trim(), model_name: manualModel.trim() }]
+                : []
+        if (!toAdd.length) return
+        setAddSaving(true)
+        try {
+            const existing = configuredModels.filter(m => !toAdd.some(n => n.provider_id === m.provider_id && n.model_id === m.model_id))
+            await updateSetting(configKey, { value: [...existing, ...toAdd], category: 'llm' })
+            qc.invalidateQueries({ queryKey: ['settings'] })
+            setShowAdd(false); setAddProviderId(''); setFetchedModels(null); setSelectedEmbModels(new Set()); setManualModel('')
+        } finally { setAddSaving(false) }
+    }
+
+    const handleRemove = async (m: TypedModel) => {
+        const key = `${m.provider_id}:${m.model_id}`
+        setRemoving(key)
+        try {
+            const updated = configuredModels.filter(x => !(x.provider_id === m.provider_id && x.model_id === m.model_id))
+            await updateSetting(configKey, { value: updated, category: 'llm' })
+            qc.invalidateQueries({ queryKey: ['settings'] })
+        } finally { setRemoving(null) }
+    }
+
+    const getProviderDisplay = (pid: string) => {
+        const p = (providers as ProviderRow[]).find(x => x.id === pid)
+        return p ? sanitizeProviderDisplayName(p.display_name) : pid.slice(0, 8)
+    }
+
+    const totalSelected = fetchedModels ? selectedEmbModels.size : (manualModel.trim() ? 1 : 0)
+
     return (
-        <div className="space-y-3">
+        <div className="space-y-4">
             <div className="flex items-center justify-between">
                 <div>
-                    <h3 className="font-semibold text-sm">Embedding Model Providers</h3>
+                    <h3 className="font-semibold text-sm">Embedding Models</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                        Manage providers and models used for semantic indexing and search.
+                        Models used for semantic indexing and vector search. Add provider-based models or configure the built-in local model.
                     </p>
                 </div>
                 <button className="btn-primary text-xs py-1.5 px-3" onClick={() => setShowAdd(p => !p)}>
-                    <Plus className="w-3.5 h-3.5" /> {showAdd ? 'Close' : 'Add Provider'}
+                    <Plus className="w-3.5 h-3.5" /> {showAdd ? 'Close' : 'Add Model'}
                 </button>
             </div>
 
+            {/* Add model form */}
             {showAdd && (
-                <AddProviderPanel onAdded={() => setShowAdd(false)} />
+                <div className="glass-card p-4 space-y-4 border border-accent/20 animate-fade-in">
+                    <h4 className="text-xs font-medium text-accent uppercase tracking-wide">Add Embedding Models from Provider</h4>
+
+                    {(providers as unknown[]).length === 0 ? (
+                        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
+                            <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                            <span>No providers configured. Go to the <strong>Providers</strong> tab to add one first.</span>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="space-y-1.5">
+                                <label className="text-xs text-muted-foreground font-medium">1. Select provider</label>
+                                <select className="input text-sm" value={addProviderId} onChange={e => { setAddProviderId(e.target.value); setFetchedModels(null); setSelectedEmbModels(new Set()); setFetchError(null); setModelSearch('') }}>
+                                    <option value="">Choose a provider…</option>
+                                    {(providers as ProviderRow[]).map(p => (
+                                        <option key={p.id} value={p.id}>{sanitizeProviderDisplayName(p.display_name)} ({p.provider_name})</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {addProviderId && (
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-xs text-muted-foreground font-medium">2. Fetch and select models</label>
+                                        <button className="btn-ghost text-xs py-1 px-2.5 gap-1" onClick={handleFetchModels} disabled={fetchingModels}>
+                                            {fetchingModels ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                                            {fetchedModels ? 'Refresh' : 'Fetch Models'}
+                                        </button>
+                                    </div>
+
+                                    {fetchError && (
+                                        <div className="text-xs p-2.5 rounded-lg bg-destructive/10 text-red-300 border border-destructive/20 space-y-1">
+                                            <p>{fetchError}</p>
+                                            <input className="input text-xs mt-1" placeholder="Or enter model ID manually" value={manualModel} onChange={e => setManualModel(e.target.value)} />
+                                        </div>
+                                    )}
+
+                                    {fetchedModels !== null && fetchedModels.length > 0 && (
+                                        <div className="space-y-1.5">
+                                            <div className="flex items-center justify-between px-1">
+                                                <div className="relative flex-1 mr-2">
+                                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                                                    <input className="input text-xs pl-8" placeholder={`Filter ${fetchedModels.length} models…`} value={modelSearch} onChange={e => setModelSearch(e.target.value)} />
+                                                </div>
+                                                <button className="text-[10px] text-accent hover:underline whitespace-nowrap" onClick={() => {
+                                                    selectedEmbModels.size === filteredFetchedModels.length
+                                                        ? setSelectedEmbModels(new Set())
+                                                        : setSelectedEmbModels(new Set(filteredFetchedModels.map(m => m.id)))
+                                                }}>{selectedEmbModels.size === filteredFetchedModels.length ? 'Deselect all' : 'Select all'}</button>
+                                            </div>
+                                            <div className="max-h-52 overflow-y-auto rounded-lg border border-border/50 bg-background/30 divide-y divide-border/20">
+                                                {filteredFetchedModels.map(m => {
+                                                    const checked = selectedEmbModels.has(m.id)
+                                                    return (
+                                                        <button key={m.id} onClick={() => setSelectedEmbModels(prev => { const n = new Set(prev); n.has(m.id) ? n.delete(m.id) : n.add(m.id); return n })}
+                                                            className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2.5 hover:bg-muted/30 transition-colors ${checked ? 'bg-accent/5' : ''}`}>
+                                                            <div className={`w-4 h-4 rounded flex-shrink-0 flex items-center justify-center border ${checked ? 'bg-accent border-accent' : 'border-border'}`}>
+                                                                {checked && <Check className="w-2.5 h-2.5 text-accent-foreground" />}
+                                                            </div>
+                                                            <span className={checked ? 'text-foreground' : 'text-muted-foreground'}>{m.name}</span>
+                                                        </button>
+                                                    )
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {fetchedModels === null && !fetchError && (
+                                        <input className="input text-xs" placeholder="Or enter model ID manually (e.g. text-embedding-3-small)" value={manualModel} onChange={e => setManualModel(e.target.value)} />
+                                    )}
+                                </div>
+                            )}
+
+                            <button className="btn-primary text-xs py-1.5 px-3 w-full justify-center" onClick={handleAddEmbModels} disabled={addSaving || !addProviderId || totalSelected === 0}>
+                                {addSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                                {addSaving ? 'Saving…' : totalSelected > 0 ? `Add ${totalSelected} model${totalSelected > 1 ? 's' : ''}` : 'Select models above'}
+                            </button>
+                        </>
+                    )}
+                </div>
             )}
 
-            {/* Built-in local embedding provider card */}
+            {/* Provider-based embedding models */}
+            {configuredModels.length > 0 && (
+                <div className="space-y-2">
+                    {configuredModels.map(m => {
+                        const removeKey = `${m.provider_id}:${m.model_id}`
+                        const provider = (providers as ProviderRow[]).find(p => p.id === m.provider_id)
+                        const meta = provider ? PROVIDER_META[provider.provider_name] : undefined
+                        return (
+                            <div key={removeKey} className="glass-card px-4 py-3 flex items-center gap-3">
+                                {provider && (
+                                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center border flex-shrink-0 ${meta?.color ?? 'bg-muted border-border'}`}>
+                                        <ProviderIcon providerId={provider.provider_name} className="w-3.5 h-3.5" />
+                                    </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium truncate">{m.model_name}</p>
+                                    <p className="text-xs text-muted-foreground truncate">{getProviderDisplay(m.provider_id)}</p>
+                                </div>
+                                <button className="btn-ghost p-1.5 text-red-400" onClick={() => handleRemove(m)} disabled={removing === removeKey}>
+                                    {removing === removeKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                </button>
+                            </div>
+                        )
+                    })}
+                </div>
+            )}
+
+            {/* Built-in local embedding model */}
             <div className="glass-card-hover transition-all duration-300">
                 <div
                     className="flex items-center gap-3 px-4 py-3 cursor-pointer"
-                    onClick={() => setExpanded(p => !p)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(p => !p) } }}
+                    onClick={() => setLocalExpanded(p => !p)}
+                    role="button" tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLocalExpanded(p => !p) } }}
                 >
                     <div className="w-8 h-8 rounded-lg flex items-center justify-center border bg-lime-500/10 border-lime-500/20">
                         <Database className="w-4 h-4 text-lime-300" />
                     </div>
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                            <span className="font-medium text-sm">Local / Built-in</span>
+                            <span className="font-medium text-sm">Built-in Local</span>
                             <span className="chip-muted text-[10px]">sentence-transformers</span>
-                            <span className="chip-muted text-[10px]">Local provider</span>
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                            {model || 'No model configured'}{model ? ' · 1 model' : ''}
+                            {model || 'No model configured'}
                         </p>
                     </div>
-                    <button className="btn-ghost p-1.5" onClick={(e) => { e.stopPropagation(); setExpanded(p => !p) }}>
-                        {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    <button className="btn-ghost p-1.5" onClick={(e) => { e.stopPropagation(); setLocalExpanded(p => !p) }}>
+                        {localExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                     </button>
                 </div>
 
-                {expanded && (
+                {localExpanded && (
                     <div className="border-t border-border/50 px-4 py-4 space-y-3 animate-fade-in">
                         <div>
-                            <label className="text-xs text-muted-foreground mb-1.5 block font-medium">Default Model</label>
-                            <input
-                                className="input text-sm"
-                                placeholder="e.g. text-embedding-3-small, nomic-embed-text"
-                                value={model}
-                                onChange={e => { setModel(e.target.value); setSaved(false) }}
+                            <label className="text-xs text-muted-foreground mb-2 block font-medium">Select a model (auto-downloaded from HuggingFace on first use)</label>
+                            <LocalModelPicker
+                                models={RECOMMENDED_EMBEDDING_MODELS}
+                                selected={model}
+                                onSelect={id => { setModel(id); setSaved(false) }}
                             />
+                            <div className="mt-2">
+                                <label className="text-[10px] text-muted-foreground mb-1 block">Or enter a custom model ID</label>
+                                <input
+                                    className="input text-xs"
+                                    placeholder="e.g. sentence-transformers/my-model"
+                                    value={RECOMMENDED_EMBEDDING_MODELS.some(m => m.id === model) ? '' : model}
+                                    onChange={e => { setModel(e.target.value); setSaved(false) }}
+                                />
+                            </div>
                         </div>
-
                         <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
                             <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
                             <span>Changing the embedding model requires re-indexing all knowledge. Search results will be unavailable until re-indexing completes.</span>
                         </div>
-
-                        <button className="btn-primary text-xs py-1.5 px-3" onClick={handleSave} disabled={saving || !model.trim()}>
-                            {saved
-                                ? <><CheckCircle2 className="w-3.5 h-3.5" /> Saved</>
-                                : saving
-                                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                    : <><Save className="w-3.5 h-3.5" /> Save</>}
+                        <button className="btn-primary text-xs py-1.5 px-3" onClick={handleSaveLocal} disabled={saving || !model.trim()}>
+                            {saved ? <><CheckCircle2 className="w-3.5 h-3.5" /> Saved</> : saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Save className="w-3.5 h-3.5" /> Save</>}
                         </button>
                     </div>
                 )}
             </div>
+
+            {/* Critical embedding model change confirmation */}
+            {showEmbedConfirm && (
+                <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/70 backdrop-blur-sm animate-fade-in" onClick={() => setShowEmbedConfirm(false)} />
+                    <div className="relative w-full max-w-lg animate-fade-in">
+                        {/* Danger glow border */}
+                        <div className="absolute -inset-0.5 rounded-2xl bg-gradient-to-br from-red-600/60 via-red-500/40 to-orange-600/60 blur-sm" />
+                        <div className="relative rounded-2xl bg-background border border-red-600/50 shadow-2xl overflow-hidden">
+                            {/* Critical header stripe */}
+                            <div className="bg-gradient-to-r from-red-900/80 via-red-800/70 to-red-900/80 border-b border-red-600/40 px-6 py-4 flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-red-500/20 border border-red-500/40 flex items-center justify-center flex-shrink-0">
+                                    <ShieldAlert className="w-5 h-5 text-red-400" />
+                                </div>
+                                <div>
+                                    <p className="text-xs font-semibold uppercase tracking-widest text-red-400/80 mb-0.5">Destructive Operation</p>
+                                    <h3 className="text-base font-bold text-foreground">Change Embedding Model</h3>
+                                </div>
+                            </div>
+
+                            <div className="px-6 py-5 space-y-4">
+                                {/* Model change summary */}
+                                <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/30 border border-border/60 text-xs font-mono">
+                                    <span className="text-muted-foreground truncate max-w-[180px]">{embeddingModel || '(none)'}</span>
+                                    <span className="text-red-400 font-bold flex-shrink-0">→</span>
+                                    <span className="text-foreground font-semibold truncate max-w-[180px]">{model}</span>
+                                </div>
+
+                                {/* Consequences */}
+                                <div className="space-y-2">
+                                    <p className="text-xs font-semibold text-red-400 uppercase tracking-wide">What will happen</p>
+                                    {[
+                                        'All existing knowledge vectors will be invalidated immediately.',
+                                        'Semantic search will be unavailable until full re-indexing completes.',
+                                        'Re-indexing every knowledge item may take hours on large datasets.',
+                                        'The new model will be downloaded on first use (can be several GB).',
+                                        'This action cannot be undone without manually re-indexing with the old model.',
+                                    ].map(line => (
+                                        <div key={line} className="flex items-start gap-2 text-xs text-muted-foreground">
+                                            <span className="text-red-500 font-bold flex-shrink-0 mt-0.5">!</span>
+                                            <span>{line}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="px-6 pb-5 flex items-center justify-end gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowEmbedConfirm(false)}
+                                    className="btn-ghost px-4 py-2 text-sm font-medium"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => void doSaveLocal()}
+                                    className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 border border-red-500/50 shadow-lg shadow-red-900/30 transition-all focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                                >
+                                    <ShieldAlert className="w-4 h-4" />
+                                    Yes, Change Model &amp; Re-index
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
+// ── Audio Tab ─────────────────────────────────────────────────────────────────
+function AudioTab() {
+    const { data: settings = [] } = useQuery({ queryKey: ['settings'], queryFn: listSettings })
+    const { data: providers = [] } = useQuery({ queryKey: ['providers'], queryFn: listProviders })
+    const qc = useQueryClient()
+
+    const configKey = 'system_audio_models'
+    const configuredModels: (TypedModel & { subtype: 'tts' | 'stt' })[] = useMemo(() => {
+        const raw = (settings as { key: string; value: unknown }[]).find(s => s.key === configKey)?.value
+        return Array.isArray(raw) ? (raw as (TypedModel & { subtype: 'tts' | 'stt' })[]) : []
+    }, [settings])
+
+    // Sub-tab: stt or tts
+    const [audioSubTab, setAudioSubTab] = useState<'stt' | 'tts'>('stt')
+    const [showAdd, setShowAdd] = useState(false)
+    const [addProviderId, setAddProviderId] = useState('')
+    const [fetchedModels, setFetchedModels] = useState<{ id: string; name: string }[] | null>(null)
+    const [fetchingModels, setFetchingModels] = useState(false)
+    const [fetchError, setFetchError] = useState<string | null>(null)
+    const [modelSearch, setModelSearch] = useState('')
+    const [selectedAudioModels, setSelectedAudioModels] = useState<Set<string>>(new Set())
+    const [manualModel, setManualModel] = useState('')
+    const [saving, setSaving] = useState(false)
+    const [removing, setRemoving] = useState<string | null>(null)
+    // Built-in local Whisper state
+    const [whisperModel, setWhisperModel] = useState('')
+    const [whisperExpanded, setWhisperExpanded] = useState(true)
+    const [savingWhisper, setSavingWhisper] = useState(false)
+    const [savedWhisper, setSavedWhisper] = useState(false)
+
+    const filteredFetchedModels = useMemo(() => {
+        if (!fetchedModels) return []
+        const q = modelSearch.toLowerCase()
+        return q ? fetchedModels.filter(m => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)) : fetchedModels
+    }, [fetchedModels, modelSearch])
+
+    const handleFetchModels = async () => {
+        if (!addProviderId) return
+        setFetchingModels(true); setFetchError(null); setFetchedModels(null); setSelectedAudioModels(new Set())
+        try {
+            const models = await listModels(addProviderId)
+            setFetchedModels(models)
+        } catch (e: unknown) {
+            const err = e as { response?: { data?: { detail?: string } }; message?: string }
+            setFetchError(err?.response?.data?.detail ?? err?.message ?? 'Failed to fetch models')
+        } finally { setFetchingModels(false) }
+    }
+
+    const handleAddModels = async () => {
+        const toAdd: (TypedModel & { subtype: 'tts' | 'stt' })[] = fetchedModels
+            ? [...selectedAudioModels].map(id => ({
+                provider_id: addProviderId, model_id: id,
+                model_name: fetchedModels.find(m => m.id === id)?.name ?? id, subtype: audioSubTab,
+            }))
+            : manualModel.trim()
+                ? [{ provider_id: addProviderId, model_id: manualModel.trim(), model_name: manualModel.trim(), subtype: audioSubTab }]
+                : []
+        if (!toAdd.length) return
+        setSaving(true)
+        try {
+            const existing = configuredModels.filter(m => !toAdd.some(n => n.provider_id === m.provider_id && n.model_id === m.model_id))
+            await updateSetting(configKey, { value: [...existing, ...toAdd], category: 'llm' })
+            qc.invalidateQueries({ queryKey: ['settings'] })
+            setShowAdd(false); setAddProviderId(''); setFetchedModels(null); setSelectedAudioModels(new Set()); setManualModel('')
+        } finally { setSaving(false) }
+    }
+
+    const handleRemove = async (m: TypedModel) => {
+        const key = `${m.provider_id}:${m.model_id}`
+        setRemoving(key)
+        try {
+            const updated = configuredModels.filter(x => !(x.provider_id === m.provider_id && x.model_id === m.model_id))
+            await updateSetting(configKey, { value: updated, category: 'llm' })
+            qc.invalidateQueries({ queryKey: ['settings'] })
+        } finally { setRemoving(null) }
+    }
+
+    const getProviderDisplay = (pid: string) => {
+        const p = (providers as ProviderRow[]).find(x => x.id === pid)
+        return p ? sanitizeProviderDisplayName(p.display_name) : pid.slice(0, 8)
+    }
+
+    const ttsModels = configuredModels.filter(m => m.subtype === 'tts')
+    const sttModels = configuredModels.filter(m => m.subtype === 'stt')
+    const totalSelected = fetchedModels ? selectedAudioModels.size : (manualModel.trim() ? 1 : 0)
+    const localWhisperModel = (settings as { key: string; value: string }[]).find(s => s.key === 'local_whisper_model')?.value ?? ''
+    useEffect(() => { setWhisperModel(localWhisperModel) }, [localWhisperModel])
+
+    const handleSaveWhisper = async () => {
+        setSavingWhisper(true)
+        await updateSetting('local_whisper_model', { value: whisperModel, category: 'llm' })
+        qc.invalidateQueries({ queryKey: ['settings'] })
+        setSavingWhisper(false); setSavedWhisper(true)
+        setTimeout(() => setSavedWhisper(false), 2000)
+    }
+
+    const resetAddForm = () => {
+        setShowAdd(false); setAddProviderId(''); setFetchedModels(null)
+        setSelectedAudioModels(new Set()); setManualModel(''); setFetchError(null); setModelSearch('')
+    }
+
+    return (
+        <div className="space-y-4">
+            <div>
+                <h3 className="font-semibold text-sm">Audio Models</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    Configure Speech-to-Text (STT) and Text-to-Speech (TTS) models from providers or use local Whisper.
+                </p>
+            </div>
+
+            {/* STT / TTS sub-tabs */}
+            <div className="flex gap-1 p-1 rounded-lg bg-muted/30 border border-border/50">
+                {([['stt', 'Speech-to-Text (STT)', sttModels.length], ['tts', 'Text-to-Speech (TTS)', ttsModels.length]] as const).map(([key, label, count]) => (
+                    <button
+                        key={key}
+                        onClick={() => { setAudioSubTab(key); resetAddForm() }}
+                        className={`flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${audioSubTab === key ? 'bg-accent text-accent-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                        {label}
+                        <span className={`text-[9px] rounded-full px-1.5 py-0.5 font-medium ${audioSubTab === key ? 'bg-accent-foreground/20' : 'bg-muted text-muted-foreground'}`}>{count}</span>
+                    </button>
+                ))}
+            </div>
+
+            {/* Add model button + panel */}
+            <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">
+                    {audioSubTab === 'stt' ? 'Provider-based STT models' : 'Provider-based TTS models'}
+                </p>
+                <button className="btn-primary text-xs py-1.5 px-3" onClick={() => setShowAdd(p => !p)}>
+                    <Plus className="w-3.5 h-3.5" /> {showAdd ? 'Close' : `Add ${audioSubTab.toUpperCase()} Model`}
+                </button>
+            </div>
+
+            {showAdd && (
+                <div className="glass-card p-4 space-y-4 border border-accent/20 animate-fade-in">
+                    <h4 className="text-xs font-medium text-accent uppercase tracking-wide">
+                        Add {audioSubTab === 'stt' ? 'Speech-to-Text' : 'Text-to-Speech'} Model
+                    </h4>
+
+                    {(providers as unknown[]).length === 0 ? (
+                        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
+                            <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                            <span>No providers configured. Go to the <strong>Providers</strong> tab to add one first.</span>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="space-y-1.5">
+                                <label className="text-xs text-muted-foreground font-medium">1. Select provider</label>
+                                <select className="input text-sm" value={addProviderId} onChange={e => { setAddProviderId(e.target.value); setFetchedModels(null); setSelectedAudioModels(new Set()); setFetchError(null); setModelSearch('') }}>
+                                    <option value="">Choose a provider…</option>
+                                    {(providers as ProviderRow[]).map(p => (
+                                        <option key={p.id} value={p.id}>{sanitizeProviderDisplayName(p.display_name)} ({p.provider_name})</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {addProviderId && (
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-xs text-muted-foreground font-medium">2. Fetch and select models</label>
+                                        <button className="btn-ghost text-xs py-1 px-2.5 gap-1" onClick={handleFetchModels} disabled={fetchingModels}>
+                                            {fetchingModels ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                                            {fetchedModels ? 'Refresh' : 'Fetch Models'}
+                                        </button>
+                                    </div>
+
+                                    {fetchError && (
+                                        <div className="text-xs p-2.5 rounded-lg bg-destructive/10 text-red-300 border border-destructive/20 space-y-1">
+                                            <p>{fetchError}</p>
+                                            <input className="input text-xs mt-1" placeholder="Or enter model ID manually" value={manualModel} onChange={e => setManualModel(e.target.value)} />
+                                        </div>
+                                    )}
+
+                                    {fetchedModels !== null && fetchedModels.length > 0 && (
+                                        <div className="space-y-1.5">
+                                            <div className="flex items-center justify-between px-1">
+                                                <div className="relative flex-1 mr-2">
+                                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                                                    <input className="input text-xs pl-8" placeholder={`Filter ${fetchedModels.length} models…`} value={modelSearch} onChange={e => setModelSearch(e.target.value)} />
+                                                </div>
+                                                <button className="text-[10px] text-accent hover:underline whitespace-nowrap" onClick={() => {
+                                                    selectedAudioModels.size === filteredFetchedModels.length
+                                                        ? setSelectedAudioModels(new Set())
+                                                        : setSelectedAudioModels(new Set(filteredFetchedModels.map(m => m.id)))
+                                                }}>{selectedAudioModels.size === filteredFetchedModels.length ? 'Deselect all' : 'Select all'}</button>
+                                            </div>
+                                            <div className="max-h-44 overflow-y-auto rounded-lg border border-border/50 bg-background/30 divide-y divide-border/20">
+                                                {filteredFetchedModels.map(m => {
+                                                    const checked = selectedAudioModels.has(m.id)
+                                                    return (
+                                                        <button key={m.id} onClick={() => setSelectedAudioModels(prev => { const n = new Set(prev); n.has(m.id) ? n.delete(m.id) : n.add(m.id); return n })}
+                                                            className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2.5 hover:bg-muted/30 ${checked ? 'bg-accent/5' : ''}`}>
+                                                            <div className={`w-4 h-4 rounded flex-shrink-0 flex items-center justify-center border ${checked ? 'bg-accent border-accent' : 'border-border'}`}>
+                                                                {checked && <Check className="w-2.5 h-2.5 text-accent-foreground" />}
+                                                            </div>
+                                                            <span className={checked ? 'text-foreground' : 'text-muted-foreground'}>{m.name}</span>
+                                                        </button>
+                                                    )
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {fetchedModels === null && !fetchError && (
+                                        <input className="input text-xs" placeholder={`Or enter model ID manually (e.g. ${audioSubTab === 'stt' ? 'whisper-1' : 'tts-1'})`} value={manualModel} onChange={e => setManualModel(e.target.value)} />
+                                    )}
+                                </div>
+                            )}
+
+                            <button className="btn-primary text-xs py-1.5 px-3 w-full justify-center" onClick={handleAddModels} disabled={saving || !addProviderId || totalSelected === 0}>
+                                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                                {saving ? 'Saving…' : totalSelected > 0 ? `Add ${totalSelected} ${audioSubTab.toUpperCase()} model${totalSelected > 1 ? 's' : ''}` : 'Select models above'}
+                            </button>
+                        </>
+                    )}
+                </div>
+            )}
+
+            {/* Model list for active sub-tab */}
+            {audioSubTab === 'stt' ? (
+                <div className="space-y-2">
+                    {sttModels.length > 0 ? sttModels.map(m => {
+                        const removeKey = `${m.provider_id}:${m.model_id}`
+                        const provider = (providers as ProviderRow[]).find(p => p.id === m.provider_id)
+                        const meta = provider ? PROVIDER_META[provider.provider_name] : undefined
+                        return (
+                            <div key={removeKey} className="glass-card px-4 py-3 flex items-center gap-3">
+                                {provider && <div className={`w-7 h-7 rounded-lg flex items-center justify-center border flex-shrink-0 ${meta?.color ?? 'bg-muted border-border'}`}><ProviderIcon providerId={provider.provider_name} className="w-3.5 h-3.5" /></div>}
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium truncate">{m.model_name}</p>
+                                    <p className="text-xs text-muted-foreground truncate">{getProviderDisplay(m.provider_id)}</p>
+                                </div>
+                                <button className="btn-ghost p-1.5 text-red-400" onClick={() => handleRemove(m)} disabled={removing === removeKey}>
+                                    {removing === removeKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                </button>
+                            </div>
+                        )
+                    }) : <p className="text-xs text-muted-foreground italic px-1">No provider-based STT models configured.</p>}
+
+                    {/* Built-in local Whisper */}
+                    <div className="glass-card-hover transition-all duration-300">
+                        <div
+                            className="flex items-center gap-3 px-4 py-3 cursor-pointer"
+                            onClick={() => setWhisperExpanded(p => !p)}
+                            role="button" tabIndex={0}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setWhisperExpanded(p => !p) } }}
+                        >
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center border bg-indigo-500/10 border-indigo-500/20">
+                                <Mic className="w-4 h-4 text-indigo-300" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                    <span className="font-medium text-sm">Built-in Local STT</span>
+                                    <span className="chip-muted text-[10px]">Whisper</span>
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                                    {whisperModel || 'No model configured'}
+                                </p>
+                            </div>
+                            <button className="btn-ghost p-1.5" onClick={(e) => { e.stopPropagation(); setWhisperExpanded(p => !p) }}>
+                                {whisperExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                            </button>
+                        </div>
+                        {whisperExpanded && (
+                            <div className="border-t border-border/50 px-4 py-4 space-y-3 animate-fade-in">
+                                <label className="text-xs text-muted-foreground mb-2 block font-medium">Select a Whisper model (auto-downloaded from HuggingFace on first use)</label>
+                                <LocalModelPicker
+                                    models={RECOMMENDED_WHISPER_MODELS}
+                                    selected={whisperModel}
+                                    onSelect={id => { setWhisperModel(id); setSavedWhisper(false) }}
+                                />
+                                <div>
+                                    <label className="text-[10px] text-muted-foreground mb-1 block">Or enter a custom model ID</label>
+                                    <input
+                                        className="input text-xs"
+                                        placeholder="e.g. openai/whisper-medium.en"
+                                        value={RECOMMENDED_WHISPER_MODELS.some(m => m.id === whisperModel) ? '' : whisperModel}
+                                        onChange={e => { setWhisperModel(e.target.value); setSavedWhisper(false) }}
+                                    />
+                                </div>
+                                <button className="btn-primary text-xs py-1.5 px-3" onClick={handleSaveWhisper} disabled={savingWhisper || !whisperModel.trim()}>
+                                    {savedWhisper ? <><CheckCircle2 className="w-3.5 h-3.5" /> Saved</> : savingWhisper ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Save className="w-3.5 h-3.5" /> Save</>}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            ) : (
+                <div className="space-y-2">
+                    {ttsModels.length > 0 ? ttsModels.map(m => {
+                        const removeKey = `${m.provider_id}:${m.model_id}`
+                        const provider = (providers as ProviderRow[]).find(p => p.id === m.provider_id)
+                        const meta = provider ? PROVIDER_META[provider.provider_name] : undefined
+                        return (
+                            <div key={removeKey} className="glass-card px-4 py-3 flex items-center gap-3">
+                                {provider && <div className={`w-7 h-7 rounded-lg flex items-center justify-center border flex-shrink-0 ${meta?.color ?? 'bg-muted border-border'}`}><ProviderIcon providerId={provider.provider_name} className="w-3.5 h-3.5" /></div>}
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium truncate">{m.model_name}</p>
+                                    <p className="text-xs text-muted-foreground truncate">{getProviderDisplay(m.provider_id)}</p>
+                                </div>
+                                <button className="btn-ghost p-1.5 text-red-400" onClick={() => handleRemove(m)} disabled={removing === removeKey}>
+                                    {removing === removeKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                </button>
+                            </div>
+                        )
+                    }) : <p className="text-xs text-muted-foreground italic px-1">No TTS models configured.</p>}
+                </div>
+            )}
         </div>
     )
 }
@@ -874,141 +1858,76 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
     const [apiKey, setApiKey] = useState('')
     const [baseUrl, setBaseUrl] = useState('')
     const [showKey, setShowKey] = useState(false)
-
-    const [loadingModels, setLoadingModels] = useState(false)
-    const [models, setModels] = useState<{ id: string; name: string }[] | null>(null)
-    const [modelError, setModelError] = useState<string | null>(null)
-    const [modelSearch, setModelSearch] = useState('')
-    const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set())
-    const [manualModel, setManualModel] = useState('')
-
+    const [showAdvanced, setShowAdvanced] = useState(false)
+    const [testing, setTesting] = useState(false)
+    const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
     const [saving, setSaving] = useState(false)
-    const [saved, setSaved] = useState(false)
     const [saveError, setSaveError] = useState<string | null>(null)
-    const [createdProviderId, setCreatedProviderId] = useState<string | null>(null)
 
     const meta = PROVIDER_META[providerName]
 
     const handleProviderChange = (id: string) => {
         setProviderName(id); setDisplayName(''); setApiKey(''); setBaseUrl('')
-        setShowKey(false); setModels(null); setModelError(null)
-        setModelSearch(''); setSelectedModels(new Set()); setManualModel('')
-        setSaved(false); setSaveError(null)
-        setCreatedProviderId(null)
-        setShowAdvanced(false)
+        setShowKey(false); setTestResult(null); setSaveError(null); setShowAdvanced(false)
     }
 
-    const filteredModels = useMemo(() => {
-        if (!models) return []
-        const q = modelSearch.toLowerCase()
-        return q ? models.filter(m => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)) : models
-    }, [models, modelSearch])
-
-    const handleFetchModels = async () => {
-        setLoadingModels(true); setModelError(null); setModels(null)
-        setSelectedModels(new Set()); setModelSearch('')
+    const handleTest = async () => {
+        setTesting(true); setTestResult(null)
         try {
-            let pid = createdProviderId
-            if (!pid) {
-                const temp = await createProvider({
-                    provider_name: providerName,
-                    display_name: displayName || meta?.name || providerName,
-                    api_key: apiKey || undefined,
-                    base_url: baseUrl || undefined,
-                })
-                pid = temp.id
-                setCreatedProviderId(pid)
-            } else {
-                await updateProvider(pid, {
-                    display_name: displayName || meta?.name || providerName,
-                    api_key: apiKey || undefined,
-                    base_url: baseUrl || undefined,
-                })
-            }
-            const list = await listModels(pid!)
-            setModels(list)
-            if (list.length <= 10) setSelectedModels(new Set(list.map((m: { id: string }) => m.id)))
+            // Create a temporary provider to test
+            const temp = await createProvider({
+                provider_name: providerName,
+                display_name: displayName || meta?.name || providerName,
+                api_key: apiKey || undefined,
+                base_url: baseUrl || undefined,
+            })
+            const result = await testConnection(temp.id)
+            // Delete the temp provider after testing (will be recreated on save)
+            await import('@/lib/api').then(a => a.deleteProvider(temp.id))
+            setTestResult(result)
         } catch (e: unknown) {
             const err = e as { response?: { data?: { detail?: string } }; message?: string }
-            setModelError(err?.response?.data?.detail ?? err?.message ?? 'Failed to fetch models')
-        } finally { setLoadingModels(false) }
+            setTestResult({ success: false, message: err?.response?.data?.detail ?? err?.message ?? 'Test failed' })
+        } finally { setTesting(false) }
     }
 
-    const toggleModel = (id: string) => setSelectedModels(prev => {
-        const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n
-    })
-
     const handleSave = async () => {
-        const modelsToSave = models ? [...selectedModels] : manualModel.trim() ? [manualModel.trim()] : []
-        if (!modelsToSave.length) { setSaveError('Select at least one model or type a model ID.'); return }
         setSaving(true); setSaveError(null)
         try {
-            const enabledList = modelsToSave.map(modelId => {
-                const label = models?.find(m => m.id === modelId)?.name ?? modelId
-                return { id: modelId, name: label }
+            await createProvider({
+                provider_name: providerName,
+                display_name: displayName || meta?.name || providerName,
+                api_key: apiKey || undefined,
+                base_url: baseUrl || undefined,
             })
-            if (createdProviderId) {
-                await updateProvider(createdProviderId, {
-                    display_name: displayName || meta?.name || providerName,
-                    api_key: apiKey || undefined,
-                    base_url: baseUrl || undefined,
-                    default_model: modelsToSave[0],
-                    enabled_models: enabledList,
-                })
-            } else {
-                await createProvider({
-                    provider_name: providerName,
-                    display_name: displayName || meta?.name || providerName,
-                    api_key: apiKey || undefined,
-                    base_url: baseUrl || undefined,
-                    default_model: modelsToSave[0],
-                    enabled_models: enabledList,
-                })
-            }
-            setSaved(true); onAdded()
-            setModels(null); setSelectedModels(new Set()); setManualModel(''); setSaveError(null)
-            setCreatedProviderId(null)
-            setTimeout(() => setSaved(false), 3000)
+            onAdded()
         } catch (e: unknown) {
             const err = e as { response?: { data?: { detail?: string } }; message?: string }
             setSaveError(err?.response?.data?.detail ?? err?.message ?? 'Save failed')
         } finally { setSaving(false) }
     }
 
-    const canFetch = meta?.needsUrl ? !!baseUrl : !!apiKey
-    const totalSelected = models ? selectedModels.size : (manualModel.trim() ? 1 : 0)
-
-    const [showAdvanced, setShowAdvanced] = useState(false)
+    const canSave = meta?.needsUrl ? !!baseUrl : (!!apiKey || isLocalProvider(providerName))
 
     return (
         <div className="glass-card shadow-glass-lg p-5 space-y-4 border border-accent/30 animate-fade-in">
-            <div className="flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-accent">Add Provider</h4>
-                {saved && (
-                    <span className="text-xs text-emerald-400 flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Saved
-                    </span>
-                )}
-            </div>
+            <h4 className="text-sm font-semibold text-accent">Add Provider</h4>
 
-            {/* Step 1 — Provider */}
+            {/* Step 1 — Provider type */}
             <div>
-                <label className="text-xs text-muted-foreground mb-2 block font-medium">1. Select provider</label>
+                <label className="text-xs text-muted-foreground mb-2 block font-medium">1. Select provider type</label>
                 <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
                     {PROVIDER_NAMES.map(id => {
                         const m = PROVIDER_META[id]
                         return (
                             <button key={id} onClick={() => handleProviderChange(id)}
-                                className={`p-2 rounded-xl border text-center text-xs transition-all duration-300 ${providerName === id ? `${m.color} border-accent ring-2 ring-accent/30 scale-105 shadow-glass-md` : 'border-border/50 hover:bg-muted/30 hover:shadow-glass-sm'
-                                    }`}
+                                className={`p-2 rounded-xl border text-center text-xs transition-all duration-300 ${providerName === id ? `${m.color} border-accent ring-2 ring-accent/30 scale-105 shadow-glass-md` : 'border-border/50 hover:bg-muted/30 hover:shadow-glass-sm'}`}
                             >
                                 <div className="flex justify-center mb-1.5">
                                     <ProviderIcon providerId={id} className="w-4 h-4" />
                                 </div>
                                 <div className="text-[10px] leading-tight font-medium truncate">{m.name}</div>
-                                {isLocalProvider(id) && (
-                                    <div className="mt-1 text-[9px] text-lime-300/90 font-medium">Local</div>
-                                )}
+                                {isLocalProvider(id) && <div className="mt-1 text-[9px] text-lime-300/90 font-medium">Local</div>}
                             </button>
                         )
                     })}
@@ -1019,7 +1938,7 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
             <div className="space-y-2">
                 <label className="text-xs text-muted-foreground font-medium block">2. Enter credentials</label>
                 {isLocalProvider(providerName) && (
-                    <p className="text-[10px] text-lime-300/90">Local provider (runs on this machine)</p>
+                    <p className="text-[10px] text-lime-300/90">Local provider — no API key required</p>
                 )}
                 <input className="input text-sm" placeholder={`Display name (default: ${meta?.name})`} value={displayName} onChange={e => setDisplayName(e.target.value)} />
 
@@ -1041,16 +1960,12 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
                                 {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                             </button>
                         </div>
-                        <button
-                            type="button"
-                            className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 mt-1 transition-colors"
-                            onClick={() => setShowAdvanced(!showAdvanced)}
-                        >
-                            <Sliders className="w-3 h-3" /> {showAdvanced ? 'Hide advanced settings' : 'Show advanced settings (Custom Base URL)'}
+                        <button type="button" className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 mt-1 transition-colors" onClick={() => setShowAdvanced(!showAdvanced)}>
+                            <Sliders className="w-3 h-3" /> {showAdvanced ? 'Hide advanced' : 'Custom Base URL'}
                         </button>
                         {showAdvanced && (
                             <div className="animate-fade-in pt-1">
-                                <label className="text-[10px] text-muted-foreground mb-1 block">Base URL Override (e.g. for API gateways)</label>
+                                <label className="text-[10px] text-muted-foreground mb-1 block">Base URL Override</label>
                                 <input className="input text-sm" placeholder="https://api.openai.com/v1" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
                             </div>
                         )}
@@ -1058,101 +1973,48 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
                 )}
             </div>
 
-            {/* Step 3 — Test + model fetch */}
+            {/* Step 3 — Test connection */}
             <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                    <label className="text-xs text-muted-foreground font-medium">3. Test &amp; fetch models</label>
-                    <button className="btn-primary text-xs py-1.5 px-3 gap-1.5" onClick={handleFetchModels} disabled={loadingModels || !canFetch}>
-                        {loadingModels ? <Loader2 className="w-3 h-3 animate-spin" /> : <Globe2 className="w-3 h-3" />}
-                        {models ? 'Refresh' : 'Test & Fetch Models'}
-                    </button>
-                </div>
-
-                {modelError && (
-                    <div className="text-xs p-3 rounded-lg bg-destructive/10 text-red-300 border border-destructive/20 space-y-1">
-                        <p className="font-medium">Could not fetch model list</p>
-                        <p className="opacity-80">{modelError}</p>
-                        <p className="text-muted-foreground mt-1">Type model ID directly:</p>
-                        <input className="input text-xs mt-1" placeholder="e.g. gpt-4o" value={manualModel} onChange={e => setManualModel(e.target.value)} />
+                <label className="text-xs text-muted-foreground font-medium">3. Test connection</label>
+                <button className="btn-ghost text-xs border border-border w-full justify-center py-2" onClick={handleTest} disabled={testing || !canSave}>
+                    {testing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe2 className="w-3.5 h-3.5" />}
+                    {testing ? 'Testing…' : 'Test Connection'}
+                </button>
+                {testResult && (
+                    <div className={`flex items-start gap-2 text-xs p-2.5 rounded-lg ${testResult.success ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' : 'bg-destructive/10 text-red-300 border border-destructive/20'}`}>
+                        {testResult.success ? <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" /> : <XCircle className="w-3.5 h-3.5 flex-shrink-0" />}
+                        {testResult.message}
                     </div>
-                )}
-
-                {models !== null && models.length > 0 && (
-                    <div className="space-y-1.5">
-                        <div className="relative">
-                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                            <input className="input text-xs pl-8" placeholder={`Filter ${models.length} models…`} value={modelSearch} onChange={e => setModelSearch(e.target.value)} />
-                        </div>
-                        <div className="flex items-center justify-between px-1">
-                            <span className="text-[10px] text-muted-foreground">{selectedModels.size} / {filteredModels.length} selected</span>
-                            <button className="text-[10px] text-accent hover:underline" onClick={() => {
-                                selectedModels.size === filteredModels.length
-                                    ? setSelectedModels(new Set())
-                                    : setSelectedModels(new Set(filteredModels.map(m => m.id)))
-                            }}>{selectedModels.size === filteredModels.length ? 'Deselect all' : 'Select all'}</button>
-                        </div>
-                        <div className="max-h-52 overflow-y-auto rounded-lg border border-border/50 bg-background/30 divide-y divide-border/20">
-                            {filteredModels.map(m => {
-                                const checked = selectedModels.has(m.id)
-                                return (
-                                    <button key={m.id} onClick={() => toggleModel(m.id)} className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2.5 hover:bg-muted/30 transition-colors ${checked ? 'bg-accent/5' : ''}`}>
-                                        <div className={`w-4 h-4 rounded flex-shrink-0 flex items-center justify-center border transition-colors ${checked ? 'bg-accent border-accent' : 'border-border'}`}>
-                                            {checked && <Check className="w-2.5 h-2.5 text-accent-foreground" />}
-                                        </div>
-                                        <span className={checked ? 'text-foreground' : 'text-muted-foreground'}>{m.name}</span>
-                                    </button>
-                                )
-                            })}
-                        </div>
-                    </div>
-                )}
-
-                {models === null && !modelError && (
-                    <input className="input text-xs" placeholder="Or type model ID directly (e.g. gpt-4o)" value={manualModel} onChange={e => setManualModel(e.target.value)} />
                 )}
             </div>
 
             {saveError && <div className="text-xs p-2.5 rounded-lg bg-destructive/10 text-red-300 border border-destructive/20">{saveError}</div>}
 
-            {/* Step 4 — Save */}
-            <button className="btn-primary w-full justify-center py-2.5" onClick={handleSave} disabled={saving || totalSelected === 0}>
+            <button className="btn-primary w-full justify-center py-2.5" onClick={handleSave} disabled={saving || !canSave}>
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                {saving ? `Saving…` : totalSelected > 0 ? `Save Provider with ${totalSelected} model${totalSelected > 1 ? 's' : ''}` : 'Select models above'}
+                {saving ? 'Saving…' : 'Save Provider'}
             </button>
-            <p className="text-[10px] text-muted-foreground text-center">Panel stays open — add more providers after saving</p>
+            <p className="text-[10px] text-muted-foreground text-center">After saving, add models in the Chat, Vision, Embedding, or Audio tabs</p>
         </div>
     )
 }
 
 // ── Provider Card ────────────────────────────────────────────────────────────
-function ProviderCard({ provider, expanded, onToggle, onDelete, onSetDefault }: {
+function ProviderCard({ provider, expanded, onToggle, onDelete }: {
     provider: ProviderRow; expanded: boolean
-    onToggle: () => void; onDelete: () => void; onSetDefault: () => void
+    onToggle: () => void; onDelete: () => void
 }) {
     const qc = useQueryClient()
     const [testing, setTesting] = useState(false)
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
-    const [selectedModel, setSelectedModel] = useState(provider.default_model ?? '')
-    const [savingModel, setSavingModel] = useState(false)
-    const [modelSaved, setModelSaved] = useState(false)
-    const [modelSearch, setModelSearch] = useState('')
-    const [enabledModels, setEnabledModels] = useState<{ id: string; name: string }[]>(provider.enabled_models ?? [])
-    const [newModelId, setNewModelId] = useState('')
-    const [newModelName, setNewModelName] = useState('')
-    const [addingModel, setAddingModel] = useState(false)
-    const [removingModel, setRemovingModel] = useState<string | null>(null)
+    const [editApiKey, setEditApiKey] = useState('')
+    const [editBaseUrl, setEditBaseUrl] = useState(provider.base_url ?? '')
+    const [editDisplayName, setEditDisplayName] = useState(provider.display_name ?? '')
+    const [showKey, setShowKey] = useState(false)
+    const [saving, setSaving] = useState(false)
+    const [saved, setSaved] = useState(false)
 
     const meta = PROVIDER_META[provider.provider_name]
-    const filteredModels = useMemo(() => {
-        const list = enabledModels
-        const q = modelSearch.toLowerCase()
-        return q ? list.filter(m => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)) : list
-    }, [enabledModels, modelSearch])
-
-    // Sync enabledModels with provider changes
-    useEffect(() => {
-        setEnabledModels(provider.enabled_models ?? [])
-    }, [provider.enabled_models])
 
     const handleTest = async () => {
         setTesting(true); setTestResult(null)
@@ -1161,63 +2023,24 @@ function ProviderCard({ provider, expanded, onToggle, onDelete, onSetDefault }: 
         finally { setTesting(false) }
     }
 
-    const handleSaveDefaultModel = async () => {
-        setSavingModel(true)
-        await updateProvider(provider.id, { default_model: selectedModel })
+    const handleSave = async () => {
+        setSaving(true)
+        await updateProvider(provider.id, {
+            display_name: editDisplayName || undefined,
+            api_key: editApiKey || undefined,
+            base_url: editBaseUrl || undefined,
+        })
         qc.invalidateQueries({ queryKey: ['providers'] })
-        setSavingModel(false); setModelSaved(true)
-        setTimeout(() => setModelSaved(false), 2000)
-    }
-
-    const handleAddModel = async () => {
-        if (!newModelId.trim()) return
-        setAddingModel(true)
-        const modelToAdd = { id: newModelId.trim(), name: newModelName.trim() || newModelId.trim() }
-        const updatedModels = [...enabledModels, modelToAdd]
-        try {
-            await updateProvider(provider.id, { enabled_models: updatedModels })
-            setEnabledModels(updatedModels)
-            setNewModelId('')
-            setNewModelName('')
-            qc.invalidateQueries({ queryKey: ['providers'] })
-        } catch (err) {
-            console.error('Failed to add model:', err)
-        } finally {
-            setAddingModel(false)
-        }
-    }
-
-    const handleRemoveModel = async (modelId: string) => {
-        setRemovingModel(modelId)
-        const updatedModels = enabledModels.filter(m => m.id !== modelId)
-        try {
-            await updateProvider(provider.id, { enabled_models: updatedModels })
-            setEnabledModels(updatedModels)
-            // If the removed model was the default, clear it
-            if (selectedModel === modelId) {
-                setSelectedModel(updatedModels[0]?.id ?? '')
-            }
-            qc.invalidateQueries({ queryKey: ['providers'] })
-        } catch (err) {
-            console.error('Failed to remove model:', err)
-        } finally {
-            setRemovingModel(null)
-        }
+        setSaving(false); setSaved(true); setEditApiKey('')
+        setTimeout(() => setSaved(false), 2000)
     }
 
     return (
         <div className="glass-card-hover transition-all duration-300">
             <div
                 className="flex items-center gap-3 px-4 py-3 cursor-pointer"
-                onClick={onToggle}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        onToggle()
-                    }
-                }}
+                onClick={onToggle} role="button" tabIndex={0}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle() } }}
             >
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${meta?.color ?? 'bg-muted border-border'}`}>
                     <ProviderIcon providerId={provider.provider_name} className="w-4 h-4" />
@@ -1226,19 +2049,13 @@ function ProviderCard({ provider, expanded, onToggle, onDelete, onSetDefault }: 
                     <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-sm">{sanitizeProviderDisplayName(provider.display_name) || provider.provider_name}</span>
                         <span className="chip-muted text-[10px]">{provider.provider_name}</span>
-                        {isLocalProvider(provider.provider_name) && <span className="chip-muted text-[10px]">Local provider</span>}
-                        {provider.is_system_default && <span className="chip-accent text-[10px]"><Star className="w-2.5 h-2.5 mr-0.5 inline" />Default</span>}
+                        {isLocalProvider(provider.provider_name) && <span className="chip-muted text-[10px]">Local</span>}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                        {provider.has_api_key ? 'Key set' : provider.base_url ?? 'No credentials'}
-                        {provider.default_model ? ` · ${provider.default_model}` : ''}
-                        {enabledModels.length > 0 && ` · ${enabledModels.length} model${enabledModels.length !== 1 ? 's' : ''}`}
+                        {provider.has_api_key ? 'Key configured' : provider.base_url ?? 'No credentials set'}
                     </p>
                 </div>
                 <div className="flex gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                    {!provider.is_system_default && (
-                        <button className="btn-ghost p-1.5" title="Set as default" onClick={onSetDefault}><Star className="w-3.5 h-3.5" /></button>
-                    )}
                     <button className="btn-ghost p-1.5 text-red-400" onClick={onDelete}><Trash2 className="w-3.5 h-3.5" /></button>
                     <button className="btn-ghost p-1.5" onClick={onToggle}>
                         {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
@@ -1248,125 +2065,46 @@ function ProviderCard({ provider, expanded, onToggle, onDelete, onSetDefault }: 
 
             {expanded && (
                 <div className="border-t border-border/50 px-4 py-4 space-y-4 animate-fade-in">
-                    <button className="btn-ghost text-xs border border-border w-full justify-center py-2" onClick={handleTest} disabled={testing}>
-                        {testing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe2 className="w-3.5 h-3.5" />}
-                        {testing ? 'Testing…' : 'Test Connection'}
-                    </button>
-                    {testResult && (
-                        <div className={`flex items-start gap-2 text-xs p-2.5 rounded-lg ${testResult.success ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' : 'bg-destructive/10 text-red-300 border border-destructive/20'}`}>
-                            {testResult.success ? <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" /> : <XCircle className="w-3.5 h-3.5 flex-shrink-0" />}
-                            {testResult.message}
-                        </div>
-                    )}
-
-                    {/* Enabled Models Section */}
+                    {/* Edit credentials */}
                     <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                            <label className="text-xs font-medium text-muted-foreground">Enabled Models</label>
-                            <span className="text-[10px] text-muted-foreground">{enabledModels.length} model{enabledModels.length !== 1 ? 's' : ''}</span>
-                        </div>
-
-                        {enabledModels.length > 0 && (
-                            <>
-                                <div className="relative">
-                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
-                                    <input
-                                        className="input text-xs pl-7 w-full"
-                                        placeholder="Search models..."
-                                        value={modelSearch}
-                                        onChange={e => setModelSearch(e.target.value)}
-                                    />
-                                </div>
-                                <div className="max-h-40 overflow-y-auto rounded-lg border border-border/50 bg-background/30 divide-y divide-border/20">
-                                    {filteredModels.map(m => (
-                                        <div key={m.id} className="flex items-center justify-between px-3 py-2 text-xs hover:bg-muted/30 transition-colors">
-                                            <div className="flex items-center gap-2 min-w-0 flex-1">
-                                                {selectedModel === m.id ? (
-                                                    <Zap className="w-3 h-3 flex-shrink-0 text-accent" />
-                                                ) : (
-                                                    <span className="w-3" />
-                                                )}
-                                                <span className="truncate">{m.name}</span>
-                                                <span className="text-muted-foreground/50 font-mono text-[10px] truncate">{m.id}</span>
-                                            </div>
-                                            <div className="flex items-center gap-1 flex-shrink-0">
-                                                <button
-                                                    className="btn-ghost p-1 text-[10px] hover:text-accent"
-                                                    onClick={() => setSelectedModel(m.id)}
-                                                    title="Set as default"
-                                                >
-                                                    {selectedModel === m.id ? <Star className="w-3 h-3 text-accent" /> : <Star className="w-3 h-3" />}
-                                                </button>
-                                                <button
-                                                    className="btn-ghost p-1 text-red-400 hover:bg-red-500/10"
-                                                    onClick={() => handleRemoveModel(m.id)}
-                                                    disabled={removingModel === m.id}
-                                                    title="Remove model"
-                                                >
-                                                    {removingModel === m.id ? (
-                                                        <Loader2 className="w-3 h-3 animate-spin" />
-                                                    ) : (
-                                                        <X className="w-3 h-3" />
-                                                    )}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </>
+                        <label className="text-xs font-medium text-muted-foreground">Edit Credentials</label>
+                        <input className="input text-sm" placeholder="Display name" value={editDisplayName} onChange={e => setEditDisplayName(e.target.value)} />
+                        {meta?.needsUrl && (
+                            <input className="input text-sm" placeholder={meta.urlPlaceholder ?? 'Base URL'} value={editBaseUrl} onChange={e => setEditBaseUrl(e.target.value)} />
                         )}
-
-                        {/* Add new model */}
-                        <div className="flex flex-col gap-2 pt-2 border-t border-border/30">
-                            <p className="text-[10px] text-muted-foreground">Add a new model to this provider:</p>
-                            <div className="flex gap-2">
-                                <input
-                                    className="input text-xs flex-1 py-1.5"
-                                    placeholder="Model ID (e.g. gpt-4o)"
-                                    value={newModelId}
-                                    onChange={e => setNewModelId(e.target.value)}
-                                    onKeyDown={e => { if (e.key === 'Enter') handleAddModel() }}
-                                />
-                                <input
-                                    className="input text-xs flex-1 py-1.5"
-                                    placeholder="Display name (optional)"
-                                    value={newModelName}
-                                    onChange={e => setNewModelName(e.target.value)}
-                                    onKeyDown={e => { if (e.key === 'Enter') handleAddModel() }}
-                                />
-                                <button
-                                    className="btn-primary text-xs py-1.5 px-3 whitespace-nowrap"
-                                    onClick={handleAddModel}
-                                    disabled={addingModel || !newModelId.trim()}
-                                >
-                                    {addingModel ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Save Default Model */}
-                    <div className="space-y-2 pt-2 border-t border-border/30">
-                        <div className="flex items-center justify-between">
-                            <label className="text-xs font-medium text-muted-foreground">Default Model</label>
-                            {modelSaved && <span className="text-[10px] text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Saved</span>}
-                        </div>
-                        <div className="flex gap-2">
+                        <div className="relative">
                             <input
-                                className="input text-xs flex-1 py-1.5"
-                                placeholder="Default model ID"
-                                value={selectedModel}
-                                onChange={e => setSelectedModel(e.target.value)}
+                                type={showKey ? 'text' : 'password'}
+                                className="input text-sm pr-10"
+                                placeholder={provider.has_api_key ? '••••••• (leave blank to keep current)' : (meta?.placeholder ?? 'API Key')}
+                                value={editApiKey}
+                                onChange={e => setEditApiKey(e.target.value)}
+                                autoComplete="off"
                             />
-                            <button
-                                className="btn-primary text-xs py-1.5 px-3 whitespace-nowrap"
-                                onClick={handleSaveDefaultModel}
-                                disabled={savingModel || !selectedModel.trim()}
-                            >
-                                {savingModel ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-                                {savingModel ? 'Saving…' : 'Save Default'}
+                            <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setShowKey(v => !v)}>
+                                {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                             </button>
                         </div>
+                        {!meta?.needsUrl && (
+                            <input className="input text-sm" placeholder="Base URL override (optional)" value={editBaseUrl} onChange={e => setEditBaseUrl(e.target.value)} />
+                        )}
+                        <button className="btn-primary text-xs py-1.5 px-3" onClick={handleSave} disabled={saving}>
+                            {saved ? <><CheckCircle2 className="w-3.5 h-3.5" /> Saved</> : saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Save className="w-3.5 h-3.5" /> Save Changes</>}
+                        </button>
+                    </div>
+
+                    {/* Test connection */}
+                    <div className="space-y-2 pt-2 border-t border-border/30">
+                        <button className="btn-ghost text-xs border border-border w-full justify-center py-2" onClick={handleTest} disabled={testing}>
+                            {testing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe2 className="w-3.5 h-3.5" />}
+                            {testing ? 'Testing…' : 'Test Connection'}
+                        </button>
+                        {testResult && (
+                            <div className={`flex items-start gap-2 text-xs p-2.5 rounded-lg ${testResult.success ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' : 'bg-destructive/10 text-red-300 border border-destructive/20'}`}>
+                                {testResult.success ? <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" /> : <XCircle className="w-3.5 h-3.5 flex-shrink-0" />}
+                                {testResult.message}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

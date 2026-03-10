@@ -109,6 +109,21 @@ class LLMGateway:
         base_url: str | None = None,
         max_tokens: int = 2000,
     ) -> str:
+        if provider_name == "ollama":
+            base = self._resolve_base_url(provider_name, base_url)
+            base = (base or "http://localhost:11434").rstrip("/")
+            body: dict = {
+                "model": model,
+                "messages": self._to_ollama_messages(messages),
+                "stream": False,
+                "options": {"num_predict": max_tokens},
+            }
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                resp = await client.post(f"{base}/api/chat", json=body)
+                resp.raise_for_status()
+                data = resp.json()
+                return (data.get("message") or {}).get("content") or ""
+
         response = await litellm.acompletion(
             model=self._resolve_model(provider_name, model),
             messages=messages,
@@ -580,7 +595,26 @@ class LLMGateway:
             content = msg.get("content") or ""
 
             if role in ("system", "user"):
-                result.append({"role": role, "content": content})
+                if isinstance(content, list):
+                    # Multimodal content: extract text parts and base64 images
+                    text_parts: list[str] = []
+                    images: list[str] = []
+                    for part in content:
+                        if not isinstance(part, dict):
+                            continue
+                        if part.get("type") == "text":
+                            text_parts.append(part.get("text", ""))
+                        elif part.get("type") == "image_url":
+                            url = (part.get("image_url") or {}).get("url", "")
+                            if url.startswith("data:") and "," in url:
+                                # data:image/jpeg;base64,<base64_data>
+                                images.append(url.split(",", 1)[1])
+                    ollama_msg: dict = {"role": role, "content": " ".join(text_parts)}
+                    if images:
+                        ollama_msg["images"] = images
+                    result.append(ollama_msg)
+                else:
+                    result.append({"role": role, "content": content})
 
             elif role == "assistant":
                 converted: dict = {"role": "assistant", "content": content}

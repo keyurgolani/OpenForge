@@ -8,11 +8,11 @@ interface WsManager {
     isConnected: boolean
 }
 
-const managers = new Map<string, { ws: WebSocket; handlers: Map<string, Set<WsHandler>>; reconnectTimer: ReturnType<typeof setTimeout> | null; statusListeners: Set<(connected: boolean) => void>; isConnected: boolean; reconnectAttempt: number }>()
+const managers = new Map<string, { ws: WebSocket; handlers: Map<string, Set<WsHandler>>; reconnectTimer: ReturnType<typeof setTimeout> | null; pingInterval: ReturnType<typeof setInterval> | null; statusListeners: Set<(connected: boolean) => void>; isConnected: boolean; reconnectAttempt: number }>()
 
 function getOrCreateManager(workspaceId: string) {
     if (!managers.has(workspaceId)) {
-        managers.set(workspaceId, { ws: null as unknown as WebSocket, handlers: new Map(), reconnectTimer: null, statusListeners: new Set(), isConnected: false, reconnectAttempt: 0 })
+        managers.set(workspaceId, { ws: null as unknown as WebSocket, handlers: new Map(), reconnectTimer: null, pingInterval: null, statusListeners: new Set(), isConnected: false, reconnectAttempt: 0 })
     }
     return managers.get(workspaceId)!
 }
@@ -41,6 +41,13 @@ export function useWorkspaceWebSocket(workspaceId: string): WsManager {
                 clearTimeout(manager.reconnectTimer)
                 manager.reconnectTimer = null
             }
+            // Send a ping every 20s to keep the Vite proxy connection alive
+            if (manager.pingInterval) clearInterval(manager.pingInterval)
+            manager.pingInterval = setInterval(() => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'ping' }))
+                }
+            }, 20000)
         }
 
         ws.onmessage = (event) => {
@@ -58,9 +65,18 @@ export function useWorkspaceWebSocket(workspaceId: string): WsManager {
             } catch { /* ignore parse errors */ }
         }
 
-        ws.onclose = () => {
+        ws.onclose = (event) => {
             manager.isConnected = false
             manager.statusListeners.forEach(l => l(false))
+            if (manager.pingInterval) {
+                clearInterval(manager.pingInterval)
+                manager.pingInterval = null
+            }
+            // Auth rejection — don't retry, let AuthGuard handle it
+            if (event.code === 4001) {
+                window.dispatchEvent(new Event('openforge:unauthorized'))
+                return
+            }
             // Exponential backoff with jitter: min(30s, 1s × 2^attempt) + up to 1s random
             const attempt = manager.reconnectAttempt
             const baseDelay = Math.min(30000, 1000 * Math.pow(2, attempt))

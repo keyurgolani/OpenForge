@@ -188,6 +188,9 @@ async def _process_knowledge_file(
 
     logger.info("Processing %s knowledge %s", knowledge_type, knowledge_id)
 
+    processor_result: dict = {}
+    extraction_succeeded = False
+
     async with AsyncSessionLocal() as db:
         try:
             result = await db.execute(
@@ -231,6 +234,7 @@ async def _process_knowledge_file(
 
             knowledge.embedding_status = "done"
             await db.commit()
+            extraction_succeeded = True
 
             logger.info(
                 "Knowledge %s processed successfully (type=%s)", knowledge_id, knowledge_type
@@ -256,6 +260,29 @@ async def _process_knowledge_file(
                 await db.commit()
             except Exception:
                 pass
+
+    # Run knowledge intelligence after extraction so it can use the extracted content.
+    # This is done outside the DB session to avoid holding a connection during LLM calls.
+    if extraction_succeeded and processor_result.get("content"):
+        try:
+            from openforge.services.automation_config import is_auto_knowledge_intelligence_enabled
+            from openforge.services.knowledge_processing_service import knowledge_processing_service
+
+            async with AsyncSessionLocal() as intelli_db:
+                auto_intelligence = await is_auto_knowledge_intelligence_enabled(intelli_db)
+
+            if auto_intelligence:
+                await knowledge_processing_service.run_knowledge_intelligence_job(
+                    knowledge_id=knowledge_id,
+                    workspace_id=workspace_id,
+                    audit_task_type="generate_knowledge_intelligence",
+                )
+        except Exception as intelli_err:
+            logger.warning(
+                "Post-extraction intelligence failed for knowledge %s: %s",
+                knowledge_id,
+                intelli_err,
+            )
 
 
 async def _run_processor(
@@ -287,6 +314,48 @@ async def _run_processor(
     else:
         logger.warning("No processor for knowledge type: %s", knowledge_type)
         return {}
+
+
+@router.post("/{workspace_id}/knowledge/{knowledge_id}/reprocess", status_code=202)
+async def reprocess_knowledge_file(
+    workspace_id: UUID,
+    knowledge_id: UUID,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """Re-trigger content extraction for an already-uploaded file-based knowledge item."""
+    result = await db.execute(
+        select(Knowledge).where(
+            Knowledge.id == knowledge_id,
+            Knowledge.workspace_id == workspace_id,
+        )
+    )
+    knowledge = result.scalar_one_or_none()
+    if not knowledge:
+        raise HTTPException(status_code=404, detail="Knowledge not found")
+
+    reprocessable_types = {"image", "audio", "pdf", "docx", "xlsx", "pptx"}
+    if knowledge.type not in reprocessable_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Knowledge type '{knowledge.type}' does not support reprocessing",
+        )
+
+    if not knowledge.file_path or not os.path.exists(knowledge.file_path):
+        raise HTTPException(status_code=404, detail="Original file not found on disk")
+
+    knowledge.embedding_status = "processing"
+    await db.commit()
+
+    background_tasks.add_task(
+        _process_knowledge_file,
+        knowledge_id=knowledge_id,
+        workspace_id=workspace_id,
+        knowledge_type=knowledge.type,
+        file_path=knowledge.file_path,
+    )
+
+    return {"status": "processing", "knowledge_id": str(knowledge_id)}
 
 
 @router.get("/{workspace_id}/knowledge/{knowledge_id}/file")

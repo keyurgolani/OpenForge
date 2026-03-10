@@ -96,6 +96,11 @@ def _to_list_item(knowledge: Knowledge) -> KnowledgeListItem:
         url=knowledge.url,
         url_title=knowledge.url_title,
         gist_language=knowledge.gist_language,
+        file_path=knowledge.file_path,
+        file_size=knowledge.file_size,
+        mime_type=knowledge.mime_type,
+        thumbnail_path=knowledge.thumbnail_path,
+        file_metadata=knowledge.file_metadata,
         created_at=knowledge.created_at,
         updated_at=knowledge.updated_at,
     )

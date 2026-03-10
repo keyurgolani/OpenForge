@@ -107,6 +107,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Auth middleware (added last = outermost; OPTIONS pass-through ensures CORS preflight works)
+from openforge.middleware.auth import AuthMiddleware
+app.add_middleware(AuthMiddleware)
+
 # Health check endpoint
 @app.get("/api/health")
 async def health_check():
@@ -142,6 +146,10 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": detail, "type": "internal_error"},
     )
 
+
+# Register auth router (separate prefix, not under /api/v1)
+from openforge.api.auth import router as auth_router
+app.include_router(auth_router)
 
 # Register API router
 from openforge.api.router import api_router

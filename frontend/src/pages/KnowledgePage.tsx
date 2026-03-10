@@ -17,10 +17,20 @@ import {
     FileText, ChevronDown, Pencil, Check, Link2, ExternalLink,
     Download, File, FileImage, FileAudio, Music,
 } from 'lucide-react'
-import BlockNoteEditor, { BlockNoteViewer } from '@/components/knowledge/BlockNoteEditor'
+import BlockNoteEditor from '@/components/knowledge/BlockNoteEditor'
 import MarkdownIt from 'markdown-it'
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
+
+function RenderedContent({ content, className }: { content: string; className?: string }) {
+    const html = md.render(content || '')
+    return (
+        <div
+            className={`prose prose-sm prose-invert max-w-none text-foreground/85 leading-relaxed ${className ?? ''}`}
+            dangerouslySetInnerHTML={{ __html: html }}
+        />
+    )
+}
 
 const MIN_KNOWLEDGE_INTELLIGENCE_WIDTH = 280
 const MAX_KNOWLEDGE_INTELLIGENCE_WIDTH = 620
@@ -554,7 +564,7 @@ export default function KnowledgePage() {
                                             className="flex-1 min-h-[300px]"
                                         />
                                     ) : (
-                                        <BlockNoteViewer
+                                        <RenderedContent
                                             content={content}
                                             className="flex-1"
                                         />
@@ -578,7 +588,7 @@ export default function KnowledgePage() {
                                         />
                                     ) : (
                                         content.trim() ? (
-                                            <BlockNoteViewer content={content} className="flex-1" />
+                                            <RenderedContent content={content} className="flex-1" />
                                         ) : (
                                             <p className="text-muted-foreground/40 text-sm italic">Nothing captured yet.</p>
                                         )
@@ -649,7 +659,7 @@ export default function KnowledgePage() {
                                             />
                                         ) : (
                                             content.trim() ? (
-                                                <BlockNoteViewer content={content} />
+                                                <RenderedContent content={content} />
                                             ) : (
                                                 <p className="text-muted-foreground/40 text-sm italic">No notes.</p>
                                             )
@@ -717,9 +727,9 @@ export default function KnowledgePage() {
                             )}
 
                             {/* ── Audio ── */}
+                            {/* ── Audio ── */}
                             {type === 'audio' && (
                                 <div className="flex flex-col gap-4">
-                                    {/* Title */}
                                     <h1 className="text-2xl font-bold text-foreground">
                                         {title.trim() || knowledgeRecord.ai_title || (
                                             <span className="text-muted-foreground/40 flex items-center gap-2">
@@ -728,26 +738,7 @@ export default function KnowledgePage() {
                                         )}
                                     </h1>
 
-                                    {/* Audio player */}
-                                    <audio
-                                        controls
-                                        src={fileUrl}
-                                        className="w-full rounded-xl"
-                                    />
-
-                                    {/* Audio metadata badges */}
-                                    {(metadata.duration != null || metadata.format || metadata.sample_rate || metadata.channels) && (
-                                        <div className="flex flex-wrap gap-2">
-                                            {metadata.duration != null && (
-                                                <span className="chip-accent text-xs">
-                                                    {Math.floor(metadata.duration / 60)}:{String(Math.floor(metadata.duration % 60)).padStart(2, '0')}
-                                                </span>
-                                            )}
-                                            {metadata.format && <span className="chip-accent text-xs">{metadata.format}</span>}
-                                            {metadata.sample_rate && <span className="chip-accent text-xs">{metadata.sample_rate} Hz</span>}
-                                            {metadata.channels && <span className="chip-accent text-xs">{metadata.channels}ch</span>}
-                                        </div>
-                                    )}
+                                    <audio controls src={fileUrl} className="w-full rounded-xl" />
 
                                     {/* Transcript */}
                                     <div>
@@ -759,21 +750,57 @@ export default function KnowledgePage() {
                                                 editable
                                                 className="min-h-[200px]"
                                             />
+                                        ) : content.trim() ? (
+                                            <RenderedContent content={content} />
                                         ) : (
-                                            content.trim() ? (
-                                                <BlockNoteViewer content={content} />
-                                            ) : (
-                                                <p className="text-muted-foreground/40 text-sm italic">No transcript yet.</p>
-                                            )
+                                            <p className="text-muted-foreground/40 text-sm italic">No transcript available.</p>
                                         )}
                                     </div>
+
+                                    {/* Metadata */}
+                                    {(metadata.duration != null || metadata.format || metadata.sample_rate != null || metadata.channels != null || metadata.bitrate != null) && (
+                                        <div>
+                                            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-2">Metadata</p>
+                                            <div className="rounded-xl border border-border/40 bg-muted/15 divide-y divide-border/30">
+                                                {metadata.duration != null && (
+                                                    <div className="flex items-center justify-between px-3 py-2 text-sm">
+                                                        <span className="text-muted-foreground/70">Duration</span>
+                                                        <span className="font-mono text-foreground/80">{Math.floor(metadata.duration / 60)}:{String(Math.floor(metadata.duration % 60)).padStart(2, '0')}</span>
+                                                    </div>
+                                                )}
+                                                {metadata.format && (
+                                                    <div className="flex items-center justify-between px-3 py-2 text-sm">
+                                                        <span className="text-muted-foreground/70">Format</span>
+                                                        <span className="font-mono text-foreground/80">{metadata.format}</span>
+                                                    </div>
+                                                )}
+                                                {metadata.sample_rate != null && (
+                                                    <div className="flex items-center justify-between px-3 py-2 text-sm">
+                                                        <span className="text-muted-foreground/70">Sample Rate</span>
+                                                        <span className="font-mono text-foreground/80">{metadata.sample_rate} Hz</span>
+                                                    </div>
+                                                )}
+                                                {metadata.channels != null && (
+                                                    <div className="flex items-center justify-between px-3 py-2 text-sm">
+                                                        <span className="text-muted-foreground/70">Channels</span>
+                                                        <span className="font-mono text-foreground/80">{metadata.channels}</span>
+                                                    </div>
+                                                )}
+                                                {metadata.bitrate != null && (
+                                                    <div className="flex items-center justify-between px-3 py-2 text-sm">
+                                                        <span className="text-muted-foreground/70">Bitrate</span>
+                                                        <span className="font-mono text-foreground/80">{metadata.bitrate} kbps</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
                             {/* ── Image ── */}
                             {type === 'image' && (
                                 <div className="flex flex-col gap-4">
-                                    {/* Title */}
                                     <h1 className="text-2xl font-bold text-foreground">
                                         {title.trim() || knowledgeRecord.ai_title || (
                                             <span className="text-muted-foreground/40 flex items-center gap-2">
@@ -782,78 +809,275 @@ export default function KnowledgePage() {
                                         )}
                                     </h1>
 
-                                    {/* Image */}
                                     <img
                                         src={fileUrl}
                                         alt={title || knowledgeRecord.ai_title || 'Image'}
                                         className="max-w-full max-h-[60vh] object-contain rounded-xl border border-border/40 mx-auto block"
                                     />
 
-                                    {/* AI Description */}
-                                    {knowledgeRecord.ai_summary && (
+                                    {/* Content (vision description + OCR) */}
+                                    <div>
+                                        <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-2">Content</p>
+                                        {content.trim() ? (
+                                            <RenderedContent content={content} />
+                                        ) : (
+                                            <p className="text-muted-foreground/40 text-sm italic">No text detected in this image.</p>
+                                        )}
+                                    </div>
+
+                                    {/* EXIF Metadata */}
+                                    {metadata.exif && Object.keys(metadata.exif).length > 0 && (
                                         <div>
-                                            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-2">AI Description</p>
-                                            <BlockNoteViewer content={knowledgeRecord.ai_summary} />
+                                            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-2">Metadata</p>
+                                            <div className="rounded-xl border border-border/40 bg-muted/15 divide-y divide-border/30">
+                                                {metadata.exif.width && metadata.exif.height && (
+                                                    <div className="flex items-center justify-between px-3 py-2 text-sm">
+                                                        <span className="text-muted-foreground/70">Dimensions</span>
+                                                        <span className="font-mono text-foreground/80">{metadata.exif.width}×{metadata.exif.height}</span>
+                                                    </div>
+                                                )}
+                                                {metadata.exif.format && (
+                                                    <div className="flex items-center justify-between px-3 py-2 text-sm">
+                                                        <span className="text-muted-foreground/70">Format</span>
+                                                        <span className="font-mono text-foreground/80">{metadata.exif.format}</span>
+                                                    </div>
+                                                )}
+                                                {metadata.exif.Make && (
+                                                    <div className="flex items-center justify-between px-3 py-2 text-sm">
+                                                        <span className="text-muted-foreground/70">Camera</span>
+                                                        <span className="font-mono text-foreground/80">{metadata.exif.Make}{metadata.exif.Model ? ` ${metadata.exif.Model}` : ''}</span>
+                                                    </div>
+                                                )}
+                                                {metadata.exif.DateTime && (
+                                                    <div className="flex items-center justify-between px-3 py-2 text-sm">
+                                                        <span className="text-muted-foreground/70">Date Taken</span>
+                                                        <span className="font-mono text-foreground/80">{metadata.exif.DateTime}</span>
+                                                    </div>
+                                                )}
+                                                {metadata.exif.ExposureTime && (
+                                                    <div className="flex items-center justify-between px-3 py-2 text-sm">
+                                                        <span className="text-muted-foreground/70">Exposure</span>
+                                                        <span className="font-mono text-foreground/80">{metadata.exif.ExposureTime}s</span>
+                                                    </div>
+                                                )}
+                                                {metadata.exif.FNumber && (
+                                                    <div className="flex items-center justify-between px-3 py-2 text-sm">
+                                                        <span className="text-muted-foreground/70">Aperture</span>
+                                                        <span className="font-mono text-foreground/80">f/{metadata.exif.FNumber}</span>
+                                                    </div>
+                                                )}
+                                                {metadata.exif.ISOSpeedRatings && (
+                                                    <div className="flex items-center justify-between px-3 py-2 text-sm">
+                                                        <span className="text-muted-foreground/70">ISO</span>
+                                                        <span className="font-mono text-foreground/80">{metadata.exif.ISOSpeedRatings}</span>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     )}
                                 </div>
                             )}
 
-                            {/* ── PDF / DOCX / XLSX / PPTX ── */}
-                            {['pdf', 'docx', 'xlsx', 'pptx'].includes(type) && (
+                            {/* ── PDF ── */}
+                            {type === 'pdf' && (
                                 <div className="flex flex-col gap-4">
-                                    {/* Title */}
                                     <h1 className="text-2xl font-bold text-foreground">
                                         {title.trim() || knowledgeRecord.ai_title || (
                                             <span className="text-muted-foreground/40 flex items-center gap-2">
-                                                <File className="w-5 h-5" /> {type.toUpperCase()} Document
+                                                <File className="w-5 h-5" /> PDF Document
                                             </span>
                                         )}
                                     </h1>
 
-                                    {/* File info card */}
                                     <div className="bg-muted/20 border border-border/50 rounded-xl px-4 py-3 flex items-center gap-4">
                                         <div className="w-10 h-10 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0">
                                             <File className="w-5 h-5 text-accent" />
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium text-foreground truncate">
-                                                {knowledgeRecord.original_filename || `${type.toUpperCase()} file`}
-                                            </p>
+                                            <p className="text-sm font-medium text-foreground truncate">{knowledgeRecord.original_filename || 'PDF file'}</p>
                                             <div className="flex flex-wrap gap-3 mt-1">
-                                                {knowledgeRecord.file_size && (
-                                                    <span className="text-xs text-muted-foreground">{formatFileSize(knowledgeRecord.file_size)}</span>
-                                                )}
-                                                {metadata.page_count != null && (
-                                                    <span className="text-xs text-muted-foreground">{metadata.page_count} pages</span>
-                                                )}
-                                                {metadata.slide_count != null && (
-                                                    <span className="text-xs text-muted-foreground">{metadata.slide_count} slides</span>
-                                                )}
-                                                {metadata.total_sheets != null && (
-                                                    <span className="text-xs text-muted-foreground">{metadata.total_sheets} sheets</span>
-                                                )}
-                                                {metadata.word_count != null && (
-                                                    <span className="text-xs text-muted-foreground">{metadata.word_count} words</span>
-                                                )}
+                                                {knowledgeRecord.file_size && <span className="text-xs text-muted-foreground">{formatFileSize(knowledgeRecord.file_size)}</span>}
+                                                {metadata.page_count != null && <span className="text-xs text-muted-foreground">{metadata.page_count} pages</span>}
                                             </div>
                                         </div>
-                                        <a
-                                            href={fileUrl}
-                                            download
-                                            className="btn-ghost text-xs py-1.5 px-3 gap-1.5 flex items-center flex-shrink-0"
-                                            title="Download file"
-                                        >
-                                            <Download className="w-3.5 h-3.5" />
-                                            <span className="hidden sm:inline">Download</span>
+                                        <a href={fileUrl} download className="btn-ghost text-xs py-1.5 px-3 gap-1.5 flex items-center flex-shrink-0">
+                                            <Download className="w-3.5 h-3.5" /><span className="hidden sm:inline">Download</span>
                                         </a>
                                     </div>
 
-                                    {/* Extracted content */}
-                                    {knowledgeRecord.content && (
+                                    {content.trim() && (
                                         <div>
-                                            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-2">Extracted Content</p>
-                                            <BlockNoteViewer content={knowledgeRecord.content} />
+                                            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-2">Content</p>
+                                            <RenderedContent content={content} />
+                                        </div>
+                                    )}
+
+                                    {(metadata.author || metadata.pdf_title || metadata.creation_date || metadata.producer) && (
+                                        <div>
+                                            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-2">Metadata</p>
+                                            <div className="rounded-xl border border-border/40 bg-muted/15 divide-y divide-border/30">
+                                                {metadata.pdf_title && <div className="flex items-center justify-between px-3 py-2 text-sm"><span className="text-muted-foreground/70">Title</span><span className="text-foreground/80 text-right max-w-[60%] truncate">{metadata.pdf_title}</span></div>}
+                                                {metadata.author && <div className="flex items-center justify-between px-3 py-2 text-sm"><span className="text-muted-foreground/70">Author</span><span className="text-foreground/80">{metadata.author}</span></div>}
+                                                {metadata.creation_date && <div className="flex items-center justify-between px-3 py-2 text-sm"><span className="text-muted-foreground/70">Created</span><span className="font-mono text-foreground/80">{metadata.creation_date}</span></div>}
+                                                {metadata.producer && <div className="flex items-center justify-between px-3 py-2 text-sm"><span className="text-muted-foreground/70">Producer</span><span className="text-foreground/80 truncate max-w-[60%] text-right">{metadata.producer}</span></div>}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* ── DOCX ── */}
+                            {type === 'docx' && (
+                                <div className="flex flex-col gap-4">
+                                    <h1 className="text-2xl font-bold text-foreground">
+                                        {title.trim() || knowledgeRecord.ai_title || (
+                                            <span className="text-muted-foreground/40 flex items-center gap-2">
+                                                <File className="w-5 h-5" /> Word Document
+                                            </span>
+                                        )}
+                                    </h1>
+
+                                    <div className="bg-muted/20 border border-border/50 rounded-xl px-4 py-3 flex items-center gap-4">
+                                        <div className="w-10 h-10 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0">
+                                            <File className="w-5 h-5 text-accent" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium text-foreground truncate">{knowledgeRecord.original_filename || 'DOCX file'}</p>
+                                            <div className="flex flex-wrap gap-3 mt-1">
+                                                {knowledgeRecord.file_size && <span className="text-xs text-muted-foreground">{formatFileSize(knowledgeRecord.file_size)}</span>}
+                                                {metadata.word_count != null && <span className="text-xs text-muted-foreground">{metadata.word_count} words</span>}
+                                            </div>
+                                        </div>
+                                        <a href={fileUrl} download className="btn-ghost text-xs py-1.5 px-3 gap-1.5 flex items-center flex-shrink-0">
+                                            <Download className="w-3.5 h-3.5" /><span className="hidden sm:inline">Download</span>
+                                        </a>
+                                    </div>
+
+                                    {content.trim() && (
+                                        <div>
+                                            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-2">Content</p>
+                                            <RenderedContent content={content} />
+                                        </div>
+                                    )}
+
+                                    {(metadata.author || metadata.doc_title || metadata.paragraph_count != null || metadata.section_count != null) && (
+                                        <div>
+                                            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-2">Metadata</p>
+                                            <div className="rounded-xl border border-border/40 bg-muted/15 divide-y divide-border/30">
+                                                {metadata.doc_title && <div className="flex items-center justify-between px-3 py-2 text-sm"><span className="text-muted-foreground/70">Title</span><span className="text-foreground/80 truncate max-w-[60%] text-right">{metadata.doc_title}</span></div>}
+                                                {metadata.author && <div className="flex items-center justify-between px-3 py-2 text-sm"><span className="text-muted-foreground/70">Author</span><span className="text-foreground/80">{metadata.author}</span></div>}
+                                                {metadata.paragraph_count != null && <div className="flex items-center justify-between px-3 py-2 text-sm"><span className="text-muted-foreground/70">Paragraphs</span><span className="font-mono text-foreground/80">{metadata.paragraph_count}</span></div>}
+                                                {metadata.section_count != null && <div className="flex items-center justify-between px-3 py-2 text-sm"><span className="text-muted-foreground/70">Sections</span><span className="font-mono text-foreground/80">{metadata.section_count}</span></div>}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* ── XLSX ── */}
+                            {type === 'xlsx' && (
+                                <div className="flex flex-col gap-4">
+                                    <h1 className="text-2xl font-bold text-foreground">
+                                        {title.trim() || knowledgeRecord.ai_title || (
+                                            <span className="text-muted-foreground/40 flex items-center gap-2">
+                                                <File className="w-5 h-5" /> Spreadsheet
+                                            </span>
+                                        )}
+                                    </h1>
+
+                                    <div className="bg-muted/20 border border-border/50 rounded-xl px-4 py-3 flex items-center gap-4">
+                                        <div className="w-10 h-10 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0">
+                                            <File className="w-5 h-5 text-accent" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium text-foreground truncate">{knowledgeRecord.original_filename || 'XLSX file'}</p>
+                                            <div className="flex flex-wrap gap-3 mt-1">
+                                                {knowledgeRecord.file_size && <span className="text-xs text-muted-foreground">{formatFileSize(knowledgeRecord.file_size)}</span>}
+                                                {metadata.total_sheets != null && <span className="text-xs text-muted-foreground">{metadata.total_sheets} sheets</span>}
+                                                {metadata.total_rows != null && <span className="text-xs text-muted-foreground">{metadata.total_rows} rows</span>}
+                                            </div>
+                                        </div>
+                                        <a href={fileUrl} download className="btn-ghost text-xs py-1.5 px-3 gap-1.5 flex items-center flex-shrink-0">
+                                            <Download className="w-3.5 h-3.5" /><span className="hidden sm:inline">Download</span>
+                                        </a>
+                                    </div>
+
+                                    {content.trim() && (
+                                        <div>
+                                            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-2">Content</p>
+                                            <RenderedContent content={content} />
+                                        </div>
+                                    )}
+
+                                    {(metadata.total_sheets != null || metadata.total_rows != null || (metadata.sheet_names && metadata.sheet_names.length > 0)) && (
+                                        <div>
+                                            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-2">Metadata</p>
+                                            <div className="rounded-xl border border-border/40 bg-muted/15 divide-y divide-border/30">
+                                                {metadata.total_sheets != null && <div className="flex items-center justify-between px-3 py-2 text-sm"><span className="text-muted-foreground/70">Sheets</span><span className="font-mono text-foreground/80">{metadata.total_sheets}</span></div>}
+                                                {metadata.total_rows != null && <div className="flex items-center justify-between px-3 py-2 text-sm"><span className="text-muted-foreground/70">Total Rows</span><span className="font-mono text-foreground/80">{metadata.total_rows}</span></div>}
+                                                {metadata.sheet_names && metadata.sheet_names.length > 0 && (
+                                                    <div className="flex items-start justify-between px-3 py-2 text-sm gap-4">
+                                                        <span className="text-muted-foreground/70 shrink-0">Sheet Names</span>
+                                                        <span className="text-foreground/80 text-right">{(metadata.sheet_names as string[]).join(', ')}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* ── PPTX ── */}
+                            {type === 'pptx' && (
+                                <div className="flex flex-col gap-4">
+                                    <h1 className="text-2xl font-bold text-foreground">
+                                        {title.trim() || knowledgeRecord.ai_title || (
+                                            <span className="text-muted-foreground/40 flex items-center gap-2">
+                                                <File className="w-5 h-5" /> Presentation
+                                            </span>
+                                        )}
+                                    </h1>
+
+                                    <div className="bg-muted/20 border border-border/50 rounded-xl px-4 py-3 flex items-center gap-4">
+                                        <div className="w-10 h-10 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0">
+                                            <File className="w-5 h-5 text-accent" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium text-foreground truncate">{knowledgeRecord.original_filename || 'PPTX file'}</p>
+                                            <div className="flex flex-wrap gap-3 mt-1">
+                                                {knowledgeRecord.file_size && <span className="text-xs text-muted-foreground">{formatFileSize(knowledgeRecord.file_size)}</span>}
+                                                {metadata.slide_count != null && <span className="text-xs text-muted-foreground">{metadata.slide_count} slides</span>}
+                                            </div>
+                                        </div>
+                                        <a href={fileUrl} download className="btn-ghost text-xs py-1.5 px-3 gap-1.5 flex items-center flex-shrink-0">
+                                            <Download className="w-3.5 h-3.5" /><span className="hidden sm:inline">Download</span>
+                                        </a>
+                                    </div>
+
+                                    {content.trim() && (
+                                        <div>
+                                            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-2">Content</p>
+                                            <RenderedContent content={content} />
+                                        </div>
+                                    )}
+
+                                    {(metadata.slide_count != null || (metadata.slide_titles && metadata.slide_titles.length > 0)) && (
+                                        <div>
+                                            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-2">Metadata</p>
+                                            <div className="rounded-xl border border-border/40 bg-muted/15 divide-y divide-border/30">
+                                                {metadata.slide_count != null && <div className="flex items-center justify-between px-3 py-2 text-sm"><span className="text-muted-foreground/70">Slides</span><span className="font-mono text-foreground/80">{metadata.slide_count}</span></div>}
+                                                {metadata.has_notes && <div className="flex items-center justify-between px-3 py-2 text-sm"><span className="text-muted-foreground/70">Speaker Notes</span><span className="text-foreground/80">Yes</span></div>}
+                                                {metadata.slide_titles && metadata.slide_titles.length > 0 && (
+                                                    <div className="px-3 py-2 text-sm">
+                                                        <p className="text-muted-foreground/70 mb-1.5">Slide Titles</p>
+                                                        <ol className="list-decimal list-inside space-y-0.5">
+                                                            {(metadata.slide_titles as string[]).map((t: string, i: number) => (
+                                                                <li key={i} className="text-foreground/75 text-xs truncate">{t}</li>
+                                                            ))}
+                                                        </ol>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     )}
                                 </div>

@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { listKnowledge, deleteKnowledge, togglePin, toggleArchive, extractBookmarkContent, getKnowledgeThumbnailUrl } from '@/lib/api'
+import { listKnowledge, deleteKnowledge, togglePin, toggleArchive, extractBookmarkContent, reprocessKnowledge, getKnowledgeThumbnailUrl } from '@/lib/api'
+import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import { CopyButton } from '@/components/shared/CopyButton'
 import { openQuickKnowledge, type QuickKnowledgeType, FILE_BASED_TYPES } from '@/lib/quick-knowledge'
 import KnowledgeTypeGrid from '@/components/knowledge/KnowledgeTypeGrid'
@@ -104,6 +105,15 @@ export default function WorkspaceHome() {
     const [searchParams, setSearchParams] = useSearchParams()
     const qc = useQueryClient()
 
+    // Listen for background AI title/intelligence updates and refresh the grid
+    const { on } = useWorkspaceWebSocket(workspaceId)
+    useEffect(() => {
+        if (!workspaceId) return
+        return on('knowledge_updated', () => {
+            qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
+        })
+    }, [on, qc, workspaceId])
+
     const [filterText, setFilterText] = useState('')
     const [typeFilter, setTypeFilter] = useState('')
     const [showArchived, setShowArchived] = useState(false)
@@ -176,6 +186,12 @@ export default function WorkspaceHome() {
 
     const handleExtractBookmarkContent = async (knowledgeId: string) => {
         await extractBookmarkContent(workspaceId, knowledgeId)
+        qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
+        qc.invalidateQueries({ queryKey: ['knowledge-item', knowledgeId] })
+    }
+
+    const handleReprocess = async (knowledgeId: string) => {
+        await reprocessKnowledge(workspaceId, knowledgeId)
         qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
         qc.invalidateQueries({ queryKey: ['knowledge-item', knowledgeId] })
     }
@@ -428,6 +444,7 @@ export default function WorkspaceHome() {
                                             onPin={() => handlePin(knowledgeRecord.id)}
                                             onArchive={() => handleArchive(knowledgeRecord.id)}
                                             onExtractBookmarkContent={() => handleExtractBookmarkContent(knowledgeRecord.id)}
+                                            onReprocess={() => handleReprocess(knowledgeRecord.id)}
                                             onDelete={() => handleDelete(knowledgeRecord.id)}
                                             workspaceId={workspaceId}
                                         />
@@ -590,7 +607,7 @@ function FittedTagRow({ tags }: { tags: string[] }) {
 
 function KnowledgeCard({
     knowledgeRecord, index, isSelected, anySelected, onSelect, onClick,
-    onPin, onArchive, onExtractBookmarkContent, onDelete, minWidthPx, maxHeightPx, workspaceId,
+    onPin, onArchive, onExtractBookmarkContent, onReprocess, onDelete, minWidthPx, maxHeightPx, workspaceId,
 }: {
     knowledgeRecord: KnowledgeListItem
     index: number
@@ -603,6 +620,7 @@ function KnowledgeCard({
     onPin: () => void
     onArchive: () => void
     onExtractBookmarkContent: () => void
+    onReprocess: () => void
     onDelete: () => void
     workspaceId: string
 }) {
@@ -677,7 +695,6 @@ function KnowledgeCard({
                         <div className="flex items-center gap-1.5">
                             {knowledgeRecord.is_pinned && <Pin className="w-3.5 h-3.5 text-amber-300" />}
                             {isBookmarkScraping && <Loader2 className="w-3.5 h-3.5 text-accent animate-spin" />}
-                            {knowledgeRecord.embedding_status === 'done' && <Sparkles className="w-3.5 h-3.5 text-accent" />}
                         </div>
                     </div>
 
@@ -711,7 +728,7 @@ function KnowledgeCard({
                             </div>
                         ) : (
                             <div
-                                className="text-[13px] text-foreground/88 line-clamp-7 leading-[1.45] prose prose-invert prose-p:my-0 prose-headings:my-0 prose-li:my-0 prose-ul:my-0 focus:outline-none max-w-none"
+                                className="text-[13px] text-foreground/88 line-clamp-7 leading-[1.45] prose prose-invert prose-p:my-0 prose-headings:my-0 prose-headings:text-[13px] prose-headings:font-medium prose-headings:leading-[1.45] prose-li:my-0 prose-ul:my-0 focus:outline-none max-w-none"
                                 dangerouslySetInnerHTML={{ __html: mdPreview.render(knowledgeRecord.content_preview || (knowledgeRecord.url_title ?? '')) }}
                             />
                         )}
@@ -721,17 +738,20 @@ function KnowledgeCard({
                         <FittedTagRow tags={knowledgeRecord.tags} />
 
                         <div className="flex items-end justify-between gap-2">
-                            <p className="min-w-0 flex-1 text-[10px] text-muted-foreground/90 truncate">
-                                Updated {new Date(knowledgeRecord.updated_at).toLocaleDateString()} · {knowledgeRecord.word_count} words · {knowledgeRecord.insights_count ?? 0} insights
-                            </p>
+                            <div className="flex items-center gap-1 min-w-0 flex-1">
+                                {knowledgeRecord.embedding_status === 'done' && <Sparkles className="w-3 h-3 text-accent flex-shrink-0" />}
+                                <p className="text-[10px] text-muted-foreground/90 truncate">
+                                    Updated {new Date(knowledgeRecord.updated_at).toLocaleDateString()} · {knowledgeRecord.word_count} words · {knowledgeRecord.insights_count ?? 0} insights
+                                </p>
+                            </div>
 
                             <div className="flex flex-shrink-0 items-center gap-1 self-end">
-                                {knowledgeRecord.type === 'bookmark' && knowledgeRecord.url && (
+                                {(knowledgeRecord.type === 'bookmark' || ['image', 'audio', 'pdf', 'docx', 'xlsx', 'pptx'].includes(knowledgeRecord.type)) && (knowledgeRecord.type !== 'bookmark' || !!knowledgeRecord.url) && (
                                     <button
                                         className={actionBtnClass}
-                                        onClick={e => runAction(e, onExtractBookmarkContent)}
-                                        title="Extract bookmark content"
-                                        aria-label="Extract bookmark content"
+                                        onClick={e => runAction(e, knowledgeRecord.type === 'bookmark' ? onExtractBookmarkContent : onReprocess)}
+                                        title="Re-extract content"
+                                        aria-label="Re-extract content"
                                     >
                                         <RefreshCw className="w-3.5 h-3.5" />
                                     </button>
