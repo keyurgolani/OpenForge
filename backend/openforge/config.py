@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_dimension: int = 384
 
+    # CLIP visual embedding
+    clip_model: str = "clip-ViT-B-32"
+    clip_dimension: int = 512
+    qdrant_visual_collection: str = "openforge_visual"
+
     # Encryption key for API keys (generated on first run if not set)
     encryption_key: str = ""
 

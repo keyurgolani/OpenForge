@@ -1,10 +1,10 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { listKnowledge, deleteKnowledge, togglePin, toggleArchive, extractBookmarkContent } from '@/lib/api'
+import { listKnowledge, deleteKnowledge, togglePin, toggleArchive, extractBookmarkContent, getKnowledgeThumbnailUrl } from '@/lib/api'
 import { KnowledgeModal } from '@/components/shared/KnowledgeModal'
 import { CopyButton } from '@/components/shared/CopyButton'
-import { openQuickKnowledge, type QuickKnowledgeType } from '@/lib/quick-knowledge'
+import { openQuickKnowledge, type QuickKnowledgeType, FILE_BASED_TYPES } from '@/lib/quick-knowledge'
 import { getShortcutDisplay } from '@/lib/keyboard'
 import {
     Search, FileText, Bookmark, Code2, Zap, Pin, Archive,
@@ -44,6 +44,11 @@ interface KnowledgeListItem {
     url: string | null
     url_title: string | null
     gist_language: string | null
+    file_path: string | null
+    file_size: number | null
+    mime_type: string | null
+    thumbnail_path: string | null
+    file_metadata: Record<string, unknown> | null
 }
 
 const TYPE_OPTS = [
@@ -52,6 +57,12 @@ const TYPE_OPTS = [
     { id: 'fleeting', label: 'Fleeting', icon: Zap },
     { id: 'bookmark', label: 'Bookmarks', icon: Bookmark },
     { id: 'gist', label: 'Gists', icon: Code2 },
+    { id: 'image', label: 'Images', icon: FileText },
+    { id: 'audio', label: 'Audio', icon: FileText },
+    { id: 'pdf', label: 'PDFs', icon: FileText },
+    { id: 'docx', label: 'Word Docs', icon: FileText },
+    { id: 'xlsx', label: 'Spreadsheets', icon: FileText },
+    { id: 'pptx', label: 'Presentations', icon: FileText },
 ]
 
 const SORT_OPTS = [
@@ -65,6 +76,12 @@ const TYPE_META: Record<string, { icon: React.ComponentType<{ className?: string
     fleeting: { icon: Zap, label: 'Fleeting', color: 'text-yellow-400' },
     bookmark: { icon: Bookmark, label: 'Bookmark', color: 'text-purple-400' },
     gist: { icon: Code2, label: 'Gist', color: 'text-green-400' },
+    image: { icon: FileText, label: 'Image', color: 'text-pink-400' },
+    audio: { icon: FileText, label: 'Audio', color: 'text-orange-400' },
+    pdf: { icon: FileText, label: 'PDF', color: 'text-red-400' },
+    docx: { icon: FileText, label: 'Word', color: 'text-blue-300' },
+    xlsx: { icon: FileText, label: 'Excel', color: 'text-green-300' },
+    pptx: { icon: FileText, label: 'PowerPoint', color: 'text-amber-400' },
 }
 
 const MASONRY_GAP_PX = 20

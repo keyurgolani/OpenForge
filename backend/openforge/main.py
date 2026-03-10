@@ -34,11 +34,12 @@ async def lifespan(app: FastAPI):
         logger.error(f"Database initialization failed: {e}")
         raise
 
-    # Initialize Qdrant collection
+    # Initialize Qdrant collections
     needs_reindex = False
     try:
-        from openforge.db.qdrant_client import init_qdrant_collection
+        from openforge.db.qdrant_client import init_qdrant_collection, init_visual_collection
         needs_reindex = await init_qdrant_collection()
+        await init_visual_collection()
     except Exception as e:
         logger.warning(f"Qdrant initialization failed (continuing): {e}")
 

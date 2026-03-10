@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import FileKnowledgeEditor from '@/components/knowledge/editors/FileKnowledgeEditor'
 import { useParams, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -509,6 +510,21 @@ export default function KnowledgePage() {
             <div className="flex h-full items-center justify-center">
                 <Loader2 className="h-6 w-6 animate-spin text-accent" />
             </div>
+        )
+    }
+
+    // File-based knowledge types use a dedicated editor
+    const FILE_BASED_KNOWLEDGE_TYPES = ['image', 'audio', 'pdf', 'docx', 'xlsx', 'pptx']
+    if (knowledgeRecord && FILE_BASED_KNOWLEDGE_TYPES.includes(knowledgeRecord.type)) {
+        // FileKnowledgeEditor is imported at the top of the file
+        return (
+            <FileKnowledgeEditor
+                knowledge={knowledgeRecord}
+                onUpdate={(updated: any) => {
+                    qc.setQueryData(['knowledge-item', knowledgeId], updated)
+                    qc.invalidateQueries({ queryKey: ['knowledge-list'] })
+                }}
+            />
         )
     }
 

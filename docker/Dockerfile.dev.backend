@@ -2,7 +2,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential curl && rm -rf /var/lib/apt/lists/*
+    build-essential curl tesseract-ocr ffmpeg && rm -rf /var/lib/apt/lists/*
 
 COPY backend/requirements.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \

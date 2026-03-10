@@ -5,7 +5,10 @@ from datetime import datetime
 
 
 class KnowledgeCreate(BaseModel):
-    type: Literal["standard", "fleeting", "bookmark", "gist"] = "standard"
+    type: Literal[
+        "standard", "fleeting", "bookmark", "gist",
+        "image", "audio", "pdf", "docx", "xlsx", "pptx",
+    ] = "standard"
     title: Optional[str] = None
     content: Optional[str] = ""
     url: Optional[str] = None
@@ -42,6 +45,11 @@ class KnowledgeListItem(BaseModel):
     url: Optional[str] = None
     url_title: Optional[str] = None
     gist_language: Optional[str] = None
+    file_path: Optional[str] = None
+    file_size: Optional[int] = None
+    mime_type: Optional[str] = None
+    thumbnail_path: Optional[str] = None
+    file_metadata: Optional[dict] = None
     created_at: datetime
     updated_at: datetime
 
@@ -66,6 +74,11 @@ class KnowledgeResponse(BaseModel):
     embedding_status: str = "pending"
     word_count: int = 0
     tags: list[str] = []
+    file_path: Optional[str] = None
+    file_size: Optional[int] = None
+    mime_type: Optional[str] = None
+    thumbnail_path: Optional[str] = None
+    file_metadata: Optional[dict] = None
     created_at: datetime
     updated_at: datetime
 

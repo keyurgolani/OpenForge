@@ -1,6 +1,6 @@
 """
 Attachments API — file upload for chat messages.
-Supports PDFs, images, and text files.
+Supports PDFs, images, text files, audio, and Office documents.
 """
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,22 +18,41 @@ from openforge.db.models import MessageAttachment, Message
 from openforge.config import get_settings
 from openforge.schemas.knowledge import KnowledgeCreate
 from openforge.services.knowledge_service import knowledge_service
+from openforge.services.attachment_pipeline import get_extractor
 
 router = APIRouter()
 logger = logging.getLogger("openforge.attachments")
 
 # Allowed file types
 ALLOWED_TYPES = {
-    "application/pdf": [".pdf"],
+    # Text
     "text/plain": [".txt", ".md", ".json", ".csv", ".xml", ".yaml", ".yml"],
     "text/markdown": [".md"],
+    # Images
     "image/png": [".png"],
     "image/jpeg": [".jpg", ".jpeg"],
     "image/gif": [".gif"],
     "image/webp": [".webp"],
+    # PDF
+    "application/pdf": [".pdf"],
+    # Audio
+    "audio/mpeg": [".mp3"],
+    "audio/wav": [".wav"],
+    "audio/x-wav": [".wav"],
+    "audio/ogg": [".ogg"],
+    "audio/flac": [".flac"],
+    "audio/mp4": [".m4a"],
+    "audio/x-m4a": [".m4a"],
+    # Office documents
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+    "application/msword": [".doc"],
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+    "application/vnd.ms-excel": [".xls"],
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": [".pptx"],
+    "application/vnd.ms-powerpoint": [".ppt"],
 }
 
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
 
 class AttachmentOut(BaseModel):
@@ -42,40 +61,6 @@ class AttachmentOut(BaseModel):
     content_type: str
     file_size: int
     extracted_text: Optional[str] = None
-
-
-async def extract_text_from_pdf(file_path: str) -> str:
-    """Extract text content from a PDF file."""
-    try:
-        import fitz  # PyMuPDF
-        doc = fitz.open(file_path)
-        text_parts = []
-        for page in doc:
-            text_parts.append(page.get_text())
-        doc.close()
-        return "\n\n".join(text_parts)[:50000]  # Limit to 50k chars
-    except ImportError:
-        logger.warning("PyMuPDF not installed, cannot extract PDF text")
-        return ""
-    except Exception as e:
-        logger.error(f"Failed to extract PDF text: {e}")
-        return ""
-
-
-async def extract_text_from_image(file_path: str) -> str:
-    """Extract text from an image using OCR (if available)."""
-    try:
-        import pytesseract
-        from PIL import Image
-        img = Image.open(file_path)
-        text = pytesseract.image_to_string(img)
-        return text[:10000]  # Limit to 10k chars
-    except ImportError:
-        logger.warning("pytesseract/PIL not installed, cannot OCR images")
-        return ""
-    except Exception as e:
-        logger.error(f"Failed to OCR image: {e}")
-        return ""
 
 
 async def extract_text_from_text_file(file_path: str) -> str:
@@ -109,7 +94,7 @@ async def upload_file(
     if not is_allowed:
         raise HTTPException(
             status_code=400,
-            detail=f"File type {content_type} ({ext}) not allowed. Allowed types: PDF, images, text files."
+            detail=f"File type {content_type} ({ext}) not allowed."
         )
 
     # Read file content
@@ -134,11 +119,15 @@ async def upload_file(
     async with aiofiles.open(file_path, 'wb') as f:
         await f.write(content)
 
-    # Extract text based on file type (text attachments only for now).
-    # PDF/image and other richer pipelines will be wired separately.
+    # Extract text using the unified attachment pipeline
     extracted_text = ""
-    if content_type.startswith("text/") or ext in [".txt", ".md", ".json", ".csv", ".xml", ".yaml", ".yml"]:
-        extracted_text = await extract_text_from_text_file(file_path)
+    extractor = get_extractor(content_type, file.filename)
+    if extractor:
+        try:
+            extracted_text = await extractor.extract(file_path) or ""
+        except Exception as e:
+            logger.warning(f"Extraction failed for {file.filename}: {e}")
+            extracted_text = ""
 
     # Persist attachment record; it will be linked to a message when chat is sent.
     attachment = MessageAttachment(

@@ -12,10 +12,12 @@ RUN npx vite build
 FROM python:3.11-slim
 WORKDIR /app
 
-# Install system dependencies (curl needed for HEALTHCHECK)
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
+    tesseract-ocr \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies

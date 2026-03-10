@@ -192,6 +192,53 @@ class LLMService:
             )
         return provider.provider_name, api_key, model, provider.base_url
 
+    async def get_vision_provider_for_workspace(
+        self,
+        db: AsyncSession,
+        workspace_id: UUID,
+    ) -> tuple[str, str, str, str | None]:
+        """Returns (provider_name, decrypted_api_key, model, base_url) for vision tasks."""
+        ws_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
+        workspace = ws_result.scalar_one_or_none()
+
+        provider = None
+        model = None
+
+        # Try workspace vision provider first
+        if workspace and workspace.vision_provider_id:
+            p_result = await db.execute(
+                select(LLMProvider).where(LLMProvider.id == workspace.vision_provider_id)
+            )
+            provider = p_result.scalar_one_or_none()
+            model = workspace.vision_model
+
+        # Fall back to workspace LLM provider
+        if not provider and workspace and workspace.llm_provider_id:
+            p_result = await db.execute(
+                select(LLMProvider).where(LLMProvider.id == workspace.llm_provider_id)
+            )
+            provider = p_result.scalar_one_or_none()
+            model = workspace.llm_model
+
+        # Fall back to system default
+        if not provider:
+            p_result = await db.execute(
+                select(LLMProvider).where(LLMProvider.is_system_default == True)
+            )
+            provider = p_result.scalar_one_or_none()
+
+        if not provider:
+            raise HTTPException(status_code=400, detail="No vision provider configured")
+
+        api_key = ""
+        if provider.api_key_enc:
+            api_key = decrypt_value(provider.api_key_enc)
+
+        if not model:
+            model = provider.default_model or ""
+
+        return provider.provider_name, api_key, model, provider.base_url
+
     async def list_models(self, db: AsyncSession, provider_id: UUID) -> list[ModelInfo]:
         result = await db.execute(select(LLMProvider).where(LLMProvider.id == provider_id))
         provider = result.scalar_one_or_none()

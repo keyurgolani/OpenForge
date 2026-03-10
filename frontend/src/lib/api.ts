@@ -66,6 +66,25 @@ export const generateKnowledgeIntelligence = (wid: string, nid: string): Promise
     api.post(`/workspaces/${wid}/knowledge/${nid}/generate-intelligence`).then(r => r.data)
 export const extractBookmarkContent = (wid: string, nid: string): Promise<any> =>
     api.post(`/workspaces/${wid}/knowledge/${nid}/extract-bookmark-content`).then(r => r.data)
+export const uploadKnowledge = (wid: string, file: File): Promise<any> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post(`/workspaces/${wid}/knowledge/upload`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data)
+}
+export const getKnowledgeFileUrl = (wid: string, nid: string): string =>
+    `/api/v1/workspaces/${wid}/knowledge/${nid}/file`
+export const getKnowledgeThumbnailUrl = (wid: string, nid: string): string =>
+    `/api/v1/workspaces/${wid}/knowledge/${nid}/thumbnail`
+export const visualSearch = (wid: string, file: File, limit?: number): Promise<any> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post(`/workspaces/${wid}/knowledge/search/visual`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        params: limit ? { limit } : undefined,
+    }).then(r => r.data)
+}
 
 // ── Conversations ──
 export const listConversations = (

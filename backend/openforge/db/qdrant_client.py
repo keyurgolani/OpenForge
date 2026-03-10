@@ -81,3 +81,35 @@ async def init_qdrant_collection() -> bool:
         logger.info("Collection '%s' created with payload indexes.", collection_name)
 
     return needs_reindex
+
+
+async def init_visual_collection() -> None:
+    """Create the CLIP visual search collection if it doesn't exist."""
+    settings = get_settings()
+    client = get_qdrant()
+    collection_name = settings.qdrant_visual_collection
+
+    collections = client.get_collections().collections
+    exists = any(c.name == collection_name for c in collections)
+
+    if not exists:
+        logger.info("Creating CLIP visual collection: %s", collection_name)
+        client.create_collection(
+            collection_name=collection_name,
+            vectors_config=models.VectorParams(
+                size=settings.clip_dimension,
+                distance=models.Distance.COSINE,
+            ),
+        )
+
+        for field, schema in [
+            ("workspace_id", models.PayloadSchemaType.KEYWORD),
+            ("knowledge_id", models.PayloadSchemaType.KEYWORD),
+        ]:
+            client.create_payload_index(
+                collection_name=collection_name,
+                field_name=field,
+                field_schema=schema,
+            )
+
+        logger.info("Visual collection '%s' created.", collection_name)
