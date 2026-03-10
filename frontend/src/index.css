@@ -1098,6 +1098,3 @@
     animation: none !important;
   }
 }
-
-/* Knowledge file components */
-@import './styles/knowledge-files.css';

@@ -3,12 +3,13 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import type { ReactElement } from 'react'
 import { searchKnowledge } from '@/lib/api'
-import { Search, Loader2, FileText, Bookmark, Code2, Zap, ExternalLink, Copy, SearchX, MessageSquare } from 'lucide-react'
+import { Search, Loader2, FileText, Bookmark, Code2, Zap, ExternalLink, Copy, SearchX, MessageSquare, Image as ImageIcon, Music, FileType2, Table, Presentation } from 'lucide-react'
 import { KnowledgeModal } from '@/components/shared/KnowledgeModal'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem
 } from '@/components/ui/context-menu'
 import MarkdownIt from 'markdown-it'
+import VisualSearchTab from '@/components/search/VisualSearchTab'
 
 const mdPreview = new MarkdownIt({ html: false, linkify: false, typographer: true, breaks: true })
 mdPreview.renderer.rules.link_open = () => ''
@@ -19,6 +20,12 @@ const TYPE_ICONS: Record<string, ReactElement> = {
     gist: <Code2 className="w-3.5 h-3.5" />,
     fleeting: <Zap className="w-3.5 h-3.5" />,
     standard: <FileText className="w-3.5 h-3.5" />,
+    image: <ImageIcon className="w-3.5 h-3.5" />,
+    audio: <Music className="w-3.5 h-3.5" />,
+    pdf: <FileType2 className="w-3.5 h-3.5" />,
+    docx: <FileText className="w-3.5 h-3.5" />,
+    xlsx: <Table className="w-3.5 h-3.5" />,
+    pptx: <Presentation className="w-3.5 h-3.5" />,
 }
 
 const TYPE_META: Record<string, { label: string; color: string }> = {
@@ -26,9 +33,15 @@ const TYPE_META: Record<string, { label: string; color: string }> = {
     fleeting: { label: 'Fleeting', color: 'text-yellow-400' },
     bookmark: { label: 'Bookmark', color: 'text-purple-400' },
     gist: { label: 'Gist', color: 'text-green-400' },
+    image: { label: 'Image', color: 'text-pink-400' },
+    audio: { label: 'Audio', color: 'text-orange-400' },
+    pdf: { label: 'PDF', color: 'text-red-400' },
+    docx: { label: 'Word', color: 'text-blue-300' },
+    xlsx: { label: 'Excel', color: 'text-green-300' },
+    pptx: { label: 'Presentation', color: 'text-amber-400' },
 }
 
-const KNOWLEDGE_TYPES = ['', 'standard', 'fleeting', 'bookmark', 'gist']
+const KNOWLEDGE_TYPES = ['', 'standard', 'fleeting', 'bookmark', 'gist', 'image', 'audio', 'pdf', 'docx', 'xlsx', 'pptx']
 
 interface SearchResult {
     knowledge_id: string | null
@@ -53,6 +66,7 @@ export default function SearchPage() {
     const [query, setQuery] = useState(searchParams.get('q') ?? '')
     const [typeFilter, setTypeFilter] = useState('')
     const [modalKnowledgeId, setModalKnowledgeId] = useState<string | null>(null)
+    const [searchTab, setSearchTab] = useState<'text' | 'visual'>('text')
     const searchLayoutRef = useRef<HTMLDivElement | null>(null)
 
     // Debounce the query
@@ -101,6 +115,28 @@ export default function SearchPage() {
     return (
         <div className="h-full w-full p-6 lg:p-7">
             <div ref={searchLayoutRef} data-openforge-knowledge-sheet-anchor="1" className="flex h-full min-h-0 flex-col gap-4">
+                {/* Tab toggle */}
+                <div className="flex items-center gap-1 p-1 bg-muted/30 border border-border/50 rounded-xl self-start">
+                    <button
+                        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-all ${searchTab === 'text' ? 'bg-card text-foreground shadow-sm border border-border/60' : 'text-muted-foreground hover:text-foreground'}`}
+                        onClick={() => setSearchTab('text')}
+                    >
+                        <Search className="w-3.5 h-3.5" /> Text Search
+                    </button>
+                    <button
+                        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-all ${searchTab === 'visual' ? 'bg-card text-foreground shadow-sm border border-border/60' : 'text-muted-foreground hover:text-foreground'}`}
+                        onClick={() => setSearchTab('visual')}
+                    >
+                        <ImageIcon className="w-3.5 h-3.5" /> Visual Search
+                    </button>
+                </div>
+
+                {searchTab === 'visual' ? (
+                    <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+                        <VisualSearchTab />
+                    </div>
+                ) : (<>
+
                 {/* Search bar */}
                 <div className="relative">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground pointer-events-none" />
@@ -288,6 +324,7 @@ export default function SearchPage() {
                         </div>
                     )}
                 </div>
+            </>)}
             </div>
 
             {modalKnowledgeId && (

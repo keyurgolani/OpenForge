@@ -1,124 +1,186 @@
 import { useState, useRef, useCallback } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { visualSearch, getKnowledgeThumbnailUrl } from '@/lib/api'
+import { Image as ImageIcon, Upload, Loader2, X, SearchX } from 'lucide-react'
+
+interface VisualSearchResult {
+    knowledge_id: string
+    title: string | null
+    ai_title: string | null
+    score: number
+    thumbnail_path: string | null
+}
 
 export default function VisualSearchTab() {
-    const { workspaceId } = useParams<{ workspaceId: string }>()
-    const [results, setResults] = useState<any[]>([])
-    const [searching, setSearching] = useState(false)
+    const { workspaceId = '' } = useParams<{ workspaceId: string }>()
+    const navigate = useNavigate()
+    const [queryFile, setQueryFile] = useState<File | null>(null)
+    const [queryPreview, setQueryPreview] = useState<string | null>(null)
+    const [results, setResults] = useState<VisualSearchResult[]>([])
+    const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [dragOver, setDragOver] = useState(false)
-    const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+    const [searched, setSearched] = useState(false)
     const inputRef = useRef<HTMLInputElement>(null)
 
-    const handleSearch = useCallback(async (file: File) => {
-        if (!workspaceId) return
-        setSearching(true)
+    const handleFile = useCallback((f: File) => {
+        if (!f.type.startsWith('image/')) {
+            setError('Please select an image file.')
+            return
+        }
+        setQueryFile(f)
+        if (queryPreview) URL.revokeObjectURL(queryPreview)
+        setQueryPreview(URL.createObjectURL(f))
         setError(null)
         setResults([])
-
-        // Show preview of query image
-        const url = URL.createObjectURL(file)
-        setPreviewUrl(url)
-
-        try {
-            const data = await visualSearch(workspaceId, file, 20)
-            setResults(data.results || [])
-        } catch (err: any) {
-            setError(err?.response?.data?.detail || 'Visual search failed.')
-        } finally {
-            setSearching(false)
-        }
-    }, [workspaceId])
+        setSearched(false)
+    }, [queryPreview])
 
     const handleDrop = useCallback((e: React.DragEvent) => {
         e.preventDefault()
         setDragOver(false)
-        const file = e.dataTransfer.files[0]
-        if (file && file.type.startsWith('image/')) {
-            handleSearch(file)
-        }
-    }, [handleSearch])
+        const f = e.dataTransfer.files[0]
+        if (f) handleFile(f)
+    }, [handleFile])
 
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]
-        if (file) handleSearch(file)
+    const handleSearch = async () => {
+        if (!queryFile || !workspaceId) return
+        setLoading(true)
+        setError(null)
+        try {
+            const data = await visualSearch(workspaceId, queryFile, 20)
+            setResults(data.results ?? [])
+            setSearched(true)
+        } catch (err: any) {
+            setError(err?.response?.data?.detail || 'Visual search failed. Please try again.')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleReset = () => {
+        setQueryFile(null)
+        if (queryPreview) URL.revokeObjectURL(queryPreview)
+        setQueryPreview(null)
+        setResults([])
+        setSearched(false)
+        setError(null)
     }
 
     return (
-        <div className="visual-search-tab">
-            <h3 className="visual-search-title">🔍 Visual Search</h3>
-            <p className="visual-search-description">
-                Search for visually similar images in your knowledge base using AI.
+        <div className="space-y-4">
+            <p className="text-xs text-muted-foreground">
+                Upload an image to find visually similar images in your knowledge base using CLIP embeddings.
             </p>
 
-            {/* Upload zone */}
-            <div
-                className={`visual-search-dropzone ${dragOver ? 'drag-over' : ''}`}
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={handleDrop}
-                onClick={() => inputRef.current?.click()}
-            >
-                <input
-                    ref={inputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileSelect}
-                    style={{ display: 'none' }}
-                />
-                {previewUrl ? (
-                    <img src={previewUrl} alt="Query" className="visual-search-query-preview" />
-                ) : (
-                    <div className="visual-search-empty">
-                        <span className="visual-search-icon">🖼️</span>
-                        <p>Drop an image here or click to search</p>
-                    </div>
-                )}
+            {/* Query image + search button */}
+            <div className="flex flex-col sm:flex-row gap-3 items-start">
+                <div
+                    className={`relative flex-1 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed transition-all cursor-pointer
+                        ${dragOver ? 'border-accent bg-accent/5 scale-[1.01]' : queryFile ? 'border-accent/40 bg-accent/5' : 'border-border/60 hover:border-accent/50 hover:bg-muted/20'}`}
+                    style={{ minHeight: '8rem' }}
+                    onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={handleDrop}
+                    onClick={() => !queryFile && inputRef.current?.click()}
+                >
+                    <input
+                        ref={inputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/gif,image/webp,image/bmp"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
+                        className="hidden"
+                    />
+
+                    {queryFile && queryPreview ? (
+                        <div className="relative p-2 w-full">
+                            <img
+                                src={queryPreview}
+                                alt="Query"
+                                className="w-full rounded-lg object-contain"
+                                style={{ maxHeight: '160px' }}
+                            />
+                            <button
+                                className="absolute top-3 right-3 btn-ghost p-1 bg-card/80 backdrop-blur-sm border border-border/50"
+                                onClick={e => { e.stopPropagation(); handleReset() }}
+                            >
+                                <X className="w-3 h-3" />
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center gap-2 text-center p-5">
+                            <div className="w-10 h-10 rounded-xl bg-muted/40 border border-border/60 flex items-center justify-center">
+                                <Upload className="w-4 h-4 text-muted-foreground" />
+                            </div>
+                            <div>
+                                <p className="text-sm text-foreground">
+                                    Drop an image or <span className="text-accent font-medium">browse</span>
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-0.5">PNG, JPG, WebP, GIF</p>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <button
+                    className="btn-primary px-5 py-2.5 text-sm gap-2 self-end sm:self-center flex-shrink-0"
+                    disabled={!queryFile || loading}
+                    onClick={handleSearch}
+                >
+                    {loading ? (
+                        <><Loader2 className="w-4 h-4 animate-spin" /> Searching…</>
+                    ) : (
+                        <><ImageIcon className="w-4 h-4" /> Search</>
+                    )}
+                </button>
             </div>
 
-            {/* Error */}
-            {error && <div className="visual-search-error">{error}</div>}
+            {error && (
+                <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>
+            )}
 
-            {/* Loading */}
-            {searching && (
-                <div className="visual-search-loading">
-                    <span className="spinner-dot" /> Searching...
+            {searched && results.length === 0 && !loading && (
+                <div className="flex flex-col items-center gap-2 py-8 text-center">
+                    <SearchX className="w-8 h-8 text-muted-foreground opacity-40" />
+                    <p className="text-sm text-muted-foreground">No visually similar images found.</p>
+                    <p className="text-xs text-muted-foreground/60">Try a different image or add more images to your knowledge base.</p>
                 </div>
             )}
 
-            {/* Results */}
             {results.length > 0 && (
-                <div className="visual-search-results">
-                    <h4>Results ({results.length})</h4>
-                    <div className="visual-search-grid">
-                        {results.map((result) => (
-                            <div key={result.knowledge_id} className="visual-search-result-card">
-                                {workspaceId && (
-                                    <img
-                                        src={getKnowledgeThumbnailUrl(workspaceId, result.knowledge_id)}
-                                        alt={result.title || result.ai_title || ''}
-                                        className="visual-search-result-thumb"
-                                    />
-                                )}
-                                <div className="visual-search-result-info">
-                                    <span className="visual-search-result-title">
-                                        {result.title || result.ai_title || 'Untitled'}
-                                    </span>
-                                    <span className="visual-search-result-score">
-                                        {Math.round(result.score * 100)}% match
-                                    </span>
+                <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground">{results.length} similar image{results.length !== 1 ? 's' : ''} found</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                        {results.map((r) => {
+                            const displayTitle = r.title?.trim() || r.ai_title?.trim() || 'Untitled'
+                            return (
+                                <div
+                                    key={r.knowledge_id}
+                                    className="glass-card-hover rounded-xl overflow-hidden cursor-pointer group animate-fade-in"
+                                    onClick={() => navigate(`/w/${workspaceId}/knowledge/${r.knowledge_id}`)}
+                                >
+                                    <div className="aspect-square bg-muted/30 overflow-hidden">
+                                        {r.thumbnail_path ? (
+                                            <img
+                                                src={getKnowledgeThumbnailUrl(workspaceId, r.knowledge_id)}
+                                                alt={displayTitle}
+                                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                                                loading="lazy"
+                                            />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center">
+                                                <ImageIcon className="w-8 h-8 text-muted-foreground/40" />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="p-2 space-y-0.5">
+                                        <p className="text-xs font-medium truncate">{displayTitle}</p>
+                                        <p className="text-[10px] text-accent font-medium">{Math.round(r.score * 100)}% match</p>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            )
+                        })}
                     </div>
-                </div>
-            )}
-
-            {/* No results */}
-            {!searching && results.length === 0 && previewUrl && !error && (
-                <div className="visual-search-no-results">
-                    No similar images found. Upload more images to your knowledge base.
                 </div>
             )}
         </div>

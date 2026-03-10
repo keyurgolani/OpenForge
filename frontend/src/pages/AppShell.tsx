@@ -6,9 +6,10 @@ import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import { useUIStore } from '@/stores/uiStore'
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
 import { getShortcutDisplay } from '@/lib/keyboard'
-import { onQuickKnowledgeOpen, type QuickKnowledgeType } from '@/lib/quick-knowledge'
+import { onQuickKnowledgeOpen, type QuickKnowledgeType, FILE_BASED_TYPES } from '@/lib/quick-knowledge'
 import CommandPalette from '@/components/shared/CommandPalette'
 import { QuickKnowledgePanel } from '@/components/shared/QuickKnowledgePanel'
+import KnowledgeCreateDispatcher from '@/components/knowledge/KnowledgeCreateDispatcher'
 import { ModeToggle } from '@/components/mode-toggle'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import {
@@ -18,7 +19,8 @@ import MarkdownIt from 'markdown-it'
 import {
     Home, MessageSquare, Search, Settings, Plus, Folder,
     FileText, Pin, Archive, Bookmark, Code2, Zap, WifiOff,
-    PanelLeft, ChevronDown, ChevronLeft, ChevronRight, Brain, CheckSquare, Calendar, Star, Pencil, Trash2, Download, ShieldAlert
+    PanelLeft, ChevronDown, ChevronLeft, ChevronRight, Brain, CheckSquare, Calendar, Star, Pencil, Trash2, Download, ShieldAlert,
+    Image as ImageIcon, Music, FileType2, Table, Presentation,
 } from 'lucide-react'
 import { getWorkspaceIcon } from '@/pages/SettingsPage'
 
@@ -89,6 +91,8 @@ export default function AppShell() {
     const [sidebarOpen, setSidebarOpen] = useState(true)
     const [showQuickKnowledge, setShowQuickKnowledge] = useState(false)
     const [defaultKnowledgeType, setDefaultKnowledgeType] = useState<'standard' | 'fleeting' | 'bookmark' | 'gist'>('standard')
+    const [showKnowledgeCreate, setShowKnowledgeCreate] = useState(false)
+    const [createDispatchType, setCreateDispatchType] = useState<QuickKnowledgeType>('image')
     const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
     const [workspaceQuery, setWorkspaceQuery] = useState('')
     const [activeInsightSection, setActiveInsightSection] = useState<InsightSectionKey | null>('tasks')
@@ -217,9 +221,14 @@ export default function AppShell() {
 
     // Keyboard shortcuts
     const openQuickPanel = useCallback((type: QuickKnowledgeType = 'standard') => {
-        const validTypes = ['standard', 'fleeting', 'bookmark', 'gist'] as const
-        setDefaultKnowledgeType(validTypes.includes(type as typeof validTypes[number]) ? (type as 'standard' | 'fleeting' | 'bookmark' | 'gist') : 'standard')
-        setShowQuickKnowledge(true)
+        if (FILE_BASED_TYPES.has(type)) {
+            setCreateDispatchType(type)
+            setShowKnowledgeCreate(true)
+        } else {
+            const validTypes = ['standard', 'fleeting', 'bookmark', 'gist'] as const
+            setDefaultKnowledgeType(validTypes.includes(type as typeof validTypes[number]) ? (type as 'standard' | 'fleeting' | 'bookmark' | 'gist') : 'standard')
+            setShowQuickKnowledge(true)
+        }
     }, [])
 
     const handleNewKnowledge = useCallback(() => {
@@ -693,30 +702,39 @@ export default function AppShell() {
                             <ChevronDown className="w-3.5 h-3.5" />
                         </button>
 
-                        <div className="absolute top-full right-0 mt-1 z-[140] bg-card border border-border shadow-2xl rounded-xl py-1 min-w-40 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all origin-top-right">
-                            <button
-                                className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground focus:outline-none"
-                                onClick={() => openQuickPanel('standard')}
-                            >
+                        <div className="absolute top-full right-0 mt-1 z-[140] bg-card border border-border shadow-2xl rounded-xl py-1 min-w-44 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all origin-top-right">
+                            <p className="px-3 pt-1 pb-0.5 text-[10px] uppercase tracking-wide text-muted-foreground font-medium">Text</p>
+                            <button className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground focus:outline-none" onClick={() => openQuickPanel('standard')}>
                                 <FileText className="w-3.5 h-3.5" /> Note
                             </button>
-                            <button
-                                className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground focus:outline-none"
-                                onClick={() => openQuickPanel('fleeting')}
-                            >
+                            <button className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground focus:outline-none" onClick={() => openQuickPanel('fleeting')}>
                                 <Zap className="w-3.5 h-3.5 text-yellow-500" /> Fleeting Note
                             </button>
-                            <button
-                                className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground focus:outline-none"
-                                onClick={() => openQuickPanel('bookmark')}
-                            >
+                            <button className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground focus:outline-none" onClick={() => openQuickPanel('bookmark')}>
                                 <Bookmark className="w-3.5 h-3.5 text-purple-500" /> Bookmark
                             </button>
-                            <button
-                                className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground focus:outline-none"
-                                onClick={() => openQuickPanel('gist')}
-                            >
+                            <button className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground focus:outline-none" onClick={() => openQuickPanel('gist')}>
                                 <Code2 className="w-3.5 h-3.5 text-green-500" /> Gist
+                            </button>
+                            <div className="mx-2 my-1 h-px bg-border/60" />
+                            <p className="px-3 pt-0.5 pb-0.5 text-[10px] uppercase tracking-wide text-muted-foreground font-medium">File Upload</p>
+                            <button className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground focus:outline-none" onClick={() => openQuickPanel('image')}>
+                                <ImageIcon className="w-3.5 h-3.5 text-pink-400" /> Image
+                            </button>
+                            <button className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground focus:outline-none" onClick={() => openQuickPanel('audio')}>
+                                <Music className="w-3.5 h-3.5 text-orange-400" /> Audio
+                            </button>
+                            <button className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground focus:outline-none" onClick={() => openQuickPanel('pdf')}>
+                                <FileType2 className="w-3.5 h-3.5 text-red-400" /> PDF Document
+                            </button>
+                            <button className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground focus:outline-none" onClick={() => openQuickPanel('docx')}>
+                                <FileText className="w-3.5 h-3.5 text-blue-300" /> Word Document
+                            </button>
+                            <button className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground focus:outline-none" onClick={() => openQuickPanel('xlsx')}>
+                                <Table className="w-3.5 h-3.5 text-green-300" /> Spreadsheet
+                            </button>
+                            <button className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/50 transition-colors text-foreground focus:outline-none" onClick={() => openQuickPanel('pptx')}>
+                                <Presentation className="w-3.5 h-3.5 text-amber-400" /> Presentation
                             </button>
                         </div>
                     </div>
@@ -726,6 +744,11 @@ export default function AppShell() {
                     open={showQuickKnowledge}
                     defaultType={defaultKnowledgeType}
                     onClose={() => setShowQuickKnowledge(false)}
+                />
+
+                <KnowledgeCreateDispatcher
+                    open={showKnowledgeCreate}
+                    onClose={() => setShowKnowledgeCreate(false)}
                 />
 
                 <div className="relative z-0 flex-1 min-h-0 flex gap-3 p-3">

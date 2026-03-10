@@ -20,12 +20,15 @@ import {
     toggleArchive,
     deleteKnowledge,
     generateKnowledgeIntelligence,
+    getKnowledgeFileUrl,
+    getKnowledgeThumbnailUrl,
 } from '@/lib/api'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import {
     X, ExternalLink, Pin, PinOff, Archive, ArchiveX, Trash2, Sparkles,
     FileText, Bookmark, Code2, Zap, Clock, Tag, Hash, Loader2,
     Brain, Star, ChevronRight, ChevronDown,
+    Image as ImageIcon, Music, FileType2, Table, Presentation, Download,
 } from 'lucide-react'
 import MarkdownIt from 'markdown-it'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -38,6 +41,21 @@ const TYPE_META: Record<string, { icon: React.ComponentType<{ className?: string
     fleeting: { icon: Zap, label: 'Fleeting', color: 'text-yellow-400' },
     bookmark: { icon: Bookmark, label: 'Bookmark', color: 'text-purple-400' },
     gist: { icon: Code2, label: 'Gist', color: 'text-green-400' },
+    image: { icon: ImageIcon, label: 'Image', color: 'text-pink-400' },
+    audio: { icon: Music, label: 'Audio', color: 'text-orange-400' },
+    pdf: { icon: FileType2, label: 'PDF', color: 'text-red-400' },
+    docx: { icon: FileText, label: 'Word Doc', color: 'text-blue-300' },
+    xlsx: { icon: Table, label: 'Spreadsheet', color: 'text-green-300' },
+    pptx: { icon: Presentation, label: 'Presentation', color: 'text-amber-400' },
+}
+
+const FILE_BASED_TYPES = new Set(['image', 'audio', 'pdf', 'docx', 'xlsx', 'pptx'])
+
+function formatFileSize(bytes: number | null): string {
+    if (!bytes) return ''
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 interface KnowledgeModalProps {
@@ -322,14 +340,85 @@ export function KnowledgeModal({ knowledgeId, workspaceId, onClose }: KnowledgeM
                                 </div>
                             )}
 
+                            {/* Processing banner for file-based types */}
+                            {FILE_BASED_TYPES.has(knowledgeRecord.type) && knowledgeRecord.embedding_status === 'processing' && (
+                                <div className="flex items-center gap-2 rounded-lg bg-accent/10 border border-accent/20 px-3 py-2">
+                                    <Loader2 className="w-3.5 h-3.5 text-accent animate-spin flex-shrink-0" />
+                                    <p className="text-xs text-accent">Processing file — extracting content and generating embeddings…</p>
+                                </div>
+                            )}
+
+                            {/* Image preview */}
+                            {knowledgeRecord.type === 'image' && knowledgeRecord.thumbnail_path && (
+                                <div className="space-y-2">
+                                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Image</p>
+                                    <img
+                                        src={getKnowledgeThumbnailUrl(workspaceId, knowledgeId)}
+                                        alt={displayTitle ?? 'Image'}
+                                        className="rounded-xl max-h-48 object-contain border border-border/50 bg-muted/20"
+                                        loading="lazy"
+                                    />
+                                </div>
+                            )}
+
+                            {/* Audio player */}
+                            {knowledgeRecord.type === 'audio' && knowledgeRecord.file_path && (
+                                <div className="space-y-2">
+                                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Audio</p>
+                                    <audio
+                                        controls
+                                        src={getKnowledgeFileUrl(workspaceId, knowledgeId)}
+                                        className="w-full rounded-lg"
+                                        style={{ height: '40px' }}
+                                    />
+                                </div>
+                            )}
+
+                            {/* PDF thumbnail */}
+                            {knowledgeRecord.type === 'pdf' && knowledgeRecord.thumbnail_path && (
+                                <div className="space-y-2">
+                                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Preview</p>
+                                    <img
+                                        src={getKnowledgeThumbnailUrl(workspaceId, knowledgeId)}
+                                        alt="PDF preview"
+                                        className="rounded-xl max-h-48 object-contain border border-border/50 bg-muted/20"
+                                        loading="lazy"
+                                    />
+                                </div>
+                            )}
+
+                            {/* File metadata + download for all file types */}
+                            {FILE_BASED_TYPES.has(knowledgeRecord.type) && knowledgeRecord.file_path && (
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    {knowledgeRecord.mime_type && (
+                                        <span className="chip-muted text-xs">{knowledgeRecord.mime_type}</span>
+                                    )}
+                                    {knowledgeRecord.file_size && (
+                                        <span className="chip-muted text-xs">{formatFileSize(knowledgeRecord.file_size)}</span>
+                                    )}
+                                    <a
+                                        href={getKnowledgeFileUrl(workspaceId, knowledgeId)}
+                                        download
+                                        className="chip-muted text-xs flex items-center gap-1 hover:bg-muted/60 transition-colors"
+                                        onClick={e => e.stopPropagation()}
+                                    >
+                                        <Download className="w-3 h-3" /> Download
+                                    </a>
+                                </div>
+                            )}
+
                             {/* Content preview */}
                             <div>
-                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2">Content</p>
+                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2">
+                                    {FILE_BASED_TYPES.has(knowledgeRecord.type) ? 'Extracted Content' : 'Content'}
+                                </p>
                                 {knowledgeRecord.content ? (
                                     <div
                                         className={`markdown-content max-w-none text-sm leading-relaxed ${knowledgeRecord.type === 'gist' ? '[&_pre]:text-[12px] [&_code]:text-[12px]' : ''}`}
                                         dangerouslySetInnerHTML={{ __html: renderedKnowledgeContent }}
                                     />
+                                ) : FILE_BASED_TYPES.has(knowledgeRecord.type) && knowledgeRecord.embedding_status === 'processing' ? (
+                                    <p className="text-muted-foreground/50 italic text-sm">Extracting content…</p>
                                 ) : (
                                     <p className="text-muted-foreground/50 italic text-sm">No content yet.</p>
                                 )}

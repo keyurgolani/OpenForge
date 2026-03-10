@@ -10,7 +10,8 @@ import {
     Search, FileText, Bookmark, Code2, Zap, Pin, Archive,
     Trash2, PinOff, ArchiveX, Loader2, Sparkles,
     Inbox, CheckSquare, Square, Clock, ExternalLink, Copy, SortAsc,
-    ChevronDown, Tag, RefreshCw
+    ChevronDown, Tag, RefreshCw,
+    Image as ImageIcon, Music, FileType2, Table, Presentation,
 } from 'lucide-react'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem,
@@ -57,12 +58,12 @@ const TYPE_OPTS = [
     { id: 'fleeting', label: 'Fleeting', icon: Zap },
     { id: 'bookmark', label: 'Bookmarks', icon: Bookmark },
     { id: 'gist', label: 'Gists', icon: Code2 },
-    { id: 'image', label: 'Images', icon: FileText },
-    { id: 'audio', label: 'Audio', icon: FileText },
-    { id: 'pdf', label: 'PDFs', icon: FileText },
+    { id: 'image', label: 'Images', icon: ImageIcon },
+    { id: 'audio', label: 'Audio', icon: Music },
+    { id: 'pdf', label: 'PDFs', icon: FileType2 },
     { id: 'docx', label: 'Word Docs', icon: FileText },
-    { id: 'xlsx', label: 'Spreadsheets', icon: FileText },
-    { id: 'pptx', label: 'Presentations', icon: FileText },
+    { id: 'xlsx', label: 'Spreadsheets', icon: Table },
+    { id: 'pptx', label: 'Presentations', icon: Presentation },
 ]
 
 const SORT_OPTS = [
@@ -76,12 +77,12 @@ const TYPE_META: Record<string, { icon: React.ComponentType<{ className?: string
     fleeting: { icon: Zap, label: 'Fleeting', color: 'text-yellow-400' },
     bookmark: { icon: Bookmark, label: 'Bookmark', color: 'text-purple-400' },
     gist: { icon: Code2, label: 'Gist', color: 'text-green-400' },
-    image: { icon: FileText, label: 'Image', color: 'text-pink-400' },
-    audio: { icon: FileText, label: 'Audio', color: 'text-orange-400' },
-    pdf: { icon: FileText, label: 'PDF', color: 'text-red-400' },
+    image: { icon: ImageIcon, label: 'Image', color: 'text-pink-400' },
+    audio: { icon: Music, label: 'Audio', color: 'text-orange-400' },
+    pdf: { icon: FileType2, label: 'PDF', color: 'text-red-400' },
     docx: { icon: FileText, label: 'Word', color: 'text-blue-300' },
-    xlsx: { icon: FileText, label: 'Excel', color: 'text-green-300' },
-    pptx: { icon: FileText, label: 'PowerPoint', color: 'text-amber-400' },
+    xlsx: { icon: Table, label: 'Excel', color: 'text-green-300' },
+    pptx: { icon: Presentation, label: 'PowerPoint', color: 'text-amber-400' },
 }
 
 const MASONRY_GAP_PX = 20
@@ -429,6 +430,7 @@ export default function WorkspaceHome() {
                                             onArchive={() => handleArchive(knowledgeRecord.id)}
                                             onExtractBookmarkContent={() => handleExtractBookmarkContent(knowledgeRecord.id)}
                                             onDelete={() => handleDelete(knowledgeRecord.id)}
+                                            workspaceId={workspaceId}
                                         />
                                     ))}
                                 </div>
@@ -589,7 +591,7 @@ function FittedTagRow({ tags }: { tags: string[] }) {
 
 function KnowledgeCard({
     knowledgeRecord, index, isSelected, anySelected, onSelect, onClick,
-    onPin, onArchive, onExtractBookmarkContent, onDelete, minWidthPx, maxHeightPx,
+    onPin, onArchive, onExtractBookmarkContent, onDelete, minWidthPx, maxHeightPx, workspaceId,
 }: {
     knowledgeRecord: KnowledgeListItem
     index: number
@@ -603,6 +605,7 @@ function KnowledgeCard({
     onArchive: () => void
     onExtractBookmarkContent: () => void
     onDelete: () => void
+    workspaceId: string
 }) {
     const meta = TYPE_META[knowledgeRecord.type] ?? TYPE_META.standard
     const TypeIcon = meta.icon
@@ -684,6 +687,18 @@ function KnowledgeCard({
                             {displayTitle ?? 'Untitled'}
                         </h3>
                     </div>
+
+                    {/* Thumbnail for image/pdf */}
+                    {(knowledgeRecord.type === 'image' || knowledgeRecord.type === 'pdf') && knowledgeRecord.thumbnail_path && (
+                        <div className="mt-2 rounded-lg overflow-hidden border border-border/40 bg-muted/20">
+                            <img
+                                src={getKnowledgeThumbnailUrl(workspaceId, knowledgeRecord.id)}
+                                alt={displayTitle ?? 'Preview'}
+                                className="w-full object-cover max-h-40"
+                                loading="lazy"
+                            />
+                        </div>
+                    )}
 
                     <div className="mt-2 min-h-0 overflow-hidden">
                         {isBookmarkScraping && isBookmarkContentMissing ? (
