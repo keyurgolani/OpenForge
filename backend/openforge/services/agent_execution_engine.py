@@ -703,6 +703,7 @@ class AgentExecutionEngine:
                         raw_tools = [
                             t for t in raw_tools
                             if t.get("category") in agent_tool_categories
+                            or t.get("category") == "agent"
                         ]
                     for t in raw_tools:
                         fn = _tool_id_to_fn_name(t["id"])

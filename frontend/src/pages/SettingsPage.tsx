@@ -272,6 +272,23 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
     const [agentToolCategories, setAgentToolCategories] = useState<string[]>(ws.agent_tool_categories ?? [])
     const [agentMaxToolLoops, setAgentMaxToolLoops] = useState(ws.agent_max_tool_loops ?? 20)
     const [saving, setSaving] = useState(false)
+
+    const { data: toolRegistryData } = useQuery({
+        queryKey: ['tool-registry'],
+        queryFn: getToolRegistry,
+        enabled: agentEnabled,
+        staleTime: 60_000,
+    })
+    const availableToolCategories = useMemo(() => {
+        if (!Array.isArray(toolRegistryData)) return []
+        const cats = Array.from(new Set(
+            toolRegistryData
+                .map((t: any) => t.category as string)
+                .filter((c: string) => c && c !== 'agent')
+        )).sort() as string[]
+        return cats
+    }, [toolRegistryData])
+    const DANGEROUS_CATEGORIES = new Set(['shell', 'git'])
     const [saved, setSaved] = useState(false)
     const [deleting, setDeleting] = useState(false)
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -515,34 +532,47 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
                         {agentEnabled && (
                             <>
                                 <div className="space-y-2">
-                                    <p className="text-xs text-muted-foreground">Enabled tool categories:</p>
-                                    <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                                        {(['filesystem', 'http', 'shell', 'memory', 'git', 'task', 'language', 'skills'] as const).map(cat => {
-                                            const checked = agentToolCategories.includes(cat)
-                                            const isDangerous = cat === 'shell' || cat === 'git'
-                                            return (
-                                                <label
-                                                    key={cat}
-                                                    className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-colors ${checked ? 'border-accent/40 bg-accent/10 text-foreground' : 'border-border/50 bg-muted/20 text-muted-foreground hover:bg-muted/40'}`}
-                                                >
-                                                    <input
-                                                        type="checkbox"
-                                                        className="sr-only"
-                                                        checked={checked}
-                                                        onChange={() => setAgentToolCategories(prev =>
-                                                            checked ? prev.filter(c => c !== cat) : [...prev, cat]
-                                                        )}
-                                                    />
-                                                    <span className={`h-3.5 w-3.5 flex-shrink-0 rounded border ${checked ? 'border-accent bg-accent' : 'border-border'} flex items-center justify-center`}>
-                                                        {checked && <Check className="h-2.5 w-2.5 text-accent-foreground" />}
-                                                    </span>
-                                                    <span className="capitalize">{cat}</span>
-                                                    {isDangerous && <Shield className="h-3 w-3 text-amber-400 flex-shrink-0" aria-label="Elevated risk" />}
-                                                </label>
-                                            )
-                                        })}
-                                    </div>
-                                    {agentToolCategories.some(c => c === 'shell' || c === 'git') && (
+                                    <p className="text-xs text-muted-foreground">
+                                        Enabled tool categories:
+                                        {!toolRegistryData && <span className="ml-2 text-muted-foreground/50 italic">loading…</span>}
+                                    </p>
+                                    {availableToolCategories.length > 0 ? (
+                                        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                                            {availableToolCategories.map(cat => {
+                                                const checked = agentToolCategories.includes(cat)
+                                                const isDangerous = DANGEROUS_CATEGORIES.has(cat)
+                                                return (
+                                                    <label
+                                                        key={cat}
+                                                        className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-colors ${checked ? 'border-accent/40 bg-accent/10 text-foreground' : 'border-border/50 bg-muted/20 text-muted-foreground hover:bg-muted/40'}`}
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            className="sr-only"
+                                                            checked={checked}
+                                                            onChange={() => setAgentToolCategories(prev =>
+                                                                checked ? prev.filter(c => c !== cat) : [...prev, cat]
+                                                            )}
+                                                        />
+                                                        <span className={`h-3.5 w-3.5 flex-shrink-0 rounded border ${checked ? 'border-accent bg-accent' : 'border-border'} flex items-center justify-center`}>
+                                                            {checked && <Check className="h-2.5 w-2.5 text-accent-foreground" />}
+                                                        </span>
+                                                        <span className="capitalize">{cat}</span>
+                                                        {isDangerous && <Shield className="h-3 w-3 text-amber-400 flex-shrink-0" aria-label="Elevated risk" />}
+                                                    </label>
+                                                )
+                                            })}
+                                        </div>
+                                    ) : toolRegistryData ? (
+                                        <p className="text-xs text-muted-foreground/60 italic">No tool categories available.</p>
+                                    ) : (
+                                        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                                            {[...Array(6)].map((_, i) => (
+                                                <div key={i} className="h-9 rounded-lg border border-border/40 bg-muted/20 skeleton" />
+                                            ))}
+                                        </div>
+                                    )}
+                                    {agentToolCategories.some(c => DANGEROUS_CATEGORIES.has(c)) && (
                                         <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
                                             <Shield className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
                                             <span>Shell and Git tools can execute arbitrary commands in the workspace. Only enable if you trust the workspace content.</span>
