@@ -1,14 +1,14 @@
 """Add file-based knowledge columns.
 
-Revision ID: 020
-Revises: 019
+Revision ID: 020_knowledge_file_columns
+Revises: 019_hitl_tables
 """
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
-revision = "020"
-down_revision = "019"
+revision = "020_knowledge_file_columns"
+down_revision = "019_hitl_tables"
 branch_labels = None
 depends_on = None
 
