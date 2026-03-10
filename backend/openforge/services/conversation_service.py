@@ -11,7 +11,7 @@ from openforge.schemas.conversation import (
     ConversationResponse, ConversationWithMessages, MessageResponse
 )
 from openforge.services.config_service import config_service
-from openforge.services.attachment_pipeline import resolve_attachment_pipeline
+from openforge.services.attachment_pipeline import resolve_attachment_pipeline, get_extractor
 from openforge.utils.chat_title import (
     build_running_title_summary,
     derive_chat_title,
@@ -44,22 +44,25 @@ def _attachment_to_processed_summary(attachment: MessageAttachment) -> dict:
             "extracted_text": extracted_text[:5000] if extracted_text else None,
         }
 
-    pipeline = resolve_attachment_pipeline(
+    extractor = get_extractor(
         content_type=attachment.content_type,
         filename=attachment.filename,
     )
-    status = "deferred"
-    details = "Pipeline not available yet for this file type"
-    extracted_text = ""
+    pipeline = extractor.pipeline if extractor is not None else resolve_attachment_pipeline(
+        content_type=attachment.content_type,
+        filename=attachment.filename,
+    )
+    extracted_text = (attachment.extracted_text or "").strip()
 
-    if pipeline == "text":
-        extracted_text = (attachment.extracted_text or "").strip()
-        if extracted_text:
-            status = "processed"
-            details = f"Extracted text ({len(extracted_text)} chars)"
-        else:
-            status = "empty"
-            details = "No text extracted from attachment"
+    if extractor is None:
+        status = "deferred"
+        details = "Pipeline not available yet for this file type"
+    elif extracted_text:
+        status = "processed"
+        details = f"Extracted text ({len(extracted_text)} chars)"
+    else:
+        status = "empty"
+        details = "No text extracted from attachment"
 
     return {
         "id": str(attachment.id),

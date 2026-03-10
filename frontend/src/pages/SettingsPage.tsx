@@ -280,9 +280,10 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
         staleTime: 60_000,
     })
     const availableToolCategories = useMemo(() => {
-        if (!Array.isArray(toolRegistryData)) return []
+        const tools: any[] = toolRegistryData?.tools ?? []
+        if (!Array.isArray(tools)) return []
         const cats = Array.from(new Set(
-            toolRegistryData
+            tools
                 .map((t: any) => t.category as string)
                 .filter((c: string) => c && c !== 'agent')
         )).sort() as string[]

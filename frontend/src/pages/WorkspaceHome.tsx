@@ -1,10 +1,11 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { listKnowledge, deleteKnowledge, togglePin, toggleArchive, extractBookmarkContent, getKnowledgeThumbnailUrl } from '@/lib/api'
-import { KnowledgeModal } from '@/components/shared/KnowledgeModal'
 import { CopyButton } from '@/components/shared/CopyButton'
 import { openQuickKnowledge, type QuickKnowledgeType, FILE_BASED_TYPES } from '@/lib/quick-knowledge'
+import KnowledgeTypeGrid from '@/components/knowledge/KnowledgeTypeGrid'
+import { UnifiedKnowledgeModal } from '@/components/knowledge/UnifiedKnowledgeModal'
 import { getShortcutDisplay } from '@/lib/keyboard'
 import {
     Search, FileText, Bookmark, Code2, Zap, Pin, Archive,
@@ -100,6 +101,7 @@ function getResponsiveCardMinWidth(containerWidth: number): number {
 
 export default function WorkspaceHome() {
     const { workspaceId = '' } = useParams<{ workspaceId: string }>()
+    const [searchParams, setSearchParams] = useSearchParams()
     const qc = useQueryClient()
 
     const [filterText, setFilterText] = useState('')
@@ -109,7 +111,16 @@ export default function WorkspaceHome() {
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
     const [showTypeMenu, setShowTypeMenu] = useState(false)
     const [showSortMenu, setShowSortMenu] = useState(false)
-    const [modalKnowledgeId, setModalKnowledgeId] = useState<string | null>(null)
+    const [activeKnowledgeId, setActiveKnowledgeId] = useState<string | null>(null)
+
+    // Re-open modal from ?k= URL param (set by KnowledgePage "collapse" button)
+    useEffect(() => {
+        const k = searchParams.get('k')
+        if (k) {
+            setActiveKnowledgeId(k)
+            setSearchParams({}, { replace: true })
+        }
+    }, [searchParams, setSearchParams])
     const knowledgeLayoutRef = useRef<HTMLDivElement | null>(null)
     const [knowledgeCardMinWidth, setKnowledgeCardMinWidth] = useState(() =>
         typeof window !== 'undefined' ? getResponsiveCardMinWidth(window.innerWidth) : 400
@@ -376,38 +387,26 @@ export default function WorkspaceHome() {
 
                     {/* Empty state */}
                     {!isLoading && knowledgeItems.length === 0 && (
-                        <div className="text-center py-20">
-                            <Inbox className="w-14 h-14 mx-auto mb-4 text-muted-foreground/30" />
-                            <h3 className="text-lg font-semibold mb-2">
-                                {filterText ? 'No knowledge match your search' : 'No knowledge yet'}
-                            </h3>
-                            <p className="text-muted-foreground text-sm mb-6">
-                                {filterText ? 'Try a different search term.' : 'Use the + New Knowledge button to get started.'}
-                            </p>
-                            {!filterText && (
-                                <div className="flex justify-center gap-3 flex-wrap">
-                                    {[
-                                        { type: 'standard', Icon: FileText, label: 'Note', desc: 'Freeform markdown' },
-                                        { type: 'fleeting', Icon: Zap, label: 'Fleeting', desc: 'Quick capture' },
-                                        { type: 'bookmark', Icon: Bookmark, label: 'Bookmark', desc: 'Save a URL' },
-                                        { type: 'gist', Icon: Code2, label: 'Gist', desc: 'Code snippet' },
-                                    ].map(t => (
-                                        <button
-                                            type="button"
-                                            key={t.type}
-                                            onClick={() => handleCreate(t.type as QuickKnowledgeType)}
-                                            className="glass-card-hover px-4 py-3 text-left cursor-pointer flex items-start gap-3"
-                                        >
-                                            <t.Icon className="w-4 h-4 mt-0.5 text-accent flex-shrink-0" />
-                                            <div>
-                                                <div className="font-medium text-sm">{t.label}</div>
-                                                <div className="text-xs text-muted-foreground">{t.desc}</div>
-                                            </div>
-                                        </button>
-                                    ))}
+                        filterText ? (
+                            <div className="text-center py-20">
+                                <Inbox className="w-14 h-14 mx-auto mb-4 text-muted-foreground/30" />
+                                <h3 className="text-lg font-semibold mb-2">No knowledge match your search</h3>
+                                <p className="text-muted-foreground text-sm">Try a different search term.</p>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col items-center gap-6 py-16">
+                                <div className="w-12 h-12 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+                                    <Sparkles className="w-6 h-6 text-accent/60" />
                                 </div>
-                            )}
-                        </div>
+                                <div className="text-center">
+                                    <p className="text-lg font-semibold text-foreground/80">Your knowledge base is empty</p>
+                                    <p className="text-sm text-muted-foreground mt-1">Start by creating your first knowledge item</p>
+                                </div>
+                                <div className="w-full max-w-2xl">
+                                    <KnowledgeTypeGrid onSelect={(type) => handleCreate(type)} />
+                                </div>
+                            </div>
+                        )
                     )}
 
                     {/* Knowledge grid */}
@@ -425,7 +424,7 @@ export default function WorkspaceHome() {
                                             isSelected={selected.has(knowledgeRecord.id)}
                                             anySelected={hasSelection}
                                             onSelect={toggleSelect}
-                                            onClick={() => setModalKnowledgeId(knowledgeRecord.id)}
+                                            onClick={() => setActiveKnowledgeId(knowledgeRecord.id)}
                                             onPin={() => handlePin(knowledgeRecord.id)}
                                             onArchive={() => handleArchive(knowledgeRecord.id)}
                                             onExtractBookmarkContent={() => handleExtractBookmarkContent(knowledgeRecord.id)}
@@ -462,14 +461,14 @@ export default function WorkspaceHome() {
                     </div>
                 )}
 
-                {/* Knowledge modal */}
-                {modalKnowledgeId && (
-                    <KnowledgeModal
-                        knowledgeId={modalKnowledgeId}
-                        workspaceId={workspaceId}
-                        onClose={() => setModalKnowledgeId(null)}
-                    />
-                )}
+                {/* Unified knowledge modal — view mode */}
+                <UnifiedKnowledgeModal
+                    mode="view"
+                    knowledgeId={activeKnowledgeId ?? undefined}
+                    workspaceId={workspaceId}
+                    isOpen={!!activeKnowledgeId}
+                    onClose={() => setActiveKnowledgeId(null)}
+                />
             </div>
 
         </div>

@@ -652,7 +652,19 @@ class AgentExecutionEngine:
                 else _agent_prompt_default
             )
 
-            # 5b. Append installed skills to system prompt
+            # 5b. If agent mode is disabled, append a clear capability notice so the LLM
+            # responds gracefully instead of hallucinating tool access.
+            if not agent_enabled:
+                system_prompt = system_prompt + (
+                    "\n\n## Agent Mode Disabled\n"
+                    "Agent mode is not enabled for this workspace. You do NOT have access to any tools, "
+                    "workspace knowledge search, or external integrations. If the user asks you to search "
+                    "knowledge, use tools, or perform agentic tasks, politely explain that agent mode must "
+                    "be enabled in Workspace Settings first, and that you can only respond based on the "
+                    "conversation context and your own training knowledge.\n"
+                )
+
+            # 5c. Append installed skills to system prompt
             installed_skills = await tool_dispatcher.list_skills()
             if installed_skills:
                 skills_section = "\n\n## Installed Skills\n"
@@ -1328,14 +1340,32 @@ class AgentExecutionEngine:
             except Exception:
                 pass
 
-            # Load agent system prompt
-            from openforge.api.prompts import PROMPT_CATALOGUE
-            _entry = next((p for p in PROMPT_CATALOGUE if p["id"] == "agent_system"), None)
-            system_prompt = _entry["default"] if _entry else "You are a helpful AI agent."
-            _cfg = await db.execute(select(Config).where(Config.key == "prompt.agent_system"))
-            _row = _cfg.scalar_one_or_none()
-            if _row and _row.value and "text" in _row.value:
-                system_prompt = _row.value["text"]
+            # Subagents use a dedicated autonomous prompt — not the interactive agent prompt.
+            # They have no user present and must never ask for clarification.
+            system_prompt = (
+                "You are an autonomous AI subagent operating inside OpenForge. "
+                "You have been delegated a specific task by another agent. "
+                "You MUST complete the task fully and autonomously — there is NO user present "
+                "and you CANNOT ask for clarification or more details.\n\n"
+                "## Tool categories\n"
+                "- `workspace.*` — the user's persistent content: knowledge records and chat conversations\n"
+                "  - `workspace.search` — semantically search knowledge and past chats by topic\n"
+                "  - `workspace.list_chats` — list all conversations to find one by title\n"
+                "  - `workspace.read_chat` — read the full messages of a conversation by ID\n"
+                "  - `workspace.list_knowledge` — browse knowledge records\n"
+                "  - `workspace.save_knowledge` — create a new knowledge record\n"
+                "  - `workspace.delete_knowledge` — delete a knowledge record\n"
+                "- `memory.*` — your private execution scratchpad (ephemeral, invisible to user)\n"
+                "  - `memory.store` / `memory.recall` / `memory.forget`\n"
+                "- `filesystem.*` — files on the workspace disk\n\n"
+                "## Rules\n"
+                "1. NEVER say 'I need more details' or ask any questions — search and find the answer yourself.\n"
+                "2. Try at least 2–3 different searches before concluding something cannot be found.\n"
+                "3. When you find a `conversation_id` in search results, immediately call `workspace.read_chat` to read the full content.\n"
+                "4. When asked to summarize a chat: use `workspace.list_chats` to find it by title, then `workspace.read_chat` to read its messages.\n"
+                "5. Return a complete, useful response — not a description of what you attempted.\n"
+                "6. Only call tools listed in your tool schema — never invent tool names.\n"
+            )
 
             # RAG context
             rag_results: list = []

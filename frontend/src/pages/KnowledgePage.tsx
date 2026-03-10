@@ -1,27 +1,23 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import FileKnowledgeEditor from '@/components/knowledge/editors/FileKnowledgeEditor'
-import { useParams, useLocation } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
     getKnowledge,
     updateKnowledge,
     generateKnowledgeIntelligence,
     deleteKnowledge,
     listSettings,
+    getKnowledgeFileUrl,
 } from '@/lib/api'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import { useToast } from '@/components/shared/ToastProvider'
 import {
-    Split, Eye, Edit3, Sparkles, Brain, Tag, Loader2,
+    Sparkles, Brain, Tag, Loader2,
     ChevronRight, ChevronLeft, CheckSquare, Calendar, Star,
-    Copy, FileText
+    FileText, ChevronDown, Pencil, Check, Link2, ExternalLink,
+    Download, File, FileImage, FileAudio, Music,
 } from 'lucide-react'
-import {
-    ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem,
-    ContextMenuSeparator
-} from '@/components/ui/context-menu'
-import { CopyButton } from '@/components/shared/CopyButton'
-import { isModKey } from '@/lib/keyboard'
+import BlockNoteEditor, { BlockNoteViewer } from '@/components/knowledge/BlockNoteEditor'
 import MarkdownIt from 'markdown-it'
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
@@ -32,9 +28,6 @@ const DEFAULT_KNOWLEDGE_INTELLIGENCE_WIDTH = 340
 const KNOWLEDGE_INTELLIGENCE_COLLAPSED_WIDTH = 56
 const KNOWLEDGE_INTELLIGENCE_WIDTH_STORAGE_KEY = 'openforge.knowledge.intelligence.width'
 const KNOWLEDGE_INTELLIGENCE_COLLAPSED_STORAGE_KEY = 'openforge.knowledge.intelligence.collapsed'
-const KNOWLEDGE_EDITOR_HISTORY_LIMIT = 300
-const MIN_KNOWLEDGE_SPLIT_RATIO = 0.24
-const MAX_KNOWLEDGE_SPLIT_RATIO = 0.76
 type KnowledgeIntelligenceSectionKey = 'summary' | 'tasks' | 'facts' | 'crucial_things' | 'timelines'
 const DISCARDABLE_DRAFT_CLEANUP_DELAY_MS = 700
 const pendingDiscardableDraftCleanup = new Map<string, number>()
@@ -43,7 +36,7 @@ const AUTO_KNOWLEDGE_INTELLIGENCE_KEY = 'automation.auto_knowledge_intelligence_
 
 const clampKnowledgeIntelligenceWidth = (value: number) =>
     Math.max(MIN_KNOWLEDGE_INTELLIGENCE_WIDTH, Math.min(MAX_KNOWLEDGE_INTELLIGENCE_WIDTH, value))
-const clampKnowledgeSplitRatio = (value: number) => Math.max(MIN_KNOWLEDGE_SPLIT_RATIO, Math.min(MAX_KNOWLEDGE_SPLIT_RATIO, value))
+
 const parseBooleanSetting = (value: unknown, fallback: boolean) => {
     if (typeof value === 'boolean') return value
     if (typeof value === 'number') return value !== 0
@@ -64,15 +57,27 @@ function useDebounce<T>(value: T, delay: number): T {
     return debouncedValue
 }
 
+function formatFileSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+const GIST_LANGUAGES = [
+    'typescript', 'javascript', 'python', 'rust', 'go', 'java', 'c', 'cpp',
+    'csharp', 'php', 'ruby', 'swift', 'kotlin', 'scala', 'shell', 'sql',
+    'html', 'css', 'json', 'yaml', 'toml', 'markdown', 'plaintext',
+]
+
 export default function KnowledgePage() {
     const { workspaceId = '', knowledgeId = '' } = useParams<{ workspaceId: string; knowledgeId: string }>()
-    const location = useLocation()
+    const navigate = useNavigate()
+    const [searchParams] = useSearchParams()
     const qc = useQueryClient()
     const { error: showError } = useToast()
     const { on } = useWorkspaceWebSocket(workspaceId)
-    const [mode, setMode] = useState<'edit' | 'preview' | 'split'>('split')
-    const [content, setContent] = useState('')
-    const [title, setTitle] = useState('')
+
+    // Intelligence siderail state
     const [isKnowledgeIntelligenceCollapsed, setIsKnowledgeIntelligenceCollapsed] = useState(() => {
         if (typeof window === 'undefined') return false
         return window.localStorage.getItem(KNOWLEDGE_INTELLIGENCE_COLLAPSED_STORAGE_KEY) === '1'
@@ -84,19 +89,28 @@ export default function KnowledgePage() {
         const parsed = raw ? parseInt(raw, 10) : NaN
         return Number.isFinite(parsed) ? clampKnowledgeIntelligenceWidth(parsed) : DEFAULT_KNOWLEDGE_INTELLIGENCE_WIDTH
     })
-    const [splitRatio, setSplitRatio] = useState(0.5)
+
+    // Edit mode state
+    const [isEditing, setIsEditing] = useState(searchParams.get('edit') === '1')
+
+    // Content state
+    const [title, setTitle] = useState('')
+    const [content, setContent] = useState('')
+    const [gistLang, setGistLang] = useState('typescript')
+    const [gistCode, setGistCode] = useState('')
+    const [initialized, setInitialized] = useState(false)
+
+    // Save/AI state
     const [saving, setSaving] = useState(false)
     const [aiLoading, setAiLoading] = useState<string | null>(null)
-    const textareaRef = useRef<HTMLTextAreaElement>(null)
-    const splitContainerRef = useRef<HTMLDivElement>(null)
-    const undoContentStackRef = useRef<string[]>([])
-    const redoContentStackRef = useRef<string[]>([])
-    const contentMirrorRef = useRef('')
+
+    // Refs for auto-intelligence on exit
     const hadMeaningfulInputRef = useRef(false)
     const latestDraftStateRef = useRef<{ title: string; content: string; knowledgeRecord: any | null }>({ title: '', content: '', knowledgeRecord: null })
+
     const isDiscardableDraft = useMemo(
-        () => new URLSearchParams(location.search).get('draft') === '1',
-        [location.search],
+        () => searchParams.get('draft') === '1',
+        [searchParams],
     )
 
     const { data: knowledgeRecord, isLoading } = useQuery({
@@ -106,58 +120,23 @@ export default function KnowledgePage() {
         refetchOnMount: 'always',
     })
 
+    // Initialize state from fetched record (once)
     useEffect(() => {
-        contentMirrorRef.current = content
-    }, [content])
-
-    const pushUndoSnapshot = useCallback((snapshot: string) => {
-        const stack = undoContentStackRef.current
-        if (stack[stack.length - 1] === snapshot) return
-        stack.push(snapshot)
-        if (stack.length > KNOWLEDGE_EDITOR_HISTORY_LIMIT) stack.shift()
-    }, [])
-
-    const pushRedoSnapshot = useCallback((snapshot: string) => {
-        const stack = redoContentStackRef.current
-        if (stack[stack.length - 1] === snapshot) return
-        stack.push(snapshot)
-        if (stack.length > KNOWLEDGE_EDITOR_HISTORY_LIMIT) stack.shift()
-    }, [])
-
-    const applyContentFromHistory = useCallback((nextValue: string) => {
-        setContent(nextValue)
-        contentMirrorRef.current = nextValue
-        window.requestAnimationFrame(() => {
-            const ta = textareaRef.current
-            if (!ta) return
-            ta.focus()
-            const caretPos = nextValue.length
-            ta.selectionStart = caretPos
-            ta.selectionEnd = caretPos
-        })
-    }, [])
-
-    const resetContentHistory = useCallback((currentValue: string) => {
-        undoContentStackRef.current = []
-        redoContentStackRef.current = []
-        contentMirrorRef.current = currentValue
-    }, [])
-
-    useEffect(() => {
-        if (knowledgeRecord) {
-            const incomingContent = knowledgeRecord.content ?? ''
-            setContent(incomingContent)
+        if (knowledgeRecord && !initialized) {
             setTitle(knowledgeRecord.title ?? '')
-            if (contentMirrorRef.current !== incomingContent) {
-                resetContentHistory(incomingContent)
-            }
+            setContent(knowledgeRecord.content ?? '')
+            setGistCode(knowledgeRecord.content ?? '')
+            setGistLang(knowledgeRecord.gist_language ?? 'typescript')
+            setInitialized(true)
         }
-    }, [knowledgeRecord, resetContentHistory])
+    }, [knowledgeRecord, initialized])
 
+    // Keep latest draft ref up to date
     useEffect(() => {
         latestDraftStateRef.current = { title, content, knowledgeRecord: knowledgeRecord ?? null }
     }, [title, content, knowledgeRecord])
 
+    // Auto-intelligence on exit + discardable draft cleanup
     useEffect(() => {
         if (!knowledgeId) return
         const cleanupKey = `${workspaceId}:${knowledgeId}`
@@ -195,7 +174,6 @@ export default function KnowledgePage() {
                     pendingKnowledgeExitIntelligence.delete(cleanupKey)
                     void (async () => {
                         try {
-                            // Flush latest editor values before intelligence generation.
                             await updateKnowledge(workspaceId, knowledgeId, {
                                 content: latest.content,
                                 title: latest.title || null,
@@ -257,22 +235,46 @@ export default function KnowledgePage() {
         })
     }, [knowledgeId, on, qc])
 
+    // Auto-save (debounced) — content + title
     const debouncedContent = useDebounce(content, 800)
     const debouncedTitle = useDebounce(title, 800)
-    const saveRef = useRef({ content: '', title: '' })
+    const debouncedGistCode = useDebounce(gistCode, 800)
+    const debouncedGistLang = useDebounce(gistLang, 800)
+    const saveRef = useRef({ content: '', title: '', gistCode: '', gistLang: '' })
 
     useEffect(() => {
-        if (!knowledgeRecord) return
-        if (debouncedContent === saveRef.current.content && debouncedTitle === saveRef.current.title) return
-        setSaving(true)
-        updateKnowledge(workspaceId, knowledgeId, { content: debouncedContent, title: debouncedTitle || null })
-            .then(() => {
-                saveRef.current = { content: debouncedContent, title: debouncedTitle }
-                qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
-                qc.invalidateQueries({ queryKey: ['knowledge-item', knowledgeId] })
+        if (!knowledgeRecord || !initialized) return
+        const type = knowledgeRecord.type ?? 'standard'
+        if (type === 'gist') {
+            if (
+                debouncedGistCode === saveRef.current.gistCode &&
+                debouncedGistLang === saveRef.current.gistLang &&
+                debouncedTitle === saveRef.current.title
+            ) return
+            setSaving(true)
+            updateKnowledge(workspaceId, knowledgeId, {
+                content: debouncedGistCode,
+                title: debouncedTitle || null,
+                gist_language: debouncedGistLang,
             })
-            .finally(() => setTimeout(() => setSaving(false), 500))
-    }, [debouncedContent, debouncedTitle, knowledgeRecord, knowledgeId, workspaceId, qc])
+                .then(() => {
+                    saveRef.current = { ...saveRef.current, gistCode: debouncedGistCode, gistLang: debouncedGistLang, title: debouncedTitle }
+                    qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
+                    qc.invalidateQueries({ queryKey: ['knowledge-item', knowledgeId] })
+                })
+                .finally(() => setTimeout(() => setSaving(false), 500))
+        } else {
+            if (debouncedContent === saveRef.current.content && debouncedTitle === saveRef.current.title) return
+            setSaving(true)
+            updateKnowledge(workspaceId, knowledgeId, { content: debouncedContent, title: debouncedTitle || null })
+                .then(() => {
+                    saveRef.current = { ...saveRef.current, content: debouncedContent, title: debouncedTitle }
+                    qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
+                    qc.invalidateQueries({ queryKey: ['knowledge-item', knowledgeId] })
+                })
+                .finally(() => setTimeout(() => setSaving(false), 500))
+        }
+    }, [debouncedContent, debouncedTitle, debouncedGistCode, debouncedGistLang, knowledgeRecord, initialized, knowledgeId, workspaceId, qc])
 
     const getActionErrorMessage = (reason: unknown) => {
         const err = reason as { response?: { data?: { detail?: string } }, message?: string }
@@ -327,48 +329,7 @@ export default function KnowledgePage() {
         }
     }
 
-    const insertMarkdown = (before: string, after: string = '') => {
-        const ta = textareaRef.current
-        if (!ta) return
-        const start = ta.selectionStart
-        const end = ta.selectionEnd
-        const selected = content.substring(start, end)
-        const newContent = content.substring(0, start) + before + selected + after + content.substring(end)
-        pushUndoSnapshot(content)
-        redoContentStackRef.current = []
-        setContent(newContent)
-        contentMirrorRef.current = newContent
-        setTimeout(() => {
-            ta.selectionStart = start + before.length
-            ta.selectionEnd = start + before.length + selected.length
-            ta.focus()
-        }, 0)
-    }
-
-    const handleEditorKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (!isModKey(e)) return
-        const key = e.key.toLowerCase()
-        const isUndo = key === 'z' && !e.shiftKey
-        const isRedo = key === 'y' || (key === 'z' && e.shiftKey)
-        if (!isUndo && !isRedo) return
-
-        e.preventDefault()
-
-        if (isUndo) {
-            const previousValue = undoContentStackRef.current.pop()
-            if (previousValue === undefined) return
-            pushRedoSnapshot(content)
-            applyContentFromHistory(previousValue)
-            return
-        }
-
-        const nextValue = redoContentStackRef.current.pop()
-        if (nextValue === undefined) return
-        pushUndoSnapshot(content)
-        applyContentFromHistory(nextValue)
-    }, [content, applyContentFromHistory, pushRedoSnapshot, pushUndoSnapshot])
-
-    const previewTitle = title.trim() || knowledgeRecord?.ai_title?.trim() || ''
+    // Intelligence siderail helpers
     const knowledgeAiAction = { id: 'intelligence', icon: Brain, label: 'Generate Intelligence' } as const
     const summaryText = (knowledgeRecord?.ai_summary ?? '').trim()
     const tasksItems = Array.isArray(knowledgeRecord?.insights?.tasks) ? knowledgeRecord.insights.tasks : []
@@ -434,9 +395,11 @@ export default function KnowledgePage() {
             return next
         })
     }, [])
+
     const toggleKnowledgeIntelligenceSection = useCallback((section: KnowledgeIntelligenceSectionKey) => {
         setActiveKnowledgeIntelligenceSection(prev => (prev === section ? null : section))
     }, [])
+
     const formatKnowledgeIntelligenceItem = useCallback((section: KnowledgeIntelligenceSectionKey, item: unknown): string => {
         if (section === 'timelines' && typeof item === 'object' && item !== null && !Array.isArray(item)) {
             const timeline = item as { date?: unknown, event?: unknown }
@@ -476,223 +439,431 @@ export default function KnowledgePage() {
         window.addEventListener('mouseup', onMouseUp)
     }
 
-    const handleSplitResizeStart = (e: React.MouseEvent<HTMLButtonElement>) => {
-        e.preventDefault()
-        const containerRect = splitContainerRef.current?.getBoundingClientRect()
-        if (!containerRect || containerRect.width <= 0) return
-
-        const updateSplitRatio = (clientX: number) => {
-            const ratio = (clientX - containerRect.left) / containerRect.width
-            setSplitRatio(clampKnowledgeSplitRatio(ratio))
-        }
-
-        updateSplitRatio(e.clientX)
-        document.body.style.cursor = 'col-resize'
-        document.body.style.userSelect = 'none'
-
-        const onMouseMove = (moveEvent: MouseEvent) => {
-            updateSplitRatio(moveEvent.clientX)
-        }
-
-        const onMouseUp = () => {
-            document.body.style.cursor = ''
-            document.body.style.userSelect = ''
-            window.removeEventListener('mousemove', onMouseMove)
-            window.removeEventListener('mouseup', onMouseUp)
-        }
-
-        window.addEventListener('mousemove', onMouseMove)
-        window.addEventListener('mouseup', onMouseUp)
-    }
-
-    if (isLoading) {
-        return (
-            <div className="flex h-full items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-accent" />
-            </div>
-        )
-    }
-
-    // File-based knowledge types use a dedicated editor
-    const FILE_BASED_KNOWLEDGE_TYPES = ['image', 'audio', 'pdf', 'docx', 'xlsx', 'pptx']
-    if (knowledgeRecord && FILE_BASED_KNOWLEDGE_TYPES.includes(knowledgeRecord.type)) {
-        // FileKnowledgeEditor is imported at the top of the file
-        return (
-            <FileKnowledgeEditor
-                knowledge={knowledgeRecord}
-                onUpdate={(updated: any) => {
-                    qc.setQueryData(['knowledge-item', knowledgeId], updated)
-                    qc.invalidateQueries({ queryKey: ['knowledge-list'] })
-                }}
-            />
-        )
-    }
+    const type = knowledgeRecord?.type ?? 'standard'
+    const fileUrl = getKnowledgeFileUrl(workspaceId, knowledgeId)
+    const metadata = knowledgeRecord?.file_metadata ?? {}
+    const isFileBased = ['image', 'audio', 'pdf', 'docx', 'xlsx', 'pptx'].includes(type)
 
     return (
         <div className="flex h-full min-h-0 gap-3">
+            {/* Main content panel */}
             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                 {/* Toolbar */}
-                <div className="flex items-center gap-2 px-5 py-2.5 flex-shrink-0 flex-wrap gap-y-2">
-                    {/* View mode toggles */}
-                    <div className="flex gap-0.5 glass-card p-0.5">
-                        {(['edit', 'split', 'preview'] as const).map(m => (
-                            <button key={m} onClick={() => setMode(m)} className={`px-2 py-1 text-xs rounded-md transition-all ${mode === m ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
-                                {m === 'edit' ? <Edit3 className="w-3.5 h-3.5" /> : m === 'preview' ? <Eye className="w-3.5 h-3.5" /> : <Split className="w-3.5 h-3.5" />}
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* Format buttons */}
-                    <div className="flex gap-0.5">
-                        {[
-                            { label: 'B', before: '**', after: '**' },
-                            { label: 'I', before: '*', after: '*' },
-                            { label: 'H', before: '## ' },
-                            { label: '`', before: '`', after: '`' },
-                        ].map(btn => (
-                            <button key={btn.label} onClick={() => insertMarkdown(btn.before, btn.after)} className="btn-ghost px-2 py-1 text-xs font-mono">{btn.label}</button>
-                        ))}
-                    </div>
+                <div className="flex items-center gap-2 px-5 py-2.5 flex-shrink-0 border-b border-border/30">
+                    {/* Collapse / back to modal button */}
+                    <button
+                        type="button"
+                        onClick={() => navigate(`/w/${workspaceId}?k=${knowledgeId}`)}
+                        className="btn-ghost p-1.5 gap-1.5 text-xs flex items-center"
+                    >
+                        <ChevronDown className="w-4 h-4" />
+                        <span className="hidden sm:inline">Back to modal</span>
+                    </button>
 
                     <div className="flex-1" />
 
-                    {/* AI toolbar */}
-                    <div className="flex gap-1">
-                        <CopyButton
-                            content={content}
-                            label="Copy"
-                            copiedLabel="Copied"
-                            className="btn-ghost text-xs py-1 px-2 gap-1"
-                        />
-                        <button
-                            onClick={handleGenerateIntelligence}
-                            disabled={!!aiLoading}
-                            className="btn-ghost text-xs py-1 px-2 gap-1"
-                            title={knowledgeAiAction.label}
-                        >
-                            {aiLoading === knowledgeAiAction.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <knowledgeAiAction.icon className="w-3.5 h-3.5" />}
-                            <span className="hidden sm:inline">{knowledgeAiAction.label}</span>
-                        </button>
-                    </div>
-
                     {/* Save indicator */}
-                    {saving && <span className="text-xs text-muted-foreground flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Saving</span>}
+                    {saving && (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Loader2 className="w-3 h-3 animate-spin" /> Saving
+                        </span>
+                    )}
+
+                    {/* Edit / Done toggle — only for non-file types (file types use view-only) */}
+                    {initialized && !isFileBased && (
+                        <button
+                            type="button"
+                            onClick={() => setIsEditing(prev => !prev)}
+                            className="btn-ghost text-xs py-1 px-2 gap-1 flex items-center"
+                            title={isEditing ? 'Done editing' : 'Edit'}
+                        >
+                            {isEditing
+                                ? <><Check className="w-3.5 h-3.5" /><span className="hidden sm:inline">Done</span></>
+                                : <><Pencil className="w-3.5 h-3.5" /><span className="hidden sm:inline">Edit</span></>
+                            }
+                        </button>
+                    )}
+
+                    {/* Generate Intelligence button */}
+                    <button
+                        type="button"
+                        onClick={handleGenerateIntelligence}
+                        disabled={!!aiLoading}
+                        className="btn-ghost text-xs py-1 px-2 gap-1 flex items-center"
+                        title={knowledgeAiAction.label}
+                    >
+                        {aiLoading === knowledgeAiAction.id
+                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            : <knowledgeAiAction.icon className="w-3.5 h-3.5" />
+                        }
+                        <span className="hidden sm:inline">{knowledgeAiAction.label}</span>
+                    </button>
                 </div>
 
-                <div ref={splitContainerRef} className="flex flex-1 min-h-0 overflow-hidden">
-                    {/* Editor pane */}
-                    {(mode === 'edit' || mode === 'split') && (
-                        <div
-                            className={`flex min-h-0 flex-col ${mode === 'split' ? 'min-w-0' : 'w-full'} overflow-hidden`}
-                            style={mode === 'split' ? { width: `${splitRatio * 100}%` } : undefined}
-                        >
-                            <div className="px-6 pt-5 pb-3">
-                                <div className="space-y-2">
-                                    <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/85">Title</p>
-                                    <input
-                                        className="w-full text-2xl font-bold bg-transparent border-none outline-none text-foreground placeholder-muted-foreground/50"
-                                        placeholder={knowledgeRecord?.ai_title ?? 'Untitled'}
-                                        value={title}
-                                        onChange={e => {
-                                            if (e.target.value.trim().length > 0) hadMeaningfulInputRef.current = true
-                                            setTitle(e.target.value)
-                                        }}
-                                    />
-                                </div>
-                                <div className="mt-3 pt-3">
-                                    <p className="mb-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/85">Tags</p>
-                                    {!!knowledgeRecord?.tags?.length ? (
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {knowledgeRecord.tags.map((tag: string) => (
-                                                <span key={tag} className="chip-accent text-xs">{tag}</span>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <p className="text-xs text-muted-foreground/70">No tags yet.</p>
-                                    )}
-                                </div>
-                            </div>
-                            <p className="px-6 pb-2 pt-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/85">Content</p>
-                            <textarea
-                                ref={textareaRef}
-                                className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-1 bg-transparent border-none outline-none resize-none font-mono text-sm text-foreground leading-relaxed"
-                                placeholder="Start writing… (Markdown supported)"
-                                value={content}
-                                onKeyDown={handleEditorKeyDown}
-                                onChange={e => {
-                                    const nextValue = e.target.value
-                                    if (nextValue === content) return
-                                    pushUndoSnapshot(content)
-                                    redoContentStackRef.current = []
-                                    if (nextValue.trim().length > 0) hadMeaningfulInputRef.current = true
-                                    setContent(nextValue)
-                                    contentMirrorRef.current = nextValue
-                                }}
-                                style={{ tabSize: 2 }}
-                            />
+                {/* Scrollable content area */}
+                <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
+                    {/* Loading skeleton */}
+                    {isLoading && (
+                        <div className="space-y-3 animate-pulse">
+                            <div className="h-8 bg-muted/40 rounded-lg w-2/3" />
+                            <div className="h-4 bg-muted/30 rounded w-1/4" />
+                            <div className="h-4 bg-muted/20 rounded w-full mt-6" />
+                            <div className="h-4 bg-muted/20 rounded w-5/6" />
+                            <div className="h-4 bg-muted/20 rounded w-4/6" />
                         </div>
                     )}
 
-                    {mode === 'split' && (
-                        <button
-                            type="button"
-                            onMouseDown={handleSplitResizeStart}
-                            className="relative z-10 h-full w-3 flex-shrink-0 cursor-col-resize bg-transparent"
-                            aria-label="Resize editor and preview panes"
-                            title="Drag to resize panes"
-                        >
-                            <span className="pointer-events-none absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-border/45" />
-                        </button>
-                    )}
-
-                    {/* Preview pane */}
-                    {(mode === 'preview' || mode === 'split') && (
-                        <ContextMenu>
-                            <ContextMenuTrigger asChild>
-                                <div
-                                    className={`${mode === 'split' ? 'min-w-0' : 'w-full'} min-h-0 overflow-y-auto px-7 py-6`}
-                                    style={mode === 'split' ? { width: `${(1 - splitRatio) * 100}%` } : undefined}
-                                >
-                                    <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/85">Title</p>
-                                    {previewTitle ? (
-                                        <h1 className="mt-1 text-2xl font-bold text-foreground">{previewTitle}</h1>
-                                    ) : (
-                                        <p className="mt-1 text-sm text-muted-foreground/70">Untitled</p>
-                                    )}
-                                    <p className="mb-2 mt-4 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/85">Tags</p>
-                                    {!!knowledgeRecord?.tags?.length ? (
-                                        <div className="mb-4 flex flex-wrap gap-1.5">
-                                            {knowledgeRecord.tags.map((tag: string) => (
-                                                <span key={tag} className="chip-accent text-xs">{tag}</span>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <p className="mb-4 text-xs text-muted-foreground/70">No tags yet.</p>
-                                    )}
-                                    <p className="mb-3 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/85">Content</p>
-                                    <div
-                                        className="markdown-content"
-                                        dangerouslySetInnerHTML={{ __html: md.render(content || '_Start writing to see preview…_') }}
-                                    />
+                    {initialized && knowledgeRecord && (
+                        <>
+                            {/* Tags row */}
+                            {Array.isArray(knowledgeRecord.tags) && knowledgeRecord.tags.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 mb-4">
+                                    <Tag className="w-3.5 h-3.5 text-muted-foreground/60 mt-0.5 flex-shrink-0" />
+                                    {knowledgeRecord.tags.map((tag: string) => (
+                                        <span key={tag} className="chip-accent text-xs">{tag}</span>
+                                    ))}
                                 </div>
-                            </ContextMenuTrigger>
-                            <ContextMenuContent className="w-56">
-                                <ContextMenuItem
-                                    onClick={handleGenerateIntelligence}
-                                    className="gap-2"
-                                >
-                                    <knowledgeAiAction.icon className="w-4 h-4" /> {knowledgeAiAction.label}
-                                </ContextMenuItem>
-                                <ContextMenuSeparator />
-                                <ContextMenuItem onClick={() => navigator.clipboard.writeText(content)} className="gap-2">
-                                    <Copy className="w-4 h-4" /> Copy Content
-                                </ContextMenuItem>
-                            </ContextMenuContent>
-                        </ContextMenu>
+                            )}
+
+                            {/* ── Standard Note ── */}
+                            {type === 'standard' && (
+                                <div className="flex flex-col min-h-0">
+                                    {isEditing ? (
+                                        <input
+                                            className="w-full text-3xl font-bold bg-transparent border-none outline-none text-foreground placeholder-muted-foreground/40 mb-4"
+                                            placeholder={knowledgeRecord.ai_title ?? 'Untitled'}
+                                            value={title}
+                                            onChange={e => {
+                                                if (e.target.value.trim().length > 0) hadMeaningfulInputRef.current = true
+                                                setTitle(e.target.value)
+                                            }}
+                                        />
+                                    ) : (
+                                        <h1 className="text-3xl font-bold text-foreground mb-4">
+                                            {title.trim() || knowledgeRecord.ai_title || <span className="text-muted-foreground/40">Untitled</span>}
+                                        </h1>
+                                    )}
+                                    {isEditing ? (
+                                        <BlockNoteEditor
+                                            initialContent={content}
+                                            onChange={markdown => {
+                                                if (markdown.trim().length > 0) hadMeaningfulInputRef.current = true
+                                                setContent(markdown)
+                                            }}
+                                            editable
+                                            className="flex-1 min-h-[300px]"
+                                        />
+                                    ) : (
+                                        <BlockNoteViewer
+                                            content={content}
+                                            className="flex-1"
+                                        />
+                                    )}
+                                </div>
+                            )}
+
+                            {/* ── Fleeting Note ── */}
+                            {type === 'fleeting' && (
+                                <div className="flex flex-col min-h-0">
+                                    {isEditing ? (
+                                        <BlockNoteEditor
+                                            initialContent={content}
+                                            onChange={markdown => {
+                                                if (markdown.trim().length > 0) hadMeaningfulInputRef.current = true
+                                                setContent(markdown)
+                                            }}
+                                            editable
+                                            placeholder="What's fleeting on your mind?"
+                                            className="flex-1 min-h-[400px]"
+                                        />
+                                    ) : (
+                                        content.trim() ? (
+                                            <BlockNoteViewer content={content} className="flex-1" />
+                                        ) : (
+                                            <p className="text-muted-foreground/40 text-sm italic">Nothing captured yet.</p>
+                                        )
+                                    )}
+                                </div>
+                            )}
+
+                            {/* ── Bookmark ── */}
+                            {type === 'bookmark' && (
+                                <div className="flex flex-col gap-4">
+                                    {/* URL bar */}
+                                    <div className="bg-muted/20 border border-border/50 rounded-xl px-4 py-3 flex items-center gap-3">
+                                        <Link2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                                        {isEditing ? (
+                                            <input
+                                                className="flex-1 bg-transparent border-none outline-none text-sm text-foreground placeholder-muted-foreground/40"
+                                                placeholder="https://..."
+                                                value={knowledgeRecord.url ?? ''}
+                                                readOnly
+                                            />
+                                        ) : (
+                                            <span className="flex-1 text-sm text-foreground truncate">
+                                                {knowledgeRecord.url ?? <span className="text-muted-foreground/50">No URL</span>}
+                                            </span>
+                                        )}
+                                        {knowledgeRecord.url && (
+                                            <a
+                                                href={knowledgeRecord.url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+                                                title="Open in new tab"
+                                            >
+                                                <ExternalLink className="w-4 h-4" />
+                                            </a>
+                                        )}
+                                    </div>
+
+                                    {/* Title */}
+                                    {isEditing ? (
+                                        <input
+                                            className="w-full text-2xl font-bold bg-transparent border-none outline-none text-foreground placeholder-muted-foreground/40"
+                                            placeholder={knowledgeRecord.ai_title ?? 'Title'}
+                                            value={title}
+                                            onChange={e => {
+                                                if (e.target.value.trim().length > 0) hadMeaningfulInputRef.current = true
+                                                setTitle(e.target.value)
+                                            }}
+                                        />
+                                    ) : (
+                                        <h1 className="text-2xl font-bold text-foreground">
+                                            {title.trim() || knowledgeRecord.ai_title || <span className="text-muted-foreground/40">Untitled Bookmark</span>}
+                                        </h1>
+                                    )}
+
+                                    {/* Notes */}
+                                    <div>
+                                        <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-2">Notes</p>
+                                        {isEditing ? (
+                                            <BlockNoteEditor
+                                                initialContent={content}
+                                                onChange={markdown => {
+                                                    if (markdown.trim().length > 0) hadMeaningfulInputRef.current = true
+                                                    setContent(markdown)
+                                                }}
+                                                editable
+                                                className="min-h-[200px]"
+                                            />
+                                        ) : (
+                                            content.trim() ? (
+                                                <BlockNoteViewer content={content} />
+                                            ) : (
+                                                <p className="text-muted-foreground/40 text-sm italic">No notes.</p>
+                                            )
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ── Gist ── */}
+                            {type === 'gist' && (
+                                <div className="flex flex-col gap-3">
+                                    {/* Top row: language + title */}
+                                    <div className="flex items-center gap-3">
+                                        {isEditing ? (
+                                            <select
+                                                value={gistLang}
+                                                onChange={e => setGistLang(e.target.value)}
+                                                className="bg-muted/30 border border-border/50 rounded-lg px-2 py-1 text-xs font-mono text-foreground outline-none"
+                                            >
+                                                {GIST_LANGUAGES.map(lang => (
+                                                    <option key={lang} value={lang}>{lang}</option>
+                                                ))}
+                                            </select>
+                                        ) : (
+                                            <span className="bg-accent/15 border border-accent/25 text-accent rounded-lg px-2 py-1 text-xs font-mono">
+                                                {gistLang}
+                                            </span>
+                                        )}
+                                        {isEditing ? (
+                                            <input
+                                                className="flex-1 bg-transparent border-none outline-none text-lg font-semibold text-foreground placeholder-muted-foreground/40"
+                                                placeholder="Gist title"
+                                                value={title}
+                                                onChange={e => {
+                                                    if (e.target.value.trim().length > 0) hadMeaningfulInputRef.current = true
+                                                    setTitle(e.target.value)
+                                                }}
+                                            />
+                                        ) : (
+                                            <h2 className="flex-1 text-lg font-semibold text-foreground">
+                                                {title.trim() || knowledgeRecord.ai_title || <span className="text-muted-foreground/40">Untitled Gist</span>}
+                                            </h2>
+                                        )}
+                                    </div>
+
+                                    {/* Code area */}
+                                    {isEditing ? (
+                                        <textarea
+                                            className="flex-1 w-full bg-muted/20 border border-border/40 rounded-xl p-4 text-sm font-mono resize-none outline-none text-foreground leading-relaxed"
+                                            rows={20}
+                                            spellCheck={false}
+                                            value={gistCode}
+                                            onChange={e => {
+                                                if (e.target.value.trim().length > 0) hadMeaningfulInputRef.current = true
+                                                setGistCode(e.target.value)
+                                            }}
+                                            placeholder={`// Start writing ${gistLang}...`}
+                                        />
+                                    ) : (
+                                        <pre className="flex-1 overflow-auto text-xs font-mono bg-muted/20 border border-border/40 rounded-xl p-4 leading-relaxed text-foreground whitespace-pre-wrap">
+                                            {gistCode || <span className="text-muted-foreground/40">No code yet.</span>}
+                                        </pre>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* ── Audio ── */}
+                            {type === 'audio' && (
+                                <div className="flex flex-col gap-4">
+                                    {/* Title */}
+                                    <h1 className="text-2xl font-bold text-foreground">
+                                        {title.trim() || knowledgeRecord.ai_title || (
+                                            <span className="text-muted-foreground/40 flex items-center gap-2">
+                                                <Music className="w-5 h-5" /> Audio Recording
+                                            </span>
+                                        )}
+                                    </h1>
+
+                                    {/* Audio player */}
+                                    <audio
+                                        controls
+                                        src={fileUrl}
+                                        className="w-full rounded-xl"
+                                    />
+
+                                    {/* Audio metadata badges */}
+                                    {(metadata.duration != null || metadata.format || metadata.sample_rate || metadata.channels) && (
+                                        <div className="flex flex-wrap gap-2">
+                                            {metadata.duration != null && (
+                                                <span className="chip-accent text-xs">
+                                                    {Math.floor(metadata.duration / 60)}:{String(Math.floor(metadata.duration % 60)).padStart(2, '0')}
+                                                </span>
+                                            )}
+                                            {metadata.format && <span className="chip-accent text-xs">{metadata.format}</span>}
+                                            {metadata.sample_rate && <span className="chip-accent text-xs">{metadata.sample_rate} Hz</span>}
+                                            {metadata.channels && <span className="chip-accent text-xs">{metadata.channels}ch</span>}
+                                        </div>
+                                    )}
+
+                                    {/* Transcript */}
+                                    <div>
+                                        <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-2">Transcript</p>
+                                        {isEditing ? (
+                                            <BlockNoteEditor
+                                                initialContent={content}
+                                                onChange={markdown => setContent(markdown)}
+                                                editable
+                                                className="min-h-[200px]"
+                                            />
+                                        ) : (
+                                            content.trim() ? (
+                                                <BlockNoteViewer content={content} />
+                                            ) : (
+                                                <p className="text-muted-foreground/40 text-sm italic">No transcript yet.</p>
+                                            )
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ── Image ── */}
+                            {type === 'image' && (
+                                <div className="flex flex-col gap-4">
+                                    {/* Title */}
+                                    <h1 className="text-2xl font-bold text-foreground">
+                                        {title.trim() || knowledgeRecord.ai_title || (
+                                            <span className="text-muted-foreground/40 flex items-center gap-2">
+                                                <FileImage className="w-5 h-5" /> Image
+                                            </span>
+                                        )}
+                                    </h1>
+
+                                    {/* Image */}
+                                    <img
+                                        src={fileUrl}
+                                        alt={title || knowledgeRecord.ai_title || 'Image'}
+                                        className="max-w-full max-h-[60vh] object-contain rounded-xl border border-border/40 mx-auto block"
+                                    />
+
+                                    {/* AI Description */}
+                                    {knowledgeRecord.ai_summary && (
+                                        <div>
+                                            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-2">AI Description</p>
+                                            <BlockNoteViewer content={knowledgeRecord.ai_summary} />
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* ── PDF / DOCX / XLSX / PPTX ── */}
+                            {['pdf', 'docx', 'xlsx', 'pptx'].includes(type) && (
+                                <div className="flex flex-col gap-4">
+                                    {/* Title */}
+                                    <h1 className="text-2xl font-bold text-foreground">
+                                        {title.trim() || knowledgeRecord.ai_title || (
+                                            <span className="text-muted-foreground/40 flex items-center gap-2">
+                                                <File className="w-5 h-5" /> {type.toUpperCase()} Document
+                                            </span>
+                                        )}
+                                    </h1>
+
+                                    {/* File info card */}
+                                    <div className="bg-muted/20 border border-border/50 rounded-xl px-4 py-3 flex items-center gap-4">
+                                        <div className="w-10 h-10 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0">
+                                            <File className="w-5 h-5 text-accent" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium text-foreground truncate">
+                                                {knowledgeRecord.original_filename || `${type.toUpperCase()} file`}
+                                            </p>
+                                            <div className="flex flex-wrap gap-3 mt-1">
+                                                {knowledgeRecord.file_size && (
+                                                    <span className="text-xs text-muted-foreground">{formatFileSize(knowledgeRecord.file_size)}</span>
+                                                )}
+                                                {metadata.page_count != null && (
+                                                    <span className="text-xs text-muted-foreground">{metadata.page_count} pages</span>
+                                                )}
+                                                {metadata.slide_count != null && (
+                                                    <span className="text-xs text-muted-foreground">{metadata.slide_count} slides</span>
+                                                )}
+                                                {metadata.total_sheets != null && (
+                                                    <span className="text-xs text-muted-foreground">{metadata.total_sheets} sheets</span>
+                                                )}
+                                                {metadata.word_count != null && (
+                                                    <span className="text-xs text-muted-foreground">{metadata.word_count} words</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <a
+                                            href={fileUrl}
+                                            download
+                                            className="btn-ghost text-xs py-1.5 px-3 gap-1.5 flex items-center flex-shrink-0"
+                                            title="Download file"
+                                        >
+                                            <Download className="w-3.5 h-3.5" />
+                                            <span className="hidden sm:inline">Download</span>
+                                        </a>
+                                    </div>
+
+                                    {/* Extracted content */}
+                                    {knowledgeRecord.content && (
+                                        <div>
+                                            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-2">Extracted Content</p>
+                                            <BlockNoteViewer content={knowledgeRecord.content} />
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
             </div>
 
+            {/* ── Knowledge Intelligence Siderail ── */}
             <aside
                 className="relative z-10 flex flex-shrink-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-card/28 py-4 transition-[width] duration-200 ease-out"
                 style={{ width: isKnowledgeIntelligenceCollapsed ? `${KNOWLEDGE_INTELLIGENCE_COLLAPSED_WIDTH}px` : `${knowledgeIntelligenceWidth}px` }}

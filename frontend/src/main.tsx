@@ -8,6 +8,9 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import SpatialBackdrop from '@/components/shared/SpatialBackdrop'
 import api from '@/lib/api'
 import { ThemeProvider } from '@/components/theme-provider'
+import '@mantine/core/styles.css'
+import '@blocknote/core/fonts/inter.css'
+import '@blocknote/mantine/style.css'
 import './index.css'
 
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage'))

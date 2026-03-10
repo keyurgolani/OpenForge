@@ -11,7 +11,7 @@ import json
 from html import unescape
 from urllib.parse import urlparse, quote, unquote
 
-from openforge.db.models import Knowledge, KnowledgeTag
+from openforge.db.models import Knowledge, KnowledgeTag, Workspace
 from openforge.db.qdrant_client import get_qdrant
 from openforge.schemas.knowledge import KnowledgeCreate, KnowledgeUpdate, KnowledgeResponse, KnowledgeListItem, KnowledgeListParams
 from openforge.config import get_settings
@@ -428,6 +428,10 @@ class KnowledgeProcessingService:
         data: KnowledgeCreate,
         background_tasks: BackgroundTasks,
     ) -> KnowledgeResponse:
+        ws_exists = await db.scalar(select(Workspace.id).where(Workspace.id == workspace_id))
+        if not ws_exists:
+            raise HTTPException(status_code=404, detail="Workspace not found")
+
         auto_intelligence_enabled = await is_auto_knowledge_intelligence_enabled(db)
         auto_bookmark_extraction_enabled = await is_auto_bookmark_content_extraction_enabled(db)
         normalized_title = normalize_knowledge_title(data.title)
@@ -576,6 +580,7 @@ class KnowledgeProcessingService:
         await db.refresh(knowledge_record, ["tags"])
 
         if content_changed and knowledge_record.content and len(knowledge_record.content.strip()) > 20:
+            auto_intelligence_enabled = await is_auto_knowledge_intelligence_enabled(db)
             background_tasks.add_task(
                 self._process_knowledge_background,
                 knowledge_id=knowledge_record.id,
@@ -584,6 +589,13 @@ class KnowledgeProcessingService:
                 knowledge_type=knowledge_record.type,
                 title=normalize_knowledge_title(knowledge_record.title),
             )
+            if auto_intelligence_enabled:
+                background_tasks.add_task(
+                    self.run_knowledge_intelligence_job,
+                    knowledge_id=knowledge_record.id,
+                    workspace_id=workspace_id,
+                    audit_task_type="generate_knowledge_intelligence",
+                )
 
         return _to_response(knowledge_record)
 

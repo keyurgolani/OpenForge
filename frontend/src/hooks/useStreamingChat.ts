@@ -37,6 +37,17 @@ export interface TimelineToolCall {
     error?: string
 }
 
+export interface SubagentTimelineStep {
+    type: 'thinking' | 'tool_call'
+    call_id?: string
+    tool_name?: string
+    arguments?: Record<string, unknown>
+    success?: boolean
+    output?: unknown
+    error?: string
+    content?: string  // for thinking steps
+}
+
 export interface TimelineSubagentInvocation {
     type: 'subagent_invocation'
     call_id: string
@@ -44,7 +55,7 @@ export interface TimelineSubagentInvocation {
     arguments: Record<string, unknown>
     success: boolean
     subagent_response: string
-    subagent_timeline: unknown[]
+    subagent_timeline: SubagentTimelineStep[]
     subagent_conversation_id?: string | null
 }
 
@@ -273,7 +284,15 @@ export function useStreamingChat(conversationId: string | null) {
                 const m = msg as { conversation_id: string; data: TimelineSubagentInvocation }
                 if (m.conversation_id !== conversationId) return
                 setTimeline(prev => {
-                    const updated = [...prev, m.data]
+                    // Replace the pending tool_call entry for agent.invoke with the
+                    // richer subagent_invocation entry (same call_id). If no pending
+                    // entry exists yet, just append.
+                    const existingIdx = prev.findIndex(
+                        e => e.type === 'tool_call' && (e as TimelineToolCall).call_id === m.data.call_id
+                    )
+                    const updated = existingIdx >= 0
+                        ? prev.map((e, i) => i === existingIdx ? m.data : e)
+                        : [...prev, m.data]
                     timelineRef.current = updated
                     return updated
                 })

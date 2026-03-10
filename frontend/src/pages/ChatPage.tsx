@@ -16,13 +16,14 @@ import {
     approveHITL,
     denyHITL,
 } from '@/lib/api'
-import { useStreamingChat, type Mention, type TimelineSubagentInvocation, type TimelineHITLRequest } from '@/hooks/useStreamingChat'
+import { useStreamingChat, type Mention, type TimelineToolCall, type TimelineSubagentInvocation, type TimelineHITLRequest, type SubagentTimelineStep } from '@/hooks/useStreamingChat'
 import { useToast } from '@/components/shared/ToastProvider'
 import { ConfirmModal } from '@/components/ui/confirm-modal'
 import {
     Plus, Send, Square, Loader2, MessageSquare, Trash2, Bot, User,
     ChevronDown, ChevronRight, ChevronLeft, ChevronUp, ChevronsUp, ExternalLink, Check, Pencil,
-    Paperclip, X, Copy, Search, Brain, Wrench, BookmarkPlus, Network, ShieldAlert, ShieldCheck, ShieldX, AtSign
+    Paperclip, X, Copy, Search, Brain, Wrench, BookmarkPlus, Network, ShieldAlert, ShieldCheck, ShieldX, AtSign,
+    CheckCircle2, XCircle
 } from 'lucide-react'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem,
@@ -137,6 +138,7 @@ export default function ChatPage() {
     const shouldRestoreTextareaFocusRef = useRef(false)
     const suppressAutoSelectRef = useRef(false)
     const [stickToBottom, setStickToBottom] = useState(true)
+    const stickToBottomRef = useRef(true)
 
     // Per-message model override
     const [selectedModelKey, setSelectedModelKey] = useState('')
@@ -334,6 +336,7 @@ export default function ChatPage() {
     }, [activeCid, conversationId, mostRecentConversationId, navigate, workspaceId])
 
     useEffect(() => {
+        stickToBottomRef.current = true
         setStickToBottom(true)
     }, [activeCid])
 
@@ -349,14 +352,14 @@ export default function ChatPage() {
     }, [activeCid, isStreaming, streamingContent])
 
     useEffect(() => {
-        if (!stickToBottom) return
+        if (!stickToBottomRef.current) return
         const container = messagesContainerRef.current
         if (!container) return
         container.scrollTo({ top: container.scrollHeight, behavior: isStreaming ? 'auto' : 'smooth' })
     }, [messages.length, streamingContent, streamingTimeline.length, sources.length, isStreaming, stickToBottom])
 
     useEffect(() => {
-        if (!stickToBottom) return
+        if (!stickToBottomRef.current) return
         const container = messagesContainerRef.current
         if (!container) return
         container.scrollTo({ top: container.scrollHeight, behavior: 'auto' })
@@ -748,6 +751,7 @@ export default function ChatPage() {
         const msg = rawText.trim()
         const activeMentions = mentionEditorRef.current?.getMentions() ?? []
         clearLastError()
+        stickToBottomRef.current = true
         setStickToBottom(true)
 
         // Upload attachments if any
@@ -841,7 +845,9 @@ export default function ChatPage() {
     const handleMessagesScroll = (event: React.UIEvent<HTMLDivElement>) => {
         const el = event.currentTarget
         const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-        setStickToBottom(distanceFromBottom <= 64)
+        const atBottom = distanceFromBottom <= 64
+        stickToBottomRef.current = atBottom
+        setStickToBottom(atBottom)
     }
 
     const handleChatListResizeStart = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -877,6 +883,8 @@ export default function ChatPage() {
     }
 
     const activeConversationIsArchived = Boolean(conversationData?.is_archived || activeConversationRecord?.is_archived)
+    // Input box stays editable while streaming so the user can compose their next message
+    const inputDisabled = uploadingFiles || activeConversationIsArchived
     const composerDisabled = isStreaming || uploadingFiles || activeConversationIsArchived
     const canSend = !composerDisabled && inputText.trim().length > 0
     const streamingModelLabel = selectedOption?.label ?? defaultLabel
@@ -1019,7 +1027,19 @@ export default function ChatPage() {
                                                     ) : entry.type === 'subagent_invocation' ? (
                                                         <SubagentCard
                                                             key={entry.call_id}
+                                                            callId={entry.call_id}
+                                                            toolName={entry.tool_name}
+                                                            arguments={entry.arguments}
                                                             entry={entry}
+                                                            requestVisibility={() => ensureExpandedBlockVisible(streamingMessageRef.current)}
+                                                        />
+                                                    ) : entry.type === 'tool_call' && (entry as TimelineToolCall).tool_name.startsWith('agent.') ? (
+                                                        <SubagentCard
+                                                            key={(entry as TimelineToolCall).call_id}
+                                                            callId={(entry as TimelineToolCall).call_id}
+                                                            toolName={(entry as TimelineToolCall).tool_name}
+                                                            arguments={(entry as TimelineToolCall).arguments}
+                                                            entry={undefined}
                                                             requestVisibility={() => ensureExpandedBlockVisible(streamingMessageRef.current)}
                                                         />
                                                     ) : entry.type === 'hitl_request' ? (
@@ -1150,10 +1170,10 @@ export default function ChatPage() {
 
                                     <MentionEditor
                                         ref={mentionEditorRef}
-                                        disabled={composerDisabled}
+                                        disabled={inputDisabled}
                                         placeholder={activeConversationIsArchived ? 'Restore this chat to continue messaging...' : 'Ask a question, or type @ to mention a workspace or chat…'}
-                                        workspaces={(allWorkspaces as { id: string; name: string }[]).map(w => ({ type: 'workspace' as const, id: w.id, name: w.name }))}
-                                        conversations={(conversations as Conversation[]).map(c => ({ type: 'chat' as const, id: c.id, name: c.title || 'Untitled Chat' }))}
+                                        workspaces={(allWorkspaces as { id: string; name: string }[]).filter(w => w.id !== workspaceId).map(w => ({ type: 'workspace' as const, id: w.id, name: w.name }))}
+                                        conversations={(conversations as Conversation[]).filter(c => c.id !== activeCid).map(c => ({ type: 'chat' as const, id: c.id, name: c.title || 'Untitled Chat' }))}
                                         onTextChange={(text) => {
                                             setInputText(text)
                                             if (lastError) clearLastError()
@@ -1260,7 +1280,7 @@ export default function ChatPage() {
                                                     mentionEditorRef.current?.insertText('@')
                                                     mentionEditorRef.current?.focus()
                                                 }}
-                                                disabled={composerDisabled}
+                                                disabled={inputDisabled}
                                                 title="Mention a workspace or chat"
                                             >
                                                 <AtSign className="h-3.5 w-3.5" />
@@ -1619,95 +1639,81 @@ function TrashedConversationRow({
     const [showDownloadMenu, setShowDownloadMenu] = useState(false)
 
     return (
-        <div
-            className={`group flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 cursor-pointer transition-colors ${active
-                ? 'border-accent/35 bg-accent/12 ring-1 ring-accent/20'
-                : 'border-transparent bg-transparent hover:border-border/60 hover:bg-muted/35'
-                }`}
-            onClick={onSelect}
-        >
-            <Trash2 className="w-3 h-3 flex-shrink-0 text-amber-300" />
-            <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-medium truncate leading-tight">{conv.title ?? 'Untitled Chat'}</p>
-                <p className="text-[10px] text-muted-foreground/85 leading-tight">{conv.message_count} messages</p>
-            </div>
-            <div className="relative flex items-center gap-0.5">
-                <button
-                    type="button"
-                    onClick={(e) => {
-                        e.stopPropagation()
-                        setShowDownloadMenu(!showDownloadMenu)
-                    }}
-                    className="btn-ghost h-6 w-6 p-0 justify-center text-muted-foreground hover:text-foreground"
-                    aria-label="Download chat"
-                    title="Download chat"
+        <ContextMenu>
+            <ContextMenuTrigger asChild>
+                <div
+                    className={`group flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 cursor-pointer transition-colors ${active
+                        ? 'border-accent/35 bg-accent/12 ring-1 ring-accent/20'
+                        : 'border-transparent bg-transparent hover:border-border/60 hover:bg-muted/35'
+                        }`}
+                    onClick={onSelect}
                 >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                </button>
-                {showDownloadMenu && (
-                    <div className="absolute right-0 top-full mt-1 z-50 min-w-[100px] rounded-lg border border-border/60 bg-popover py-1 shadow-lg">
+                    <Trash2 className="w-3 h-3 flex-shrink-0 text-amber-300" />
+                    <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-medium truncate leading-tight">{conv.title ?? 'Untitled Chat'}</p>
+                        <p className="text-[10px] text-muted-foreground/85 leading-tight">{conv.message_count} messages</p>
+                    </div>
+                    <div className="relative flex items-center gap-0.5">
                         <button
                             type="button"
                             onClick={(e) => {
                                 e.stopPropagation()
-                                onDownload('json')
-                                setShowDownloadMenu(false)
+                                setShowDownloadMenu(!showDownloadMenu)
                             }}
-                            className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50"
+                            className="btn-ghost h-6 w-6 p-0 justify-center text-muted-foreground hover:text-foreground"
+                            aria-label="Download chat"
+                            title="Download chat"
                         >
-                            JSON
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                        </button>
+                        {showDownloadMenu && (
+                            <div className="absolute right-0 top-full mt-1 z-50 min-w-[100px] rounded-lg border border-border/60 bg-popover py-1 shadow-lg">
+                                {(['json', 'markdown', 'txt'] as const).map(fmt => (
+                                    <button key={fmt} type="button"
+                                        onClick={(e) => { e.stopPropagation(); onDownload(fmt); setShowDownloadMenu(false) }}
+                                        className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50">
+                                        {fmt === 'markdown' ? 'Markdown' : fmt === 'txt' ? 'Plain Text' : 'JSON'}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                        <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); onRestore() }}
+                            className="btn-ghost h-6 px-2 py-0 text-[10px] rounded-md"
+                            aria-label="Restore chat"
+                        >
+                            Restore
                         </button>
                         <button
                             type="button"
-                            onClick={(e) => {
-                                e.stopPropagation()
-                                onDownload('markdown')
-                                setShowDownloadMenu(false)
-                            }}
-                            className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50"
+                            onClick={(e) => { e.stopPropagation(); onPermanentDelete() }}
+                            className="btn-ghost h-6 w-6 p-0 justify-center text-red-400 hover:bg-red-500/10"
+                            aria-label="Delete permanently"
+                            title="Delete permanently"
                         >
-                            Markdown
-                        </button>
-                        <button
-                            type="button"
-                            onClick={(e) => {
-                                e.stopPropagation()
-                                onDownload('txt')
-                                setShowDownloadMenu(false)
-                            }}
-                            className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50"
-                        >
-                            Plain Text
+                            <Trash2 className="w-3 h-3" />
                         </button>
                     </div>
-                )}
-                <button
-                    type="button"
-                    onClick={(e) => {
-                        e.stopPropagation()
-                        onRestore()
-                    }}
-                    className="btn-ghost h-6 px-2 py-0 text-[10px] rounded-md"
-                    aria-label="Restore chat"
-                >
-                    Restore
-                </button>
-                <button
-                    type="button"
-                    onClick={(e) => {
-                        e.stopPropagation()
-                        onPermanentDelete()
-                    }}
-                    className="btn-ghost h-6 w-6 p-0 justify-center text-red-400 hover:bg-red-500/10"
-                    aria-label="Delete permanently"
-                    title="Delete permanently"
-                >
-                    <Trash2 className="w-3 h-3" />
-                </button>
-            </div>
-        </div>
+                </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent className="w-48">
+                <ContextMenuItem onSelect={(e) => { e.preventDefault(); onRestore() }} className="gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
+                    Restore Chat
+                </ContextMenuItem>
+                <ContextMenuItem onSelect={(e) => { e.preventDefault(); onDownload('json') }} className="gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                    Download Chat
+                </ContextMenuItem>
+                <ContextMenuSeparator />
+                <ContextMenuItem onSelect={(e) => { e.preventDefault(); onPermanentDelete() }} className="gap-2 text-red-500 focus:text-red-400 focus:bg-red-500/10">
+                    <Trash2 className="w-4 h-4" /> Delete Permanently
+                </ContextMenuItem>
+            </ContextMenuContent>
+        </ContextMenu>
     )
 }
 
@@ -1733,6 +1739,7 @@ const MentionEditor = React.forwardRef<MentionEditorHandle, {
     const editorRef = useRef<HTMLDivElement>(null)
     const [mentionOpen, setMentionOpen] = useState(false)
     const [mentionQuery, setMentionQuery] = useState('')
+    const [mentionActiveIndex, setMentionActiveIndex] = useState(-1)
     const mentionDropdownRef = useRef<HTMLDivElement>(null)
     const atPositionRef = useRef<{ node: Text; offset: number } | null>(null)
 
@@ -1816,10 +1823,12 @@ const MentionEditor = React.forwardRef<MentionEditorHandle, {
         const atMatch = textBefore.match(/@(\w*)$/)
         if (atMatch) {
             setMentionQuery(atMatch[1])
+            setMentionActiveIndex(-1)
             atPositionRef.current = { node: textNode, offset: range.startOffset - atMatch[0].length }
             setMentionOpen(true)
         } else {
             setMentionOpen(false)
+            setMentionActiveIndex(-1)
             atPositionRef.current = null
         }
     }
@@ -1890,11 +1899,42 @@ const MentionEditor = React.forwardRef<MentionEditorHandle, {
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
         if (e.key === 'Escape') {
-            if (mentionOpen) { setMentionOpen(false); e.preventDefault() }
+            if (mentionOpen) { setMentionOpen(false); setMentionActiveIndex(-1); e.preventDefault() }
             return
         }
+        if (mentionOpen) {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault()
+                const q = mentionQuery.toLowerCase()
+                const total = workspaces.filter(w => w.name.toLowerCase().includes(q)).slice(0, 5).length
+                    + conversations.filter(c => c.name.toLowerCase().includes(q)).slice(0, 5).length
+                if (total > 0) setMentionActiveIndex(prev => (prev + 1) % total)
+                return
+            }
+            if (e.key === 'ArrowUp') {
+                e.preventDefault()
+                const q = mentionQuery.toLowerCase()
+                const total = workspaces.filter(w => w.name.toLowerCase().includes(q)).slice(0, 5).length
+                    + conversations.filter(c => c.name.toLowerCase().includes(q)).slice(0, 5).length
+                if (total > 0) setMentionActiveIndex(prev => prev <= 0 ? total - 1 : prev - 1)
+                return
+            }
+            if (e.key === 'Enter') {
+                e.preventDefault()
+                const q = mentionQuery.toLowerCase()
+                const filteredWs = workspaces.filter(w => w.name.toLowerCase().includes(q)).slice(0, 5)
+                const filteredConvs = conversations.filter(c => c.name.toLowerCase().includes(q)).slice(0, 5)
+                const all = [...filteredWs, ...filteredConvs]
+                if (mentionActiveIndex >= 0 && all[mentionActiveIndex]) {
+                    handleMentionSelect(all[mentionActiveIndex])
+                } else {
+                    setMentionOpen(false)
+                    setMentionActiveIndex(-1)
+                }
+                return
+            }
+        }
         if (e.key === 'Enter' && !e.shiftKey) {
-            if (mentionOpen) { setMentionOpen(false); e.preventDefault(); return }
             e.preventDefault()
             onSubmit()
         }
@@ -1903,7 +1943,86 @@ const MentionEditor = React.forwardRef<MentionEditorHandle, {
     const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
         e.preventDefault()
         const text = e.clipboardData.getData('text/plain')
-        document.execCommand('insertText', false, text)
+        const el = editorRef.current
+        if (!el) return
+
+        // Close dropdown if open
+        if (mentionOpen) { setMentionOpen(false); setMentionActiveIndex(-1); atPositionRef.current = null }
+
+        // If no @word pattern, insert as plain text
+        if (!/@\w/.test(text)) {
+            document.execCommand('insertText', false, text)
+            return
+        }
+
+        // Try to auto-convert @Name patterns to mention chips
+        const allMentionables = [...workspaces, ...conversations]
+        const parts: Array<{ type: 'text'; value: string } | { type: 'mention'; mention: Mention }> = []
+        const regex = /@(\w+)/g
+        let lastIndex = 0
+        let match: RegExpExecArray | null
+
+        while ((match = regex.exec(text)) !== null) {
+            const found = allMentionables.find(m => m.name.toLowerCase() === match![1].toLowerCase())
+            if (found) {
+                if (match.index > lastIndex) parts.push({ type: 'text', value: text.slice(lastIndex, match.index) })
+                parts.push({ type: 'mention', mention: found })
+                lastIndex = match.index + match[0].length
+            }
+        }
+        if (lastIndex < text.length) parts.push({ type: 'text', value: text.slice(lastIndex) })
+
+        // If no exact matches found, just insert as plain text
+        if (!parts.some(p => p.type === 'mention')) {
+            document.execCommand('insertText', false, text)
+            return
+        }
+
+        // Insert chips + text at cursor
+        const sel = window.getSelection()
+        if (!sel || !sel.rangeCount) { document.execCommand('insertText', false, text); return }
+
+        const range = sel.getRangeAt(0)
+        range.deleteContents()
+        let lastNode: Node | null = null
+
+        for (const part of parts) {
+            if (part.type === 'text') {
+                if (!part.value) continue
+                const node = document.createTextNode(part.value)
+                range.insertNode(node)
+                range.setStartAfter(node)
+                range.collapse(true)
+                lastNode = node
+            } else {
+                const chip = document.createElement('span')
+                chip.contentEditable = 'false'
+                chip.className = 'mention-chip'
+                chip.dataset.mentionId = part.mention.id
+                chip.dataset.mentionType = part.mention.type
+                chip.dataset.mentionName = part.mention.name
+                chip.textContent = `@${part.mention.name}`
+                range.insertNode(chip)
+                range.setStartAfter(chip)
+                range.collapse(true)
+                const space = document.createTextNode('\u00a0')
+                range.insertNode(space)
+                range.setStartAfter(space)
+                range.collapse(true)
+                lastNode = space
+            }
+        }
+
+        if (lastNode) {
+            const newRange = document.createRange()
+            newRange.setStartAfter(lastNode)
+            newRange.collapse(true)
+            sel.removeAllRanges()
+            sel.addRange(newRange)
+        }
+
+        onTextChange(getPlainText(el))
+        onMentionsChange(getChipMentions(el))
     }
 
     return (
@@ -1915,7 +2034,8 @@ const MentionEditor = React.forwardRef<MentionEditorHandle, {
                     workspaces={workspaces}
                     conversations={conversations}
                     onSelect={handleMentionSelect}
-                    onClose={() => setMentionOpen(false)}
+                    onClose={() => { setMentionOpen(false); setMentionActiveIndex(-1) }}
+                    activeIndex={mentionActiveIndex}
                 />
             )}
             <div
@@ -2067,22 +2187,63 @@ function ThinkingBlock({
 }
 
 // ── Subagent invocation card ─────────────────────────────────────────────────
+// Unified subagent node — handles both the "pending" phase (tool_call while running)
+// and the "completed" phase (subagent_invocation with full details). React reuses the
+// same component instance (same key) when the timeline entry is promoted in-place.
 function SubagentCard({
+    callId: _callId,
+    toolName,
+    arguments: agentArgs,
     entry,
     requestVisibility,
 }: {
-    entry: TimelineSubagentInvocation
+    callId: string
+    toolName: string
+    arguments: Record<string, unknown>
+    entry?: TimelineSubagentInvocation   // undefined = still running
     requestVisibility?: (el: HTMLElement | null) => void
 }) {
-    const [open, setOpen] = useState(false)
-    const [fullyExpanded, setFullyExpanded] = useState(false)
+    const isRunning = entry === undefined
+    // Start open while running; start closed for already-completed (history) entries
+    const [open, setOpen] = useState(isRunning)
+    const [userInteracted, setUserInteracted] = useState(false)
+    const autoCollapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
     const blockRef = useRef<HTMLDivElement>(null)
-    const scrollRef = useRef<HTMLDivElement>(null)
+    // Track whether the entry was defined on last render to detect transition
+    const prevEntryRef = useRef<TimelineSubagentInvocation | undefined>(entry)
 
-    const instruction = (entry.arguments?.instruction as string) || 'Subagent task'
-    const truncated = instruction.length > 80 ? `${instruction.slice(0, 80)}…` : instruction
+    const instruction = (agentArgs?.instruction as string) || 'Subagent task'
+    const targetWorkspaceId = agentArgs?.workspace_id as string | undefined
+
+    const toolSteps = (entry?.subagent_timeline ?? []).filter(
+        (s): s is SubagentTimelineStep & { type: 'tool_call' } => s.type === 'tool_call'
+    )
+
+    // When entry transitions from undefined → defined (subagent just finished):
+    // re-open the card so the result is visible, then auto-collapse after 2s
+    useEffect(() => {
+        if (entry && !prevEntryRef.current) {
+            setOpen(true)
+            if (!userInteracted && !autoCollapseTimer.current) {
+                autoCollapseTimer.current = setTimeout(() => {
+                    setOpen(false)
+                    autoCollapseTimer.current = null
+                }, 2000)
+            }
+        }
+        prevEntryRef.current = entry
+    }, [entry]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => {
+        return () => { if (autoCollapseTimer.current) clearTimeout(autoCollapseTimer.current) }
+    }, [])
 
     const toggle = () => {
+        if (autoCollapseTimer.current) {
+            clearTimeout(autoCollapseTimer.current)
+            autoCollapseTimer.current = null
+        }
+        setUserInteracted(true)
         setOpen(prev => {
             const next = !prev
             if (next) {
@@ -2095,58 +2256,84 @@ function SubagentCard({
         })
     }
 
+    const statusIcon = isRunning
+        ? <Loader2 className="w-3 h-3 animate-spin text-accent/70" />
+        : entry?.success
+            ? <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+            : <XCircle className="w-3 h-3 text-red-400" />
+
     return (
         <div className="chat-workflow-step chat-section-reveal">
             <button className="chat-subsection-toggle" onClick={toggle}>
                 {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                 <Network className="w-3 h-3" />
                 <span>Subagent</span>
-                <span className="text-muted-foreground/60 font-normal ml-1 truncate max-w-[280px]">{truncated}</span>
+                <span className="text-muted-foreground/40 mx-0.5">·</span>
+                <span className="text-accent/60 text-[11px] font-mono">{toolName}</span>
+                {statusIcon}
             </button>
             <div ref={blockRef} className={`chat-collapse w-full ${open ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
                 <div className="chat-collapse-inner pb-px">
-                    <div className="relative mt-1 w-full rounded-2xl border border-accent/20 bg-accent/4 chat-section-reveal">
-                        {/* Subagent response */}
-                        <div className="px-4 pt-3 pb-2">
-                            <div className="mb-2 text-[10px] uppercase tracking-wide text-muted-foreground">Response</div>
-                            <div
-                                ref={scrollRef}
-                                className="text-xs leading-relaxed text-foreground/85 markdown-content overflow-y-auto"
-                                style={fullyExpanded ? undefined : { maxHeight: '200px' }}
-                                dangerouslySetInnerHTML={{ __html: md.render(entry.subagent_response || '') }}
-                            />
-                            {!fullyExpanded && entry.subagent_response && entry.subagent_response.length > 400 && (
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setFullyExpanded(true)
-                                        window.requestAnimationFrame(() => requestVisibility?.(blockRef.current))
-                                    }}
-                                    className="mt-1 text-[11px] text-accent/70 hover:text-accent"
-                                >
-                                    Show more
-                                </button>
+                    <div className="relative mt-1 w-full rounded-2xl border border-accent/20 bg-accent/5 chat-section-reveal overflow-hidden">
+
+                        {/* Request */}
+                        <div className="px-4 pt-3 pb-2 border-b border-accent/10">
+                            <div className="mb-1.5 text-[10px] uppercase tracking-wide text-muted-foreground/60">Request</div>
+                            <pre className="text-[11px] leading-relaxed text-foreground/80 whitespace-pre-wrap break-words font-sans">
+                                {instruction}
+                            </pre>
+                            {targetWorkspaceId && (
+                                <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-muted-foreground/50">
+                                    <span className="uppercase tracking-wide">workspace</span>
+                                    <span className="font-mono text-accent/60">{targetWorkspaceId}</span>
+                                </div>
                             )}
                         </div>
-                        {/* Subagent timeline */}
-                        {(entry.subagent_timeline?.length ?? 0) > 0 && (
-                            <div className="border-t border-accent/15 px-4 py-2">
-                                <div className="mb-2 text-[10px] uppercase tracking-wide text-muted-foreground">Subagent Timeline</div>
-                                <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                                    {(entry.subagent_timeline as Array<{ type: string; tool_name?: string; call_id?: string; content?: string }>).map((step, idx) =>
-                                        step.type === 'thinking' ? (
-                                            <div key={idx} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                                                <Brain className="h-3 w-3 flex-shrink-0" />
-                                                <span className="italic">Thought</span>
-                                            </div>
-                                        ) : step.type === 'tool_call' || step.type === 'subagent_invocation' ? (
-                                            <div key={step.call_id ?? idx} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                                                <Wrench className="h-3 w-3 flex-shrink-0" />
-                                                <span className="font-mono">{step.tool_name}</span>
-                                            </div>
-                                        ) : null
-                                    )}
+
+                        {/* Running placeholder */}
+                        {isRunning && (
+                            <div className="px-4 py-3">
+                                <div className="flex items-center gap-2 text-[11px] text-muted-foreground/50">
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                    <span>Subagent running…</span>
                                 </div>
+                            </div>
+                        )}
+
+                        {/* Subagent tool steps */}
+                        {toolSteps.length > 0 && (
+                            <div className="px-4 py-2 border-b border-accent/10">
+                                <div className="mb-2 text-[10px] uppercase tracking-wide text-muted-foreground/60">Steps</div>
+                                <div className="space-y-1">
+                                    {toolSteps.map((step, idx) => (
+                                        <ToolCallCard
+                                            key={step.call_id ?? idx}
+                                            callId={step.call_id ?? String(idx)}
+                                            toolName={step.tool_name ?? ''}
+                                            arguments={step.arguments ?? {}}
+                                            result={step.success !== undefined
+                                                ? { success: step.success, output: step.output, error: step.error }
+                                                : undefined
+                                            }
+                                            isRunning={false}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Response (only when completed) */}
+                        {entry && (
+                            <div className="px-4 pt-2 pb-3">
+                                <div className="mb-1.5 text-[10px] uppercase tracking-wide text-muted-foreground/60">Response</div>
+                                {entry.subagent_response ? (
+                                    <div
+                                        className="text-xs leading-relaxed text-foreground/85 markdown-content"
+                                        dangerouslySetInnerHTML={{ __html: md.render(entry.subagent_response) }}
+                                    />
+                                ) : (
+                                    <span className="text-[11px] text-muted-foreground/40 italic">No response</span>
+                                )}
                             </div>
                         )}
                     </div>
@@ -2260,11 +2447,13 @@ const MentionDropdown = React.forwardRef<HTMLDivElement, {
     conversations: Mention[]
     onSelect: (m: Mention) => void
     onClose: () => void
-}>(function MentionDropdown({ query, workspaces, conversations, onSelect, onClose }, ref) {
+    activeIndex: number
+}>(function MentionDropdown({ query, workspaces, conversations, onSelect, onClose, activeIndex }, ref) {
     const q = query.toLowerCase()
     const filteredWs = workspaces.filter(w => w.name.toLowerCase().includes(q)).slice(0, 5)
     const filteredConvs = conversations.filter(c => c.name.toLowerCase().includes(q)).slice(0, 5)
     const all = [...filteredWs, ...filteredConvs]
+    const itemRefs = useRef<(HTMLButtonElement | null)[]>([])
 
     useEffect(() => {
         const handler = (e: MouseEvent) => {
@@ -2276,21 +2465,29 @@ const MentionDropdown = React.forwardRef<HTMLDivElement, {
         return () => document.removeEventListener('mousedown', handler)
     }, [onClose, ref])
 
+    // Scroll active item into view when navigating with keyboard
+    useEffect(() => {
+        if (activeIndex >= 0 && itemRefs.current[activeIndex]) {
+            itemRefs.current[activeIndex]?.scrollIntoView({ block: 'nearest' })
+        }
+    }, [activeIndex])
+
     if (all.length === 0) return null
 
     return (
         <div
             ref={ref}
-            className="absolute bottom-full left-0 z-[200] mb-2 w-[min(22rem,90vw)] rounded-xl border border-border/80 bg-popover/95 shadow-2xl backdrop-blur-md overflow-hidden"
+            className="absolute bottom-full left-0 z-[200] mb-2 w-[min(22rem,90vw)] rounded-xl border border-border/80 bg-popover/95 shadow-2xl backdrop-blur-md overflow-hidden max-h-64 overflow-y-auto"
         >
             {filteredWs.length > 0 && (
                 <>
-                    <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border/40">Workspaces</div>
-                    {filteredWs.map(w => (
+                    <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border/40 sticky top-0 bg-popover/95 backdrop-blur-md z-10">Workspaces</div>
+                    {filteredWs.map((w, i) => (
                         <button
                             key={w.id}
+                            ref={el => { itemRefs.current[i] = el }}
                             type="button"
-                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/40 transition-colors"
+                            className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${activeIndex === i ? 'bg-muted/60 text-foreground' : 'hover:bg-muted/40'}`}
                             onMouseDown={e => { e.preventDefault(); onSelect(w) }}
                         >
                             <Network className="h-3.5 w-3.5 text-accent flex-shrink-0" />
@@ -2301,12 +2498,13 @@ const MentionDropdown = React.forwardRef<HTMLDivElement, {
             )}
             {filteredConvs.length > 0 && (
                 <>
-                    <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border/40 border-t border-t-border/40">Chats</div>
-                    {filteredConvs.map(c => (
+                    <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border/40 border-t border-t-border/40 sticky top-0 bg-popover/95 backdrop-blur-md z-10">Chats</div>
+                    {filteredConvs.map((c, i) => (
                         <button
                             key={c.id}
+                            ref={el => { itemRefs.current[filteredWs.length + i] = el }}
                             type="button"
-                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/40 transition-colors"
+                            className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${activeIndex === filteredWs.length + i ? 'bg-muted/60 text-foreground' : 'hover:bg-muted/40'}`}
                             onMouseDown={e => { e.preventDefault(); onSelect(c) }}
                         >
                             <MessageSquare className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
@@ -2573,6 +2771,9 @@ function ChatMessageCard({
                                         ) : entry.type === 'subagent_invocation' ? (
                                             <SubagentCard
                                                 key={entry.call_id}
+                                                callId={entry.call_id}
+                                                toolName={entry.tool_name}
+                                                arguments={entry.arguments}
                                                 entry={entry}
                                                 requestVisibility={requestVisibility}
                                             />

@@ -43,19 +43,18 @@ function ArgValue({ value }: { value: unknown }) {
 }
 
 export function ToolCallCard({ callId: _callId, toolName, arguments: args, result, isRunning }: ToolCallCardProps) {
-    const [isExpanded, setIsExpanded] = useState(false)
+    const [isExpanded, setIsExpanded] = useState(isRunning)
     const [userInteracted, setUserInteracted] = useState(false)
     const wasRunning = useRef(isRunning)
     const autoCollapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-    // When tool completes: auto-expand to show result, then collapse after 2s
+    // Start expanded while running; collapse when tool completes
     useEffect(() => {
         if (!isRunning && wasRunning.current && !userInteracted) {
-            setIsExpanded(true)
             autoCollapseTimer.current = setTimeout(() => {
                 setIsExpanded(false)
                 autoCollapseTimer.current = null
-            }, 2000)
+            }, 400)
         }
         wasRunning.current = isRunning
     }, [isRunning]) // eslint-disable-line react-hooks/exhaustive-deps

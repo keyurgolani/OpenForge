@@ -10,13 +10,16 @@ class RecallMemoryTool(BaseTool):
     def category(self): return "memory"
 
     @property
-    def display_name(self): return "Recall Memory"
+    def display_name(self): return "Recall Working Memory"
 
     @property
     def description(self):
         return (
-            "Recall memory entries stored during this agent execution. "
-            "Pass a key to get a specific entry, or leave empty to get all entries."
+            "Recall values you previously stored in your working scratchpad during this task session. "
+            "Pass a key to retrieve a specific value, or omit the key to list all stored entries. "
+            "Working memory is private to this execution and expires when the task ends — "
+            "it does not persist across conversations. "
+            "NOT for reading the user's knowledge base — use workspace.search or workspace.list_knowledge for that."
         )
 
     @property
@@ -24,7 +27,7 @@ class RecallMemoryTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "key": {"type": "string", "description": "Specific key to recall (optional - omit for all)"},
+                "key": {"type": "string", "description": "Key to retrieve (omit to return all stored entries)"},
             },
         }
 
@@ -41,13 +44,12 @@ class RecallMemoryTool(BaseTool):
                 raw = await redis.get(f"{prefix}{specific_key}")
                 await redis.aclose()
                 if raw is None:
-                    return ToolResult(success=False, error=f"Memory key '{specific_key}' not found")
+                    return ToolResult(success=False, error=f"No working memory entry found for key '{specific_key}'")
                 return ToolResult(success=True, output=json.loads(raw))
 
-            # Return all keys
-            pattern = f"{prefix}*"
-            keys = await redis.keys(pattern)
-            memories = {}
+            # Return all keys for this execution
+            keys = await redis.keys(f"{prefix}*")
+            memories: dict = {}
             for key in keys:
                 key_str = key.decode("utf-8") if isinstance(key, bytes) else key
                 short_key = key_str[len(prefix):]

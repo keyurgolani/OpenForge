@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { ReactElement } from 'react'
 import { searchKnowledge } from '@/lib/api'
 import { Search, Loader2, FileText, Bookmark, Code2, Zap, ExternalLink, Copy, SearchX, MessageSquare, Image as ImageIcon, Music, FileType2, Table, Presentation } from 'lucide-react'
-import { KnowledgeModal } from '@/components/shared/KnowledgeModal'
+import { UnifiedKnowledgeModal } from '@/components/knowledge/UnifiedKnowledgeModal'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem
 } from '@/components/ui/context-menu'
@@ -327,13 +327,13 @@ export default function SearchPage() {
             </>)}
             </div>
 
-            {modalKnowledgeId && (
-                <KnowledgeModal
-                    knowledgeId={modalKnowledgeId}
-                    workspaceId={workspaceId}
-                    onClose={() => setModalKnowledgeId(null)}
-                />
-            )}
+            <UnifiedKnowledgeModal
+                mode="view"
+                knowledgeId={modalKnowledgeId ?? undefined}
+                workspaceId={workspaceId}
+                isOpen={!!modalKnowledgeId}
+                onClose={() => setModalKnowledgeId(null)}
+            />
         </div>
     )
 }
