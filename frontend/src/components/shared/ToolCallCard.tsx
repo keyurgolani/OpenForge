@@ -676,7 +676,7 @@ export function ToolCallCard({ callId: _callId, toolName, arguments: args, resul
         <div>
             <button
                 type="button"
-                className="chat-subsection-toggle"
+                className={`chat-subsection-toggle ${isExpanded ? 'chat-subsection-toggle-open' : ''}`}
                 onClick={() => hasDetails && toggle()}
                 style={!hasDetails ? { cursor: 'default' } : undefined}
             >
@@ -701,7 +701,7 @@ export function ToolCallCard({ callId: _callId, toolName, arguments: args, resul
 
             <div className={`chat-collapse w-full ${isExpanded ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
                 <div className="chat-collapse-inner">
-                    <div className="mt-2 rounded-xl border border-border/40 bg-muted/15 px-3 py-2.5 text-xs space-y-2.5">
+                    <div className="chat-step-detail-card">
                         {hasArgs && <InputSection toolName={toolName} args={args} />}
 
                         {result !== undefined && (

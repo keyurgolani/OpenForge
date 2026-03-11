@@ -567,18 +567,18 @@ export default function ChatPage() {
             const dp = (providers as ProviderRecord[]).find(p => p.id === workspace.llm_provider_id)
             if (dp) {
                 const modelName = workspace.llm_model || dp.default_model || systemDefault?.model_name || 'provider default'
-                return `${sanitizeProviderDisplayName(dp.display_name) || dp.provider_name} · ${modelName} (Workspace default)`
+                return `${sanitizeProviderDisplayName(dp.display_name) || dp.provider_name} · ${modelName}`
             }
         }
         const sys = (providers as ProviderRecord[]).find(p => p.is_system_default)
         if (sys) {
             const sysModelName = sys.default_model || chatModels.find(m => m.provider_id === sys.id)?.model_name || 'provider default'
-            return `${sanitizeProviderDisplayName(sys.display_name) || sys.provider_name} · ${sysModelName} (System default)`
+            return `${sanitizeProviderDisplayName(sys.display_name) || sys.provider_name} · ${sysModelName}`
         }
         if (systemDefault) {
             const dp = (providers as ProviderRecord[]).find(p => p.id === systemDefault.provider_id)
             const provLabel = dp ? (sanitizeProviderDisplayName(dp.display_name) || dp.provider_name) : ''
-            return `${provLabel} · ${systemDefault.model_name} (System default)`
+            return `${provLabel} · ${systemDefault.model_name}`
         }
         return 'Default model'
     }, [workspace, providers, appSettings])
@@ -1319,7 +1319,7 @@ export default function ChatPage() {
                                                         <span className="chat-workflow-status">{isInterrupted ? 'Interrupted' : streamingContent ? 'Streaming' : 'Preparing'}</span>
                                                     </div>
                                                     {streamingContent && (
-                                                        <div className="chat-bubble-assistant relative mt-1.5 px-4 py-3">
+                                                        <div className="chat-bubble-assistant relative px-4 py-3">
                                                             {!streamResponseExpanded && streamResponseHasHiddenTop && (
                                                                 <>
                                                                     <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-12 rounded-t-2xl bg-gradient-to-b from-card/92 via-card/66 to-transparent" />
@@ -2413,7 +2413,7 @@ function ThinkingBlock({
 
     return (
         <div className="chat-workflow-step">
-            <button className="chat-subsection-toggle" onClick={toggle}>
+            <button className={`chat-subsection-toggle ${open ? 'chat-subsection-toggle-open' : ''}`} onClick={toggle}>
                 {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                 <Brain className="w-3 h-3" />
                 {isActiveStream
@@ -2427,10 +2427,10 @@ function ThinkingBlock({
             </button>
             <div ref={blockRef} className={`chat-collapse w-full ${open ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
                 <div className="chat-collapse-inner pb-px">
-                    <div className="relative mt-1 w-full rounded-2xl border border-accent/20 bg-accent/6 px-4 py-3 chat-section-reveal">
+                    <div className="relative w-full chat-step-detail-card chat-section-reveal">
                         {isActiveStream && !fullyExpanded && hasHiddenTop && (
                             <>
-                                <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-10 rounded-t-2xl bg-gradient-to-b from-accent/6 via-accent/6/66 to-transparent" />
+                                <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-10 rounded-t-xl bg-gradient-to-b from-accent/6 via-accent/6/66 to-transparent" />
                                 <button
                                     type="button"
                                     className="absolute left-1/2 top-0 z-[3] -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 rounded-full border border-accent/30 bg-card/95 px-2.5 py-0.5 text-[11px] text-accent/80 hover:border-accent/55 hover:text-accent shadow-sm"
@@ -2545,7 +2545,7 @@ function SubagentCard({
 
     return (
         <div className="chat-workflow-step chat-section-reveal">
-            <button className="chat-subsection-toggle" onClick={toggle}>
+            <button className={`chat-subsection-toggle ${open ? 'chat-subsection-toggle-open' : ''}`} onClick={toggle}>
                 {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                 <Network className="w-3 h-3" />
                 <span>Subagent</span>
@@ -2555,7 +2555,7 @@ function SubagentCard({
             </button>
             <div ref={blockRef} className={`chat-collapse w-full ${open ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
                 <div className="chat-collapse-inner pb-px">
-                    <div className="relative mt-1 w-full rounded-2xl border border-accent/20 bg-accent/5 chat-section-reveal overflow-hidden">
+                    <div className="chat-step-detail-card chat-section-reveal overflow-hidden !p-0">
 
                         {/* Request */}
                         <div className="px-4 pt-3 pb-2 border-b border-accent/10">
@@ -2585,7 +2585,7 @@ function SubagentCard({
                         {hasSteps && (
                             <div className="px-4 py-2 border-b border-accent/10">
                                 <div className="mb-2 text-[10px] uppercase tracking-wide text-muted-foreground/60">Steps</div>
-                                <div className="space-y-1">
+                                <div className="chat-workflow-stack">
                                     {timelineSource.map((step, idx) =>
                                         step.type === 'thinking' ? (
                                             <ThinkingBlock
@@ -2594,17 +2594,18 @@ function SubagentCard({
                                                 isActiveStream={isRunning && !step.done && idx === timelineSource.length - 1}
                                             />
                                         ) : step.type === 'tool_call' ? (
-                                            <ToolCallCard
-                                                key={step.call_id ?? idx}
-                                                callId={step.call_id ?? String(idx)}
-                                                toolName={step.tool_name ?? ''}
-                                                arguments={step.arguments ?? {}}
-                                                result={step.success !== undefined
-                                                    ? { success: step.success, output: step.output, error: step.error }
-                                                    : undefined
-                                                }
-                                                isRunning={isRunning && step.success === undefined}
-                                            />
+                                            <div key={step.call_id ?? idx} className="chat-workflow-step">
+                                                <ToolCallCard
+                                                    callId={step.call_id ?? String(idx)}
+                                                    toolName={step.tool_name ?? ''}
+                                                    arguments={step.arguments ?? {}}
+                                                    result={step.success !== undefined
+                                                        ? { success: step.success, output: step.output, error: step.error }
+                                                        : undefined
+                                                    }
+                                                    isRunning={isRunning && step.success === undefined}
+                                                />
+                                            </div>
                                         ) : null
                                     )}
                                 </div>
@@ -3252,7 +3253,7 @@ function ChatMessageCard({
                                             <span className="chat-workflow-status">Interrupted</span>
                                         )}
                                     </div>
-                                    <div className="chat-bubble-assistant mt-1.5 px-4 py-3">
+                                    <div className="chat-bubble-assistant px-4 py-3">
                                         {msg.content && (
                                             <div
                                                 className="markdown-content text-sm"

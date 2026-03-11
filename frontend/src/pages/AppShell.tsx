@@ -337,6 +337,27 @@ export default function AppShell() {
         }
     }, [location.pathname, navigate, qc, workspaceId])
 
+    const handlePermanentDeleteConversation = useCallback(async () => {
+        if (!conversationToDelete) return
+        setDeleteLoading(true)
+        try {
+            // Soft-delete first (required before permanent delete)
+            await deleteConversation(workspaceId, conversationToDelete.id)
+            await permanentlyDeleteConversation(workspaceId, conversationToDelete.id)
+            qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
+            qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'archived'] })
+            if (location.pathname.includes(`/chat/${conversationToDelete.id}`)) {
+                navigate(`/w/${workspaceId}/chat`)
+            }
+        } catch (error) {
+            console.error('Failed to permanently delete conversation:', error)
+        } finally {
+            setDeleteLoading(false)
+            setDeleteModalOpen(false)
+            setConversationToDelete(null)
+        }
+    }, [conversationToDelete, location.pathname, navigate, qc, workspaceId])
+
     const toggleInsightsSidebar = useCallback(() => {
         setIsInsightsCollapsed(prev => {
             const next = !prev
@@ -571,6 +592,16 @@ export default function AppShell() {
                                                     className="gap-2 text-red-500 focus:text-red-400 focus:bg-red-500/10"
                                                 >
                                                     <Trash2 className="w-4 h-4" /> Move to Trash
+                                                </ContextMenuItem>
+                                                <ContextMenuItem
+                                                    onSelect={(event) => {
+                                                        event.preventDefault()
+                                                        setConversationToDelete({ id: c.id, title: c.title ?? null })
+                                                        setDeleteModalOpen(true)
+                                                    }}
+                                                    className="gap-2 text-red-500 focus:text-red-400 focus:bg-red-500/10"
+                                                >
+                                                    <Trash2 className="w-4 h-4" /> Delete Permanently
                                                 </ContextMenuItem>
                                             </ContextMenuContent>
                                         </ContextMenu>
@@ -880,6 +911,18 @@ export default function AppShell() {
                     </span>
                 </Link>
             )}
+
+            <ConfirmModal
+                isOpen={deleteModalOpen}
+                onClose={() => { setDeleteModalOpen(false); setConversationToDelete(null) }}
+                title="Delete permanently?"
+                message={`"${conversationToDelete?.title || 'Untitled Chat'}" and all its messages will be permanently deleted. This cannot be undone.`}
+                confirmLabel={deleteLoading ? 'Deleting…' : 'Delete Permanently'}
+                variant="danger"
+                icon="trash"
+                loading={deleteLoading}
+                onConfirm={handlePermanentDeleteConversation}
+            />
         </div>
     )
 }

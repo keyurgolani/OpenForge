@@ -649,8 +649,9 @@
 
   .chat-bubble-assistant {
     width: 100%;
-    border-radius: 1rem;
+    border-radius: 0 0.75rem 0.75rem 0.75rem;
     border: 1px solid hsla(var(--border) / 0.76);
+    border-top: none;
     background:
       linear-gradient(160deg, var(--chat-assistant-bg-1), var(--chat-assistant-bg-2));
     box-shadow:
@@ -736,12 +737,14 @@
   }
 
   .chat-workflow-header {
-    @apply inline-flex items-center gap-1.5 rounded-full text-[11px] uppercase tracking-wide;
+    @apply inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wide;
     min-height: 1.5rem;
     padding: 0.2rem 0.6rem;
     border: 1px solid hsla(var(--border) / 0.75);
-    background: linear-gradient(140deg, hsla(var(--muted) / 0.42), hsla(var(--input) / 0.42));
+    background: linear-gradient(140deg, hsla(var(--muted) / 0.52), hsla(var(--input) / 0.52));
     color: hsl(var(--muted-foreground));
+    border-radius: 0.75rem 0.75rem 0 0;
+    border-bottom-color: transparent;
   }
 
   .chat-workflow-status {
@@ -769,6 +772,26 @@
   .chat-subsection-toggle:hover {
     color: hsl(var(--foreground));
     border-color: hsla(var(--accent) / 0.32);
+  }
+
+  /* When expanded: flatten bottom of badge and connect to detail card */
+  .chat-subsection-toggle-open {
+    border-radius: 0.75rem 0.75rem 0 0;
+    border-bottom-color: transparent;
+    background: linear-gradient(140deg, hsla(var(--muted) / 0.52), hsla(var(--input) / 0.52));
+  }
+
+  .chat-step-detail-card {
+    border: 1px solid hsla(var(--border) / 0.75);
+    border-top: none;
+    border-radius: 0 0.75rem 0.75rem 0.75rem;
+    background: linear-gradient(160deg, hsla(var(--muted) / 0.28), hsla(var(--input) / 0.18));
+    padding: 0.625rem 0.75rem;
+    font-size: 0.75rem;
+  }
+
+  .chat-step-detail-card > * + * {
+    margin-top: 0.625rem;
   }
 
   .chat-source-card {
