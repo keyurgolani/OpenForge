@@ -518,6 +518,8 @@ async def set_default_clip_model(
             f"Model '{body.model_id}' is not downloaded. Download it first.",
         )
 
+    old_model = config_value.value if (config_value := await config_service.get_config(db, "clip_model")) else None
+
     await config_service.set_config(db, "clip_model", body.model_id, "llm")
 
     # Invalidate cached model so next image processing picks up the new one
@@ -526,6 +528,32 @@ async def set_default_clip_model(
         ImageProcessor._clip_model = None
     except Exception:
         pass
+
+    # Auto-trigger image re-indexing if the model actually changed
+    if old_model != body.model_id:
+        try:
+            import asyncio as _asyncio
+            from sqlalchemy import select as _sel
+            from openforge.db.postgres import AsyncSessionLocal
+            from openforge.db.models import Knowledge
+            from openforge.api.knowledge_upload import _process_knowledge_file
+
+            async def _reindex():
+                async with AsyncSessionLocal() as _db:
+                    rows = (await _db.execute(
+                        _sel(Knowledge).where(Knowledge.type == "image", Knowledge.file_path.isnot(None))
+                    )).scalars().all()
+                    items = [(k.id, k.workspace_id, k.file_path) for k in rows]
+                for kid, wid, fpath in items:
+                    try:
+                        await _process_knowledge_file(knowledge_id=kid, workspace_id=wid, knowledge_type="image", file_path=fpath)
+                    except Exception as e:
+                        logger.warning("Auto re-index image %s failed: %s", kid, e)
+                logger.info("Auto image re-indexing after CLIP model change complete (%d items).", len(items))
+
+            _asyncio.create_task(_reindex())
+        except Exception:
+            pass
 
     return {"model_id": body.model_id, "name": CLIP_MODEL_MAP[body.model_id]}
 
@@ -594,3 +622,70 @@ async def delete_clip_model(model_id: str):
         pass
 
     return {"deleted": deleted, "model_id": model_id}
+
+
+# ─────────────────────────────────────────────
+# Re-indexing endpoints
+# ─────────────────────────────────────────────
+
+@router.post("/reindex/images")
+async def reindex_images():
+    """Re-process CLIP embeddings for all image knowledge items."""
+    import asyncio as _asyncio
+    from sqlalchemy import select as _sel
+    from openforge.db.postgres import AsyncSessionLocal
+    from openforge.db.models import Knowledge
+    from openforge.api.knowledge_upload import _process_knowledge_file
+
+    async def _run():
+        async with AsyncSessionLocal() as db:
+            rows = (await db.execute(
+                _sel(Knowledge).where(Knowledge.type == "image", Knowledge.file_path.isnot(None))
+            )).scalars().all()
+            items = [(k.id, k.workspace_id, k.file_path) for k in rows]
+
+        count = 0
+        for kid, wid, fpath in items:
+            try:
+                await _process_knowledge_file(
+                    knowledge_id=kid,
+                    workspace_id=wid,
+                    knowledge_type="image",
+                    file_path=fpath,
+                )
+                count += 1
+            except Exception as e:
+                logger.warning("Image re-index failed for %s: %s", kid, e)
+        logger.info("Image re-indexing complete: %d/%d items.", count, len(items))
+
+    _asyncio.create_task(_run())
+    return {"status": "started", "message": "Image re-indexing started in background"}
+
+
+@router.post("/reindex/knowledge")
+async def reindex_knowledge():
+    """Re-process text embeddings for all knowledge items."""
+    import asyncio as _asyncio
+    from sqlalchemy import select as _sel
+    from openforge.db.postgres import AsyncSessionLocal
+    from openforge.db.models import Knowledge
+
+    async def _run():
+        async with AsyncSessionLocal() as db:
+            rows = (await db.execute(_sel(Knowledge))).scalars().all()
+            items = [(k.id, k.workspace_id, k.content or "", k.type or "note", k.title) for k in rows]
+
+        from openforge.services.knowledge_processing_service import knowledge_processing_service
+        count = 0
+        for kid, wid, content, ktype, title in items:
+            try:
+                await knowledge_processing_service._process_knowledge_background(
+                    kid, wid, content, ktype, title
+                )
+                count += 1
+            except Exception as e:
+                logger.warning("Knowledge re-index failed for %s: %s", kid, e)
+        logger.info("Knowledge re-indexing complete: %d/%d items.", count, len(items))
+
+    _asyncio.create_task(_run())
+    return {"status": "started", "message": "Knowledge re-indexing started in background"}

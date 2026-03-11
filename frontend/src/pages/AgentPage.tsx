@@ -1478,7 +1478,7 @@ export default function AgentPage() {
                                                         aria-expanded={modelPickerOpen}
                                                     >
                                                         <Bot className="h-3.5 w-3.5" />
-                                                        <span className="max-w-[220px] truncate">{selectedOption?.label ?? defaultLabel}</span>
+                                                        <span className="max-w-[220px] truncate">{selectedModelKey ? (selectedOption?.label ?? defaultLabel) : 'Workspace default'}</span>
                                                         <ChevronDown className={`h-3 w-3 transition-transform ${modelPickerOpen ? 'rotate-180' : ''}`} />
                                                     </button>
                                                     {modelPickerOpen && (

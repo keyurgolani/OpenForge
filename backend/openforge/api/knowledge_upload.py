@@ -222,6 +222,13 @@ async def _process_knowledge_file(
             if processor_result.get("thumbnail_path"):
                 knowledge.thumbnail_path = processor_result["thumbnail_path"]
 
+            if processor_result.get("file_path"):
+                knowledge.file_path = processor_result["file_path"]
+            if processor_result.get("file_size"):
+                knowledge.file_size = processor_result["file_size"]
+            if processor_result.get("mime_type"):
+                knowledge.mime_type = processor_result["mime_type"]
+
             if processor_result.get("file_metadata"):
                 knowledge.file_metadata = processor_result["file_metadata"]
 

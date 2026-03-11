@@ -3,8 +3,9 @@
 Full pipeline:
 1. Extract metadata via mutagen/ffprobe (duration, format, sample rate, channels)
 2. Transcribe via Whisper (configurable model size)
-3. Generate AI title from transcript
-4. Embed transcript text → openforge_knowledge
+3. Compress audio to OGG Opus via ffmpeg (replaces original if smaller)
+4. Generate AI title from transcript
+5. Embed transcript text → openforge_knowledge
 """
 from __future__ import annotations
 
@@ -119,6 +120,23 @@ class AudioProcessor:
         except Exception as e:
             logger.warning("Whisper transcription failed for %s: %s", knowledge_id, e)
 
+        # ── Step 2b: Compress audio file ──
+        try:
+            compress_result = await asyncio.to_thread(
+                self._compress_audio, file_path
+            )
+            if compress_result:
+                result["compressed_file_path"] = compress_result["file_path"]
+                result["compressed_file_size"] = compress_result["file_size"]
+                result["compressed_mime_type"] = compress_result["mime_type"]
+                # Re-extract metadata from the compressed file
+                try:
+                    result["metadata"] = self._extract_metadata(compress_result["file_path"])
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.warning("Audio compression failed for %s: %s", knowledge_id, e)
+
         # ── Step 3: AI title from transcript ──
         if result["transcript"] and db_session:
             try:
@@ -137,7 +155,7 @@ class AudioProcessor:
 
         metadata = result["metadata"] or {}
 
-        return {
+        output: dict = {
             "file_metadata": {
                 "duration": metadata.get("duration"),
                 "format": metadata.get("format"),
@@ -152,6 +170,13 @@ class AudioProcessor:
             "content": result["transcript"] or "",
             "ai_title": result["ai_title"],
         }
+
+        if result.get("compressed_file_path"):
+            output["file_path"] = result["compressed_file_path"]
+            output["file_size"] = result["compressed_file_size"]
+            output["mime_type"] = result["compressed_mime_type"]
+
+        return output
 
     def _extract_metadata(self, file_path: str) -> dict:
         """Extract audio metadata using mutagen and ffprobe."""
@@ -213,6 +238,74 @@ class AudioProcessor:
                 logger.debug("ffprobe failed: %s", e)
 
         return metadata
+
+    def _compress_audio(self, file_path: str) -> Optional[dict]:
+        """Compress audio to OGG Opus format using ffmpeg.
+
+        Replaces the original file with the compressed version.
+        Returns new file info dict, or None if compression was skipped.
+        """
+        src = Path(file_path)
+        if not src.exists():
+            return None
+
+        # Skip if already OGG Opus
+        if src.suffix.lower() in (".ogg", ".opus"):
+            return None
+
+        compressed_path = src.with_suffix(".ogg")
+
+        try:
+            proc = subprocess.run(
+                [
+                    "ffmpeg", "-y",
+                    "-i", str(src),
+                    "-c:a", "libopus",
+                    "-b:a", "48k",       # 48 kbps — very good for speech
+                    "-vn",               # strip non-audio streams
+                    "-map_metadata", "-1",  # strip metadata to save space
+                    str(compressed_path),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=300,
+            )
+            if proc.returncode != 0:
+                logger.warning("ffmpeg compression failed: %s", proc.stderr[-500:] if proc.stderr else "")
+                # Clean up partial output
+                compressed_path.unlink(missing_ok=True)
+                return None
+        except subprocess.TimeoutExpired:
+            logger.warning("ffmpeg compression timed out for %s", file_path)
+            compressed_path.unlink(missing_ok=True)
+            return None
+
+        compressed_size = compressed_path.stat().st_size
+        original_size = src.stat().st_size
+
+        # Only keep compressed version if it's actually smaller
+        if compressed_size >= original_size:
+            logger.info(
+                "Compressed file not smaller (%d >= %d), keeping original: %s",
+                compressed_size, original_size, file_path,
+            )
+            compressed_path.unlink(missing_ok=True)
+            return None
+
+        logger.info(
+            "Audio compressed: %s → %s (%.0f%% reduction)",
+            file_path, compressed_path.name,
+            (1 - compressed_size / original_size) * 100,
+        )
+
+        # Remove the original and use the compressed file
+        src.unlink()
+
+        return {
+            "file_path": str(compressed_path),
+            "file_size": compressed_size,
+            "mime_type": "audio/ogg",
+        }
 
     def _transcribe(self, file_path: str, model_size: str = "base") -> dict:
         """Transcribe audio using Whisper."""

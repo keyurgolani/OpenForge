@@ -38,6 +38,10 @@ async def _build_workspace_data(db: AsyncSession, ws: Workspace) -> dict:
             "is_archived": k.is_archived,
             "word_count": k.word_count,
             "tags": [t.tag for t in tag_rows],
+            "file_path": k.file_path,
+            "file_size": k.file_size,
+            "mime_type": k.mime_type,
+            "file_metadata": k.file_metadata,
             "created_at": _dt(k.created_at),
             "updated_at": _dt(k.updated_at),
         })
@@ -115,6 +119,20 @@ async def _build_zip(db: AsyncSession, workspaces: list[Workspace]) -> BytesIO:
                 f"workspaces/{ws.id}/workspace.json",
                 json.dumps(ws_data, indent=2, ensure_ascii=False),
             )
+
+            # Include raw knowledge files that exist on disk
+            for k_item in ws_data["knowledge"]:
+                k_file_path = k_item.get("file_path", "")
+                if not k_file_path:
+                    continue
+                if os.path.isfile(k_file_path):
+                    try:
+                        zf.write(
+                            k_file_path,
+                            f"workspaces/{ws.id}/knowledge-files/{os.path.basename(k_file_path)}",
+                        )
+                    except Exception:
+                        pass
 
             # Include raw attachment files that exist on disk
             for conv in ws_data["conversations"]:

@@ -56,6 +56,10 @@ export const getCLIPDefault = (): Promise<any> =>
     api.get('/models/clip/default').then(r => r.data)
 export const setCLIPDefault = (modelId: string): Promise<any> =>
     api.put('/models/clip/default', { model_id: modelId }).then(r => r.data)
+export const reindexImages = (): Promise<any> =>
+    api.post('/models/reindex/images').then(r => r.data)
+export const reindexKnowledge = (): Promise<any> =>
+    api.post('/models/reindex/knowledge').then(r => r.data)
 export const listMarkerModels = (): Promise<any> =>
     api.get('/models/marker').then(r => r.data)
 export const downloadMarkerModel = (): Promise<any> =>

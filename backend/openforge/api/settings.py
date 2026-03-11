@@ -20,9 +20,20 @@ async def update_setting(
     body: ConfigUpdate,
     db: AsyncSession = Depends(get_db),
 ):
-    return await config_service.set_config(
+    result = await config_service.set_config(
         db, key, body.value, body.category, body.sensitive
     )
+
+    # Invalidate cached embedding model when the setting changes
+    if key == "embedding_model":
+        try:
+            from openforge.core import embedding
+            embedding._model = None
+            embedding._model_id = None
+        except Exception:
+            pass
+
+    return result
 
 
 @router.get("/needs-restart")

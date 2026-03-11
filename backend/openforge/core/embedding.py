@@ -9,6 +9,7 @@ import logging
 logger = logging.getLogger("openforge.embedding")
 
 _model: SentenceTransformer | None = None
+_model_id: str | None = None
 
 
 def _embeddings_cache_dir() -> str:
@@ -17,13 +18,51 @@ def _embeddings_cache_dir() -> str:
     return str(Path(settings.models_root) / "embeddings")
 
 
+def _resolve_embedding_model_id() -> str:
+    """Resolve the active embedding model — DB config overrides env default."""
+    from openforge.config import get_settings
+    settings = get_settings()
+    try:
+        from openforge.services.config_service import config_service as _cs
+        import asyncio
+
+        async def _read():
+            from openforge.db.postgres import AsyncSessionLocal
+            async with AsyncSessionLocal() as db:
+                cfg = await _cs.get_config(db, "embedding_model")
+                if cfg and cfg.value:
+                    val = cfg.value
+                    if isinstance(val, dict):
+                        val = val.get("value", "")
+                    if val:
+                        return str(val)
+            return None
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            # Can't await in sync context with running loop — use env default
+            return settings.embedding_model
+
+        result = asyncio.run(_read())
+        if result:
+            return result
+    except Exception:
+        pass
+    return settings.embedding_model
+
+
 def get_embedding_model() -> SentenceTransformer:
-    global _model
-    if _model is None:
-        settings = get_settings()
+    global _model, _model_id
+    resolved_id = _resolve_embedding_model_id()
+    if _model is None or _model_id != resolved_id:
         cache_dir = _embeddings_cache_dir()
-        logger.info(f"Loading embedding model: {settings.embedding_model} from {cache_dir}")
-        _model = SentenceTransformer(settings.embedding_model, cache_folder=cache_dir)
+        logger.info(f"Loading embedding model: {resolved_id} from {cache_dir}")
+        _model = SentenceTransformer(resolved_id, cache_folder=cache_dir)
+        _model_id = resolved_id
         dim = _model.get_sentence_embedding_dimension()
         logger.info(f"Embedding model loaded. Dimension: {dim}")
     return _model

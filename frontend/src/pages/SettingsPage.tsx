@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
     listProviders, createProvider, updateProvider, deleteProvider,
@@ -9,7 +9,7 @@ import {
     listSchedules, updateSchedule, runTaskNow, getTaskHistory, getToolCallLogs, listSettings, updateSetting,
     listInstalledSkills, installSkill, searchSkills, removeSkill, getToolRegistry,
     listMCPServers, createMCPServer, updateMCPServer, deleteMCPServer, discoverMCPServer,
-    updateMCPToolOverride, exportAllData, exportWorkspaceData,
+    updateMCPToolOverride, exportAllData, exportWorkspaceData, reindexImages, reindexKnowledge,
     checkAuth, logoutAuth,
     listToolPermissions, setToolPermission,
     listPendingHITL, getHITLHistory, approveHITL, denyHITL,
@@ -26,7 +26,7 @@ import {
     FileText, Timer, History, Play, Clock, CheckCircle, AlertCircle, Circle, Terminal,
     Brain, Folder, Briefcase, Microscope, BookOpen, Target, Globe, Lightbulb, Wrench,
     Palette, BarChart3, Rocket, Shield, FlaskConical, Leaf, Key, Settings2, PenLine,
-    Database, Sprout, Download, Archive, FileArchive, Mic, ShieldAlert, LogOut, ScanEye
+    Database, Sprout, Download, Archive, FileArchive, Mic, ShieldAlert, LogOut, ScanEye, Home, Settings, PanelLeft
 } from 'lucide-react'
 import { ProviderIcon } from '@/components/shared/ProviderIcon'
 import { ModelOverrideSelect } from '@/components/shared/ModelOverrideSelect'
@@ -83,12 +83,17 @@ const toSettingsTab = (value: string | null): SettingsTab => {
 
 // ── Root component ────────────────────────────────────────────────────────────
 export default function SettingsPage() {
+    const navigate = useNavigate()
     const [searchParams, setSearchParams] = useSearchParams()
     const queryTab = searchParams.get('tab')
     const newWorkspaceRequested = searchParams.get('newWorkspace') === '1'
     const [activeTab, setActiveTab] = useState<SettingsTab>(() => toSettingsTab(queryTab))
     const [authEnabled, setAuthEnabled] = useState(false)
     const [loggingOut, setLoggingOut] = useState(false)
+    const [sidebarOpen, setSidebarOpen] = useState(true)
+
+    const { data: workspaces = [] } = useQuery({ queryKey: ['workspaces'], queryFn: listWorkspaces })
+    const workspaceList = workspaces as { id: string; name: string; icon: string; color: string }[]
 
     useEffect(() => {
         const nextTab = toSettingsTab(queryTab)
@@ -128,69 +133,158 @@ export default function SettingsPage() {
     ]
 
     return (
-        <div className="w-full h-full min-h-0 p-6 lg:p-8 flex flex-col">
-            {/* Tabs + logout */}
-            <div className="flex shrink-0 items-start gap-3 mb-8">
-            <div className="flex shrink-0 gap-2 p-1.5 glass-card w-full sm:w-fit rounded-2xl overflow-x-auto min-h-[52px]">
-                {TABS.map(({ id, label, Icon }) => (
-                    <button
-                        key={id}
-                        onClick={() => {
-                            setActiveTab(id)
-                            const next = new URLSearchParams(searchParams)
-                            next.set('tab', id)
-                            if (id !== 'workspaces') {
-                                next.delete('newWorkspace')
-                            }
-                            setSearchParams(next, { replace: true })
-                        }}
-                        className={`flex min-h-9 items-center justify-center gap-2 px-5 py-2 text-sm font-medium rounded-xl transition-all duration-300 whitespace-nowrap ${activeTab === id
-                            ? 'bg-accent/20 text-accent shadow-glass-inset ring-1 ring-accent/30'
-                            : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
-                            }`}
-                    >
-                        <Icon className="w-4 h-4" />
-                        {label}
-                    </button>
-                ))}
-            </div>
-            {authEnabled && (
-                <button
-                    onClick={handleLogout}
-                    disabled={loggingOut}
-                    title="Sign out"
-                    className="flex shrink-0 items-center gap-2 h-[52px] px-4 rounded-2xl glass-card text-sm text-muted-foreground hover:text-red-400 hover:border-red-500/20 transition-all disabled:opacity-50"
-                >
-                    {loggingOut ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogOut className="w-4 h-4" />}
-                    <span className="hidden sm:inline">Sign out</span>
-                </button>
-            )}
-            </div>
+        <div className="relative flex h-screen gap-3 overflow-hidden p-3">
+            {/* Workspace sidebar */}
+            <aside className={`${sidebarOpen ? 'w-72' : 'w-14'} flex-shrink-0 transition-[width] duration-300 overflow-hidden flex flex-col glass-card`}>
+                {sidebarOpen ? (
+                    <>
+                        <div className="flex-shrink-0">
+                            {/* Header — same structure as AppShell workspace selector */}
+                            <div className="w-full border-b border-border/60 bg-card/45 px-4 py-3">
+                                <div className="flex items-center gap-2.5">
+                                    <div className="w-8 h-8 rounded-lg bg-accent/12 border border-accent/25 flex items-center justify-center flex-shrink-0">
+                                        <Settings className="w-4 h-4 text-accent" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-sm font-semibold truncate">Settings</p>
+                                        <p className="text-[11px] text-muted-foreground truncate">Providers, prompts & more</p>
+                                    </div>
+                                </div>
+                            </div>
 
-            {activeTab === 'workspaces' && (
-                <WorkspacesSettings
-                    openCreateRequested={newWorkspaceRequested}
-                    onCreateRequestConsumed={() => {
-                        if (!newWorkspaceRequested) return
-                        const next = new URLSearchParams(searchParams)
-                        next.delete('newWorkspace')
-                        setSearchParams(next, { replace: true })
-                    }}
-                />
-            )}
-            {activeTab === 'llm' && <LLMSettings />}
-            {activeTab === 'prompts' && <PromptsTab />}
-            {activeTab === 'jobs' && <JobsTab />}
-            {activeTab === 'skills' && <SkillsTab />}
-            {activeTab === 'tools' && <ToolsTab />}
-            {activeTab === 'mcp' && <MCPTab />}
-            {activeTab === 'hitl' && <HITLDashboardTab />}
-            {activeTab === 'audit' && (
-                <div className="min-h-0 flex-1">
-                    <AuditTab />
+                            {/* Nav section — same as AppShell nav */}
+                            <div className="px-4 pt-3 pb-3">
+                                <div className="flex items-center gap-1 px-2 mb-1">
+                                    <Home className="w-3 h-3 text-muted-foreground" />
+                                    <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Workspaces</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto px-3 pb-4">
+                            {workspaceList.map(ws => (
+                                <Link
+                                    key={ws.id}
+                                    to={`/w/${ws.id}`}
+                                    className="sidebar-item text-xs"
+                                >
+                                    {getWorkspaceIcon(ws.icon)}
+                                    <span className="truncate">{ws.name}</span>
+                                </Link>
+                            ))}
+                        </div>
+                    </>
+                ) : (
+                    /* Collapsed siderail — icon-only navigation */
+                    <div className="flex flex-col h-full items-center py-3 gap-1">
+                        <button
+                            type="button"
+                            onClick={() => setSidebarOpen(true)}
+                            title="Open sidebar"
+                            className="w-9 h-9 rounded-lg bg-accent/12 border border-accent/25 flex items-center justify-center mb-1 hover:bg-accent/20 transition-colors"
+                        >
+                            <Settings className="w-4 h-4 text-accent" />
+                        </button>
+
+                        <nav className="flex flex-col gap-1 w-full items-center mt-1">
+                            {workspaceList.map(ws => (
+                                <Link
+                                    key={ws.id}
+                                    to={`/w/${ws.id}`}
+                                    title={ws.name}
+                                    className="w-9 h-9 rounded-lg flex items-center justify-center transition-colors text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                                >
+                                    {getWorkspaceIcon(ws.icon)}
+                                </Link>
+                            ))}
+                        </nav>
+                    </div>
+                )}
+            </aside>
+
+            {/* Main settings content */}
+            <div className="flex-1 flex flex-col min-w-0 glass-card overflow-hidden">
+                {/* Top bar with sidebar toggle */}
+                <header className="relative z-40 flex items-center gap-3 px-5 py-3 border-b border-border/60 bg-card/40 backdrop-blur-md flex-shrink-0">
+                    <button
+                        className="btn-ghost p-2 -ml-1 border border-border/60 bg-card/35"
+                        onClick={() => setSidebarOpen(p => !p)}
+                        title="Toggle sidebar"
+                        aria-label="Toggle sidebar"
+                    >
+                        <PanelLeft className="w-4 h-4" />
+                    </button>
+                    <div className="min-w-0 flex flex-col leading-tight">
+                        <p className="text-sm font-semibold truncate">Settings</p>
+                        <p className="hidden sm:block text-xs text-muted-foreground/90 truncate">Configure providers, models & more</p>
+                    </div>
+                </header>
+
+                <div className="flex-1 min-h-0 overflow-y-auto p-6 lg:p-8 flex flex-col">
+                    {/* Tabs + logout */}
+                    <div className="flex shrink-0 items-start gap-3 mb-8">
+                    <div className="flex shrink-0 gap-2 p-1.5 glass-card w-full sm:w-fit rounded-2xl overflow-x-auto min-h-[52px]">
+                        {TABS.map(({ id, label, Icon }) => (
+                            <button
+                                key={id}
+                                onClick={() => {
+                                    setActiveTab(id)
+                                    const next = new URLSearchParams(searchParams)
+                                    next.set('tab', id)
+                                    if (id !== 'workspaces') {
+                                        next.delete('newWorkspace')
+                                    }
+                                    setSearchParams(next, { replace: true })
+                                }}
+                                className={`flex min-h-9 items-center justify-center gap-2 px-5 py-2 text-sm font-medium rounded-xl transition-all duration-300 whitespace-nowrap ${activeTab === id
+                                    ? 'bg-accent/20 text-accent shadow-glass-inset ring-1 ring-accent/30'
+                                    : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
+                                    }`}
+                            >
+                                <Icon className="w-4 h-4" />
+                                {label}
+                            </button>
+                        ))}
+                    </div>
+                    {authEnabled && (
+                        <button
+                            onClick={handleLogout}
+                            disabled={loggingOut}
+                            title="Sign out"
+                            className="flex shrink-0 items-center gap-2 h-[52px] px-4 rounded-2xl glass-card text-sm text-muted-foreground hover:text-red-400 hover:border-red-500/20 transition-all disabled:opacity-50"
+                        >
+                            {loggingOut ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogOut className="w-4 h-4" />}
+                            <span className="hidden sm:inline">Sign out</span>
+                        </button>
+                    )}
+                    </div>
+
+                    {activeTab === 'workspaces' && (
+                        <WorkspacesSettings
+                            openCreateRequested={newWorkspaceRequested}
+                            onCreateRequestConsumed={() => {
+                                if (!newWorkspaceRequested) return
+                                const next = new URLSearchParams(searchParams)
+                                next.delete('newWorkspace')
+                                setSearchParams(next, { replace: true })
+                            }}
+                        />
+                    )}
+                    {activeTab === 'llm' && <LLMSettings />}
+                    {activeTab === 'prompts' && <PromptsTab />}
+                    {activeTab === 'jobs' && <JobsTab />}
+                    {activeTab === 'skills' && <SkillsTab />}
+                    {activeTab === 'tools' && <ToolsTab />}
+                    {activeTab === 'mcp' && <MCPTab />}
+                    {activeTab === 'hitl' && <HITLDashboardTab />}
+                    {activeTab === 'audit' && (
+                        <div className="min-h-0 flex-1">
+                            <AuditTab />
+                        </div>
+                    )}
+                    {activeTab === 'export' && <ExportTab />}
                 </div>
-            )}
-            {activeTab === 'export' && <ExportTab />}
+            </div>
         </div>
     )
 }
@@ -1227,6 +1321,8 @@ function EmbeddingTab() {
     const [removing, setRemoving] = useState<string | null>(null)
     const [downloadingEmb, setDownloadingEmb] = useState<string | null>(null)
     const [deletingEmb, setDeletingEmb] = useState<string | null>(null)
+    const [reindexingKnowledge, setReindexingKnowledge] = useState(false)
+    const [reindexKnowledgeStarted, setReindexKnowledgeStarted] = useState(false)
 
     // Query download status for all recommended embedding models
     const allEmbIds = useMemo(() => RECOMMENDED_EMBEDDING_MODELS.map(m => m.id).join(','), [])
@@ -1571,6 +1667,41 @@ function EmbeddingTab() {
                             {saved ? <><CheckCircle2 className="w-3.5 h-3.5" /> Saved</> : saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Save className="w-3.5 h-3.5" /> Set as Default</>}
                         </button>
                     </div>
+                )}
+            </div>
+
+            {/* Re-index knowledge */}
+            <div className="glass-card p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h4 className="text-sm font-medium">Re-index Knowledge</h4>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                            Re-process text embeddings for all knowledge items using the current model.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={async () => {
+                            setReindexingKnowledge(true)
+                            try {
+                                await reindexKnowledge()
+                                setReindexKnowledgeStarted(true)
+                                setTimeout(() => setReindexKnowledgeStarted(false), 3000)
+                            } finally {
+                                setReindexingKnowledge(false)
+                            }
+                        }}
+                        disabled={reindexingKnowledge}
+                        className="btn-primary text-xs py-1.5 px-4 gap-1.5 flex-shrink-0"
+                    >
+                        {reindexingKnowledge ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                        Re-index All Knowledge
+                    </button>
+                </div>
+                {reindexKnowledgeStarted && (
+                    <span className="text-xs text-emerald-400 flex items-center gap-1">
+                        <CheckCircle className="w-3.5 h-3.5" /> Re-indexing started in background
+                    </span>
                 )}
             </div>
 
@@ -2100,6 +2231,8 @@ function CLIPTab() {
     const [savedClip, setSavedClip] = useState(false)
     const [downloadingModel, setDownloadingModel] = useState<string | null>(null)
     const [deletingModel, setDeletingModel] = useState<string | null>(null)
+    const [reindexing, setReindexing] = useState(false)
+    const [reindexStarted, setReindexStarted] = useState(false)
 
     const { data: clipStatuses = [], refetch: refetchClip } = useQuery({
         queryKey: ['clip-models'],
@@ -2271,10 +2404,39 @@ function CLIPTab() {
                 )}
             </div>
 
-            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
-                <p className="text-[11px] text-amber-300/90">
-                    Changing the CLIP model changes the embedding dimensions. Existing image embeddings will need to be re-processed via the image knowledge cards' re-extract action to use the new model.
-                </p>
+            {/* Re-index images */}
+            <div className="glass-card p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h4 className="text-sm font-medium">Re-index Images</h4>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                            Re-process CLIP embeddings for all images using the current model. Runs automatically when you change the default model.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={async () => {
+                            setReindexing(true)
+                            try {
+                                await reindexImages()
+                                setReindexStarted(true)
+                                setTimeout(() => setReindexStarted(false), 3000)
+                            } finally {
+                                setReindexing(false)
+                            }
+                        }}
+                        disabled={reindexing}
+                        className="btn-primary text-xs py-1.5 px-4 gap-1.5 flex-shrink-0"
+                    >
+                        {reindexing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                        Re-index All Images
+                    </button>
+                </div>
+                {reindexStarted && (
+                    <span className="text-xs text-emerald-400 flex items-center gap-1">
+                        <CheckCircle className="w-3.5 h-3.5" /> Re-indexing started in background
+                    </span>
+                )}
             </div>
         </div>
     )
@@ -2911,7 +3073,7 @@ function PromptsSubTabContent({
 }
 
 // ── Jobs Tab ──────────────────────────────────────────────────────────────────
-type JobsSubTab = 'schedules' | 'automated-triggers'
+type JobsSubTab = 'schedules' | 'automated-triggers' | 'indexing'
 
 function JobsTab() {
     const [activeSubTab, setActiveSubTab] = useState<JobsSubTab>('schedules')
@@ -2919,6 +3081,7 @@ function JobsTab() {
     const tabs: Array<{ id: JobsSubTab; label: string; icon: React.ComponentType<{ className?: string }> }> = [
         { id: 'schedules', label: 'Schedules', icon: Timer },
         { id: 'automated-triggers', label: 'Automated Triggers', icon: Zap },
+        { id: 'indexing', label: 'Indexing', icon: Database },
     ]
 
     return (
@@ -2942,7 +3105,97 @@ function JobsTab() {
                 })}
             </div>
 
-            {activeSubTab === 'schedules' ? <SchedulesTab /> : <AutomatedTriggersTab />}
+            {activeSubTab === 'schedules' && <SchedulesTab />}
+            {activeSubTab === 'automated-triggers' && <AutomatedTriggersTab />}
+            {activeSubTab === 'indexing' && <IndexingJobsTab />}
+        </div>
+    )
+}
+
+function IndexingJobsTab() {
+    const [reindexingImages, setReindexingImages] = useState(false)
+    const [reindexingKnowledge, setReindexingKnowledge] = useState(false)
+    const [imageStarted, setImageStarted] = useState(false)
+    const [knowledgeStarted, setKnowledgeStarted] = useState(false)
+
+    const jobs = [
+        {
+            title: 'Image Embedding (CLIP)',
+            description: 'Re-process CLIP visual embeddings for all image knowledge items. Required when changing the CLIP model.',
+            icon: ScanEye,
+            loading: reindexingImages,
+            started: imageStarted,
+            onRun: async () => {
+                setReindexingImages(true)
+                try {
+                    await reindexImages()
+                    setImageStarted(true)
+                    setTimeout(() => setImageStarted(false), 3000)
+                } finally {
+                    setReindexingImages(false)
+                }
+            },
+        },
+        {
+            title: 'Knowledge Embedding',
+            description: 'Re-process text embeddings for all knowledge items. Required when changing the embedding model.',
+            icon: Database,
+            loading: reindexingKnowledge,
+            started: knowledgeStarted,
+            onRun: async () => {
+                setReindexingKnowledge(true)
+                try {
+                    await reindexKnowledge()
+                    setKnowledgeStarted(true)
+                    setTimeout(() => setKnowledgeStarted(false), 3000)
+                } finally {
+                    setReindexingKnowledge(false)
+                }
+            },
+        },
+    ]
+
+    return (
+        <div className="space-y-3">
+            <div>
+                <h3 className="font-semibold text-sm">Indexing Jobs</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    Manually trigger re-indexing of embeddings. These jobs run in the background.
+                </p>
+            </div>
+
+            {jobs.map(job => {
+                const Icon = job.icon
+                return (
+                    <div key={job.title} className="glass-card p-4">
+                        <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-start gap-3 min-w-0">
+                                <div className="w-8 h-8 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                    <Icon className="w-4 h-4 text-accent" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-sm font-medium">{job.title}</p>
+                                    <p className="text-[11px] text-muted-foreground mt-0.5">{job.description}</p>
+                                    {job.started && (
+                                        <span className="text-xs text-emerald-400 flex items-center gap-1 mt-1">
+                                            <CheckCircle className="w-3.5 h-3.5" /> Started in background
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={job.onRun}
+                                disabled={job.loading}
+                                className="btn-primary text-xs py-1.5 px-4 gap-1.5 flex-shrink-0"
+                            >
+                                {job.loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                                Run Now
+                            </button>
+                        </div>
+                    </div>
+                )
+            })}
         </div>
     )
 }
