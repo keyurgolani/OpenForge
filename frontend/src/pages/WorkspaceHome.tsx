@@ -105,12 +105,25 @@ export default function WorkspaceHome() {
     const [searchParams, setSearchParams] = useSearchParams()
     const qc = useQueryClient()
 
+    // Track knowledge IDs currently undergoing re-extraction
+    const [extractingIds, setExtractingIds] = useState<Set<string>>(new Set())
+
     // Listen for background AI title/intelligence updates and refresh the grid
     const { on } = useWorkspaceWebSocket(workspaceId)
     useEffect(() => {
         if (!workspaceId) return
-        return on('knowledge_updated', () => {
+        return on('knowledge_updated', (msg: Record<string, unknown>) => {
             qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
+            const kid = msg.knowledge_id as string | undefined
+            const fields = msg.fields as string[] | undefined
+            if (kid && fields && (fields.includes('content') || fields.includes('embedding_status'))) {
+                setExtractingIds(prev => {
+                    if (!prev.has(kid)) return prev
+                    const next = new Set(prev)
+                    next.delete(kid)
+                    return next
+                })
+            }
         })
     }, [on, qc, workspaceId])
 
@@ -185,6 +198,7 @@ export default function WorkspaceHome() {
     }
 
     const handleExtractBookmarkContent = async (knowledgeId: string) => {
+        setExtractingIds(prev => new Set(prev).add(knowledgeId))
         await extractBookmarkContent(workspaceId, knowledgeId)
         qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
         qc.invalidateQueries({ queryKey: ['knowledge-item', knowledgeId] })
@@ -446,6 +460,7 @@ export default function WorkspaceHome() {
                                             onExtractBookmarkContent={() => handleExtractBookmarkContent(knowledgeRecord.id)}
                                             onReprocess={() => handleReprocess(knowledgeRecord.id)}
                                             onDelete={() => handleDelete(knowledgeRecord.id)}
+                                            isExtracting={extractingIds.has(knowledgeRecord.id)}
                                             workspaceId={workspaceId}
                                         />
                                     ))}
@@ -607,7 +622,7 @@ function FittedTagRow({ tags }: { tags: string[] }) {
 
 function KnowledgeCard({
     knowledgeRecord, index, isSelected, anySelected, onSelect, onClick,
-    onPin, onArchive, onExtractBookmarkContent, onReprocess, onDelete, minWidthPx, maxHeightPx, workspaceId,
+    onPin, onArchive, onExtractBookmarkContent, onReprocess, onDelete, isExtracting, minWidthPx, maxHeightPx, workspaceId,
 }: {
     knowledgeRecord: KnowledgeListItem
     index: number
@@ -622,6 +637,7 @@ function KnowledgeCard({
     onExtractBookmarkContent: () => void
     onReprocess: () => void
     onDelete: () => void
+    isExtracting?: boolean
     workspaceId: string
 }) {
     const meta = TYPE_META[knowledgeRecord.type] ?? TYPE_META.standard
@@ -752,8 +768,9 @@ function KnowledgeCard({
                                         onClick={e => runAction(e, knowledgeRecord.type === 'bookmark' ? onExtractBookmarkContent : onReprocess)}
                                         title="Re-extract content"
                                         aria-label="Re-extract content"
+                                        disabled={isExtracting}
                                     >
-                                        <RefreshCw className="w-3.5 h-3.5" />
+                                        <RefreshCw className={`w-3.5 h-3.5${isExtracting ? ' animate-spin' : ''}`} />
                                     </button>
                                 )}
                                 {knowledgeRecord.type === 'bookmark' && knowledgeRecord.url && (

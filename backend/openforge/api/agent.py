@@ -24,6 +24,8 @@ class SubagentRequest(BaseModel):
     instruction: str
     workspace_id: str
     parent_execution_id: Optional[str] = None
+    parent_conversation_id: Optional[str] = None
+    parent_workspace_id: Optional[str] = None
 
 
 class SubagentResponse(BaseModel):
@@ -56,12 +58,27 @@ async def invoke_subagent(
     if not ws:
         raise HTTPException(status_code=404, detail=f"Workspace {req.workspace_id} not found")
 
+    parent_conv_id: UUID | None = None
+    parent_ws_id: UUID | None = None
+    if req.parent_conversation_id:
+        try:
+            parent_conv_id = UUID(req.parent_conversation_id)
+        except ValueError:
+            pass
+    if req.parent_workspace_id:
+        try:
+            parent_ws_id = UUID(req.parent_workspace_id)
+        except ValueError:
+            pass
+
     try:
         result = await agent_engine.execute_subagent(
             workspace_id=workspace_id,
             instruction=req.instruction,
             db=db,
             parent_execution_id=req.parent_execution_id,
+            parent_conversation_id=parent_conv_id,
+            parent_workspace_id=parent_ws_id,
         )
         return SubagentResponse(**result)
     except Exception as e:

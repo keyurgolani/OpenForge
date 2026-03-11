@@ -31,6 +31,7 @@ class ToolContext:
     workspace_path: str
     execution_id: str
     main_app_url: str
+    conversation_id: str = ""
 
 
 class BaseTool(ABC):

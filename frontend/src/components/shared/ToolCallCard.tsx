@@ -85,6 +85,8 @@ function getHeaderHint(toolName: string, args: Record<string, unknown>): string 
     if (key === 'url') {
         try { const u = new URL(str); return truncate(u.hostname + u.pathname, 55) } catch { /* */ }
     }
+    // Show full instruction for agent tools — the badge wraps to fit
+    if (toolName.startsWith('agent.')) return str
     return truncate(str, 55)
 }
 
@@ -682,7 +684,7 @@ export function ToolCallCard({ callId: _callId, toolName, arguments: args, resul
                     ? (isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />)
                     : <span className="w-3 h-3 inline-block" />}
                 <CategoryIcon category={category} />
-                <span className="flex items-baseline gap-0.5 min-w-0">
+                <span className={`flex gap-0.5 min-w-0${toolName.startsWith('agent.') ? ' flex-wrap items-start' : ' items-baseline'}`}>
                     <span className="text-muted-foreground/80 shrink-0">{category}</span>
                     {action && (
                         <>
@@ -691,7 +693,7 @@ export function ToolCallCard({ callId: _callId, toolName, arguments: args, resul
                         </>
                     )}
                     {hint && (
-                        <span className="text-muted-foreground/45 truncate ml-1 max-w-[200px] font-mono text-[10px]">{hint}</span>
+                        <span className={`text-muted-foreground/45 ml-1 font-mono text-[10px]${toolName.startsWith('agent.') ? ' whitespace-pre-wrap break-words' : ' truncate max-w-[200px]'}`}>{hint}</span>
                     )}
                 </span>
                 {statusIcon}

@@ -46,6 +46,7 @@ export interface SubagentTimelineStep {
     output?: unknown
     error?: string
     content?: string  // for thinking steps
+    done?: boolean    // for thinking steps — true when complete
 }
 
 export interface TimelineSubagentInvocation {
@@ -293,6 +294,30 @@ export function useStreamingChat(conversationId: string | null) {
                     const updated = existingIdx >= 0
                         ? prev.map((e, i) => i === existingIdx ? m.data : e)
                         : [...prev, m.data]
+                    timelineRef.current = updated
+                    return updated
+                })
+            }),
+            on('chat_subagent_progress', (msg) => {
+                const m = msg as { conversation_id: string; data: { timeline?: SubagentTimelineStep[]; response_text?: string } }
+                if (m.conversation_id !== conversationId) return
+                // Update the pending agent.invoke tool_call entry with the subagent's
+                // live timeline and/or streaming response text.
+                setTimeline(prev => {
+                    const agentIdx = prev.findIndex(
+                        e => e.type === 'tool_call' && (e as TimelineToolCall).tool_name === 'agent.invoke'
+                            && (e as TimelineToolCall).success === undefined
+                    )
+                    if (agentIdx < 0) return prev
+                    const existing = prev[agentIdx] as TimelineToolCall & { _liveTimeline?: SubagentTimelineStep[]; _liveResponse?: string }
+                    const patch: Record<string, unknown> = {}
+                    if (m.data.timeline) patch._liveTimeline = m.data.timeline
+                    if (m.data.response_text !== undefined) patch._liveResponse = m.data.response_text
+                    const updated = prev.map((e, i) =>
+                        i === agentIdx
+                            ? { ...existing, ...patch } as TimelineToolCall
+                            : e
+                    )
                     timelineRef.current = updated
                     return updated
                 })

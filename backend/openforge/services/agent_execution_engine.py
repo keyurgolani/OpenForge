@@ -1257,6 +1257,7 @@ class AgentExecutionEngine:
                             params=arguments,
                             workspace_id=str(workspace_id),
                             execution_id=execution_id,
+                            conversation_id=str(conversation_id) if conversation_id else "",
                         )
 
                     call_duration_ms = int((time.perf_counter() - call_start_perf) * 1000)
@@ -1549,8 +1550,15 @@ class AgentExecutionEngine:
         instruction: str,
         db: AsyncSession,
         parent_execution_id: Optional[str] = None,
+        parent_conversation_id: Optional[UUID] = None,
+        parent_workspace_id: Optional[UUID] = None,
     ) -> dict:
-        """Run a subagent in collect mode — no streaming."""
+        """Run a subagent in collect mode — no streaming.
+
+        If parent_conversation_id and parent_workspace_id are provided,
+        progress events are streamed to the parent conversation so the UI
+        can show real-time subagent activity.
+        """
         execution_id = parent_execution_id or str(uuid.uuid4())
 
         temp_conv = Conversation(
@@ -1597,6 +1605,10 @@ class AgentExecutionEngine:
                 "You have been delegated a specific task by another agent. "
                 "You MUST complete the task fully and autonomously — there is NO user present "
                 "and you CANNOT ask for clarification or more details.\n\n"
+                f"**You are already running inside workspace `{workspace_id}`.** "
+                "All `workspace.*` and `filesystem.*` tools targeted at this workspace operate on it directly. "
+                "Do NOT call `agent.invoke` to access this workspace — use your tools directly. "
+                "Only use `agent.invoke` if you need to reach a DIFFERENT workspace.\n\n"
                 "## Tool categories\n"
                 "- `workspace.*` — the user's persistent content: knowledge records and chat conversations\n"
                 "  - `workspace.search` — semantically search knowledge and past chats by topic\n"
@@ -1607,7 +1619,8 @@ class AgentExecutionEngine:
                 "  - `workspace.delete_knowledge` — delete a knowledge record\n"
                 "- `memory.*` — your private execution scratchpad (ephemeral, invisible to user)\n"
                 "  - `memory.store` / `memory.recall` / `memory.forget`\n"
-                "- `filesystem.*` — files on the workspace disk\n\n"
+                "- `filesystem.*` — files on the workspace disk\n"
+                "- `agent.invoke` — delegate a task to a DIFFERENT workspace's agent (not needed for this workspace)\n\n"
                 "## Rules\n"
                 "1. NEVER say 'I need more details' or ask any questions — search and find the answer yourself.\n"
                 "2. Try at least 2–3 different searches before concluding something cannot be found.\n"
@@ -1637,10 +1650,13 @@ class AgentExecutionEngine:
             full_response = ""
             timeline: list[dict] = []
             max_loops = 10
+            _last_progress_publish = 0.0
+            _PROGRESS_INTERVAL = 0.1  # throttle: max one publish per 100ms
 
             for _ in range(max_loops):
                 tool_calls_this_turn: list[dict] = []
                 response_this_turn = ""
+                thinking_this_turn = ""
                 finish_reason = "stop"
 
                 try:
@@ -1651,20 +1667,65 @@ class AgentExecutionEngine:
                         api_key=api_key,
                         model=model,
                         base_url=base_url,
-                        include_thinking=False,
+                        include_thinking=True,
                     ):
                         etype = event.get("type")
-                        if etype == "token":
+                        if etype == "thinking":
+                            chunk = event.get("content", "")
+                            if chunk:
+                                thinking_this_turn += chunk
+                                # Add/update thinking entry in timeline
+                                if timeline and timeline[-1].get("type") == "thinking" and not timeline[-1].get("done"):
+                                    timeline[-1]["content"] = timeline[-1].get("content", "") + chunk
+                                else:
+                                    timeline.append({"type": "thinking", "content": chunk})
+                                if parent_conversation_id and parent_workspace_id:
+                                    now = time.monotonic()
+                                    if now - _last_progress_publish >= _PROGRESS_INTERVAL:
+                                        _last_progress_publish = now
+                                        await self._publish(
+                                            execution_id, parent_workspace_id, "chat_subagent_progress",
+                                            conversation_id=parent_conversation_id,
+                                            data={"timeline": timeline},
+                                        )
+                        elif etype == "token":
                             tok = event.get("content", "")
                             full_response += tok
                             response_this_turn += tok
+                            # Mark any open thinking block as done
+                            if timeline and timeline[-1].get("type") == "thinking" and not timeline[-1].get("done"):
+                                timeline[-1]["done"] = True
+                            # Stream response text to parent conversation (throttled)
+                            if parent_conversation_id and parent_workspace_id:
+                                now = time.monotonic()
+                                if now - _last_progress_publish >= _PROGRESS_INTERVAL:
+                                    _last_progress_publish = now
+                                    await self._publish(
+                                        execution_id, parent_workspace_id, "chat_subagent_progress",
+                                        conversation_id=parent_conversation_id,
+                                        data={"response_text": full_response, "timeline": timeline},
+                                    )
                         elif etype == "tool_calls":
                             tool_calls_this_turn = event.get("calls", [])
+                            # Mark any open thinking block as done
+                            if timeline and timeline[-1].get("type") == "thinking" and not timeline[-1].get("done"):
+                                timeline[-1]["done"] = True
                         elif etype == "done":
                             finish_reason = event.get("finish_reason", "stop")
                 except Exception as exc:
                     logger.warning("Subagent LLM error: %s", exc)
                     break
+
+                # Flush final progress (catches anything skipped by throttle)
+                if parent_conversation_id and parent_workspace_id:
+                    data: dict = {"timeline": timeline}
+                    if full_response:
+                        data["response_text"] = full_response
+                    await self._publish(
+                        execution_id, parent_workspace_id, "chat_subagent_progress",
+                        conversation_id=parent_conversation_id,
+                        data=data,
+                    )
 
                 if not tool_calls_this_turn or finish_reason == "stop":
                     break
@@ -1678,12 +1739,21 @@ class AgentExecutionEngine:
                     sub_tool_info = fn_name_to_tool_info_sub.get(fn_name)
                     sub_tool_id = sub_tool_info["tool_id"] if sub_tool_info else _fn_name_to_tool_id(fn_name)
 
-                    timeline.append({
+                    tool_call_entry = {
                         "type": "tool_call",
                         "call_id": call_id,
                         "tool_name": sub_tool_id,
                         "arguments": args,
-                    })
+                    }
+                    timeline.append(tool_call_entry)
+
+                    # Stream tool-call start to parent conversation
+                    if parent_conversation_id and parent_workspace_id:
+                        await self._publish(
+                            execution_id, parent_workspace_id, "chat_subagent_progress",
+                            conversation_id=parent_conversation_id,
+                            data={"step": tool_call_entry, "timeline": timeline},
+                        )
 
                     if not sub_tool_info:
                         sub_result = {"success": False, "error": f"Tool '{sub_tool_id}' not available"}
@@ -1707,6 +1777,14 @@ class AgentExecutionEngine:
                                 "error": sub_result.get("error"),
                             }
                             break
+
+                    # Stream tool-call result to parent conversation
+                    if parent_conversation_id and parent_workspace_id:
+                        await self._publish(
+                            execution_id, parent_workspace_id, "chat_subagent_progress",
+                            conversation_id=parent_conversation_id,
+                            data={"step": timeline[-1] if timeline else tool_call_entry, "timeline": timeline},
+                        )
 
                     if sub_result.get("success"):
                         out = sub_result.get("output")

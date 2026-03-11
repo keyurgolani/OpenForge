@@ -59,6 +59,7 @@ async def execute_tool(req: ExecuteRequest):
         ),
         execution_id=req.context.get("execution_id", ""),
         main_app_url=req.context.get("main_app_url", settings.main_app_url),
+        conversation_id=req.context.get("conversation_id", ""),
     )
 
     try:

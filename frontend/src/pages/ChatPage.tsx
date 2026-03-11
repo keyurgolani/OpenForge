@@ -1280,7 +1280,17 @@ export default function ChatPage() {
                                                             callId={(entry as TimelineToolCall).call_id}
                                                             toolName={(entry as TimelineToolCall).tool_name}
                                                             arguments={(entry as TimelineToolCall).arguments}
-                                                            entry={undefined}
+                                                            entry={(entry as TimelineToolCall).success !== undefined ? {
+                                                                type: 'subagent_invocation',
+                                                                call_id: (entry as TimelineToolCall).call_id,
+                                                                tool_name: (entry as TimelineToolCall).tool_name,
+                                                                arguments: (entry as TimelineToolCall).arguments,
+                                                                success: (entry as TimelineToolCall).success!,
+                                                                subagent_response: (entry as TimelineToolCall).error || '',
+                                                                subagent_timeline: [],
+                                                            } : undefined}
+                                                            liveTimeline={((entry as any)._liveTimeline as SubagentTimelineStep[] | undefined)}
+                                                            liveResponse={((entry as any)._liveResponse as string | undefined)}
                                                             requestVisibility={() => ensureExpandedBlockVisible(streamingMessageRef.current)}
                                                         />
                                                     ) : entry.type === 'hitl_request' ? (
@@ -2459,12 +2469,16 @@ function SubagentCard({
     toolName,
     arguments: agentArgs,
     entry,
+    liveTimeline,
+    liveResponse,
     requestVisibility,
 }: {
     callId: string
     toolName: string
     arguments: Record<string, unknown>
     entry?: TimelineSubagentInvocation   // undefined = still running
+    liveTimeline?: SubagentTimelineStep[]   // streamed steps while running
+    liveResponse?: string                  // streaming response text while running
     requestVisibility?: (el: HTMLElement | null) => void
 }) {
     const isRunning = entry === undefined
@@ -2479,9 +2493,12 @@ function SubagentCard({
     const instruction = (agentArgs?.instruction as string) || 'Subagent task'
     const targetWorkspaceId = agentArgs?.workspace_id as string | undefined
 
-    const toolSteps = (entry?.subagent_timeline ?? []).filter(
+    const timelineSource = entry?.subagent_timeline ?? liveTimeline ?? []
+    const toolSteps = timelineSource.filter(
         (s): s is SubagentTimelineStep & { type: 'tool_call' } => s.type === 'tool_call'
     )
+    const thinkingSteps = timelineSource.filter(s => s.type === 'thinking')
+    const hasSteps = toolSteps.length > 0 || thinkingSteps.length > 0
 
     // When entry transitions from undefined → defined (subagent just finished):
     // re-open the card so the result is visible, then auto-collapse after 2s
@@ -2555,7 +2572,7 @@ function SubagentCard({
                         </div>
 
                         {/* Running placeholder */}
-                        {isRunning && (
+                        {isRunning && !hasSteps && !liveResponse && (
                             <div className="px-4 py-3">
                                 <div className="flex items-center gap-2 text-[11px] text-muted-foreground/50">
                                     <Loader2 className="w-3 h-3 animate-spin" />
@@ -2564,36 +2581,44 @@ function SubagentCard({
                             </div>
                         )}
 
-                        {/* Subagent tool steps */}
-                        {toolSteps.length > 0 && (
+                        {/* Subagent timeline steps (thinking + tool calls) */}
+                        {hasSteps && (
                             <div className="px-4 py-2 border-b border-accent/10">
                                 <div className="mb-2 text-[10px] uppercase tracking-wide text-muted-foreground/60">Steps</div>
                                 <div className="space-y-1">
-                                    {toolSteps.map((step, idx) => (
-                                        <ToolCallCard
-                                            key={step.call_id ?? idx}
-                                            callId={step.call_id ?? String(idx)}
-                                            toolName={step.tool_name ?? ''}
-                                            arguments={step.arguments ?? {}}
-                                            result={step.success !== undefined
-                                                ? { success: step.success, output: step.output, error: step.error }
-                                                : undefined
-                                            }
-                                            isRunning={false}
-                                        />
-                                    ))}
+                                    {timelineSource.map((step, idx) =>
+                                        step.type === 'thinking' ? (
+                                            <ThinkingBlock
+                                                key={`thinking-${idx}`}
+                                                content={step.content || ''}
+                                                isActiveStream={isRunning && !step.done && idx === timelineSource.length - 1}
+                                            />
+                                        ) : step.type === 'tool_call' ? (
+                                            <ToolCallCard
+                                                key={step.call_id ?? idx}
+                                                callId={step.call_id ?? String(idx)}
+                                                toolName={step.tool_name ?? ''}
+                                                arguments={step.arguments ?? {}}
+                                                result={step.success !== undefined
+                                                    ? { success: step.success, output: step.output, error: step.error }
+                                                    : undefined
+                                                }
+                                                isRunning={isRunning && step.success === undefined}
+                                            />
+                                        ) : null
+                                    )}
                                 </div>
                             </div>
                         )}
 
-                        {/* Response (only when completed) */}
-                        {entry && (
+                        {/* Response — live streaming or completed */}
+                        {(entry || (isRunning && liveResponse)) && (
                             <div className="px-4 pt-2 pb-3">
                                 <div className="mb-1.5 text-[10px] uppercase tracking-wide text-muted-foreground/60">Response</div>
-                                {entry.subagent_response ? (
+                                {(entry?.subagent_response || liveResponse) ? (
                                     <div
                                         className="text-xs leading-relaxed text-foreground/85 markdown-content"
-                                        dangerouslySetInnerHTML={{ __html: md.render(entry.subagent_response) }}
+                                        dangerouslySetInnerHTML={{ __html: md.render(entry?.subagent_response || liveResponse || '') }}
                                     />
                                 ) : (
                                     <span className="text-[11px] text-muted-foreground/40 italic">No response</span>

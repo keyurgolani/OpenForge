@@ -64,6 +64,8 @@ class InvokeAgentTool(BaseTool):
             "instruction": instruction,
             "workspace_id": workspace_id,
             "parent_execution_id": context.execution_id,
+            "parent_conversation_id": context.conversation_id or None,
+            "parent_workspace_id": context.workspace_id or None,
         }
 
         try:
