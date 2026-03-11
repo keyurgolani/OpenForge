@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -16,6 +17,7 @@ from sqlalchemy import select
 from openforge.core.llm_gateway import llm_gateway
 from openforge.core.search_engine import search_engine
 from openforge.core.context_assembler import ContextAssembler
+from openforge.core.agent_definition import AgentDefinition
 from openforge.services.conversation_service import conversation_service
 from openforge.services.llm_service import llm_service
 from openforge.services.chat_retrieval import (
@@ -27,12 +29,13 @@ from openforge.services.attachment_pipeline import (
     get_extractor,
     resolve_attachment_pipeline,
 )
-from openforge.services.chat_stream_registry import ChatStreamRegistry
 from openforge.services.tool_dispatcher import tool_dispatcher
 from openforge.services.policy_engine import policy_engine
 from openforge.services.hitl_service import hitl_service
-from openforge.api.websocket import ws_manager
-from openforge.db.models import Config, Conversation, Knowledge, MessageAttachment, TaskLog, ToolCallLog, Workspace
+from openforge.db.models import (
+    AgentExecution, Config, Conversation, Knowledge,
+    MessageAttachment, TaskLog, ToolCallLog, Workspace,
+)
 
 _MAX_OUTPUT_LOG_CHARS = 50_000
 
@@ -87,7 +90,6 @@ async def _persist_tool_call_log(
     except Exception as exc:
         logger.warning("Failed to persist tool call log for %s: %s", call_id, exc)
 
-import re
 
 # Tool name separator: OpenAI rejects dots in function names, so we use double-underscore.
 _TOOL_NAME_SEP = "__"
@@ -102,8 +104,7 @@ def _fn_name_to_tool_id(fn_name: str) -> str:
 
 
 def _mcp_tool_fn_name(server_id: str, tool_name: str) -> str:
-    """Stable, LLM-safe function name for an MCP tool.
-    Replaces all non-alphanumeric characters with underscores."""
+    """Stable, LLM-safe function name for an MCP tool."""
     raw = f"mcp_{server_id}_{tool_name}"
     return re.sub(r"[^a-zA-Z0-9_]", "_", raw)
 
@@ -123,17 +124,134 @@ def _tools_to_openai_schema(tools: list[dict]) -> list[dict]:
     return result
 
 
+def _get_skill_description(skill: dict) -> str:
+    """Extract a short description from a skill for prompt injection."""
+    content = skill.get("content", "")
+    if not content:
+        return skill.get("description", "")
+
+    # Try YAML frontmatter
+    if content.startswith("---"):
+        parts = content.split("---", 2)
+        if len(parts) >= 3:
+            try:
+                import yaml
+                meta = yaml.safe_load(parts[1])
+                if meta and meta.get("description"):
+                    return meta["description"][:200]
+            except Exception:
+                pass
+
+    # Fall back to first non-header, non-empty line
+    for line in content.split("\n"):
+        line = line.strip()
+        if line and not line.startswith("#") and not line.startswith("---"):
+            return line[:200]
+
+    return skill.get("description", "")
+
+
 class AgentExecutionEngine:
     """
     Unified execution engine for all agent chat interactions.
-    Replaces chat_service.handle_chat_message() with a tool-capable agent loop.
+    Publishes events via Redis (for Celery workers) or direct WebSocket (inline fallback).
+    Parameterized by AgentDefinition for framework conformance.
     """
 
     MAX_TOOL_LOOPS = 20
 
     def __init__(self) -> None:
-        self.stream_registry = ChatStreamRegistry()
         self._cancel_events: dict[str, asyncio.Event] = {}
+        self._use_redis: bool | None = None
+
+    async def _should_use_redis(self) -> bool:
+        """Check if Redis is available for event publishing."""
+        if self._use_redis is not None:
+            return self._use_redis
+        try:
+            from openforge.db.redis_client import get_redis
+            redis = await get_redis()
+            await redis.ping()
+            self._use_redis = True
+        except Exception:
+            self._use_redis = False
+        return self._use_redis
+
+    async def _publish(
+        self,
+        execution_id: str,
+        workspace_id: UUID,
+        event_type: str,
+        conversation_id: UUID | None = None,
+        **data,
+    ) -> None:
+        """Publish an event via Redis pub/sub. Falls back to direct WebSocket."""
+        event = {
+            "type": event_type,
+            "execution_id": execution_id,
+            "workspace_id": str(workspace_id),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            **data,
+        }
+        if conversation_id:
+            event["conversation_id"] = str(conversation_id)
+
+        if await self._should_use_redis():
+            try:
+                from openforge.db.redis_client import get_redis
+                redis = await get_redis()
+                await redis.publish(f"agent:{execution_id}", json.dumps(event, default=str))
+                return
+            except Exception as e:
+                logger.warning("Redis publish failed, falling back to WS: %s", e)
+
+        # Fallback: direct WebSocket
+        from openforge.api.websocket import ws_manager
+        await ws_manager.send_to_workspace(str(workspace_id), event)
+
+    async def _update_stream_state(
+        self,
+        execution_id: str,
+        *,
+        content: str = "",
+        thinking: str = "",
+        tool_calls: list | None = None,
+        sources: list | None = None,
+        attachments_processed: list | None = None,
+    ) -> None:
+        """Write current stream state to Redis hash for reconnection support."""
+        if not await self._should_use_redis():
+            return
+        try:
+            from openforge.db.redis_client import get_redis
+            redis = await get_redis()
+            mapping = {
+                "content": content,
+                "thinking": thinking,
+                "tool_calls": json.dumps(tool_calls or [], default=str),
+                "sources": json.dumps(sources or [], default=str),
+                "attachments_processed": json.dumps(attachments_processed or [], default=str),
+            }
+            await redis.hset(f"stream_state:{execution_id}", mapping=mapping)
+            await redis.expire(f"stream_state:{execution_id}", 3600)
+        except Exception as e:
+            logger.warning("Failed to update stream state: %s", e)
+
+    async def _update_execution_record(
+        self,
+        db: AsyncSession,
+        execution_id: str,
+        **fields,
+    ) -> None:
+        """Update the AgentExecution record in the database."""
+        try:
+            exec_record = await db.get(AgentExecution, UUID(execution_id))
+            if exec_record:
+                for key, value in fields.items():
+                    setattr(exec_record, key, value)
+                await db.commit()
+        except Exception as e:
+            logger.warning("Failed to update execution record %s: %s", execution_id, e)
 
     def cancel(self, conversation_id: UUID) -> None:
         """Signal the running agent loop for this conversation to stop."""
@@ -141,6 +259,56 @@ class AgentExecutionEngine:
         event = self._cancel_events.get(key)
         if event:
             event.set()
+
+    async def send_stream_snapshot(
+        self,
+        websocket: WebSocket,
+        workspace_id: UUID,
+        conversation_id: UUID | None = None,
+    ) -> None:
+        """Send stream state snapshot to a reconnecting client."""
+        from openforge.api.websocket import ws_manager
+
+        # Try Redis-based stream state first
+        if await self._should_use_redis():
+            try:
+                from openforge.db.redis_client import get_redis
+                redis = await get_redis()
+
+                if conversation_id:
+                    # Find execution for this conversation
+                    from openforge.db.postgres import AsyncSessionLocal
+                    async with AsyncSessionLocal() as db:
+                        result = await db.execute(
+                            select(AgentExecution)
+                            .where(
+                                AgentExecution.conversation_id == conversation_id,
+                                AgentExecution.status.in_(["running", "paused_hitl"]),
+                            )
+                            .order_by(AgentExecution.started_at.desc())
+                            .limit(1)
+                        )
+                        exec_record = result.scalar_one_or_none()
+
+                    if exec_record:
+                        state = await redis.hgetall(f"stream_state:{exec_record.id}")
+                        if state:
+                            await ws_manager.send_to_connection(websocket, {
+                                "type": "chat_stream_snapshot",
+                                "conversation_id": str(conversation_id),
+                                "data": {
+                                    "content": state.get("content", ""),
+                                    "thinking": state.get("thinking", ""),
+                                    "tool_calls": json.loads(state.get("tool_calls", "[]")),
+                                    "sources": json.loads(state.get("sources", "[]")),
+                                    "attachments_processed": json.loads(
+                                        state.get("attachments_processed", "[]")
+                                    ),
+                                },
+                            })
+                            return
+            except Exception as e:
+                logger.warning("Redis stream snapshot failed: %s", e)
 
     async def _process_message_attachments(
         self,
@@ -290,16 +458,7 @@ class AgentExecutionEngine:
         user_message_id: UUID,
         urls: list[str],
     ) -> tuple[str, list[dict]]:
-        """Extract content from URLs mentioned in a chat message.
-
-        Extracts content without creating Knowledge entries — content is stored
-        as MessageAttachment records so the user can later choose to save them.
-
-        Each extraction is logged as an 'extract_url_content' task in job history.
-        At most 3 URLs are processed; each has a 20-second timeout.
-
-        Returns ``(context_str, url_attachments_processed)`` for WS broadcast.
-        """
+        """Extract content from URLs mentioned in a chat message."""
         if not urls:
             return "", []
 
@@ -313,7 +472,6 @@ class AgentExecutionEngine:
         for url in urls[:3]:
             task_log_id = None
             try:
-                # Create running TaskLog
                 async with AsyncSessionLocal() as audit_db:
                     task_log = await start_task_log(
                         audit_db,
@@ -324,7 +482,6 @@ class AgentExecutionEngine:
                     task_log_id = task_log.id
                     await audit_db.commit()
 
-                # Extract content without saving to Knowledge
                 try:
                     result = await asyncio.wait_for(
                         knowledge_processing_service.extract_url_content_raw(url),
@@ -353,8 +510,6 @@ class AgentExecutionEngine:
                 resolved_url = result.get("resolved_url") or url
                 display_name = title or resolved_url
 
-                # Store as MessageAttachment so user can "Save to Knowledge" later.
-                # Use the resolved (canonical) URL so short links are unwound.
                 attachment_id = uuid.uuid4()
                 async with AsyncSessionLocal() as att_db:
                     att_db.add(MessageAttachment(
@@ -381,7 +536,6 @@ class AgentExecutionEngine:
                     status = "empty"
                     details = "No content could be extracted"
 
-                # Mark TaskLog done
                 if task_log_id:
                     async with AsyncSessionLocal() as audit_db:
                         log_entry = await audit_db.get(TaskLog, task_log_id)
@@ -428,42 +582,13 @@ class AgentExecutionEngine:
         )
         return header + "\n".join(context_blocks), url_attachments
 
-    async def send_stream_snapshot(
-        self,
-        websocket: WebSocket,
-        workspace_id: UUID,
-        conversation_id: UUID | None = None,
-    ) -> None:
-        if conversation_id:
-            snapshot = self.stream_registry.snapshot_for_conversation(workspace_id, conversation_id)
-            if not snapshot:
-                return
-            await ws_manager.send_to_connection(websocket, {
-                "type": "chat_stream_snapshot",
-                **snapshot,
-            })
-            return
-
-        snapshots = self.stream_registry.snapshots_for_workspace(workspace_id)
-        for snapshot in snapshots:
-            await ws_manager.send_to_connection(websocket, {
-                "type": "chat_stream_snapshot",
-                **snapshot,
-            })
-
     async def _resolve_mentions(
         self,
         db: AsyncSession,
         workspace_id: UUID,
         mentions: list[dict],
     ) -> str:
-        """
-        Resolve @mention references into context strings injected into the prompt.
-
-        - @workspace mention → injects workspace_id so the LLM can use agent.invoke
-        - @chat mention → spins up a subagent to summarize the conversation and
-          injects the summary as context (same pattern as @workspace delegation)
-        """
+        """Resolve @mention references into context strings."""
         if not mentions:
             return ""
 
@@ -500,7 +625,6 @@ class AgentExecutionEngine:
                         ]
                         history_text = "\n".join(history_lines)
 
-                        # Summarize via a dedicated subagent — same delegation pattern as @workspace
                         summary_result = await self.execute_subagent(
                             workspace_id=workspace_id,
                             instruction=(
@@ -527,22 +651,69 @@ class AgentExecutionEngine:
 
         return "\n".join(parts)
 
+    def _build_skills_section(self, installed_skills: list[dict], agent: AgentDefinition) -> str:
+        """Build the optimized skills prompt section using three-tier injection."""
+        if not installed_skills:
+            return ""
+
+        configured_ids = set(agent.skill_ids) if agent.skill_ids else set()
+        configured_skills: list[dict] = []
+        other_skills: list[str] = []
+
+        for skill in installed_skills:
+            skill_name = skill.get("name", "")
+            if skill_name in configured_ids:
+                desc = _get_skill_description(skill)
+                configured_skills.append({"name": skill_name, "description": desc})
+            else:
+                other_skills.append(skill_name)
+
+        section = "\n\n## Skills\n\n"
+        section += (
+            "You have access to skills that provide domain expertise. Read a skill's full "
+            "content using `skills.read(skill_name, \"SKILL.md\")` when relevant.\n"
+        )
+
+        if configured_skills:
+            section += "\n### Configured Skills (read these proactively when relevant):\n"
+            for s in configured_skills:
+                if s["description"]:
+                    section += f"- **{s['name']}**: {s['description']}\n"
+                else:
+                    section += f"- **{s['name']}**\n"
+
+        if other_skills:
+            section += "\n### Other Installed Skills:\n"
+            for name in other_skills:
+                section += f"- {name}\n"
+
+        section += "\nYou can discover and install more skills with `skills.search()` and `skills.install()`.\n"
+        return section
+
     async def run(
         self,
         workspace_id: UUID,
         conversation_id: UUID,
         user_content: str,
         db: AsyncSession,
+        agent: AgentDefinition | None = None,
+        execution_id: str | None = None,
         attachment_ids: Optional[List[str]] = None,
         provider_id: Optional[str] = None,
         model_id: Optional[str] = None,
         mentions: Optional[List[dict]] = None,
     ):
-        """Full agent execution pipeline, replacing the old chat_service pipeline."""
+        """Full agent execution pipeline, parameterized by AgentDefinition."""
         workspace_key = str(workspace_id)
-        execution_id = str(uuid.uuid4())
+        if not execution_id:
+            execution_id = str(uuid.uuid4())
         cancel_event = asyncio.Event()
         self._cancel_events[str(conversation_id)] = cancel_event
+
+        # If no agent provided, build one from workspace settings (backward compat)
+        if agent is None:
+            from openforge.core.agent_registry import agent_registry
+            agent = await agent_registry.get_for_workspace(db, workspace_id)
 
         # Validate conversation
         conv_result = await db.execute(
@@ -550,93 +721,94 @@ class AgentExecutionEngine:
         )
         conversation = conv_result.scalar_one_or_none()
         if not conversation or conversation.workspace_id != workspace_id or conversation.is_archived:
-            await ws_manager.send_to_workspace(workspace_key, {
-                "type": "chat_error",
-                "conversation_id": str(conversation_id),
-                "detail": "Conversation not found",
-            })
+            await self._publish(
+                execution_id, workspace_id, "chat_error",
+                conversation_id=conversation_id,
+                detail="Conversation not found",
+            )
             return
 
-        # Load workspace to check agent settings
-        ws_result = await db.execute(
-            select(Workspace).where(Workspace.id == workspace_id)
-        )
-        workspace = ws_result.scalar_one_or_none()
-        agent_enabled = bool(workspace and workspace.agent_enabled)
-        agent_tool_categories: list[str] = list(workspace.agent_tool_categories) if workspace else []
-        max_tool_loops: int = int(workspace.agent_max_tool_loops) if workspace else self.MAX_TOOL_LOOPS
+        # Update execution record to running
+        await self._update_execution_record(db, execution_id, status="running")
 
         # 1. Save user message
         user_message = await conversation_service.add_message(
             db, conversation_id, role="user", content=user_content
         )
-        self.stream_registry.start(workspace_id=workspace_id, conversation_id=conversation_id)
 
         try:
-            # 2. Process attachments
-            attachment_context, attachments_processed = await self._process_message_attachments(
-                db,
-                workspace_id=workspace_id,
-                conversation_id=conversation_id,
-                user_message_id=user_message.id,
-                attachment_ids=attachment_ids,
-            )
-            # 3. Extract content from HTTP links mentioned in chat
-            chat_urls = extract_http_urls(user_content)
-            url_context = ""
-            url_attachments_processed: list[dict] = []
-            if chat_urls:
-                url_context, url_attachments_processed = await self._extract_urls_for_chat(
+            # 2. Process attachments (if agent supports them)
+            attachment_context = ""
+            attachments_processed: list[dict] = []
+            if agent.attachment_support:
+                attachment_context, attachments_processed = await self._process_message_attachments(
+                    db,
                     workspace_id=workspace_id,
+                    conversation_id=conversation_id,
                     user_message_id=user_message.id,
-                    urls=chat_urls,
+                    attachment_ids=attachment_ids,
                 )
 
-            # 3b. Resolve @mentions into additional context
+            # 3. Extract content from HTTP links (if agent supports auto-bookmarking)
+            url_context = ""
+            url_attachments_processed: list[dict] = []
+            if agent.auto_bookmark_urls:
+                chat_urls = extract_http_urls(user_content)
+                if chat_urls:
+                    url_context, url_attachments_processed = await self._extract_urls_for_chat(
+                        workspace_id=workspace_id,
+                        user_message_id=user_message.id,
+                        urls=chat_urls,
+                    )
+
+            # 3b. Resolve @mentions (if agent supports them)
             mention_context = ""
-            if mentions:
+            if agent.mention_support and mentions:
                 mention_context = await self._resolve_mentions(db, workspace_id, mentions)
 
             all_attachments_processed = attachments_processed + url_attachments_processed
             if all_attachments_processed:
-                self.stream_registry.set_attachments_processed(
+                await self._publish(
+                    execution_id, workspace_id, "chat_attachments_processed",
                     conversation_id=conversation_id,
-                    attachments=all_attachments_processed,
+                    data=all_attachments_processed,
                 )
-                await ws_manager.send_to_workspace(workspace_key, {
-                    "type": "chat_attachments_processed",
-                    "conversation_id": str(conversation_id),
-                    "data": all_attachments_processed,
-                })
+                await self._update_stream_state(
+                    execution_id,
+                    attachments_processed=all_attachments_processed,
+                )
 
-            # 4. RAG context retrieval
-            rag_query = user_content
-            if attachment_context:
-                rag_query = f"{rag_query}\n{attachment_context}"
-            if url_context:
-                rag_query = f"{rag_query}\n{url_context}"
+            # 4. RAG context retrieval (if agent has RAG enabled)
+            context_sources: list[dict] = []
+            rag_results: list = []
+            if agent.rag_enabled:
+                rag_query = user_content
+                if attachment_context:
+                    rag_query = f"{rag_query}\n{attachment_context}"
+                if url_context:
+                    rag_query = f"{rag_query}\n{url_context}"
 
-            raw_rag_results = search_engine.search(
-                query=rag_query,
-                workspace_id=str(workspace_id),
-                limit=12,
-                score_threshold=0.35,
-            )
-            rag_results = select_relevant_rag_results(raw_rag_results, limit=5)
-            context_sources = build_context_sources(rag_results)
+                raw_rag_results = search_engine.search(
+                    query=rag_query,
+                    workspace_id=str(workspace_id),
+                    limit=agent.rag_limit * 2 + 2,
+                    score_threshold=agent.rag_score_threshold,
+                )
+                rag_results = select_relevant_rag_results(raw_rag_results, limit=agent.rag_limit)
+                context_sources = build_context_sources(rag_results)
 
             if context_sources:
-                self.stream_registry.set_sources(
-                    conversation_id=conversation_id, sources=context_sources
+                await self._publish(
+                    execution_id, workspace_id, "chat_sources",
+                    conversation_id=conversation_id,
+                    data=context_sources,
                 )
-                await ws_manager.send_to_workspace(workspace_key, {
-                    "type": "chat_sources",
-                    "conversation_id": str(conversation_id),
-                    "data": context_sources,
-                })
+                await self._update_stream_state(execution_id, sources=context_sources)
 
             # 5. Assemble initial prompt
-            history = await conversation_service.get_recent_messages(db, conversation_id, limit=20)
+            history = await conversation_service.get_recent_messages(
+                db, conversation_id, limit=agent.history_limit
+            )
 
             # Load agent system prompt — use DB override if set, otherwise catalogue default
             from openforge.api.prompts import PROMPT_CATALOGUE
@@ -646,15 +818,19 @@ class AgentExecutionEngine:
                 select(Config).where(Config.key == "prompt.agent_system")
             )
             _prompt_row = _prompt_cfg.scalar_one_or_none()
-            system_prompt = (
-                _prompt_row.value.get("text")
-                if _prompt_row and _prompt_row.value and "text" in _prompt_row.value
-                else _agent_prompt_default
-            )
 
-            # 5b. If agent mode is disabled, append a clear capability notice so the LLM
-            # responds gracefully instead of hallucinating tool access.
-            if not agent_enabled:
+            # Use agent's system_prompt if set, otherwise fall back to catalogue
+            if agent.system_prompt:
+                system_prompt = agent.system_prompt
+            else:
+                system_prompt = (
+                    _prompt_row.value.get("text")
+                    if _prompt_row and _prompt_row.value and "text" in _prompt_row.value
+                    else _agent_prompt_default
+                )
+
+            # 5b. Agent mode disabled notice
+            if not agent.tools_enabled:
                 system_prompt = system_prompt + (
                     "\n\n## Agent Mode Disabled\n"
                     "Agent mode is not enabled for this workspace. You do NOT have access to any tools, "
@@ -664,20 +840,10 @@ class AgentExecutionEngine:
                     "conversation context and your own training knowledge.\n"
                 )
 
-            # 5c. Append installed skills to system prompt
+            # 5c. Optimized skills injection (three-tier system)
             installed_skills = await tool_dispatcher.list_skills()
-            if installed_skills:
-                skills_section = "\n\n## Installed Skills\n"
-                skills_section += (
-                    "The following skills are installed in this workspace. "
-                    "Apply their guidance automatically when relevant.\n\n"
-                )
-                for skill in installed_skills:
-                    skills_section += f"### {skill['name']}\n"
-                    if skill.get("description"):
-                        skills_section += f"_{skill['description']}_\n\n"
-                    if skill.get("content"):
-                        skills_section += skill["content"].strip() + "\n\n"
+            skills_section = self._build_skills_section(installed_skills, agent)
+            if skills_section:
                 system_prompt = system_prompt + skills_section
 
             extra_context_parts = [p for p in [attachment_context, url_context, mention_context] if p]
@@ -690,33 +856,48 @@ class AgentExecutionEngine:
 
             # 6. Get provider
             try:
+                _provider_id = provider_id
+                _model_id = model_id
+                if agent.provider_override_id and not provider_id:
+                    _provider_id = agent.provider_override_id
+                if agent.model_override and not model_id:
+                    _model_id = agent.model_override
+
                 provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(
-                    db, workspace_id, provider_id=provider_id, model_override=model_id
+                    db, workspace_id, provider_id=_provider_id, model_override=_model_id
                 )
             except Exception as e:
-                await ws_manager.send_to_workspace(workspace_key, {
-                    "type": "chat_error",
-                    "conversation_id": str(conversation_id),
-                    "detail": str(e),
-                })
+                await self._publish(
+                    execution_id, workspace_id, "chat_error",
+                    conversation_id=conversation_id,
+                    detail=str(e),
+                )
+                await self._update_execution_record(
+                    db, execution_id, status="failed", error_message=str(e),
+                    completed_at=datetime.now(timezone.utc),
+                )
                 return
 
             # 7. Load tool definitions if agent mode is enabled
             openai_tools: list[dict] = []
             all_tool_defs: list[dict] = []
-            # Maps LLM function name → routing info
             fn_name_to_tool_info: dict[str, dict] = {}
 
-            if agent_enabled:
+            if agent.tools_enabled:
                 # 7a. Built-in tools from tool server
                 try:
                     raw_tools = await tool_dispatcher.list_tools()
-                    if agent_tool_categories:
+                    if agent.allowed_tool_categories:
                         raw_tools = [
                             t for t in raw_tools
-                            if t.get("category") in agent_tool_categories
+                            if t.get("category") in agent.allowed_tool_categories
                             or t.get("category") == "agent"
                         ]
+                    # Filter blocked tools
+                    if agent.blocked_tool_ids:
+                        blocked = set(agent.blocked_tool_ids)
+                        raw_tools = [t for t in raw_tools if t["id"] not in blocked]
+
                     for t in raw_tools:
                         fn = _tool_id_to_fn_name(t["id"])
                         fn_name_to_tool_info[fn] = {
@@ -729,7 +910,7 @@ class AgentExecutionEngine:
                 except Exception as e:
                     logger.warning("Could not load tools from tool server: %s", e)
 
-                # 7b. External MCP tools from configured servers
+                # 7b. External MCP tools
                 try:
                     from openforge.services.mcp_service import get_enabled_servers_with_overrides
                     mcp_server_pairs = await get_enabled_servers_with_overrides(db)
@@ -738,7 +919,6 @@ class AgentExecutionEngine:
                             t_name = raw_tool.get("name", "")
                             if not t_name:
                                 continue
-                            # Respect per-tool disabled overrides
                             ov = overrides.get(t_name)
                             if ov and not ov.is_enabled:
                                 continue
@@ -767,22 +947,32 @@ class AgentExecutionEngine:
                 except Exception as e:
                     logger.warning("Could not load MCP tools: %s", e)
 
+            # Publish execution_started event
+            await self._publish(
+                execution_id, workspace_id, "execution_started",
+                conversation_id=conversation_id,
+                agent_id=agent.id,
+                agent_name=agent.name,
+            )
+
             # 8. Agent loop
             full_response = ""
             full_thinking = ""
             all_tool_calls_made: list[dict] = []
-            timeline: list[dict] = []   # ordered sequence of thinking/tool_call events
+            timeline: list[dict] = []
             generation_started = time.perf_counter()
             was_cancelled = False
+            iteration_count = 0
+            tool_calls_count = 0
 
-            # messages list grows as tool results are injected
             loop_messages = list(assembled)
 
-            for loop_iteration in range(max_tool_loops):
+            for loop_iteration in range(agent.max_iterations):
                 if cancel_event.is_set():
                     was_cancelled = True
                     break
 
+                iteration_count = loop_iteration + 1
                 tool_calls_this_turn: list[dict] = []
                 response_this_turn = ""
                 thinking_this_turn = ""
@@ -808,28 +998,32 @@ class AgentExecutionEngine:
                             if chunk:
                                 full_thinking += chunk
                                 thinking_this_turn += chunk
-                                self.stream_registry.append_thinking(
-                                    conversation_id=conversation_id, chunk=chunk
+                                await self._publish(
+                                    execution_id, workspace_id, "chat_thinking",
+                                    conversation_id=conversation_id,
+                                    data=chunk,
                                 )
-                                await ws_manager.send_to_workspace(workspace_key, {
-                                    "type": "chat_thinking",
-                                    "conversation_id": str(conversation_id),
-                                    "data": chunk,
-                                })
+                                await self._update_stream_state(
+                                    execution_id,
+                                    content=full_response,
+                                    thinking=full_thinking,
+                                )
 
                         elif event_type == "token":
                             token = event.get("content", "")
                             if token:
                                 full_response += token
                                 response_this_turn += token
-                                self.stream_registry.append_content(
-                                    conversation_id=conversation_id, chunk=token
+                                await self._publish(
+                                    execution_id, workspace_id, "chat_token",
+                                    conversation_id=conversation_id,
+                                    data=token,
                                 )
-                                await ws_manager.send_to_workspace(workspace_key, {
-                                    "type": "chat_token",
-                                    "conversation_id": str(conversation_id),
-                                    "data": token,
-                                })
+                                await self._update_stream_state(
+                                    execution_id,
+                                    content=full_response,
+                                    thinking=full_thinking,
+                                )
 
                         elif event_type == "tool_calls":
                             tool_calls_this_turn = event.get("calls", [])
@@ -839,21 +1033,24 @@ class AgentExecutionEngine:
 
                 except Exception as e:
                     logger.error("LLM streaming error: %s", e)
-                    await ws_manager.send_to_workspace(workspace_key, {
-                        "type": "chat_error",
-                        "conversation_id": str(conversation_id),
-                        "detail": str(e),
-                    })
+                    await self._publish(
+                        execution_id, workspace_id, "chat_error",
+                        conversation_id=conversation_id,
+                        detail=str(e),
+                    )
+                    await self._update_execution_record(
+                        db, execution_id, status="failed", error_message=str(e),
+                        completed_at=datetime.now(timezone.utc),
+                    )
                     return
 
                 # No tool calls — we have the final response
                 if not tool_calls_this_turn or finish_reason == "stop":
-                    # Flush any thinking from this final turn into the timeline
                     if thinking_this_turn.strip():
                         timeline.append({"type": "thinking", "content": thinking_this_turn.strip()})
                     break
 
-                # Flush thinking that preceded the tool calls in this turn
+                # Flush thinking that preceded the tool calls
                 if thinking_this_turn.strip():
                     timeline.append({"type": "thinking", "content": thinking_this_turn.strip()})
 
@@ -865,7 +1062,6 @@ class AgentExecutionEngine:
                     fn_name = call.get("name", "")
                     arguments = call.get("arguments", {})
 
-                    # Resolve tool info from our fn_name map
                     tool_info = fn_name_to_tool_info.get(fn_name)
                     if tool_info:
                         tool_id = (
@@ -882,24 +1078,73 @@ class AgentExecutionEngine:
                         "arguments": arguments,
                     }
                     all_tool_calls_made.append(call_record)
-                    self.stream_registry.append_tool_call(
-                        conversation_id=conversation_id, call=call_record
+                    tool_calls_count += 1
+
+                    await self._publish(
+                        execution_id, workspace_id, "chat_tool_call",
+                        conversation_id=conversation_id,
+                        data=call_record,
+                    )
+                    await self._update_stream_state(
+                        execution_id,
+                        content=full_response,
+                        thinking=full_thinking,
+                        tool_calls=all_tool_calls_made,
                     )
 
-                    await ws_manager.send_to_workspace(workspace_key, {
-                        "type": "chat_tool_call",
-                        "conversation_id": str(conversation_id),
-                        "data": call_record,
-                    })
+                    # Update execution tracking
+                    await self._update_execution_record(
+                        db, execution_id,
+                        tool_calls_count=tool_calls_count,
+                        iteration_count=iteration_count,
+                    )
 
-                    # ── HITL policy check ───────────────────────────────────
+                    # HITL policy check (with tool permission overrides)
                     risk_level = (
                         tool_info.get("risk_level", "low")
                         if tool_info and tool_info.get("type") == "builtin"
                         else "medium"
                     )
                     hitl_approved = True
-                    if tool_info and policy_engine.evaluate(tool_id, risk_level) == "hitl_required":
+
+                    # Check async policy (includes ToolPermission table)
+                    from openforge.db.postgres import AsyncSessionLocal
+                    async with AsyncSessionLocal() as policy_db:
+                        policy_decision = await policy_engine.evaluate_async(
+                            tool_id, risk_level, policy_db
+                        )
+
+                    if policy_decision == "blocked":
+                        # Tool is blocked — return error to agent
+                        result = {
+                            "success": False,
+                            "error": f"Tool '{tool_id}' is blocked by administrator policy.",
+                        }
+                        tool_results_for_messages.append({
+                            "tool_call_id": call_id,
+                            "content": f"Tool error: {result['error']}",
+                        })
+                        timeline.append({
+                            "type": "tool_call",
+                            "call_id": call_id,
+                            "tool_name": tool_id,
+                            "arguments": arguments,
+                            "success": False,
+                            "error": result["error"],
+                        })
+                        await self._publish(
+                            execution_id, workspace_id, "chat_tool_result",
+                            conversation_id=conversation_id,
+                            data={
+                                "call_id": call_id,
+                                "tool_name": tool_id,
+                                "success": False,
+                                "error": result["error"],
+                            },
+                        )
+                        continue
+
+                    if tool_info and policy_decision == "hitl_required":
                         action_summary = (
                             f"Agent wants to execute '{tool_id}' with: "
                             f"{json.dumps(arguments, default=str)[:300]}"
@@ -917,8 +1162,6 @@ class AgentExecutionEngine:
                             )
                         hitl_id = str(hitl_req.id)
 
-                        # Register event BEFORE sending WS (avoids race where user
-                        # approves before we start waiting)
                         hitl_event_obj = hitl_service.register_event(hitl_id)
 
                         hitl_entry = {
@@ -931,19 +1174,29 @@ class AgentExecutionEngine:
                         }
                         timeline.append(hitl_entry)
 
-                        await ws_manager.send_to_workspace(workspace_key, {
-                            "type": "chat_hitl_request",
-                            "conversation_id": str(conversation_id),
-                            "data": {
+                        await self._publish(
+                            execution_id, workspace_id, "chat_hitl_request",
+                            conversation_id=conversation_id,
+                            data={
                                 "hitl_id": hitl_id,
                                 "tool_id": tool_id,
                                 "tool_input": arguments,
                                 "action_summary": action_summary,
                                 "risk_level": risk_level,
                             },
-                        })
+                        )
+
+                        # Update execution status to paused
+                        await self._update_execution_record(
+                            db, execution_id, status="paused_hitl"
+                        )
 
                         hitl_approved = await hitl_service.wait_for_decision(hitl_id, timeout=300.0)
+
+                        # Update execution status back to running
+                        await self._update_execution_record(
+                            db, execution_id, status="running"
+                        )
 
                         # Update timeline entry with resolution
                         for i, entry in enumerate(timeline):
@@ -954,14 +1207,14 @@ class AgentExecutionEngine:
                                 }
                                 break
 
-                        await ws_manager.send_to_workspace(workspace_key, {
-                            "type": "chat_hitl_resolved",
-                            "conversation_id": str(conversation_id),
-                            "data": {
+                        await self._publish(
+                            execution_id, workspace_id, "chat_hitl_resolved",
+                            conversation_id=conversation_id,
+                            data={
                                 "hitl_id": hitl_id,
                                 "status": "approved" if hitl_approved else "denied",
                             },
-                        })
+                        )
 
                         if not hitl_approved:
                             result = {
@@ -974,15 +1227,11 @@ class AgentExecutionEngine:
                             })
                             continue
 
-                    # ── Execute via the appropriate backend (timed) ──────────
+                    # Execute via the appropriate backend (timed)
                     tool_started_at = datetime.now(timezone.utc)
                     call_start_perf = time.perf_counter()
 
                     if not tool_info:
-                        # fn_name was not in the registered tool schema — the model
-                        # hallucinated a tool name.  Return a clear error so the model
-                        # can recover using an actual tool instead of spiraling into
-                        # repeated 404 errors.
                         available = ", ".join(
                             _fn_name_to_tool_id(k)
                             for k in sorted(fn_name_to_tool_info.keys())
@@ -1013,7 +1262,7 @@ class AgentExecutionEngine:
                     call_duration_ms = int((time.perf_counter() - call_start_perf) * 1000)
                     tool_finished_at = datetime.now(timezone.utc)
 
-                    # ── Special handling: agent.invoke → subagent_invocation ─
+                    # Special handling: agent.invoke → subagent_invocation
                     if tool_id == "agent.invoke" and result.get("success"):
                         subagent_out = result.get("output") or {}
                         subagent_response = subagent_out.get("response", "")
@@ -1032,11 +1281,11 @@ class AgentExecutionEngine:
                         }
                         timeline.append(invocation_entry)
 
-                        await ws_manager.send_to_workspace(workspace_key, {
-                            "type": "chat_subagent_invocation",
-                            "conversation_id": str(conversation_id),
-                            "data": invocation_entry,
-                        })
+                        await self._publish(
+                            execution_id, workspace_id, "chat_subagent_invocation",
+                            conversation_id=conversation_id,
+                            data=invocation_entry,
+                        )
 
                         result_content = (
                             f"Subagent completed. Response:\n\n{subagent_response}"
@@ -1062,17 +1311,8 @@ class AgentExecutionEngine:
                                 finished_at=tool_finished_at,
                             )
                         )
-                        continue  # skip the regular timeline/WS handling below
+                        continue
 
-                    result_record = {
-                        "call_id": call_id,
-                        "tool_name": tool_id,
-                        "success": result.get("success", False),
-                        "output": result.get("output"),
-                        "error": result.get("error"),
-                    }
-                    # Record in ordered timeline (truncate string output for storage efficiency;
-                    # keep dict/list as-is so the frontend can render them as structured data)
                     _output = result.get("output")
                     if isinstance(_output, str) and len(_output) > 2000:
                         _output = _output[:2000] + "…"
@@ -1085,19 +1325,21 @@ class AgentExecutionEngine:
                         "output": _output,
                         "error": result.get("error"),
                     })
-                    self.stream_registry.set_tool_result(
+
+                    result_record = {
+                        "call_id": call_id,
+                        "tool_name": tool_id,
+                        "success": result.get("success", False),
+                        "output": result.get("output"),
+                        "error": result.get("error"),
+                    }
+
+                    await self._publish(
+                        execution_id, workspace_id, "chat_tool_result",
                         conversation_id=conversation_id,
-                        call_id=call_id,
-                        result=result_record,
+                        data=result_record,
                     )
 
-                    await ws_manager.send_to_workspace(workspace_key, {
-                        "type": "chat_tool_result",
-                        "conversation_id": str(conversation_id),
-                        "data": result_record,
-                    })
-
-                    # Persist tool call log asynchronously
                     asyncio.create_task(
                         _persist_tool_call_log(
                             workspace_id=workspace_id,
@@ -1135,7 +1377,6 @@ class AgentExecutionEngine:
 
                 # Inject assistant message with tool_calls into the loop messages
                 assistant_tool_message: dict = {"role": "assistant", "content": response_this_turn or ""}
-                # Build tool_calls in OpenAI format for the message
                 assistant_tool_message["tool_calls"] = [
                     {
                         "id": c.get("id") or c.get("call_id", ""),
@@ -1149,7 +1390,6 @@ class AgentExecutionEngine:
                 ]
                 loop_messages.append(assistant_tool_message)
 
-                # Inject tool results
                 for tr in tool_results_for_messages:
                     loop_messages.append({
                         "role": "tool",
@@ -1157,9 +1397,7 @@ class AgentExecutionEngine:
                         "content": tr["content"],
                     })
 
-            # 9a. If the model produced no text response (only thinking, or only tool calls),
-            #     do one final tools-disabled, thinking-disabled turn to force a text summary.
-            #     Skip this if the user cancelled — we don't want to start another LLM call.
+            # 9a. Final summary turn if no text response
             if not was_cancelled and not full_response.strip() and (all_tool_calls_made or full_thinking.strip()):
                 try:
                     async for event in llm_gateway.stream_with_tools(
@@ -1175,14 +1413,11 @@ class AgentExecutionEngine:
                             token = event.get("content", "")
                             if token:
                                 full_response += token
-                                self.stream_registry.append_content(
-                                    conversation_id=conversation_id, chunk=token
+                                await self._publish(
+                                    execution_id, workspace_id, "chat_token",
+                                    conversation_id=conversation_id,
+                                    data=token,
                                 )
-                                await ws_manager.send_to_workspace(workspace_key, {
-                                    "type": "chat_token",
-                                    "conversation_id": str(conversation_id),
-                                    "data": token,
-                                })
                 except Exception as e:
                     logger.warning("Final summary turn failed: %s", e)
 
@@ -1207,19 +1442,40 @@ class AgentExecutionEngine:
                 is_interrupted=was_cancelled,
             )
 
-            # 10. Notify completion
-            await ws_manager.send_to_workspace(workspace_key, {
-                "type": "chat_done",
-                "conversation_id": str(conversation_id),
-                "message_id": str(msg.id),
-                "generation_ms": generation_ms,
-                "interrupted": was_cancelled,
-            })
+            # 10. Update execution record to completed
+            final_status = "cancelled" if was_cancelled else "completed"
+            await self._update_execution_record(
+                db, execution_id,
+                status=final_status,
+                iteration_count=iteration_count,
+                tool_calls_count=tool_calls_count,
+                timeline=timeline,
+                completed_at=datetime.now(timezone.utc),
+            )
+
+            # 11. Notify completion
+            await self._publish(
+                execution_id, workspace_id, "chat_done",
+                conversation_id=conversation_id,
+                message_id=str(msg.id),
+                generation_ms=generation_ms,
+                interrupted=was_cancelled,
+            )
+
+            # Publish execution_completed event
+            await self._publish(
+                execution_id, workspace_id, "execution_completed",
+                conversation_id=conversation_id,
+                agent_id=agent.id,
+                status=final_status,
+                iteration_count=iteration_count,
+                tool_calls_count=tool_calls_count,
+                duration_ms=generation_ms,
+            )
 
             if has_runtime_override:
                 async def _refresh_title() -> None:
                     from openforge.db.postgres import AsyncSessionLocal
-
                     try:
                         async with AsyncSessionLocal() as title_db:
                             await conversation_service.refresh_conversation_title(
@@ -1234,13 +1490,11 @@ class AgentExecutionEngine:
                     except Exception as e:
                         logger.warning(
                             "Chat title refresh failed for conversation %s: %s",
-                            conversation_id,
-                            e,
+                            conversation_id, e,
                         )
-
                 asyncio.create_task(_refresh_title())
 
-            # Embed the chat exchange for searchability (fire-and-forget)
+            # Embed the chat exchange for searchability
             if not was_cancelled and full_response and isinstance(user_content, str):
                 from openforge.services.chat_embedding_service import chat_embedding_service
 
@@ -1260,23 +1514,32 @@ class AgentExecutionEngine:
                     except Exception as e:
                         logger.warning(
                             "Chat embedding failed for conversation %s: %s",
-                            conversation_id,
-                            e,
+                            conversation_id, e,
                         )
-
                 asyncio.create_task(_embed_chat())
 
         except Exception as e:
             logger.error(
                 "Agent pipeline error for conversation %s: %s", conversation_id, e
             )
-            await ws_manager.send_to_workspace(workspace_key, {
-                "type": "chat_error",
-                "conversation_id": str(conversation_id),
-                "detail": str(e),
-            })
+            await self._publish(
+                execution_id, workspace_id, "chat_error",
+                conversation_id=conversation_id,
+                detail=str(e),
+            )
+            await self._update_execution_record(
+                db, execution_id, status="failed", error_message=str(e),
+                completed_at=datetime.now(timezone.utc),
+            )
         finally:
-            self.stream_registry.finish(conversation_id)
+            # Clean up Redis stream state
+            if await self._should_use_redis():
+                try:
+                    from openforge.db.redis_client import get_redis
+                    redis = await get_redis()
+                    await redis.delete(f"stream_state:{execution_id}")
+                except Exception:
+                    pass
             self._cancel_events.pop(str(conversation_id), None)
 
     async def execute_subagent(
@@ -1287,16 +1550,9 @@ class AgentExecutionEngine:
         db: AsyncSession,
         parent_execution_id: Optional[str] = None,
     ) -> dict:
-        """
-        Run a subagent in collect mode — no WebSocket streaming.
-
-        Creates a temporary (archived) conversation in the target workspace,
-        runs the full agent loop, and returns the collected response + timeline.
-        Used by the agent.invoke tool for subagent delegation.
-        """
+        """Run a subagent in collect mode — no streaming."""
         execution_id = parent_execution_id or str(uuid.uuid4())
 
-        # Create a temporary, archived conversation
         temp_conv = Conversation(
             workspace_id=workspace_id,
             title=f"[subagent] {instruction[:80]}",
@@ -1308,10 +1564,8 @@ class AgentExecutionEngine:
         conv_id = temp_conv.id
 
         try:
-            # Save user instruction as message
             await conversation_service.add_message(db, conv_id, role="user", content=instruction)
 
-            # Load LLM provider
             try:
                 provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(
                     db, workspace_id
@@ -1323,7 +1577,6 @@ class AgentExecutionEngine:
                     "conversation_id": str(conv_id),
                 }
 
-            # Load tools
             openai_tools: list[dict] = []
             fn_name_to_tool_info_sub: dict[str, dict] = {}
             try:
@@ -1339,8 +1592,6 @@ class AgentExecutionEngine:
             except Exception:
                 pass
 
-            # Subagents use a dedicated autonomous prompt — not the interactive agent prompt.
-            # They have no user present and must never ask for clarification.
             system_prompt = (
                 "You are an autonomous AI subagent operating inside OpenForge. "
                 "You have been delegated a specific task by another agent. "
@@ -1366,7 +1617,6 @@ class AgentExecutionEngine:
                 "6. Only call tools listed in your tool schema — never invent tool names.\n"
             )
 
-            # RAG context
             rag_results: list = []
             try:
                 raw_rag = search_engine.search(
@@ -1386,7 +1636,7 @@ class AgentExecutionEngine:
 
             full_response = ""
             timeline: list[dict] = []
-            max_loops = 10  # subagents get fewer loops
+            max_loops = 10
 
             for _ in range(max_loops):
                 tool_calls_this_turn: list[dict] = []
@@ -1445,8 +1695,6 @@ class AgentExecutionEngine:
                             execution_id=execution_id,
                         )
 
-                    # Update timeline entry (keep dict/list as-is for structured rendering;
-                    # only truncate string outputs)
                     for i, entry in enumerate(timeline):
                         if entry.get("call_id") == call_id:
                             _out = sub_result.get("output")
@@ -1493,7 +1741,7 @@ class AgentExecutionEngine:
                         "content": tr["content"],
                     })
 
-            # Final summary turn if no text response yet
+            # Final summary turn if no text response
             if not full_response.strip():
                 try:
                     async for event in llm_gateway.stream_with_tools(
@@ -1510,7 +1758,6 @@ class AgentExecutionEngine:
                 except Exception:
                     pass
 
-            # Save assistant message
             await conversation_service.add_message(
                 db, conv_id, role="assistant", content=full_response, timeline=timeline
             )

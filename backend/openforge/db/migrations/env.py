@@ -12,7 +12,9 @@ from openforge.db.models import Base
 from openforge.config import get_settings
 
 config = context.config
-if config.config_file_name is not None:
+# Skip fileConfig when running programmatically (inside uvicorn) —
+# reconfiguring logging can interfere with uvicorn's output handling.
+if config.config_file_name is not None and not config.attributes.get("skip_logging_config"):
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata

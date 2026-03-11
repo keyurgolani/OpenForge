@@ -8,6 +8,7 @@ import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
 import { getShortcutDisplay } from '@/lib/keyboard'
 import { onQuickKnowledgeOpen, type QuickKnowledgeType } from '@/lib/quick-knowledge'
 import CommandPalette from '@/components/shared/CommandPalette'
+import HITLFab from '@/components/shared/HITLFab'
 import { UnifiedKnowledgeModal } from '@/components/knowledge/UnifiedKnowledgeModal'
 import KnowledgeTypeGrid from '@/components/knowledge/KnowledgeTypeGrid'
 import { ModeToggle } from '@/components/mode-toggle'
@@ -361,6 +362,7 @@ export default function AppShell() {
     return (
         <div className="relative flex h-screen gap-3 overflow-hidden p-3">
             <CommandPalette />
+            <HITLFab />
             {/* Sidebar */}
             <aside className={`${sidebarOpen ? 'w-72' : 'w-14'} flex-shrink-0 transition-[width] duration-300 overflow-hidden flex flex-col glass-card`}>
                 {sidebarOpen ? (

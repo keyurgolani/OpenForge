@@ -86,6 +86,9 @@ class Workspace(Base):
         UUID(as_uuid=True), ForeignKey("llm_providers.id", ondelete="SET NULL"), nullable=True
     )
     vision_model: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    agent_id: Mapped[Optional[str]] = mapped_column(
+        String(100), nullable=True, default="workspace_agent"
+    )
     agent_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     agent_tool_categories: Mapped[List[str]] = mapped_column(JSONB, nullable=False, default=list)
     agent_max_tool_loops: Mapped[int] = mapped_column(Integer, nullable=False, default=20)
@@ -367,6 +370,71 @@ class HITLRequest(Base):
         Index("idx_hitl_requests_workspace_status", "workspace_id", "status"),
         Index("idx_hitl_requests_conversation", "conversation_id"),
         Index("idx_hitl_requests_status", "status", "created_at"),
+    )
+
+
+class AgentDefinitionModel(Base):
+    """Persisted agent definitions."""
+    __tablename__ = "agent_definitions"
+
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    version: Mapped[str] = mapped_column(String(20), nullable=False, default="1.0.0")
+    config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    icon: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=now_utc
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc
+    )
+
+
+class AgentExecution(Base):
+    """Tracks individual agent execution runs."""
+    __tablename__ = "agent_executions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False
+    )
+    agent_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="queued")
+    iteration_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tool_calls_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    token_usage: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    timeline: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=now_utc
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("idx_agent_exec_workspace", "workspace_id", "started_at"),
+        Index(
+            "idx_agent_exec_status",
+            "status",
+            postgresql_where="status IN ('running', 'paused_hitl', 'queued')",
+        ),
+    )
+
+
+class ToolPermission(Base):
+    """Per-tool permission overrides (user-configured)."""
+    __tablename__ = "tool_permissions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tool_id: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)
+    permission: Mapped[str] = mapped_column(String(20), nullable=False, default="default")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc
     )
 
 

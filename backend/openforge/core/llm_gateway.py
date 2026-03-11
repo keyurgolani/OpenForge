@@ -346,6 +346,33 @@ class LLMGateway:
 
     # ── Model listing ─────────────────────────────────────────────────────────
 
+    @staticmethod
+    async def _get_with_retry(
+        client: httpx.AsyncClient, url: str, *, headers: dict | None = None, params: dict | None = None, retries: int = 3,
+    ) -> httpx.Response:
+        """GET with automatic retry on 429 Too Many Requests.
+
+        Adds small random jitter before each attempt to avoid thundering-herd
+        collisions when the frontend fires multiple calls (e.g. test_connection
+        followed immediately by list_models).
+        """
+        import asyncio as _aio
+        import random as _rand
+        for attempt in range(retries):
+            # Small jitter (100–500 ms) before each attempt to stagger
+            # concurrent requests to the same provider.
+            await _aio.sleep(_rand.uniform(0.1, 0.5))
+            resp = await client.get(url, headers=headers, params=params)
+            if resp.status_code == 429 and attempt < retries - 1:
+                base_delay = float(resp.headers.get("retry-after", 2 * (attempt + 1)))
+                jitter = _rand.uniform(0, base_delay * 0.5)
+                await _aio.sleep(base_delay + jitter)
+                continue
+            resp.raise_for_status()
+            return resp
+        resp.raise_for_status()
+        return resp  # unreachable but satisfies type checker
+
     async def list_models(
         self,
         provider_name: str,
@@ -362,15 +389,13 @@ class LLMGateway:
                 base = self._resolve_base_url("ollama", base_url)
                 headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
                 async with httpx.AsyncClient(timeout=5.0) as client:
-                    resp = await client.get(f"{base}/api/tags", headers=headers)
-                    resp.raise_for_status()
+                    resp = await self._get_with_retry(client, f"{base}/api/tags", headers=headers)
                     return [{"id": m["name"], "name": m["name"]} for m in resp.json().get("models", [])]
 
             elif provider_name == "openai":
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     url = (base_url or "https://api.openai.com").rstrip("/") + "/v1/models"
-                    resp = await client.get(url, headers={"Authorization": f"Bearer {api_key}"})
-                    resp.raise_for_status()
+                    resp = await self._get_with_retry(client, url, headers={"Authorization": f"Bearer {api_key}"})
                     return sorted(
                         [{"id": m["id"], "name": m["id"]} for m in resp.json().get("data", [])
                          if any(k in m["id"] for k in ("gpt", "o1", "o3", "o4"))],
@@ -380,18 +405,16 @@ class LLMGateway:
             elif provider_name == "anthropic":
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     url = (base_url or "https://api.anthropic.com").rstrip("/") + "/v1/models"
-                    resp = await client.get(
-                        url, headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"}
+                    resp = await self._get_with_retry(
+                        client, url, headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"}
                     )
-                    resp.raise_for_status()
                     return [{"id": m["id"], "name": m.get("display_name", m["id"])}
                             for m in resp.json().get("data", [])]
 
             elif provider_name == "gemini":
                 async with httpx.AsyncClient(timeout=10.0) as client:
-                    url = (base_url or "https://generativelanguage.googleapis.com").rstrip("/") + f"/v1beta/models?key={api_key}"
-                    resp = await client.get(url)
-                    resp.raise_for_status()
+                    url = (base_url or "https://generativelanguage.googleapis.com").rstrip("/") + "/v1beta/models"
+                    resp = await self._get_with_retry(client, url, params={"key": api_key})
                     return [
                         {"id": m["name"].replace("models/", ""), "name": m.get("displayName", m["name"])}
                         for m in resp.json().get("models", [])
@@ -401,8 +424,7 @@ class LLMGateway:
             elif provider_name == "groq":
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     url = (base_url or "https://api.groq.com").rstrip("/") + "/openai/v1/models"
-                    resp = await client.get(url, headers={"Authorization": f"Bearer {api_key}"})
-                    resp.raise_for_status()
+                    resp = await self._get_with_retry(client, url, headers={"Authorization": f"Bearer {api_key}"})
                     return sorted(
                         [{"id": m["id"], "name": m["id"]} for m in resp.json().get("data", [])],
                         key=lambda x: x["id"],
@@ -411,15 +433,13 @@ class LLMGateway:
             elif provider_name == "deepseek":
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     url = (base_url or "https://api.deepseek.com").rstrip("/") + "/models"
-                    resp = await client.get(url, headers={"Authorization": f"Bearer {api_key}"})
-                    resp.raise_for_status()
+                    resp = await self._get_with_retry(client, url, headers={"Authorization": f"Bearer {api_key}"})
                     return [{"id": m["id"], "name": m["id"]} for m in resp.json().get("data", [])]
 
             elif provider_name == "mistral":
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     url = (base_url or "https://api.mistral.ai").rstrip("/") + "/v1/models"
-                    resp = await client.get(url, headers={"Authorization": f"Bearer {api_key}"})
-                    resp.raise_for_status()
+                    resp = await self._get_with_retry(client, url, headers={"Authorization": f"Bearer {api_key}"})
                     return sorted(
                         [{"id": m["id"], "name": m.get("id", m["id"])} for m in resp.json().get("data", [])
                          if m.get("capabilities", {}).get("completion_chat", True)],
@@ -429,55 +449,70 @@ class LLMGateway:
             elif provider_name == "openrouter":
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     url = (base_url or "https://openrouter.ai").rstrip("/") + "/api/v1/models"
-                    resp = await client.get(url, headers={"Authorization": f"Bearer {api_key}"})
-                    resp.raise_for_status()
+                    resp = await self._get_with_retry(client, url, headers={"Authorization": f"Bearer {api_key}"})
                     return [{"id": m["id"], "name": m.get("name", m["id"])}
                             for m in resp.json().get("data", [])]
 
             elif provider_name == "xai":
-                async with httpx.AsyncClient(timeout=10.0) as client:
+                async with httpx.AsyncClient(timeout=15.0) as client:
                     url = (base_url or "https://api.x.ai").rstrip("/") + "/v1/models"
-                    resp = await client.get(url, headers={"Authorization": f"Bearer {api_key}"})
-                    resp.raise_for_status()
+                    resp = await self._get_with_retry(client, url, headers={"Authorization": f"Bearer {api_key}"})
                     return [{"id": m["id"], "name": m["id"]} for m in resp.json().get("data", [])]
 
             elif provider_name == "cohere":
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     url = (base_url or "https://api.cohere.com").rstrip("/") + "/v1/models"
-                    resp = await client.get(url, headers={"Authorization": f"Bearer {api_key}"})
-                    resp.raise_for_status()
+                    resp = await self._get_with_retry(client, url, headers={"Authorization": f"Bearer {api_key}"})
                     return [{"id": m["name"], "name": m["name"]}
                             for m in resp.json().get("models", [])
                             if "chat" in m.get("endpoints", [])]
 
             elif provider_name == "zhipuai":
+                # Z.AI / ZhipuAI supports multiple base URLs:
+                #   Regular:     https://api.z.ai/api/paas/v4  (or https://open.bigmodel.cn/api/paas/v4)
+                #   Coding plan: https://api.z.ai/api/coding/paas/v4
+                # When user provides a custom base_url, append /models directly;
+                # otherwise use the default international API URL.
                 async with httpx.AsyncClient(timeout=10.0) as client:
-                    url = (base_url or "https://open.bigmodel.cn").rstrip("/") + "/api/paas/v4/models"
-                    resp = await client.get(url, headers={"Authorization": f"Bearer {api_key}"})
-                    resp.raise_for_status()
+                    if base_url:
+                        url = base_url.rstrip("/") + "/models"
+                    else:
+                        url = "https://open.bigmodel.cn/api/paas/v4/models"
+                    resp = await self._get_with_retry(client, url, headers={"Authorization": f"Bearer {api_key}"})
                     return [{"id": m["id"], "name": m["id"]} for m in resp.json().get("data", [])]
 
             elif provider_name == "huggingface":
-                raise RuntimeError(
-                    "HuggingFace does not provide a chat-model list API. "
-                    "Please type the model ID directly (e.g. 'meta-llama/Meta-Llama-3-8B-Instruct')."
-                )
+                # HuggingFace doesn't have a model-list API; return empty so
+                # the frontend shows the manual-entry input gracefully.
+                return []
 
             elif provider_name == "custom-openai":
                 if not base_url:
                     raise RuntimeError("Custom OpenAI-compatible provider requires a Base URL.")
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
-                    resp = await client.get(base_url.rstrip("/") + "/v1/models", headers=headers)
-                    resp.raise_for_status()
+                    # Try /models first (user may include version in base_url,
+                    # e.g. https://api.z.ai/api/coding/paas/v4).
+                    # Fall back to /v1/models for standard OpenAI-compatible hosts.
+                    stripped = base_url.rstrip("/")
+                    try:
+                        resp = await self._get_with_retry(
+                            client, stripped + "/models", headers=headers, retries=1,
+                        )
+                    except httpx.HTTPStatusError as exc:
+                        if exc.response.status_code == 404:
+                            resp = await self._get_with_retry(
+                                client, stripped + "/v1/models", headers=headers,
+                            )
+                        else:
+                            raise
                     return [{"id": m["id"], "name": m.get("id", m["id"])}
                             for m in resp.json().get("data", [])]
 
             elif provider_name == "custom-anthropic":
-                raise RuntimeError(
-                    "Anthropic-compatible providers don't expose a model list endpoint. "
-                    "Please type the model ID directly."
-                )
+                # Anthropic-compatible providers don't expose a model list;
+                # return empty so the frontend shows the manual-entry input.
+                return []
 
             else:
                 raise RuntimeError(f"Unknown provider: {provider_name!r}")
@@ -494,7 +529,11 @@ class LLMGateway:
         model: str | None = None,
         base_url: str | None = None,
     ) -> dict:
+        # Providers that don't support model listing — validate via a lightweight request instead.
+        no_list_providers = {"huggingface", "custom-anthropic"}
         try:
+            if provider_name in no_list_providers:
+                return {"success": True, "message": "Connected. Enter model IDs manually.", "models_count": 0}
             models = await self.list_models(provider_name, api_key, base_url)
             return {"success": True, "message": f"Connected. {len(models)} model(s) available.", "models_count": len(models)}
         except Exception as e:

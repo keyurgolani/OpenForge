@@ -350,6 +350,7 @@ function ModelsSetupStep({ onNext, loading }: { onNext: () => void; loading: boo
     const [addProviderId, setAddProviderId] = useState('')
     const [providerModels, setProviderModels] = useState<{ id: string; name: string }[]>([])
     const [fetchingModels, setFetchingModels] = useState(false)
+    const [fetchAttempted, setFetchAttempted] = useState(false)
     const [selectedModelId, setSelectedModelId] = useState('')
     const [modelSearch, setModelSearch] = useState('')
     const [fetchError, setFetchError] = useState<string | null>(null)
@@ -378,8 +379,8 @@ function ModelsSetupStep({ onNext, loading }: { onNext: () => void; loading: boo
     }
 
     const handleFetchModels = async (pid: string) => {
-        if (!pid) { setProviderModels([]); setSelectedModelId(''); return }
-        setFetchingModels(true); setFetchError(null); setProviderModels([]); setSelectedModelId('')
+        if (!pid) { setProviderModels([]); setSelectedModelId(''); setFetchAttempted(false); return }
+        setFetchingModels(true); setFetchError(null); setProviderModels([]); setSelectedModelId(''); setFetchAttempted(false)
         try {
             const list = await listModels(pid)
             setProviderModels(list)
@@ -388,11 +389,12 @@ function ModelsSetupStep({ onNext, loading }: { onNext: () => void; loading: boo
             setFetchError(err?.response?.data?.detail ?? err?.message ?? 'Could not fetch models')
         } finally {
             setFetchingModels(false)
+            setFetchAttempted(true)
         }
     }
 
     const handleProviderChange = (pid: string) => {
-        setAddProviderId(pid); setModelSearch(''); handleFetchModels(pid)
+        setAddProviderId(pid); setModelSearch(''); setFetchAttempted(false); handleFetchModels(pid)
     }
 
     const handleAddModel = () => {
@@ -531,7 +533,19 @@ function ModelsSetupStep({ onNext, loading }: { onNext: () => void; loading: boo
                     </div>
                 )}
 
-                {fetchError && <p className="text-xs text-red-400">{fetchError}</p>}
+                {fetchError && (
+                    <div className="space-y-1">
+                        <p className="text-xs text-red-400">{fetchError}</p>
+                        <input className="input text-xs" placeholder="Enter model ID manually (e.g. gpt-4o)" value={selectedModelId} onChange={e => setSelectedModelId(e.target.value)} />
+                    </div>
+                )}
+
+                {!fetchError && fetchAttempted && !fetchingModels && providerModels.length === 0 && (
+                    <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">This provider doesn't support model listing. Enter the model ID manually.</p>
+                        <input className="input text-xs" placeholder="Enter model ID (e.g. meta-llama/Meta-Llama-3-8B-Instruct)" value={selectedModelId} onChange={e => setSelectedModelId(e.target.value)} />
+                    </div>
+                )}
 
                 {providerModels.length > 0 && (
                     <>

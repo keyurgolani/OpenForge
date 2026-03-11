@@ -178,6 +178,29 @@ export const approveHITL = (hitlId: string, note?: string): Promise<any> =>
 export const denyHITL = (hitlId: string, note?: string): Promise<any> =>
     api.post(`/hitl/${hitlId}/deny`, { resolution_note: note }).then(r => r.data)
 
+// ── Agents ───────────────────────────────────────────────────────────────────
+export const listAgents = (): Promise<any> => api.get('/agents').then(r => r.data)
+export const getAgent = (id: string): Promise<any> => api.get(`/agents/${id}`).then(r => r.data)
+export const updateAgent = (id: string, data: object): Promise<any> =>
+    api.put(`/agents/${id}`, data).then(r => r.data)
+export const getWorkspaceAgent = (wid: string): Promise<any> =>
+    api.get(`/agents/workspace/${wid}/agent`).then(r => r.data)
+export const setWorkspaceAgent = (wid: string, agentId: string): Promise<any> =>
+    api.put(`/agents/workspace/${wid}/agent`, { agent_id: agentId }).then(r => r.data)
+
+// ── Agent Executions ─────────────────────────────────────────────────────────
+export const listExecutions = (wid: string, params?: object): Promise<any> =>
+    api.get(`/agents/workspace/${wid}/executions`, { params }).then(r => r.data)
+export const getExecution = (wid: string, eid: string): Promise<any> =>
+    api.get(`/agents/workspace/${wid}/executions/${eid}`).then(r => r.data)
+
+// ── Tool Permissions ─────────────────────────────────────────────────────────
+export const listToolPermissions = (): Promise<any> => api.get('/tools/permissions').then(r => r.data)
+export const getToolPermission = (toolId: string): Promise<any> =>
+    api.get(`/tools/${toolId}/permission`).then(r => r.data)
+export const setToolPermission = (toolId: string, permission: string): Promise<any> =>
+    api.put(`/tools/${toolId}/permission`, { permission }).then(r => r.data)
+
 // ── MCP Servers ───────────────────────────────────────────────────────────────
 export const listMCPServers = (): Promise<any> => api.get('/mcp/servers').then(r => r.data)
 export const createMCPServer = (data: object): Promise<any> => api.post('/mcp/servers', data).then(r => r.data)

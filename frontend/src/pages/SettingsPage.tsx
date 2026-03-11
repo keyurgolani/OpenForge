@@ -11,6 +11,8 @@ import {
     listMCPServers, createMCPServer, updateMCPServer, deleteMCPServer, discoverMCPServer,
     updateMCPToolOverride, exportAllData, exportWorkspaceData,
     checkAuth, logoutAuth,
+    listToolPermissions, setToolPermission,
+    listPendingHITL, getHITLHistory, approveHITL, denyHITL,
 } from '@/lib/api'
 import {
     Globe2, Loader2, Trash2, CheckCircle2, XCircle, Star, Plus,
@@ -68,8 +70,8 @@ export function getWorkspaceIcon(iconName: string | null): React.ReactNode {
     return <IconComponent className="w-4 h-4" />
 }
 
-type SettingsTab = 'workspaces' | 'llm' | 'prompts' | 'jobs' | 'skills' | 'tools' | 'mcp' | 'audit' | 'export'
-const SETTINGS_TABS: SettingsTab[] = ['workspaces', 'llm', 'prompts', 'jobs', 'skills', 'tools', 'mcp', 'audit', 'export']
+type SettingsTab = 'workspaces' | 'llm' | 'prompts' | 'jobs' | 'skills' | 'tools' | 'mcp' | 'hitl' | 'audit' | 'export'
+const SETTINGS_TABS: SettingsTab[] = ['workspaces', 'llm', 'prompts', 'jobs', 'skills', 'tools', 'mcp', 'hitl', 'audit', 'export']
 const toSettingsTab = (value: string | null): SettingsTab => {
     const normalized = value === 'schedules' ? 'jobs' : value
     return SETTINGS_TABS.includes(normalized as SettingsTab) ? (normalized as SettingsTab) : 'workspaces'
@@ -117,6 +119,7 @@ export default function SettingsPage() {
         { id: 'skills' as const, label: 'Skills', Icon: Wrench },
         { id: 'tools' as const, label: 'Native Tools', Icon: Settings2 },
         { id: 'mcp' as const, label: 'MCP', Icon: Layers },
+        { id: 'hitl' as const, label: 'HITL', Icon: ShieldAlert },
         { id: 'audit' as const, label: 'Audit', Icon: History },
         { id: 'export' as const, label: 'Export', Icon: Download },
     ]
@@ -179,6 +182,7 @@ export default function SettingsPage() {
             {activeTab === 'skills' && <SkillsTab />}
             {activeTab === 'tools' && <ToolsTab />}
             {activeTab === 'mcp' && <MCPTab />}
+            {activeTab === 'hitl' && <HITLDashboardTab />}
             {activeTab === 'audit' && (
                 <div className="min-h-0 flex-1">
                     <AuditTab workspaceId={workspaceId} />
@@ -896,6 +900,13 @@ function ModelTypeTab({
                                         <div className="text-xs p-2.5 rounded-lg bg-destructive/10 text-red-300 border border-destructive/20 space-y-1">
                                             <p>{fetchError}</p>
                                             <input className="input text-xs mt-1" placeholder="Or enter model ID manually (e.g. gpt-4o)" value={manualModel} onChange={e => setManualModel(e.target.value)} />
+                                        </div>
+                                    )}
+
+                                    {!fetchError && fetchedModels !== null && fetchedModels.length === 0 && (
+                                        <div className="text-xs p-2.5 rounded-lg bg-muted/20 text-muted-foreground border border-border/30 space-y-1">
+                                            <p>This provider doesn't support model listing. Enter the model ID manually.</p>
+                                            <input className="input text-xs mt-1" placeholder="Enter model ID (e.g. meta-llama/Meta-Llama-3-8B-Instruct)" value={manualModel} onChange={e => setManualModel(e.target.value)} />
                                         </div>
                                     )}
 
@@ -2849,7 +2860,18 @@ function extractParams(tool: ToolMeta): ToolParam[] {
     }))
 }
 
-function ToolCard({ tool }: { tool: ToolMeta }) {
+const PERMISSION_OPTIONS = [
+    { value: 'default', label: 'Default', active: 'text-muted-foreground bg-muted/30 ring-1 ring-border/50', inactive: 'text-muted-foreground/40' },
+    { value: 'allowed', label: 'Allowed', active: 'text-emerald-400 bg-emerald-500/10 ring-1 ring-emerald-500/30', inactive: 'text-muted-foreground/40' },
+    { value: 'hitl', label: 'HITL', active: 'text-amber-400 bg-amber-500/10 ring-1 ring-amber-500/30', inactive: 'text-muted-foreground/40' },
+    { value: 'blocked', label: 'Blocked', active: 'text-red-400 bg-red-500/10 ring-1 ring-red-500/30', inactive: 'text-muted-foreground/40' },
+] as const
+
+function ToolCard({ tool, permission, onPermissionChange }: {
+    tool: ToolMeta
+    permission: string
+    onPermissionChange: (toolId: string, perm: string) => void
+}) {
     const [expanded, setExpanded] = useState(false)
     const [showRaw, setShowRaw] = useState(false)
     const params = extractParams(tool)
@@ -2857,32 +2879,53 @@ function ToolCard({ tool }: { tool: ToolMeta }) {
 
     return (
         <div className="glass-card rounded-xl border-border/50 overflow-hidden">
-            <button
-                type="button"
-                className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-muted/20 transition-colors"
-                onClick={() => setExpanded(v => !v)}
-            >
-                {expanded
-                    ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
-                    : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />}
-                <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium">{tool.display_name}</span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${RISK_STYLES[tool.risk_level] ?? RISK_STYLES.low}`}>
-                            {tool.risk_level}
-                        </span>
-                        {params.length > 0 && (
-                            <span className="text-[10px] text-muted-foreground/60">{params.length} param{params.length !== 1 ? 's' : ''}</span>
-                        )}
+            <div className="flex items-start">
+                <button
+                    type="button"
+                    className="flex-1 flex items-start gap-3 px-4 py-3 text-left hover:bg-muted/20 transition-colors"
+                    onClick={() => setExpanded(v => !v)}
+                >
+                    {expanded
+                        ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                        : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />}
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-medium">{tool.display_name}</span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${RISK_STYLES[tool.risk_level] ?? RISK_STYLES.low}`}>
+                                {tool.risk_level}
+                            </span>
+                            {params.length > 0 && (
+                                <span className="text-[10px] text-muted-foreground/60">{params.length} param{params.length !== 1 ? 's' : ''}</span>
+                            )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{tool.description}</p>
+                        <p className="text-[10px] font-mono text-accent/60 mt-0.5">
+                            <span className="text-muted-foreground/50">{tool.category}</span>
+                            <span className="text-muted-foreground/30">.</span>
+                            {action}
+                        </p>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{tool.description}</p>
-                    <p className="text-[10px] font-mono text-accent/60 mt-0.5">
-                        <span className="text-muted-foreground/50">{tool.category}</span>
-                        <span className="text-muted-foreground/30">.</span>
-                        {action}
-                    </p>
+                </button>
+
+                {/* Permission selector */}
+                <div className="flex items-center gap-0.5 px-3 py-3 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                    {PERMISSION_OPTIONS.map(opt => (
+                        <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => onPermissionChange(tool.id, opt.value)}
+                            className={`px-2 py-1 text-[10px] font-medium rounded-md transition-all ${
+                                permission === opt.value
+                                    ? opt.active
+                                    : `${opt.inactive} hover:text-muted-foreground/70 hover:bg-muted/20`
+                            }`}
+                            title={`Set permission to ${opt.label}`}
+                        >
+                            {opt.label}
+                        </button>
+                    ))}
                 </div>
-            </button>
+            </div>
 
             {expanded && (
                 <div className="border-t border-border/40 px-4 py-3 space-y-3 animate-fade-in">
@@ -2961,6 +3004,7 @@ function ToolCard({ tool }: { tool: ToolMeta }) {
 }
 
 function ToolsTab() {
+    const qc = useQueryClient()
     const [query, setQuery] = useState('')
     const [activeCategory, setActiveCategory] = useState<string>('all')
 
@@ -2970,6 +3014,31 @@ function ToolsTab() {
         retry: false,
         staleTime: 60_000,
     })
+
+    const { data: permData } = useQuery({
+        queryKey: ['tool-permissions'],
+        queryFn: listToolPermissions,
+        retry: false,
+        staleTime: 30_000,
+    })
+
+    // Build permission lookup map: tool_id → permission string
+    const permMap = useMemo(() => {
+        const m: Record<string, string> = {}
+        if (Array.isArray(permData)) {
+            for (const p of permData) m[p.tool_id] = p.permission
+        }
+        return m
+    }, [permData])
+
+    const handlePermissionChange = useCallback(async (toolId: string, perm: string) => {
+        try {
+            await setToolPermission(toolId, perm)
+            qc.invalidateQueries({ queryKey: ['tool-permissions'] })
+        } catch {
+            // toast handled by axios interceptor
+        }
+    }, [qc])
 
     const tools: ToolMeta[] = data?.tools ?? []
     const available: boolean = data?.tool_server_available !== false
@@ -3060,7 +3129,12 @@ function ToolsTab() {
                                 <div className="flex-1 h-px bg-border/40" />
                             </div>
                             {catTools.map(tool => (
-                                <ToolCard key={tool.id} tool={tool} />
+                                <ToolCard
+                                    key={tool.id}
+                                    tool={tool}
+                                    permission={permMap[tool.id] ?? 'default'}
+                                    onPermissionChange={handlePermissionChange}
+                                />
                             ))}
                         </div>
                     ))}
@@ -3365,6 +3439,220 @@ function StatusIcon({ status }: { status: string }) {
     if (status === 'done') return <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
     if (status === 'failed') return <AlertCircle className="w-3.5 h-3.5 text-red-400" />
     return <Circle className="w-3.5 h-3.5 text-muted-foreground" />
+}
+
+// ── HITL Dashboard Tab ────────────────────────────────────────────────────────
+interface HITLRequest {
+    id: string
+    execution_id: string | null
+    workspace_id: string
+    tool_call_id: string
+    tool_name: string
+    tool_arguments: Record<string, unknown>
+    risk_level: string
+    status: string
+    resolution_note: string | null
+    created_at: string
+    resolved_at: string | null
+    resolved_by: string | null
+}
+
+function HITLDashboardTab() {
+    const qc = useQueryClient()
+    const [subTab, setSubTab] = useState<'pending' | 'history'>('pending')
+
+    const { data: pendingData, isLoading: loadingPending } = useQuery({
+        queryKey: ['hitl-pending'],
+        queryFn: listPendingHITL,
+        refetchInterval: 5_000,
+    })
+    const pending: HITLRequest[] = pendingData ?? []
+
+    const { data: historyData, isLoading: loadingHistory } = useQuery({
+        queryKey: ['hitl-history'],
+        queryFn: () => getHITLHistory({ limit: 100 }),
+        enabled: subTab === 'history',
+    })
+    const history: HITLRequest[] = historyData ?? []
+
+    const [actionNote, setActionNote] = useState('')
+    const [acting, setActing] = useState<string | null>(null)
+
+    const handleApprove = async (id: string) => {
+        setActing(id)
+        try {
+            await approveHITL(id, actionNote || undefined)
+            setActionNote('')
+            qc.invalidateQueries({ queryKey: ['hitl-pending'] })
+            qc.invalidateQueries({ queryKey: ['hitl-history'] })
+        } finally {
+            setActing(null)
+        }
+    }
+
+    const handleDeny = async (id: string) => {
+        setActing(id)
+        try {
+            await denyHITL(id, actionNote || undefined)
+            setActionNote('')
+            qc.invalidateQueries({ queryKey: ['hitl-pending'] })
+            qc.invalidateQueries({ queryKey: ['hitl-history'] })
+        } finally {
+            setActing(null)
+        }
+    }
+
+    return (
+        <div className="space-y-5">
+            <div>
+                <h3 className="font-semibold text-sm">Human-in-the-Loop</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    Review and approve or deny tool calls that require human oversight. Configure per-tool permissions in the Native Tools tab.
+                </p>
+            </div>
+
+            {/* Sub-tab selector */}
+            <div className="flex gap-1 p-1 glass-card rounded-xl w-fit">
+                {(['pending', 'history'] as const).map(tab => (
+                    <button
+                        key={tab}
+                        onClick={() => setSubTab(tab)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors capitalize ${
+                            subTab === tab
+                                ? 'bg-accent/20 text-accent ring-1 ring-accent/30'
+                                : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
+                        }`}
+                    >
+                        {tab === 'pending' && <ShieldAlert className="w-3.5 h-3.5" />}
+                        {tab === 'history' && <History className="w-3.5 h-3.5" />}
+                        {tab}
+                        {tab === 'pending' && pending.length > 0 && (
+                            <span className="ml-1 text-[10px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full font-semibold">
+                                {pending.length}
+                            </span>
+                        )}
+                    </button>
+                ))}
+            </div>
+
+            {subTab === 'pending' && (
+                <div className="space-y-3">
+                    {loadingPending && (
+                        <div className="flex items-center justify-center py-16">
+                            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                        </div>
+                    )}
+
+                    {!loadingPending && pending.length === 0 && (
+                        <div className="text-center py-16 text-muted-foreground glass-card rounded-xl">
+                            <CheckCircle className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                            <p className="text-sm">No pending approvals.</p>
+                            <p className="text-xs mt-1 opacity-60">Tool calls requiring review will appear here.</p>
+                        </div>
+                    )}
+
+                    {pending.map(req => (
+                        <div key={req.id} className="glass-card rounded-xl p-4 space-y-3 border-amber-500/20">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="font-medium text-sm">{req.tool_name}</span>
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${RISK_STYLES[req.risk_level] ?? RISK_STYLES.medium}`}>
+                                            {req.risk_level}
+                                        </span>
+                                    </div>
+                                    <p className="text-[10px] text-muted-foreground/60 mt-1">
+                                        {new Date(req.created_at).toLocaleString()}
+                                        {req.execution_id && <span className="ml-2">Execution: {req.execution_id.slice(0, 8)}…</span>}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Arguments preview */}
+                            <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[10px] text-foreground/60 bg-muted/30 rounded-lg p-3 border border-border/40 max-h-40">
+                                {JSON.stringify(req.tool_arguments, null, 2)}
+                            </pre>
+
+                            {/* Action row */}
+                            <div className="flex items-center gap-2">
+                                <input
+                                    className="input text-xs flex-1"
+                                    placeholder="Optional note…"
+                                    value={acting === req.id ? actionNote : ''}
+                                    onChange={e => { setActing(req.id); setActionNote(e.target.value) }}
+                                />
+                                <button
+                                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 hover:bg-emerald-500/25 transition-colors disabled:opacity-50"
+                                    onClick={() => void handleApprove(req.id)}
+                                    disabled={acting === req.id}
+                                >
+                                    {acting === req.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                                    Approve
+                                </button>
+                                <button
+                                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/15 text-red-400 border border-red-500/25 hover:bg-red-500/25 transition-colors disabled:opacity-50"
+                                    onClick={() => void handleDeny(req.id)}
+                                    disabled={acting === req.id}
+                                >
+                                    {acting === req.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                                    Deny
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {subTab === 'history' && (
+                <div className="space-y-3">
+                    {loadingHistory && (
+                        <div className="flex items-center justify-center py-16">
+                            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                        </div>
+                    )}
+
+                    {!loadingHistory && history.length === 0 && (
+                        <div className="text-center py-16 text-muted-foreground glass-card rounded-xl">
+                            <History className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                            <p className="text-sm">No HITL history yet.</p>
+                        </div>
+                    )}
+
+                    {history.map(req => (
+                        <div key={req.id} className="glass-card rounded-xl px-4 py-3 flex items-center gap-3">
+                            {req.status === 'approved' && <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />}
+                            {req.status === 'denied' && <XCircle className="w-4 h-4 text-red-400 flex-shrink-0" />}
+                            {req.status !== 'approved' && req.status !== 'denied' && <Circle className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium">{req.tool_name}</span>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${
+                                        req.status === 'approved'
+                                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                            : req.status === 'denied'
+                                                ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                                                : 'bg-muted/30 text-muted-foreground border-border/40'
+                                    }`}>
+                                        {req.status}
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-3 mt-0.5">
+                                    <span className="text-[10px] text-muted-foreground/60">
+                                        {new Date(req.created_at).toLocaleString()}
+                                    </span>
+                                    {req.resolution_note && (
+                                        <span className="text-[10px] text-muted-foreground/50 truncate">
+                                            {req.resolution_note}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    )
 }
 
 function AuditTab({ workspaceId }: { workspaceId: string }) {

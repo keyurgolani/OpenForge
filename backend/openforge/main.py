@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -52,7 +53,6 @@ async def lifespan(app: FastAPI):
 
     # If the Qdrant collection was migrated, re-index all existing knowledge in background
     if needs_reindex:
-        import asyncio
 
         async def _reindex_all():
             try:
@@ -78,12 +78,45 @@ async def lifespan(app: FastAPI):
 
         asyncio.create_task(_reindex_all())
 
+    # Register system agents and load custom agents
+    try:
+        from openforge.db.postgres import AsyncSessionLocal
+        from openforge.core.agent_registry import agent_registry, WORKSPACE_AGENT
+
+        agent_registry.register_system_agent(WORKSPACE_AGENT)
+        async with AsyncSessionLocal() as db:
+            await agent_registry.upsert_to_db(db, WORKSPACE_AGENT)
+            await agent_registry.load_custom_agents(db)
+        logger.info("Agent registry initialized.")
+    except Exception as e:
+        logger.warning("Agent registry initialization failed (continuing): %s", e)
+
+    # Start Redis agent relay (bridges Celery worker events to WebSocket)
+    relay_task = None
+    try:
+        from openforge.services.agent_relay import start_agent_relay
+        relay_task = asyncio.create_task(start_agent_relay())
+        logger.info("Agent relay started.")
+    except Exception as e:
+        logger.warning("Agent relay failed to start (continuing): %s", e)
+
     logger.info("OpenForge ready.")
     await task_scheduler.start()
     yield
 
     logger.info("OpenForge shutting down...")
+    if relay_task:
+        relay_task.cancel()
+        try:
+            await relay_task
+        except asyncio.CancelledError:
+            pass
     await task_scheduler.stop()
+    try:
+        from openforge.db.redis_client import close_redis
+        await close_redis()
+    except Exception:
+        pass
     try:
         from openforge.db.postgres import engine
         await engine.dispose()

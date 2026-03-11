@@ -103,7 +103,6 @@ async def workspace_websocket(websocket: WebSocket, workspace_id: str):
                 import asyncio as _asyncio
                 from uuid import UUID
                 from openforge.db.postgres import AsyncSessionLocal
-                from openforge.services.agent_execution_engine import agent_engine
 
                 _cid = conversation_id
                 _wid = workspace_id
@@ -113,20 +112,35 @@ async def workspace_websocket(websocket: WebSocket, workspace_id: str):
                 _mid = model_id
                 _mentions = mentions
 
-                async def _run_agent():
-                    async with AsyncSessionLocal() as db:
-                        await agent_engine.run(
-                            workspace_id=UUID(_wid),
-                            conversation_id=UUID(_cid),
-                            user_content=_content,
-                            db=db,
-                            attachment_ids=_att,
-                            provider_id=_pid,
-                            model_id=_mid,
-                            mentions=_mentions,
-                        )
+                if settings.use_celery_agents:
+                    # Dispatch to Celery worker
+                    await _dispatch_celery_agent(
+                        workspace_id=_wid,
+                        conversation_id=_cid,
+                        content=_content,
+                        attachment_ids=_att,
+                        provider_id=_pid,
+                        model_id=_mid,
+                        mentions=_mentions,
+                    )
+                else:
+                    # Inline execution (fallback)
+                    from openforge.services.agent_execution_engine import agent_engine
 
-                _asyncio.create_task(_run_agent())
+                    async def _run_agent():
+                        async with AsyncSessionLocal() as db:
+                            await agent_engine.run(
+                                workspace_id=UUID(_wid),
+                                conversation_id=UUID(_cid),
+                                user_content=_content,
+                                db=db,
+                                attachment_ids=_att,
+                                provider_id=_pid,
+                                model_id=_mid,
+                                mentions=_mentions,
+                            )
+
+                    _asyncio.create_task(_run_agent())
 
             elif msg_type == "chat_stream_resume":
                 from uuid import UUID
@@ -160,18 +174,31 @@ async def workspace_websocket(websocket: WebSocket, workspace_id: str):
                     except Exception:
                         pass
 
+                    # Also publish cancel via Redis for Celery workers
+                    if settings.use_celery_agents:
+                        try:
+                            from openforge.db.redis_client import get_redis
+                            import json as _json
+                            redis = await get_redis()
+                            await redis.publish(
+                                f"agent_cancel:{conversation_id}",
+                                _json.dumps({"conversation_id": conversation_id}),
+                            )
+                        except Exception:
+                            pass
+
             elif msg_type == "ping":
                 await ws_manager.send_to_connection(websocket, {"type": "pong"})
-            
+
             elif msg_type == "stream_logs":
                 import asyncio
                 from openforge.services.docker_service import docker_service
-                
+
                 task = asyncio.create_task(docker_service.stream_logs(websocket, ws_manager))
                 if not hasattr(websocket, "log_tasks"):
                     websocket.log_tasks = []
                 websocket.log_tasks.append(task)
-            
+
             elif msg_type == "stop_logs":
                 if hasattr(websocket, "log_tasks"):
                     for task in websocket.log_tasks:
@@ -195,3 +222,54 @@ async def workspace_websocket(websocket: WebSocket, workspace_id: str):
             for task in websocket.log_tasks:
                 task.cancel()
         ws_manager.disconnect(websocket, workspace_id)
+
+
+async def _dispatch_celery_agent(
+    *,
+    workspace_id: str,
+    conversation_id: str,
+    content: str,
+    attachment_ids: list,
+    provider_id: str | None,
+    model_id: str | None,
+    mentions: list,
+) -> None:
+    """Create an execution record and dispatch to Celery."""
+    import uuid as _uuid
+    from uuid import UUID
+    from openforge.db.postgres import AsyncSessionLocal
+    from openforge.db.models import AgentExecution
+    from openforge.core.agent_registry import agent_registry
+
+    execution_id = str(_uuid.uuid4())
+
+    async with AsyncSessionLocal() as db:
+        # Get agent for workspace
+        agent = await agent_registry.get_for_workspace(db, UUID(workspace_id))
+
+        # Create execution record
+        db.add(AgentExecution(
+            id=UUID(execution_id),
+            workspace_id=UUID(workspace_id),
+            conversation_id=UUID(conversation_id),
+            agent_id=agent.id,
+            status="queued",
+        ))
+        await db.commit()
+
+    # Dispatch to Celery
+    from openforge.worker.tasks import execute_agent_task
+    execute_agent_task.delay(
+        execution_id=execution_id,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        user_message=content,
+        agent_id=agent.id,
+        agent_enabled=agent.tools_enabled,
+        agent_tool_categories=agent.allowed_tool_categories or [],
+        agent_max_tool_loops=agent.max_iterations,
+        attachment_ids=attachment_ids,
+        provider_id=provider_id,
+        model_id=model_id,
+        mentions=mentions,
+    )

@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     admin_password: str = ""
     session_expiry_hours: int = 168  # 7 days
 
+    # Redis
+    redis_url: str = "redis://redis:6379/0"
+
+    # Celery agent execution (set to false to run agents inline for debugging)
+    use_celery_agents: bool = True
+
     # Tool server
     tool_server_url: str = "http://tool-server:8001"
 

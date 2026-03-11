@@ -21,6 +21,8 @@ const KnowledgePage = lazy(() => import('./pages/KnowledgePage'))
 const ChatPage = lazy(() => import('./pages/ChatPage'))
 const SearchPage = lazy(() => import('./pages/SearchPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const ExecutionListPage = lazy(() => import('./pages/ExecutionListPage'))
+const ExecutionMonitorPage = lazy(() => import('./pages/ExecutionMonitorPage'))
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -142,6 +144,16 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                 <Route path="settings" element={
                                     <ErrorBoundary>
                                         <SettingsPage />
+                                    </ErrorBoundary>
+                                } />
+                                <Route path="executions" element={
+                                    <ErrorBoundary>
+                                        <ExecutionListPage />
+                                    </ErrorBoundary>
+                                } />
+                                <Route path="executions/:executionId" element={
+                                    <ErrorBoundary>
+                                        <ExecutionMonitorPage />
                                     </ErrorBoundary>
                                 } />
                             </Route>
