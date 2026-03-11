@@ -59,17 +59,19 @@ const WAVEFORM_BARS = [0.4, 0.7, 0.5, 0.9, 0.6, 0.8, 0.3, 0.7, 0.5, 0.4, 0.8, 0.
 
 function AudioWaveformPlayer({ fileUrl, duration, format }: { fileUrl: string; duration?: number; format?: string }) {
     const audioRef = useRef<HTMLAudioElement>(null)
+    const scrubberRef = useRef<HTMLDivElement>(null)
     const [playing, setPlaying] = useState(false)
     const [progress, setProgress] = useState(0)
     const [currentTime, setCurrentTime] = useState(0)
     const [audioDuration, setAudioDuration] = useState(duration ?? 0)
+    const [scrubbing, setScrubbing] = useState(false)
 
     useEffect(() => {
         const audio = audioRef.current
         if (!audio) return
 
         const onTimeUpdate = () => {
-            if (audio.duration && isFinite(audio.duration)) {
+            if (audio.duration && isFinite(audio.duration) && !scrubbing) {
                 setProgress(audio.currentTime / audio.duration)
                 setCurrentTime(audio.currentTime)
             }
@@ -95,7 +97,7 @@ function AudioWaveformPlayer({ fileUrl, duration, format }: { fileUrl: string; d
             audio.removeEventListener('play', onPlay)
             audio.removeEventListener('pause', onPause)
         }
-    }, [])
+    }, [scrubbing])
 
     const togglePlay = useCallback((e: React.MouseEvent) => {
         e.stopPropagation()
@@ -104,15 +106,42 @@ function AudioWaveformPlayer({ fileUrl, duration, format }: { fileUrl: string; d
         if (playing) { audio.pause() } else { audio.play() }
     }, [playing])
 
+    const seekToFraction = useCallback((fraction: number) => {
+        const audio = audioRef.current
+        if (!audio || !audio.duration || !isFinite(audio.duration)) return
+        const clamped = Math.max(0, Math.min(1, fraction))
+        audio.currentTime = clamped * audio.duration
+        setProgress(clamped)
+        setCurrentTime(clamped * audio.duration)
+    }, [])
+
     const seek = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
         e.stopPropagation()
-        const audio = audioRef.current
-        if (!audio || !audioDuration) return
         const rect = e.currentTarget.getBoundingClientRect()
-        const fraction = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-        audio.currentTime = fraction * audio.duration
-        setProgress(fraction)
-    }, [audioDuration])
+        seekToFraction((e.clientX - rect.left) / rect.width)
+    }, [seekToFraction])
+
+    const onScrubStart = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+        e.stopPropagation()
+        e.preventDefault()
+        setScrubbing(true)
+        const track = scrubberRef.current
+        if (!track) return
+        const rect = track.getBoundingClientRect()
+        seekToFraction((e.clientX - rect.left) / rect.width)
+
+        const onMove = (ev: MouseEvent) => {
+            const r = track.getBoundingClientRect()
+            seekToFraction((ev.clientX - r.left) / r.width)
+        }
+        const onUp = () => {
+            setScrubbing(false)
+            window.removeEventListener('mousemove', onMove)
+            window.removeEventListener('mouseup', onUp)
+        }
+        window.addEventListener('mousemove', onMove)
+        window.addEventListener('mouseup', onUp)
+    }, [seekToFraction])
 
     const filledBars = Math.floor(progress * WAVEFORM_BARS.length)
     const displayTime = playing || currentTime > 0 ? currentTime : audioDuration
@@ -133,7 +162,7 @@ function AudioWaveformPlayer({ fileUrl, duration, format }: { fileUrl: string; d
                 }
             </button>
 
-            {/* Waveform + time */}
+            {/* Waveform + scrubber + time */}
             <div className="flex-1 min-w-0">
                 {/* Clickable waveform bars */}
                 <div
@@ -150,8 +179,27 @@ function AudioWaveformPlayer({ fileUrl, duration, format }: { fileUrl: string; d
                         />
                     ))}
                 </div>
+                {/* Scrubber track */}
+                <div
+                    ref={scrubberRef}
+                    className="relative h-3 cursor-pointer group/scrub mt-1"
+                    onMouseDown={onScrubStart}
+                >
+                    {/* Track background */}
+                    <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-[3px] rounded-full bg-violet-400/20" />
+                    {/* Filled portion */}
+                    <div
+                        className="absolute top-1/2 -translate-y-1/2 left-0 h-[3px] rounded-full bg-violet-400/70"
+                        style={{ width: `${progress * 100}%` }}
+                    />
+                    {/* Thumb */}
+                    <div
+                        className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-violet-300 shadow-sm transition-opacity ${scrubbing ? 'opacity-100 scale-110' : 'opacity-0 group-hover/scrub:opacity-100'}`}
+                        style={{ left: `${progress * 100}%` }}
+                    />
+                </div>
                 {/* Time + format */}
-                <div className="flex items-center gap-2 mt-0.5">
+                <div className="flex items-center gap-2">
                     {displayTime > 0 && (
                         <span className="text-[10px] font-mono text-violet-300/80">
                             {formatDuration(displayTime)}

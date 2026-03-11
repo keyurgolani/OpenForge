@@ -128,7 +128,7 @@ export default function CommandPalette() {
                                         >Go to Search</PaletteItem>
                                         <PaletteItem
                                             icon={<Settings className="w-4 h-4" />}
-                                            onSelect={() => run(() => navigate(`/w/${workspaceId}/settings`))}
+                                            onSelect={() => run(() => navigate(`/settings`))}
                                         >Go to Settings</PaletteItem>
                                     </>
                                 )}

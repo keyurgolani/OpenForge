@@ -1,4 +1,4 @@
-import { Pin, Loader2 } from 'lucide-react'
+import { Pin } from 'lucide-react'
 import MarkdownIt from 'markdown-it'
 
 /** Markdown renderer for card previews -- links rendered as plain text to avoid navigation on card click */
@@ -67,8 +67,6 @@ export function ProcessingSkeleton({ className = '', lines = 3 }: { className?: 
 /** Full-area skeleton for thumbnail/image placeholders */
 export function ThumbnailSkeleton({ className = '' }: { className?: string }) {
     return (
-        <div className={`skeleton rounded-lg flex items-center justify-center ${className}`}>
-            <Loader2 className="w-5 h-5 text-muted-foreground/30 animate-spin" />
-        </div>
+        <div className={`skeleton rounded-lg ${className}`} />
     )
 }

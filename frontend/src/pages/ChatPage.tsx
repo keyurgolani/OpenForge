@@ -630,12 +630,29 @@ export default function ChatPage() {
         }
     }, [activeCid, isStreaming, streamingContent])
 
+    // Track thinking content length for scroll updates during streaming
+    const streamingThinkingContentLength = useMemo(() => {
+        return streamingTimeline
+            .filter((entry): entry is { type: 'thinking'; content: string } => entry.type === 'thinking')
+            .reduce((sum, entry) => sum + (entry.content?.length ?? 0), 0)
+    }, [streamingTimeline])
+
+    // Track subagent live content length for scroll updates during subagent execution
+    const subagentLiveContentLength = useMemo(() => {
+        return streamingTimeline.reduce((sum, entry) => {
+            const e = entry as unknown as Record<string, unknown>
+            const tl = e._liveTimeline as unknown[] | undefined
+            const resp = e._liveResponse as string | undefined
+            return sum + (tl?.length ?? 0) + (resp?.length ?? 0)
+        }, 0)
+    }, [streamingTimeline])
+
     useEffect(() => {
         if (!stickToBottomRef.current) return
         const container = messagesContainerRef.current
         if (!container) return
         container.scrollTo({ top: container.scrollHeight, behavior: isStreaming ? 'auto' : 'smooth' })
-    }, [messages.length, streamingContent, streamingTimeline.length, sources.length, isStreaming, stickToBottom])
+    }, [messages.length, streamingContent, streamingTimeline.length, subagentLiveContentLength, sources.length, isStreaming, stickToBottom])
 
     useEffect(() => {
         if (!stickToBottomRef.current) return
@@ -801,13 +818,6 @@ export default function ChatPage() {
         }
     }, [])
 
-    // Track thinking content length for scroll updates during streaming
-    const streamingThinkingContentLength = useMemo(() => {
-        return streamingTimeline
-            .filter((entry): entry is { type: 'thinking'; content: string } => entry.type === 'thinking')
-            .reduce((sum, entry) => sum + (entry.content?.length ?? 0), 0)
-    }, [streamingTimeline])
-
     // Pre-render streaming markdown once per content change instead of inline
     // on every render cycle — avoids redundant md.render() calls when only
     // unrelated state (scroll position, tool results, etc.) changes.
@@ -839,6 +849,7 @@ export default function ChatPage() {
         sources.length,
         streamingTimeline.length,
         streamingThinkingContentLength,
+        subagentLiveContentLength,
         streamingContent,
         ensureExpandedBlockVisible,
     ])
@@ -1285,6 +1296,8 @@ export default function ChatPage() {
                                                             arguments={entry.arguments}
                                                             entry={entry}
                                                             requestVisibility={() => ensureExpandedBlockVisible(streamingMessageRef.current)}
+                                                            workspaceId={workspaceId}
+                                                            mentionMaps={mentionMaps}
                                                         />
                                                     ) : entry.type === 'tool_call' && (entry as TimelineToolCall).tool_name.startsWith('agent.') ? (
                                                         <SubagentCard
@@ -1304,6 +1317,8 @@ export default function ChatPage() {
                                                             liveTimeline={((entry as any)._liveTimeline as SubagentTimelineStep[] | undefined)}
                                                             liveResponse={((entry as any)._liveResponse as string | undefined)}
                                                             requestVisibility={() => ensureExpandedBlockVisible(streamingMessageRef.current)}
+                                                            workspaceId={workspaceId}
+                                                            mentionMaps={mentionMaps}
                                                         />
                                                     ) : entry.type === 'hitl_request' ? (
                                                         <HITLCard
@@ -2484,6 +2499,8 @@ function SubagentCard({
     liveTimeline,
     liveResponse,
     requestVisibility,
+    workspaceId,
+    mentionMaps,
 }: {
     callId: string
     toolName: string
@@ -2492,6 +2509,8 @@ function SubagentCard({
     liveTimeline?: SubagentTimelineStep[]   // streamed steps while running
     liveResponse?: string                  // streaming response text while running
     requestVisibility?: (el: HTMLElement | null) => void
+    workspaceId: string
+    mentionMaps?: MentionResolutionMaps
 }) {
     const isRunning = entry === undefined
     // Start open while running; start closed for already-completed (history) entries
@@ -2631,7 +2650,7 @@ function SubagentCard({
                                 {(entry?.subagent_response || liveResponse) ? (
                                     <div
                                         className="text-xs leading-relaxed text-foreground/85 markdown-content"
-                                        dangerouslySetInnerHTML={{ __html: md.render(entry?.subagent_response || liveResponse || '') }}
+                                        dangerouslySetInnerHTML={{ __html: renderMessageContent(entry?.subagent_response || liveResponse || '', targetWorkspaceId || workspaceId, mentionMaps) }}
                                     />
                                 ) : (
                                     <span className="text-[11px] text-muted-foreground/40 italic">No response</span>
@@ -3186,6 +3205,8 @@ function ChatMessageCard({
                                                 arguments={entry.arguments}
                                                 entry={entry}
                                                 requestVisibility={requestVisibility}
+                                                workspaceId={workspaceId}
+                                                mentionMaps={mentionMaps}
                                             />
                                         ) : entry.type === 'hitl_request' ? (
                                             <HITLCard

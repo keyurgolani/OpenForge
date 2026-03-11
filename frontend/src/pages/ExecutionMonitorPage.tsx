@@ -366,7 +366,7 @@ export default function ExecutionMonitorPage() {
                 {/* ── Navigation ─────────────────────────────────────────────── */}
                 <div className="flex items-center gap-3">
                     <button
-                        onClick={() => navigate(`/w/${workspaceId}/settings`)}
+                        onClick={() => navigate(`/settings`)}
                         className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-foreground/70 transition-colors"
                     >
                         <ArrowLeft className="h-3.5 w-3.5" />

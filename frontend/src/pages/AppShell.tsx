@@ -140,7 +140,7 @@ export default function AppShell() {
         if (workspaceList.length === 0) {
             navigate('/onboarding', { replace: true })
         } else {
-            navigate(`/w/${workspaceList[0].id}/settings`, { replace: true })
+            navigate(`/settings`, { replace: true })
         }
     }, [workspacesFetched, ws, workspaceList, navigate])
     const recentConversations = conversations as SidebarConversation[]
@@ -481,7 +481,7 @@ export default function AppShell() {
                                                 onClick={() => {
                                                     setWorkspaceMenuOpen(false)
                                                     setWorkspaceQuery('')
-                                                    navigate(`/w/${workspaceId}/settings?tab=workspaces&newWorkspace=1`)
+                                                    navigate(`/settings?tab=workspaces&newWorkspace=1`)
                                                 }}
                                             >
                                                 <span className="inline-flex items-center gap-2">
@@ -504,7 +504,7 @@ export default function AppShell() {
                                         <Search className="w-4 h-4" /> Search
                                     </Link>
                                     <Link to={`/w/${workspaceId}/chat`} className={`sidebar-item ${isActive('/chat') ? 'active' : ''}`}>
-                                        <MessageSquare className="w-4 h-4" /> Agent
+                                        <MessageSquare className="w-4 h-4" /> Workspace Agent
                                     </Link>
                                 </nav>
                             </div>
@@ -614,7 +614,7 @@ export default function AppShell() {
                         {/* Settings — bottom of sidebar, same style as workspace selector */}
                         <div className="flex-shrink-0 border-t border-border/60">
                             <Link
-                                to={`/w/${workspaceId}/settings`}
+                                to={`/settings`}
                                 className={`flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-card/60 ${isSettingsPage ? 'bg-card/55' : 'bg-card/45'}`}
                             >
                                 <div className={`w-8 h-8 rounded-lg border flex items-center justify-center flex-shrink-0 ${isSettingsPage ? 'bg-accent/15 border-accent/30' : 'bg-muted/40 border-border/50'}`}>
@@ -662,7 +662,7 @@ export default function AppShell() {
                             </Link>
                             <Link
                                 to={`/w/${workspaceId}/chat`}
-                                title="Agent"
+                                title="Workspace Agent"
                                 className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isActive('/chat') ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
                             >
                                 <MessageSquare className="w-4 h-4" />
@@ -673,7 +673,7 @@ export default function AppShell() {
 
                         {/* Settings */}
                         <Link
-                            to={`/w/${workspaceId}/settings`}
+                            to={`/settings`}
                             title="Settings"
                             className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isSettingsPage ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
                         >

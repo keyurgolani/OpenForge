@@ -774,10 +774,12 @@ function KnowledgeCard({
                     </div>
 
                     {/* Card body — delegated to type-specific component */}
-                    <KnowledgeCardContent item={knowledgeRecord} workspaceId={workspaceId} slim />
+                    <div className="flex-1 min-h-0 overflow-hidden">
+                        <KnowledgeCardContent item={knowledgeRecord} workspaceId={workspaceId} slim />
+                    </div>
 
                     {/* Footer: tags + metadata */}
-                    <div className="mt-3 pt-2 border-t border-border/45 space-y-1.5">
+                    <div className="mt-3 pt-2 border-t border-border/45 space-y-1.5 flex-shrink-0">
                         <FittedTagRow tags={knowledgeRecord.tags} />
 
                         <div className="flex items-center gap-1 min-w-0">

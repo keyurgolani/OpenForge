@@ -138,11 +138,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                         <SearchPage />
                                     </ErrorBoundary>
                                 } />
-                                <Route path="settings" element={
-                                    <ErrorBoundary>
-                                        <SettingsPage />
-                                    </ErrorBoundary>
-                                } />
                                 <Route path="executions" element={
                                     <ErrorBoundary>
                                         <ExecutionListPage />
@@ -154,6 +149,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                     </ErrorBoundary>
                                 } />
                             </Route>
+                            <Route path="/settings" element={
+                                <ErrorBoundary>
+                                    <SettingsPage />
+                                </ErrorBoundary>
+                            } />
                             <Route path="/" element={<Navigate to="/onboarding" replace />} />
                         </Routes>
                     </Suspense>

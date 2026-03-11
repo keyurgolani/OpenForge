@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
     listProviders, createProvider, updateProvider, deleteProvider,
@@ -83,7 +83,6 @@ const toSettingsTab = (value: string | null): SettingsTab => {
 
 // ── Root component ────────────────────────────────────────────────────────────
 export default function SettingsPage() {
-    const { workspaceId = '' } = useParams<{ workspaceId: string }>()
     const [searchParams, setSearchParams] = useSearchParams()
     const queryTab = searchParams.get('tab')
     const newWorkspaceRequested = searchParams.get('newWorkspace') === '1'
@@ -170,7 +169,6 @@ export default function SettingsPage() {
 
             {activeTab === 'workspaces' && (
                 <WorkspacesSettings
-                    activeWorkspaceId={workspaceId}
                     openCreateRequested={newWorkspaceRequested}
                     onCreateRequestConsumed={() => {
                         if (!newWorkspaceRequested) return
@@ -189,10 +187,10 @@ export default function SettingsPage() {
             {activeTab === 'hitl' && <HITLDashboardTab />}
             {activeTab === 'audit' && (
                 <div className="min-h-0 flex-1">
-                    <AuditTab workspaceId={workspaceId} />
+                    <AuditTab />
                 </div>
             )}
-            {activeTab === 'export' && <ExportTab workspaceId={workspaceId} />}
+            {activeTab === 'export' && <ExportTab />}
         </div>
     )
 }
@@ -212,11 +210,9 @@ type WorkspaceRow = {
 }
 
 function WorkspacesSettings({
-    activeWorkspaceId,
     openCreateRequested,
     onCreateRequestConsumed,
 }: {
-    activeWorkspaceId: string
     openCreateRequested?: boolean
     onCreateRequestConsumed?: () => void
 }) {
@@ -277,7 +273,6 @@ function WorkspacesSettings({
                     key={ws.id}
                     workspace={ws}
                     providers={providers as ProviderRow[]}
-                    isActive={ws.id === activeWorkspaceId}
                     onDeleted={() => qc.invalidateQueries({ queryKey: ['workspaces'] })}
                     onSaved={() => qc.invalidateQueries({ queryKey: ['workspaces'] })}
                 />
@@ -288,10 +283,9 @@ function WorkspacesSettings({
 
 type ProviderRow = { id: string; display_name: string; provider_name: string; default_model: string | null; is_system_default: boolean; has_api_key: boolean; base_url: string | null; enabled_models: { id: string; name: string }[] }
 
-function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved }: {
+function WorkspaceCard({ workspace: ws, providers, onDeleted, onSaved }: {
     workspace: WorkspaceRow
     providers: ProviderRow[]
-    isActive: boolean
     onDeleted: () => void
     onSaved: () => void
 }) {
@@ -407,7 +401,7 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
     }
 
     return (
-        <div className={`glass-card-hover transition-all duration-300 ${isActive ? 'border-accent/50 shadow-glass-lg' : ''}`}>
+        <div className="glass-card-hover transition-all duration-300">
             <div
                 className="flex cursor-pointer items-center gap-3 px-4 py-3"
                 role="button"
@@ -426,7 +420,6 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                         <span className="font-medium text-sm">{ws.name}</span>
-                        {isActive && <span className="chip-accent text-[10px]">Current</span>}
                         <span className="text-xs text-muted-foreground">{ws.knowledge_count} knowledge · {ws.conversation_count} chats</span>
                     </div>
                     <p className="text-xs text-muted-foreground truncate mt-0.5">
@@ -4188,7 +4181,7 @@ function HITLDashboardTab() {
     )
 }
 
-function AuditTab({ workspaceId }: { workspaceId: string }) {
+function AuditTab() {
     const [subTab, setSubTab] = useState<'history' | 'tool-calls' | 'logs'>('history')
 
     return (
@@ -4224,10 +4217,10 @@ function AuditTab({ workspaceId }: { workspaceId: string }) {
             </div>
 
             {subTab === 'history' && <JobHistorySubTab />}
-            {subTab === 'tool-calls' && <ToolCallLogsSubTab workspaceId={workspaceId} />}
+            {subTab === 'tool-calls' && <ToolCallLogsSubTab />}
             {subTab === 'logs' && (
                 <div className="min-h-0 flex-1">
-                    <ContainerLogsSubTab workspaceId={workspaceId} />
+                    <ContainerLogsSubTab />
                 </div>
             )}
         </div>
@@ -4356,13 +4349,13 @@ interface ToolCallLogEntry {
     finished_at: string | null
 }
 
-function ToolCallLogsSubTab({ workspaceId }: { workspaceId: string }) {
+function ToolCallLogsSubTab() {
     const [filterTool, setFilterTool] = useState('')
     const [expanded, setExpanded] = useState<string | null>(null)
 
     const { data: logs = [], isLoading, refetch } = useQuery<ToolCallLogEntry[]>({
-        queryKey: ['tool-call-logs', workspaceId, filterTool],
-        queryFn: () => getToolCallLogs({ workspace_id: workspaceId || undefined, tool_name: filterTool || undefined, limit: 100 }),
+        queryKey: ['tool-call-logs', filterTool],
+        queryFn: () => getToolCallLogs({ tool_name: filterTool || undefined, limit: 100 }),
         refetchInterval: false,
     })
 
@@ -4494,8 +4487,10 @@ function ToolCallLogsSubTab({ workspaceId }: { workspaceId: string }) {
     )
 }
 
-function ContainerLogsSubTab({ workspaceId }: { workspaceId: string }) {
-    const { send, on, isConnected } = useWorkspaceWebSocket(workspaceId)
+function ContainerLogsSubTab() {
+    const { data: workspaces = [] } = useQuery({ queryKey: ['workspaces'], queryFn: listWorkspaces })
+    const wsId = (workspaces as { id: string }[])[0]?.id ?? ''
+    const { send, on, isConnected } = useWorkspaceWebSocket(wsId)
     // Use a ref to keep track of logs without triggering deep rerenders constantly if possible,
     // though state is fine for this UI size.
     const [logs, setLogs] = useState<ContainerLogLine[]>([])
@@ -5085,7 +5080,7 @@ function MCPTab() {
 }
 
 // ── Export Tab ────────────────────────────────────────────────────────────────
-function ExportTab({ workspaceId }: { workspaceId: string }) {
+function ExportTab() {
     const { data: workspaces = [] } = useQuery({ queryKey: ['workspaces'], queryFn: listWorkspaces })
     const [exporting, setExporting] = useState<'all' | string | null>(null)
     const [exportError, setExportError] = useState<string | null>(null)
@@ -5188,7 +5183,6 @@ function ExportTab({ workspaceId }: { workspaceId: string }) {
                                     <span className="font-medium text-sm">{ws.name}</span>
                                     <p className="text-xs text-muted-foreground">
                                         {ws.knowledge_count} knowledge · {ws.conversation_count} chats
-                                        {ws.id === workspaceId && <span className="ml-2 text-accent">(current)</span>}
                                     </p>
                                 </div>
                             </div>

@@ -298,10 +298,16 @@ class KnowledgeProcessingService:
                 provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
                 tags_str = ", ".join([t.tag for t in knowledge_record.tags])
 
+                workspace = await db.get(Workspace, workspace_id)
+                workspace_name = workspace.name if workspace else ""
+                workspace_description = workspace.description if workspace else ""
+
                 title_prompt = await self._get_prompt_text(
                     db,
                     "generate_title",
                     knowledge_content=knowledge_record.content[:2000],
+                    workspace_name=workspace_name,
+                    workspace_description=workspace_description,
                 )
                 title_response = await llm_gateway.chat(
                     messages=[
@@ -315,11 +321,12 @@ class KnowledgeProcessingService:
                     max_tokens=30,
                 )
                 normalized_title = derive_knowledge_title(title_response, knowledge_record.content or "")
+                FILE_BASED_TYPES = {"pdf", "document", "sheet", "slides", "audio", "image"}
                 title_was_empty = False
                 if normalized_title:
                     knowledge_record.ai_title = normalized_title
                     title_was_empty = not normalize_knowledge_title(knowledge_record.title)
-                    if title_was_empty:
+                    if title_was_empty or knowledge_record.type in FILE_BASED_TYPES:
                         knowledge_record.title = normalized_title
 
                 insights_prompt = await self._get_prompt_text(
@@ -328,6 +335,8 @@ class KnowledgeProcessingService:
                     knowledge_content=knowledge_record.content[:8000],
                     knowledge_title=normalize_knowledge_title(knowledge_record.title) or "Untitled",
                     tags=tags_str,
+                    workspace_name=workspace_name,
+                    workspace_description=workspace_description,
                 )
                 insights_response = await llm_gateway.chat(
                     messages=[
@@ -353,6 +362,8 @@ class KnowledgeProcessingService:
                     knowledge_title=normalize_knowledge_title(knowledge_record.title) or "Untitled",
                     knowledge_type=knowledge_record.type,
                     tags=tags_str,
+                    workspace_name=workspace_name,
+                    workspace_description=workspace_description,
                 )
                 summary = await llm_gateway.chat(
                     messages=[

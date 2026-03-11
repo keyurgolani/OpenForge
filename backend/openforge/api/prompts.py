@@ -24,6 +24,7 @@ router = APIRouter()
 #   {conversation_history} - Previous messages in the chat (chat prompts only)
 #   {query}           - User's search query or chat message
 #   {workspace_name}  - Name of the current workspace
+#   {workspace_description} - Full description of the current workspace
 
 PROMPT_CATALOGUE = [
     {
@@ -32,10 +33,12 @@ PROMPT_CATALOGUE = [
         "description": "Used to auto-generate a concise title for a knowledge item when it has no user-set title.",
         "category": "knowledge",
         "role": "system",
-        "variables": ["{knowledge_content}"],
+        "variables": ["{knowledge_content}", "{workspace_name}", "{workspace_description}"],
         "default": (
             "Generate a concise, descriptive title (max 60 chars) for the following knowledge content. "
             "Return ONLY the title — no quotes, markdown, or extra explanation.\n\n"
+            "Workspace: {workspace_name}\n"
+            "Workspace Description: {workspace_description}\n\n"
             "Knowledge Content:\n{knowledge_content}"
         ),
     },
@@ -45,11 +48,14 @@ PROMPT_CATALOGUE = [
         "description": "Used when the user clicks 'Summarize' on a knowledge item. Produces a structured summary.",
         "category": "knowledge",
         "role": "system",
-        "variables": ["{knowledge_title}", "{knowledge_content}", "{knowledge_type}", "{tags}"],
+        "variables": ["{knowledge_title}", "{knowledge_content}", "{knowledge_type}", "{tags}", "{workspace_name}", "{workspace_description}"],
         "default": (
             "Summarize the following knowledge item concisely and clearly. "
             "Preserve the key ideas, facts, and any action items. "
-            "Use structured markdown with short paragraphs or bullet points.\n\n"
+            "Use structured markdown with short paragraphs or bullet points. "
+            "Consider the workspace context when determining what is most relevant.\n\n"
+            "Workspace: {workspace_name}\n"
+            "Workspace Description: {workspace_description}\n\n"
             "Title: {knowledge_title}\n"
             "Tags: {tags}\n\n"
             "Knowledge Content:\n{knowledge_content}"
@@ -61,9 +67,12 @@ PROMPT_CATALOGUE = [
         "description": "Extracts structured insights (tasks, timeline dates, facts, crucial points, tags) from a knowledge item.",
         "category": "knowledge",
         "role": "system",
-        "variables": ["{knowledge_title}", "{knowledge_content}", "{tags}"],
+        "variables": ["{knowledge_title}", "{knowledge_content}", "{tags}", "{workspace_name}", "{workspace_description}"],
         "default": (
-            "Extract structured insights from this knowledge item. Return ONLY valid JSON with this exact structure:\n"
+            "Extract structured insights from this knowledge item. "
+            "Use the workspace context to understand what is most relevant and meaningful — "
+            "the same content may yield different insights depending on the workspace's focus area.\n\n"
+            "Return ONLY valid JSON with this exact structure:\n"
             "{\n"
             '  "timelines": [{"date": "YYYY-MM-DD", "event": "description"}],\n'
             '  "facts": ["key fact 1"],\n'
@@ -77,6 +86,8 @@ PROMPT_CATALOGUE = [
             "- If year is missing, infer from context if possible.\n"
             "- Do not invent dates.\n"
             "Return empty arrays if none found. Tags should be lowercase single words or hyphenated phrases.\n\n"
+            "Workspace: {workspace_name}\n"
+            "Workspace Description: {workspace_description}\n\n"
             "Title: {knowledge_title}\n\n"
             "Knowledge Content:\n{knowledge_content}"
         ),
