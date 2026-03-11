@@ -220,7 +220,7 @@ export default function SearchPage() {
                                         <div key={card.key} className="break-inside-avoid mb-4">
                                             <div
                                                 className="glass-card-hover rounded-2xl p-4 cursor-pointer animate-fade-in space-y-3"
-                                                onClick={() => card.chunks[0]?.conversation_id && navigate(`/w/${workspaceId}/chat/${card.chunks[0].conversation_id}`)}
+                                                onClick={() => card.chunks[0]?.conversation_id && navigate(`/w/${workspaceId}/agent/${card.chunks[0].conversation_id}`)}
                                             >
                                                 <div className="flex items-start justify-between gap-3">
                                                     <div className="min-w-0 space-y-2">

@@ -184,7 +184,7 @@ export default function ExecutionListPage() {
                                             title="Open conversation"
                                             onClick={(e) => {
                                                 e.stopPropagation()
-                                                navigate(`/w/${workspaceId}/chat/${exec.conversation_id}`)
+                                                navigate(`/w/${workspaceId}/agent/${exec.conversation_id}`)
                                             }}
                                         >
                                             <MessageCircle className="w-3.5 h-3.5" />

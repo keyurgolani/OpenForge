@@ -120,8 +120,8 @@ export default function CommandPalette() {
                                         <PaletteItem icon={<Code2 className="w-4 h-4" />} onSelect={() => handleCreateKnowledge('gist')}>New Code Gist</PaletteItem>
                                         <PaletteItem
                                             icon={<MessageSquare className="w-4 h-4" />}
-                                            onSelect={() => run(() => navigate(`/w/${workspaceId}/chat`))}
-                                        >Go to Chat</PaletteItem>
+                                            onSelect={() => run(() => navigate(`/w/${workspaceId}/agent`))}
+                                        >Go to Agent</PaletteItem>
                                         <PaletteItem
                                             icon={<Search className="w-4 h-4" />}
                                             onSelect={() => run(() => navigate(`/w/${workspaceId}/search`))}

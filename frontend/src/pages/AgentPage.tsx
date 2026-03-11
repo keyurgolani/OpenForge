@@ -87,7 +87,7 @@ function injectIdLinks(
         (_, pre, uuid, post) => {
             const title = maps?.chatsById.get(uuid)
             const label = title ? `Chat: ${title}` : `Chat: ${uuid.slice(0, 8)}…`
-            return `${pre}[${label}](/w/${workspaceId}/chat/${uuid})${post}`
+            return `${pre}[${label}](/w/${workspaceId}/agent/${uuid})${post}`
         }
     )
     // workspace_id: <uuid>
@@ -114,7 +114,7 @@ function injectIdLinks(
             const escapedName = nameLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
             out = out.replace(
                 new RegExp(`@(${escapedName})(?![^[]*\\])`, 'gi'),
-                (_, matched) => `[@${matched}](/w/${workspaceId}/chat/${chatId})`
+                (_, matched) => `[@${matched}](/w/${workspaceId}/agent/${chatId})`
             )
         }
     }
@@ -127,7 +127,7 @@ function injectIdLinks(
                 const wsName = maps.workspacesById.get(lc)
                 if (wsName) return `[Workspace: ${wsName}](/w/${uuid})`
                 const chatTitle = maps.chatsById.get(lc)
-                if (chatTitle) return `[Chat: ${chatTitle}](/w/${workspaceId}/chat/${uuid})`
+                if (chatTitle) return `[Chat: ${chatTitle}](/w/${workspaceId}/agent/${uuid})`
                 const knTitle = maps.knowledgeById.get(lc)
                 const knType = maps.knowledgeTypeById.get(lc)
                 const knWs = maps.knowledgeWorkspaceById.get(lc)
@@ -261,7 +261,7 @@ interface ConversationWithMessages extends Conversation {
     messages: Message[]
 }
 
-export default function ChatPage() {
+export default function AgentPage() {
     const { workspaceId = '', conversationId } = useParams<{ workspaceId: string; conversationId?: string }>()
     const navigate = useNavigate()
     const qc = useQueryClient()
@@ -611,7 +611,7 @@ export default function ChatPage() {
         if (activeCid === mostRecentConversationId) return
         shouldRestoreTextareaFocusRef.current = true
         setActiveCid(mostRecentConversationId)
-        navigate(`/w/${workspaceId}/chat/${mostRecentConversationId}`, { replace: true })
+        navigate(`/w/${workspaceId}/agent/${mostRecentConversationId}`, { replace: true })
     }, [activeCid, conversationId, mostRecentConversationId, navigate, workspaceId])
 
     useEffect(() => {
@@ -942,7 +942,7 @@ export default function ChatPage() {
         qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'archived'] })
         scheduleComposerFocus(40)
         setActiveCid(conv.id)
-        navigate(`/w/${workspaceId}/chat/${conv.id}`)
+        navigate(`/w/${workspaceId}/agent/${conv.id}`)
     }
 
     const handleDeleteConv = async (cid: string) => {
@@ -952,7 +952,7 @@ export default function ChatPage() {
         if (activeCid === cid) {
             suppressAutoSelectRef.current = true
             setActiveCid(null)
-            navigate(`/w/${workspaceId}/chat`)
+            navigate(`/w/${workspaceId}/agent`)
         }
     }
 
@@ -987,7 +987,7 @@ export default function ChatPage() {
                     if (activeCid === cid) {
                         suppressAutoSelectRef.current = true
                         setActiveCid(null)
-                        navigate(`/w/${workspaceId}/chat`)
+                        navigate(`/w/${workspaceId}/agent`)
                     }
                 } catch (err: any) {
                     const detail = err?.response?.data?.detail || err?.message || 'Unable to permanently delete conversation.'
@@ -1021,14 +1021,14 @@ export default function ChatPage() {
         suppressAutoSelectRef.current = false
         scheduleComposerFocus(20)
         setActiveCid(cid)
-        navigate(`/w/${workspaceId}/chat/${cid}`)
+        navigate(`/w/${workspaceId}/agent/${cid}`)
     }
 
     const handleSelectTrashedConversation = (cid: string) => {
         setActiveChatRailSection('trash')
         suppressAutoSelectRef.current = false
         setActiveCid(cid)
-        navigate(`/w/${workspaceId}/chat/${cid}`)
+        navigate(`/w/${workspaceId}/agent/${cid}`)
     }
 
     const handleSend = async () => {
@@ -1080,7 +1080,7 @@ export default function ChatPage() {
             qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
             qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'archived'] })
             setActiveCid(conv.id)
-            navigate(`/w/${workspaceId}/chat/${conv.id}`)
+            navigate(`/w/${workspaceId}/agent/${conv.id}`)
         }
 
         const override: { provider_id?: string; model_id?: string; attachment_ids?: string[]; mentions?: Mention[] } = {}

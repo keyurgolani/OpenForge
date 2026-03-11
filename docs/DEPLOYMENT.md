@@ -125,7 +125,7 @@ tar -czf workspace_backup_$(date +%Y%m%d).tar.gz ./data/workspace
 
 | Symptom | Likely Cause | Fix |
 |---|---|---|
-| Chat not working | No LLM provider configured | Go to Settings → Add Provider |
+| Agent not working | No LLM provider configured | Go to Settings → Add Provider |
 | Slow first response | Embedding model loading | Wait 60s on first start |
 | `decryption failed` error | `ENCRYPTION_KEY` changed | Restore original key from backup |
 | WebSocket disconnects | Nginx `proxy_read_timeout` too low | Set to 3600s (see nginx config above) |

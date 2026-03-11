@@ -151,10 +151,10 @@ export default function AppShell() {
     const isWorkspaceHome = location.pathname === `/w/${workspaceId}`
     const isSearchPage = location.pathname.includes('/search')
     const isSettingsPage = location.pathname.includes('/settings')
-    const isChatPage = location.pathname.includes('/chat')
+    const isAgentPage = location.pathname.includes('/agent')
     const isKnowledgePage = location.pathname.includes('/knowledge/') || location.pathname.includes('/knowledge/')
     const currentSectionMeta = useMemo(() => {
-        if (location.pathname.includes('/chat')) {
+        if (location.pathname.includes('/agent')) {
             return {
                 title: 'Workspace Agent',
                 description: 'Ask questions, review context, and manage conversations.',
@@ -329,8 +329,8 @@ export default function AppShell() {
             await deleteConversation(workspaceId, conversationId)
             qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
             qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'archived'] })
-            if (location.pathname.includes(`/chat/${conversationId}`)) {
-                navigate(`/w/${workspaceId}/chat`)
+            if (location.pathname.includes(`/agent/${conversationId}`)) {
+                navigate(`/w/${workspaceId}/agent`)
             }
         } catch (error) {
             console.error('Failed to move conversation to trash from sidebar:', error)
@@ -346,8 +346,8 @@ export default function AppShell() {
             await permanentlyDeleteConversation(workspaceId, conversationToDelete.id)
             qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
             qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'archived'] })
-            if (location.pathname.includes(`/chat/${conversationToDelete.id}`)) {
-                navigate(`/w/${workspaceId}/chat`)
+            if (location.pathname.includes(`/agent/${conversationToDelete.id}`)) {
+                navigate(`/w/${workspaceId}/agent`)
             }
         } catch (error) {
             console.error('Failed to permanently delete conversation:', error)
@@ -503,7 +503,7 @@ export default function AppShell() {
                                     <Link to={`/w/${workspaceId}/search`} className={`sidebar-item ${isActive('/search') ? 'active' : ''}`}>
                                         <Search className="w-4 h-4" /> Search
                                     </Link>
-                                    <Link to={`/w/${workspaceId}/chat`} className={`sidebar-item ${isActive('/chat') ? 'active' : ''}`}>
+                                    <Link to={`/w/${workspaceId}/agent`} className={`sidebar-item ${isActive('/agent') ? 'active' : ''}`}>
                                         <MessageSquare className="w-4 h-4" /> Workspace Agent
                                     </Link>
                                 </nav>
@@ -544,7 +544,7 @@ export default function AppShell() {
                                         <ContextMenu key={c.id}>
                                             <ContextMenuTrigger asChild>
                                                 {isRenaming ? (
-                                                    <div className={`sidebar-item text-xs ${isActive(`/chat/${c.id}`) ? 'active' : ''}`}>
+                                                    <div className={`sidebar-item text-xs ${isActive(`/agent/${c.id}`) ? 'active' : ''}`}>
                                                         <MessageSquare className="w-3 h-3" />
                                                         <input
                                                             ref={conversationRenameInputRef}
@@ -567,7 +567,7 @@ export default function AppShell() {
                                                         />
                                                     </div>
                                                 ) : (
-                                                    <Link to={`/w/${workspaceId}/chat/${c.id}`} className={`sidebar-item text-xs ${isActive(`/chat/${c.id}`) ? 'active' : ''}`}>
+                                                    <Link to={`/w/${workspaceId}/agent/${c.id}`} className={`sidebar-item text-xs ${isActive(`/agent/${c.id}`) ? 'active' : ''}`}>
                                                         <MessageSquare className="w-3 h-3" />
                                                         <span className="truncate">{c.title ?? 'New Chat'}</span>
                                                     </Link>
@@ -661,9 +661,9 @@ export default function AppShell() {
                                 <Search className="w-4 h-4" />
                             </Link>
                             <Link
-                                to={`/w/${workspaceId}/chat`}
+                                to={`/w/${workspaceId}/agent`}
                                 title="Workspace Agent"
-                                className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isActive('/chat') ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
+                                className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isActive('/agent') ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
                             >
                                 <MessageSquare className="w-4 h-4" />
                             </Link>
@@ -753,7 +753,7 @@ export default function AppShell() {
                 <div className="relative z-0 flex-1 min-h-0 flex gap-3 p-3">
                     <main
                         data-openforge-main-content="1"
-                        className={`relative z-20 flex-1 min-h-0 overflow-auto ${(isWorkspaceHome || isSearchPage || isSettingsPage || isChatPage || isKnowledgePage)
+                        className={`relative z-20 flex-1 min-h-0 overflow-auto ${(isWorkspaceHome || isSearchPage || isSettingsPage || isAgentPage || isKnowledgePage)
                             ? ''
                             : 'rounded-2xl border border-border/60 bg-card/25'}`}
                     >
@@ -897,7 +897,7 @@ export default function AppShell() {
             {/* HITL Approval FAB */}
             {(hitlCount as number) > 0 && (
                 <Link
-                    to={`/w/${workspaceId}/chat`}
+                    to={`/w/${workspaceId}/agent`}
                     className="fixed bottom-6 right-6 z-[300] flex items-center gap-2.5 rounded-2xl border border-amber-400/50 bg-amber-500/15 px-4 py-2.5 text-amber-200 shadow-2xl backdrop-blur-sm transition-all hover:bg-amber-500/25 hover:border-amber-400/70"
                     title="Pending tool approvals require your attention"
                 >

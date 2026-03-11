@@ -374,7 +374,7 @@ export default function ExecutionMonitorPage() {
                     </button>
                     {execution.conversation_id && (
                         <button
-                            onClick={() => navigate(`/w/${workspaceId}/chat/${execution.conversation_id}`)}
+                            onClick={() => navigate(`/w/${workspaceId}/agent/${execution.conversation_id}`)}
                             className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-foreground/70 transition-colors ml-auto"
                         >
                             <MessageCircle className="h-3.5 w-3.5" />
