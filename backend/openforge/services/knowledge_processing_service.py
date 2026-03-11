@@ -762,6 +762,21 @@ class KnowledgeProcessingService:
                         await db.commit()
             except Exception as e:
                 logger.warning(f"Auto-title generation failed for knowledge {knowledge_id}: {e}")
+                # If LLM title generation failed, use url_title for bookmarks as fallback
+                try:
+                    async with AsyncSessionLocal() as db:
+                        result = await db.execute(select(Knowledge).where(Knowledge.id == knowledge_id))
+                        knowledge_record = result.scalar_one_or_none()
+                        if (
+                            knowledge_record
+                            and not normalize_knowledge_title(knowledge_record.title)
+                            and normalize_knowledge_title(knowledge_record.url_title)
+                        ):
+                            knowledge_record.title = knowledge_record.url_title
+                            knowledge_record.ai_title = knowledge_record.url_title
+                            await db.commit()
+                except Exception:
+                    pass
 
         try:
             await ws_manager.send_to_workspace(
@@ -804,6 +819,15 @@ class KnowledgeProcessingService:
         *content* is the best readable text we could extract and
         *resolved_url* is the final URL after following any redirects
         (may equal *url* if no redirect occurred or resolution failed).
+
+        Extraction priority:
+        1. Domain-specific override (e.g. GitHub API)
+        2. Raw markdown file (if URL ends in .md etc.)
+        3. Cloudflare markdown content negotiation
+        4. HTML fetch → convert to markdown
+        5. Jina Reader API
+        6. Chrome headless rendering
+        7. Metadata-only fallback (title + description)
         """
         import httpx
 
@@ -822,12 +846,35 @@ class KnowledgeProcessingService:
             # Resolve short/redirect URLs first so domain-override matching
             # and all extraction strategies operate on the canonical URL.
             resolved_url = await self._resolve_final_url(client, url)
-            domain_override_strategy, domain_override_content = await self._try_fetch_domain_override_bookmark_content(client, resolved_url)
-            raw_markdown_file = await self._try_fetch_raw_markdown_file(client, resolved_url)
-            cloudflare_markdown = await self._try_fetch_cloudflare_markdown(client, resolved_url)
-            raw_html = await self._try_fetch_html(client, resolved_url)
 
-        title, description = self._extract_metadata_from_html(raw_html)
+            # 1. Domain-specific override (e.g. GitHub API extraction)
+            domain_override_strategy, domain_override_content = await self._try_fetch_domain_override_bookmark_content(client, resolved_url)
+
+            if not domain_override_content.strip():
+                # 2-4. Generic extraction strategies (only if domain override didn't produce content)
+                raw_markdown_file = await self._try_fetch_raw_markdown_file(client, resolved_url)
+                if not raw_markdown_file.strip():
+                    cloudflare_markdown = await self._try_fetch_cloudflare_markdown(client, resolved_url)
+                raw_html = await self._try_fetch_html(client, resolved_url)
+
+        title: str | None = None
+        description: str | None = None
+
+        if domain_override_content.strip():
+            # Domain override succeeded – derive a clean title from the URL
+            # instead of relying on HTML metadata which may contain HTML artifacts.
+            hostname = (urlparse(resolved_url).hostname or "").lower()
+            if hostname in ("github.com", "www.github.com"):
+                title = self._github_title_from_url(resolved_url)
+            # Still try HTML metadata as a fallback for description
+            if raw_html:
+                html_title, html_description = self._extract_metadata_from_html(raw_html)
+                title = title or html_title
+                description = html_description
+        else:
+            # No domain override – extract title/description from HTML
+            title, description = self._extract_metadata_from_html(raw_html)
+
         markdown_from_html = self._convert_html_to_markdown(raw_html)
         if self._looks_like_bot_challenge_text(markdown_from_html):
             markdown_from_html = ""
@@ -1037,6 +1084,63 @@ class KnowledgeProcessingService:
         cleaned = unescape(cleaned)
         return re.sub(r"\s+", " ", cleaned).strip()
 
+    def _sanitize_markdown_inline_html(self, text: str) -> str:
+        """Strip inline HTML from markdown content (common in GitHub READMEs).
+
+        Converts <img>, <a>, <br> to markdown equivalents and removes
+        remaining HTML tags while preserving their text content.
+        """
+        if not text:
+            return ""
+
+        # Convert <img src="..." alt="..."> to ![alt](src)
+        text = re.sub(
+            r'<img\s[^>]*?src=["\']([^"\']+)["\'][^>]*?alt=["\']([^"\']*)["\'][^>]*/?>',
+            r"![\2](\1)",
+            text,
+            flags=re.IGNORECASE,
+        )
+        text = re.sub(
+            r'<img\s[^>]*?alt=["\']([^"\']*)["\'][^>]*?src=["\']([^"\']+)["\'][^>]*/?>',
+            r"![\1](\2)",
+            text,
+            flags=re.IGNORECASE,
+        )
+        # img without alt
+        text = re.sub(
+            r'<img\s[^>]*?src=["\']([^"\']+)["\'][^>]*/?>',
+            r"![](\1)",
+            text,
+            flags=re.IGNORECASE,
+        )
+
+        # Convert <a href="...">text</a> to [text](href)
+        text = re.sub(
+            r'<a\s[^>]*?href=["\']([^"\']+)["\'][^>]*>(.*?)</a>',
+            r"[\2](\1)",
+            text,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+
+        # <br> / <br/> → newline
+        text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+
+        # Remove block-level wrapper tags but keep inner content
+        text = re.sub(
+            r"</?(?:p|div|span|center|section|details|summary|table|thead|tbody|tr|td|th|ul|ol|li|dd|dt|dl|em|strong|b|i|u|s|sub|sup|small|kbd|abbr|mark|ins|del)[^>]*>",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        )
+
+        # Strip any remaining HTML tags
+        text = re.sub(r"<[^>]+>", "", text)
+        text = unescape(text)
+
+        # Collapse excessive blank lines
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text.strip()
+
     def _build_bookmark_metadata_fallback_text(
         self, title: str | None, description: str | None
     ) -> str:
@@ -1189,7 +1293,10 @@ class KnowledgeProcessingService:
         if not extractor:
             return "none", ""
         try:
-            return await extractor(client, url)
+            strategy, content = await extractor(client, url)
+            if content.strip():
+                content = self._sanitize_markdown_inline_html(content)
+            return strategy, content
         except Exception as e:
             logger.warning("Domain bookmark extractor failed for %s (%s): %s", url, hostname, e)
             return "none", ""
@@ -1354,20 +1461,115 @@ class KnowledgeProcessingService:
         chain.append(None)
         return chain
 
+    async def _try_fetch_github_file_tree(
+        self,
+        client,
+        owner: str,
+        repo: str,
+        *,
+        ref: str | None,
+        directory_path: str | None,
+    ) -> str:
+        """Fetch the file tree for a GitHub repo or directory via the Contents API."""
+        owner_quoted = quote(owner, safe="")
+        repo_quoted = quote(repo, safe="")
+        endpoint = f"https://api.github.com/repos/{owner_quoted}/{repo_quoted}/contents"
+        if directory_path:
+            dir_quoted = "/".join(quote(seg, safe="") for seg in directory_path.split("/") if seg)
+            if dir_quoted:
+                endpoint = f"{endpoint}/{dir_quoted}"
+        params = {"ref": ref} if ref else None
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+        try:
+            response = await client.get(endpoint, headers=headers, params=params)
+            if response.status_code >= 400:
+                logger.info(
+                    "GitHub file tree fetch failed for %s/%s (dir=%s, ref=%s): %s",
+                    owner, repo, directory_path or ".", ref or "default", response.status_code,
+                )
+                return ""
+            items = response.json()
+            if not isinstance(items, list):
+                return ""
+            lines: list[str] = []
+            prefix = f"{owner}/{repo}"
+            if directory_path:
+                prefix = f"{prefix}/{directory_path}"
+            lines.append(f"# File tree: {prefix}\n")
+            for item in sorted(items, key=lambda x: (x.get("type") != "dir", x.get("name", ""))):
+                name = item.get("name", "")
+                item_type = item.get("type", "")
+                if item_type == "dir":
+                    lines.append(f"  {name}/")
+                else:
+                    lines.append(f"  {name}")
+            return "\n".join(lines)
+        except Exception as e:
+            logger.warning("GitHub file tree fetch failed for %s/%s: %s", owner, repo, e)
+            return ""
+
+    def _github_title_from_url(self, url: str) -> str | None:
+        """Derive a clean title from a GitHub URL."""
+        parsed = urlparse(url)
+        parts = [unquote(part) for part in parsed.path.split("/") if part]
+        if len(parts) < 2:
+            return None
+        owner, repo = parts[0], parts[1]
+        if repo.endswith(".git"):
+            repo = repo[:-4]
+
+        # Blob file: owner/repo - path/to/file.ext
+        if len(parts) >= 5 and parts[2] == "blob":
+            file_path = "/".join(parts[4:])
+            return f"{owner}/{repo} - {file_path}"
+
+        # Directory: owner/repo - path/to/dir
+        if len(parts) >= 5 and parts[2] == "tree":
+            dir_path = "/".join(parts[4:])
+            return f"{owner}/{repo} - {dir_path}"
+
+        # Repo root
+        return f"{owner}/{repo}"
+
     async def _extract_github_bookmark_content(self, client, url: str) -> tuple[str, str]:
         blob = self._parse_github_blob_file(url)
         if blob:
             owner, repo, ref, file_path = blob
-            if self._is_markdown_readme_path(file_path):
+
+            # Any markdown file (README or otherwise) → extract raw content directly
+            if file_path.lower().endswith(self._MARKDOWN_FILE_EXTENSIONS):
                 raw_markdown = await self._try_fetch_github_file_text(
-                    client,
-                    owner,
-                    repo,
-                    file_path=file_path,
-                    ref=ref,
+                    client, owner, repo, file_path=file_path, ref=ref,
                 )
                 if raw_markdown.strip():
-                    return "github_blob_readme_markdown", raw_markdown
+                    strategy = "github_blob_readme_markdown" if self._is_markdown_readme_path(file_path) else "github_blob_markdown"
+                    return strategy, raw_markdown
+
+            # Code file → extract code content + nearest README from directory chain
+            code_text = await self._try_fetch_github_file_text(
+                client, owner, repo, file_path=file_path, ref=ref,
+            )
+            if code_text.strip():
+                filename = file_path.split("/")[-1]
+                ext = filename.rsplit(".", 1)[-1] if "." in filename else ""
+                parts = [f"# {filename}\n\n```{ext}\n{code_text}\n```"]
+
+                dir_path = "/".join(file_path.split("/")[:-1]) if "/" in file_path else None
+                for candidate_dir in self._directory_fallback_chain(dir_path):
+                    readme_text = await self._try_fetch_github_readme(
+                        client, owner, repo, directory_path=candidate_dir, ref=ref,
+                    )
+                    if readme_text.strip():
+                        parts.append(f"\n\n---\n\n## README\n\n{readme_text}")
+                        break
+
+                return "github_blob_code_with_readme", "\n".join(parts)
+
+            # File fetch failed – fall through to general strategies
+            return "none", ""
 
         parsed = self._parse_github_repo_or_directory(url)
         if not parsed:
@@ -1407,6 +1609,13 @@ class KnowledgeProcessingService:
                     if candidate_directory == directory_path:
                         return "github_directory_readme", directory_readme
                     return "github_parent_directory_readme", directory_readme
+
+        # No README found anywhere – extract the file tree as a fallback
+        file_tree = await self._try_fetch_github_file_tree(
+            client, owner, repo, ref=ref, directory_path=directory_path,
+        )
+        if file_tree.strip():
+            return "github_file_tree", file_tree
 
         return "none", ""
 
