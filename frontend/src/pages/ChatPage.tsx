@@ -1247,13 +1247,13 @@ export default function ChatPage() {
                                                     />
                                                 )}
                                                 {streamingModelLabel && (
-                                                    <div className="chat-workflow-step chat-section-reveal">
-                                                        <div className="chat-llm-inline">
-                                                            <Bot className="h-3.5 w-3.5" />
-                                                            <span className="text-[11px] uppercase tracking-wide text-muted-foreground">LLM</span>
-                                                            <span className="text-accent/65">·</span>
+                                                    <div className="chat-workflow-step chat-section-reveal w-fit">
+                                                        <span className="chat-subsection-toggle" style={{ cursor: 'default' }}>
+                                                            <Bot className="h-3 w-3" />
+                                                            <span>LLM</span>
+                                                            <span className="text-muted-foreground/40">·</span>
                                                             <span className="truncate">{streamingModelLabel}</span>
-                                                        </div>
+                                                        </span>
                                                     </div>
                                                 )}
                                                 {streamingTimeline.map((entry, i) =>
@@ -1312,14 +1312,14 @@ export default function ChatPage() {
                                                         </div>
                                                     )
                                                 )}
+                                                {(streamingContent || isInterrupted) && (
                                                 <div className={`chat-workflow-step chat-section-reveal ${streamingContent ? 'chat-workflow-step-live' : ''}`}>
                                                     <div className="chat-workflow-header">
                                                         <MessageSquare className="h-3.5 w-3.5" />
                                                         <span>Response</span>
-                                                        <span className="chat-workflow-status">{isInterrupted ? 'Interrupted' : streamingContent ? 'Streaming' : 'Preparing'}</span>
+                                                        <span className="chat-workflow-status">{isInterrupted ? 'Interrupted' : 'Streaming'}</span>
                                                     </div>
-                                                    {streamingContent && (
-                                                        <div className="chat-bubble-assistant relative px-4 py-3">
+                                                    <div className="chat-bubble-assistant relative px-4 py-3">
                                                             {!streamResponseExpanded && streamResponseHasHiddenTop && (
                                                                 <>
                                                                     <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-12 rounded-t-2xl bg-gradient-to-b from-card/92 via-card/66 to-transparent" />
@@ -1361,8 +1361,8 @@ export default function ChatPage() {
                                                                 )}
                                                             </div>
                                                         </div>
-                                                    )}
-                                                </div>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -2426,7 +2426,7 @@ function ThinkingBlock({
                 }
             </button>
             <div ref={blockRef} className={`chat-collapse w-full ${open ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
-                <div className="chat-collapse-inner pb-px">
+                <div className="chat-collapse-inner">
                     <div className="relative w-full chat-step-detail-card chat-section-reveal">
                         {isActiveStream && !fullyExpanded && hasHiddenTop && (
                             <>
@@ -2554,7 +2554,7 @@ function SubagentCard({
                 {statusIcon}
             </button>
             <div ref={blockRef} className={`chat-collapse w-full ${open ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
-                <div className="chat-collapse-inner pb-px">
+                <div className="chat-collapse-inner">
                     <div className="chat-step-detail-card chat-section-reveal overflow-hidden !p-0">
 
                         {/* Request */}
@@ -2828,13 +2828,13 @@ function StreamingAttachmentsBadge({ atts, workspaceId }: { atts: AttachmentProc
     }
     return (
         <div className="chat-workflow-step">
-            <button className="chat-subsection-toggle" onClick={toggle}>
+            <button className={`chat-subsection-toggle ${open ? 'chat-subsection-toggle-open' : ''}`} onClick={toggle}>
                 {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                 {`Processed ${atts.length} Attachment${atts.length === 1 ? '' : 's'}`}
             </button>
             <div className={`chat-collapse w-full ${open ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
                 <div className="chat-collapse-inner">
-                    <div className="chat-section-reveal space-y-2 w-full pt-0.5">
+                    <div className="chat-step-detail-card chat-section-reveal space-y-2 w-full">
                         {atts.map(att => (
                             <AttachmentCard key={att.id} att={att} workspaceId={workspaceId} />
                         ))}
@@ -2864,13 +2864,13 @@ function StreamingSourcesBadge({ sources, workspaceId }: { sources: ContextSourc
     }
     return (
         <div className="chat-workflow-step">
-            <button className="chat-subsection-toggle" onClick={toggle}>
+            <button className={`chat-subsection-toggle ${open ? 'chat-subsection-toggle-open' : ''}`} onClick={toggle}>
                 {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                 {`Used ${sources.length} Knowledge ${sources.length === 1 ? 'Record' : 'Records'}`}
             </button>
             <div className={`chat-collapse w-full ${open ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
                 <div className="chat-collapse-inner">
-                    <div className="chat-section-reveal space-y-2 w-full pt-0.5">
+                    <div className="chat-step-detail-card chat-section-reveal space-y-2 w-full">
                         {sources.map(src => (
                             <div key={src.knowledge_id} className="chat-source-card p-3 text-xs">
                                 <div className="flex items-center justify-between mb-1">
@@ -2991,8 +2991,8 @@ function ChatMessageCard({
     attachmentsProcessed?: AttachmentProcessed[]
     mentionMaps?: MentionResolutionMaps
 }) {
-    const [attachmentsOpen, setAttachmentsOpen] = useState(true)
-    const [sourcesOpen, setSourcesOpen] = useState(true)
+    const [attachmentsOpen, setAttachmentsOpen] = useState(false)
+    const [sourcesOpen, setSourcesOpen] = useState(false)
     const [contextMenuOpen, setContextMenuOpen] = useState(false)
     const [copied, setCopied] = useState(false)
 
@@ -3000,26 +3000,6 @@ function ChatMessageCard({
     const sourcesUserInteracted = useRef(false)
     const attachmentsCollapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
     const sourcesCollapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-    useEffect(() => {
-        if (attachmentsProcessed.length > 0) {
-            attachmentsCollapseTimer.current = setTimeout(() => {
-                if (!attachmentsUserInteracted.current) setAttachmentsOpen(false)
-                attachmentsCollapseTimer.current = null
-            }, 3000)
-        }
-        return () => { if (attachmentsCollapseTimer.current) clearTimeout(attachmentsCollapseTimer.current) }
-    }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-    useEffect(() => {
-        if (msg.context_sources && msg.context_sources.length > 0) {
-            sourcesCollapseTimer.current = setTimeout(() => {
-                if (!sourcesUserInteracted.current) setSourcesOpen(false)
-                sourcesCollapseTimer.current = null
-            }, 3000)
-        }
-        return () => { if (sourcesCollapseTimer.current) clearTimeout(sourcesCollapseTimer.current) }
-    }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleCopy = async () => {
         await navigator.clipboard.writeText(msg.content)
@@ -3070,7 +3050,7 @@ function ChatMessageCard({
                                 {attachmentsProcessed.length > 0 && (
                                     <div className="chat-workflow-step">
                                         <button
-                                            className="chat-subsection-toggle"
+                                            className={`chat-subsection-toggle ${attachmentsOpen ? 'chat-subsection-toggle-open' : ''}`}
                                             onClick={() => {
                                                 if (attachmentsCollapseTimer.current) {
                                                     clearTimeout(attachmentsCollapseTimer.current)
@@ -3098,7 +3078,7 @@ function ChatMessageCard({
                                         </button>
                                         <div ref={attachmentsBlockRef} className={`chat-collapse w-full ${attachmentsOpen ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
                                             <div className="chat-collapse-inner">
-                                                <div className="chat-section-reveal space-y-2 w-full pt-0.5">
+                                                <div className="chat-step-detail-card chat-section-reveal space-y-2 w-full">
                                                     {attachmentsProcessed.map(att => (
                                                         <AttachmentCard
                                                             key={att.id}
@@ -3114,7 +3094,7 @@ function ChatMessageCard({
                                 {msg.context_sources && msg.context_sources.length > 0 && (
                                     <div className="chat-workflow-step">
                                         <button
-                                            className="chat-subsection-toggle"
+                                            className={`chat-subsection-toggle ${sourcesOpen ? 'chat-subsection-toggle-open' : ''}`}
                                             onClick={() => {
                                                 if (sourcesCollapseTimer.current) {
                                                     clearTimeout(sourcesCollapseTimer.current)
@@ -3142,7 +3122,7 @@ function ChatMessageCard({
                                         </button>
                                         <div ref={sourcesBlockRef} className={`chat-collapse w-full ${sourcesOpen ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
                                             <div className="chat-collapse-inner">
-                                                <div className="chat-section-reveal space-y-2 w-full pt-0.5">
+                                                <div className="chat-step-detail-card chat-section-reveal space-y-2 w-full">
                                                     {msg.context_sources.map(src => (
                                                         <div key={src.knowledge_id} className="chat-source-card p-3 text-xs">
                                                             <div className="flex items-center justify-between mb-1">
@@ -3169,13 +3149,13 @@ function ChatMessageCard({
                                     </div>
                                 )}
                                 {modelLabel && (
-                                    <div className="chat-workflow-step chat-section-reveal">
-                                        <div className="chat-llm-inline">
-                                            <Bot className="h-3.5 w-3.5" />
-                                            <span className="text-[11px] uppercase tracking-wide text-muted-foreground">LLM</span>
-                                            <span className="text-accent/65">·</span>
+                                    <div className="chat-workflow-step chat-section-reveal w-fit">
+                                        <span className="chat-subsection-toggle" style={{ cursor: 'default' }}>
+                                            <Bot className="h-3 w-3" />
+                                            <span>LLM</span>
+                                            <span className="text-muted-foreground/40">·</span>
                                             <span className="truncate">{modelLabel}</span>
-                                        </div>
+                                        </span>
                                     </div>
                                 )}
                                 {(msg.timeline?.length ?? 0) > 0
