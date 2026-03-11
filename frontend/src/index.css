@@ -66,12 +66,12 @@
     --bg-base-2: hsl(214 32% 96%);
     --bg-base-3: hsl(214 32% 94%);
 
-    --type-standard: 205 90% 40%;
+    --type-note: 205 90% 40%;
     --type-fleeting: 35 90% 45%;
     --type-bookmark: 155 80% 35%;
     --type-gist: 265 80% 45%;
 
-    --type-standard-bg: 205 90% 40%;
+    --type-note-bg: 205 90% 40%;
     --type-fleeting-bg: 35 90% 45%;
     --type-bookmark-bg: 155 80% 35%;
     --type-gist-bg: 265 80% 45%;
@@ -166,12 +166,12 @@
     --bg-base-2: hsl(223 40% 8%);
     --bg-base-3: hsl(219 43% 10%);
 
-    --type-standard: 196 95% 72%;
+    --type-note: 196 95% 72%;
     --type-fleeting: 43 98% 70%;
     --type-bookmark: 163 82% 68%;
     --type-gist: 274 88% 76%;
 
-    --type-standard-bg: 196 96% 52%;
+    --type-note-bg: 196 96% 52%;
     --type-fleeting-bg: 43 95% 53%;
     --type-bookmark-bg: 163 82% 50%;
     --type-gist-bg: 274 88% 56%;
@@ -430,11 +430,11 @@
     background: hsla(var(--muted) / 0.42);
   }
 
-  .type-standard {
+  .type-note {
     @apply chip border;
-    color: hsl(var(--type-standard));
-    border-color: hsla(var(--type-standard) / 0.38);
-    background: hsla(var(--type-standard-bg) / 0.18);
+    color: hsl(var(--type-note));
+    border-color: hsla(var(--type-note) / 0.38);
+    background: hsla(var(--type-note-bg) / 0.18);
   }
 
   .type-fleeting {
@@ -462,6 +462,26 @@
     background: linear-gradient(90deg, hsla(var(--muted) / 0.34), hsla(var(--muted) / 0.55), hsla(var(--muted) / 0.34));
     background-size: 220% 100%;
     animation: of-shimmer 1.55s linear infinite;
+  }
+
+  .skeleton-glow {
+    background: linear-gradient(
+      90deg,
+      hsla(var(--accent) / 0.06),
+      hsla(var(--accent) / 0.15),
+      hsla(var(--accent) / 0.06)
+    );
+    background-size: 220% 100%;
+    animation: of-shimmer 1.55s linear infinite;
+    box-shadow: 0 0 12px -3px hsla(var(--accent) / 0.12);
+  }
+
+  @keyframes of-sparkle-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.85); }
+  }
+  .animate-sparkle-pulse {
+    animation: of-sparkle-pulse 1.2s ease-in-out infinite;
   }
 
   .focus-ring {
@@ -903,6 +923,12 @@
         @apply inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider leading-none;
         background: rgba(255 255 255 / 0.07);
         color: hsl(var(--muted-foreground));
+      }
+
+      .entity-link-workspace-chip {
+        @apply normal-case tracking-normal;
+        background: hsla(var(--accent) / 0.15);
+        color: hsl(var(--accent));
       }
 
       .entity-link-name {

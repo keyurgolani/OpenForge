@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     # Celery agent execution (set to true when celery-worker service is running)
     use_celery_agents: bool = False
 
+    # Models directory (mounted Docker volume for Whisper, HuggingFace, etc.)
+    models_root: str = "/models"
+
     # Tool server
     tool_server_url: str = "http://tool-server:8001"
 

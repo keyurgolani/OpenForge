@@ -8,9 +8,9 @@ Full pipeline:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
-import os
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -20,17 +20,58 @@ logger = logging.getLogger("openforge.processors.audio")
 
 _whisper_models: dict = {}
 
+# Map HuggingFace-style IDs (openai/whisper-base) → Whisper CLI model names
+_HF_TO_WHISPER = {
+    "openai/whisper-tiny": "tiny",
+    "openai/whisper-base": "base",
+    "openai/whisper-small": "small",
+    "openai/whisper-medium": "medium",
+    "openai/whisper-large-v2": "large-v2",
+    "openai/whisper-large-v3": "large-v3",
+}
 
-def _get_whisper_model(model_size: str = "medium"):
+
+def _parse_whisper_model_name(config_value: str) -> str:
+    """Convert a config value like 'openai/whisper-base' to 'base'."""
+    if not config_value:
+        return "base"
+    # Check HuggingFace-style ID
+    if config_value in _HF_TO_WHISPER:
+        return _HF_TO_WHISPER[config_value]
+    # Already a raw name like "base", "small", etc.
+    return config_value
+
+
+def _get_whisper_download_root() -> str:
+    """Return the Whisper model download directory."""
+    from openforge.config import get_settings
+    return str(Path(get_settings().models_root) / "whisper")
+
+
+def _get_whisper_model(model_size: str = "base", download_root: Optional[str] = None):
     """Lazy-load Whisper model (cached per model size)."""
     global _whisper_models
-    if model_size not in _whisper_models:
+    cache_key = f"{model_size}:{download_root or 'default'}"
+    if cache_key not in _whisper_models:
         import whisper
 
-        logger.info("Loading Whisper model: %s", model_size)
-        _whisper_models[model_size] = whisper.load_model(model_size)
+        if download_root is None:
+            download_root = _get_whisper_download_root()
+
+        # Check if model file exists before loading
+        model_path = Path(download_root) / f"{model_size}.pt"
+        if not model_path.exists():
+            raise RuntimeError(
+                f"Whisper model '{model_size}' is not downloaded. "
+                f"Download it from Settings > Audio before processing audio files."
+            )
+
+        logger.info("Loading Whisper model: %s from %s", model_size, download_root)
+        _whisper_models[cache_key] = whisper.load_model(
+            model_size, download_root=download_root
+        )
         logger.info("Whisper model '%s' loaded.", model_size)
-    return _whisper_models[model_size]
+    return _whisper_models[cache_key]
 
 
 class AudioProcessor:
@@ -59,7 +100,7 @@ class AudioProcessor:
             logger.warning("Audio metadata extraction failed for %s: %s", knowledge_id, e)
 
         # ── Step 2: Whisper transcription ──
-        whisper_model_size = "medium"
+        whisper_model_size = "base"
         if db_session:
             try:
                 whisper_model_size = await self._get_whisper_model_size(db_session)
@@ -67,7 +108,12 @@ class AudioProcessor:
                 pass
 
         try:
-            transcript_result = self._transcribe(file_path, whisper_model_size)
+            # Run CPU-bound transcription in a thread pool to avoid blocking
+            # the async event loop (which would starve health checks and cause
+            # Docker to restart the container).
+            transcript_result = await asyncio.to_thread(
+                self._transcribe, file_path, whisper_model_size
+            )
             result["transcript"] = transcript_result.get("text", "")
             result["segments"] = transcript_result.get("segments", [])
         except Exception as e:
@@ -168,9 +214,10 @@ class AudioProcessor:
 
         return metadata
 
-    def _transcribe(self, file_path: str, model_size: str = "medium") -> dict:
+    def _transcribe(self, file_path: str, model_size: str = "base") -> dict:
         """Transcribe audio using Whisper."""
-        model = _get_whisper_model(model_size)
+        download_root = _get_whisper_download_root()
+        model = _get_whisper_model(model_size, download_root=download_root)
 
         # Transcribe with timestamps
         result = model.transcribe(
@@ -192,17 +239,21 @@ class AudioProcessor:
         }
 
     async def _get_whisper_model_size(self, db_session) -> str:
-        """Read whisper model size from config table."""
+        """Read whisper model from config table (local_whisper_model key)."""
         from sqlalchemy import select
         from openforge.db.models import Config
 
         result = await db_session.execute(
-            select(Config).where(Config.key == "whisper_model_size")
+            select(Config).where(Config.key == "local_whisper_model")
         )
         row = result.scalar_one_or_none()
-        if row and row.value and isinstance(row.value, dict):
-            return row.value.get("value", "medium")
-        return "medium"
+        if row and row.value:
+            # Value is stored as the HF ID (e.g. "openai/whisper-base") or raw name
+            raw = row.value
+            if isinstance(raw, dict):
+                raw = raw.get("value", "")
+            return _parse_whisper_model_name(str(raw)) if raw else "base"
+        return "base"
 
     async def _generate_title(
         self, transcript: str, workspace_id: UUID, db_session

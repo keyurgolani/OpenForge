@@ -18,6 +18,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     tesseract-ocr \
     ffmpeg \
+    libreoffice-common \
+    libreoffice-writer \
+    libreoffice-calc \
+    libreoffice-impress \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
@@ -38,10 +42,10 @@ RUN mkdir -p /workspace /uploads /models
 # Set Python path
 ENV PYTHONPATH=/app/backend
 ENV PYTHONUNBUFFERED=1
-# HuggingFace / sentence-transformers model cache — mount this as a volume
-# so models survive container rebuilds (avoids re-downloading the ~130MB bge model)
+# Model cache directories — mount /models as a volume so models survive rebuilds
 ENV HF_HOME=/models
 ENV SENTENCE_TRANSFORMERS_HOME=/models
+ENV DATALAB_MODELS_DIR=/models/marker
 
 EXPOSE 3000
 

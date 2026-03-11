@@ -13,6 +13,10 @@ import {
     checkAuth, logoutAuth,
     listToolPermissions, setToolPermission,
     listPendingHITL, getHITLHistory, approveHITL, denyHITL,
+    listWhisperModels, downloadWhisperModel, deleteWhisperModel,
+    listEmbeddingModelStatus, downloadEmbeddingModel, deleteEmbeddingModel,
+    listCLIPModels, downloadCLIPModel, deleteCLIPModel, getCLIPDefault, setCLIPDefault,
+    listMarkerModels, downloadMarkerModel, deleteMarkerModel,
 } from '@/lib/api'
 import {
     Globe2, Loader2, Trash2, CheckCircle2, XCircle, Star, Plus,
@@ -22,7 +26,7 @@ import {
     FileText, Timer, History, Play, Clock, CheckCircle, AlertCircle, Circle, Terminal,
     Brain, Folder, Briefcase, Microscope, BookOpen, Target, Globe, Lightbulb, Wrench,
     Palette, BarChart3, Rocket, Shield, FlaskConical, Leaf, Key, Settings2, PenLine,
-    Database, Sprout, Download, Archive, FileArchive, Mic, ShieldAlert, LogOut
+    Database, Sprout, Download, Archive, FileArchive, Mic, ShieldAlert, LogOut, ScanEye
 } from 'lucide-react'
 import { ProviderIcon } from '@/components/shared/ProviderIcon'
 import { ModelOverrideSelect } from '@/components/shared/ModelOverrideSelect'
@@ -113,7 +117,7 @@ export default function SettingsPage() {
 
     const TABS = [
         { id: 'workspaces' as const, label: 'Workspaces', Icon: FolderOpen },
-        { id: 'llm' as const, label: 'AI Providers', Icon: Bot },
+        { id: 'llm' as const, label: 'AI Models', Icon: Bot },
         { id: 'prompts' as const, label: 'Prompts', Icon: Sliders },
         { id: 'jobs' as const, label: 'Jobs', Icon: Timer },
         { id: 'skills' as const, label: 'Skills', Icon: Wrench },
@@ -502,7 +506,7 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
                         {chatModels.length === 0 && visionModels.length === 0 && (
                             <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
                                 <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
-                                <span>No models configured yet. Go to <strong>AI Providers</strong> → <strong>Chat</strong> / <strong>Vision</strong> tabs to add models first.</span>
+                                <span>No models configured yet. Go to <strong>AI Models</strong> → <strong>Chat</strong> / <strong>Vision</strong> tabs to add models first.</span>
                             </div>
                         )}
 
@@ -655,17 +659,19 @@ function WorkspaceCard({ workspace: ws, providers, isActive, onDeleted, onSaved 
 }
 
 // ── LLM Settings Tab ──────────────────────────────────────────────────────────
-type LLMSubTab = 'providers' | 'chat' | 'vision' | 'embedding' | 'audio'
+type LLMSubTab = 'providers' | 'chat' | 'vision' | 'embedding' | 'audio' | 'clip' | 'pdf'
 
 function LLMSettings() {
     const [subTab, setSubTab] = useState<LLMSubTab>('providers')
 
     const LLM_SUB_TABS: { id: LLMSubTab; label: string; Icon: React.ElementType }[] = [
         { id: 'providers', label: 'Providers', Icon: Server },
-        { id: 'chat', label: 'Chat', Icon: MessageSquare },
+        { id: 'chat', label: 'Reasoning', Icon: MessageSquare },
         { id: 'vision', label: 'Vision', Icon: Eye },
         { id: 'embedding', label: 'Embedding', Icon: Database },
         { id: 'audio', label: 'Audio', Icon: Zap },
+        { id: 'clip', label: 'CLIP', Icon: ScanEye },
+        { id: 'pdf', label: 'PDF', Icon: FileText },
     ]
 
     return (
@@ -687,10 +693,12 @@ function LLMSettings() {
             </div>
 
             {subTab === 'providers' && <ProvidersTab />}
-            {subTab === 'chat' && <ModelTypeTab configType="chat" title="Chat Models" description="Models used for chat conversations. Configure the models available and set the system default." Icon={MessageSquare} />}
+            {subTab === 'chat' && <ModelTypeTab configType="chat" title="Reasoning Models" description="Models used for reasoning and chat conversations. Configure the models available and set the system default." Icon={MessageSquare} />}
             {subTab === 'vision' && <ModelTypeTab configType="vision" title="Vision Models" description="Models used for image analysis and visual content extraction. Must support multimodal input." Icon={Eye} />}
             {subTab === 'embedding' && <EmbeddingTab />}
             {subTab === 'audio' && <AudioTab />}
+            {subTab === 'clip' && <CLIPTab />}
+            {subTab === 'pdf' && <PDFProcessingTab />}
         </div>
     )
 }
@@ -706,9 +714,9 @@ function ProvidersTab() {
         <div className="space-y-3">
             <div className="flex items-center justify-between">
                 <div>
-                    <h3 className="font-semibold text-sm">AI Providers</h3>
+                    <h3 className="font-semibold text-sm">AI Models</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                        Configure provider credentials and endpoints. After adding a provider, assign models to Chat, Vision, Embedding, or Audio tabs.
+                        Configure provider credentials and endpoints. After adding a provider, assign models to Reasoning, Vision, Embedding, or Audio tabs.
                     </p>
                 </div>
                 <button className="btn-primary text-xs py-1.5 px-3" onClick={() => setShowAdd(p => !p)}>
@@ -1224,8 +1232,48 @@ function EmbeddingTab() {
     const [manualModel, setManualModel] = useState('')
     const [addSaving, setAddSaving] = useState(false)
     const [removing, setRemoving] = useState<string | null>(null)
+    const [downloadingEmb, setDownloadingEmb] = useState<string | null>(null)
+    const [deletingEmb, setDeletingEmb] = useState<string | null>(null)
+
+    // Query download status for all recommended embedding models
+    const allEmbIds = useMemo(() => RECOMMENDED_EMBEDDING_MODELS.map(m => m.id).join(','), [])
+    const { data: embStatuses = [], refetch: refetchEmb } = useQuery({
+        queryKey: ['embedding-model-status', allEmbIds],
+        queryFn: () => listEmbeddingModelStatus(allEmbIds),
+    })
+    const embDownloaded = useMemo(() => {
+        const set = new Set<string>()
+        for (const s of embStatuses as { id: string; downloaded: boolean }[]) {
+            if (s.downloaded) set.add(s.id)
+        }
+        return set
+    }, [embStatuses])
 
     useEffect(() => { setModel(embeddingModel) }, [embeddingModel])
+
+    const handleDownloadEmb = async (modelId: string) => {
+        setDownloadingEmb(modelId)
+        try {
+            await downloadEmbeddingModel(modelId)
+            refetchEmb()
+        } finally {
+            setDownloadingEmb(null)
+        }
+    }
+
+    const handleDeleteEmb = async (modelId: string) => {
+        setDeletingEmb(modelId)
+        try {
+            await deleteEmbeddingModel(modelId)
+            refetchEmb()
+            if (model === modelId) {
+                setModel('')
+                setSaved(false)
+            }
+        } finally {
+            setDeletingEmb(null)
+        }
+    }
 
     const handleSaveLocal = () => {
         // If changing an existing model, require confirmation
@@ -1452,29 +1500,82 @@ function EmbeddingTab() {
 
                 {localExpanded && (
                     <div className="border-t border-border/50 px-4 py-4 space-y-3 animate-fade-in">
-                        <div>
-                            <label className="text-xs text-muted-foreground mb-2 block font-medium">Select a model (auto-downloaded from HuggingFace on first use)</label>
-                            <LocalModelPicker
-                                models={RECOMMENDED_EMBEDDING_MODELS}
-                                selected={model}
-                                onSelect={id => { setModel(id); setSaved(false) }}
-                            />
-                            <div className="mt-2">
-                                <label className="text-[10px] text-muted-foreground mb-1 block">Or enter a custom model ID</label>
-                                <input
-                                    className="input text-xs"
-                                    placeholder="e.g. sentence-transformers/my-model"
-                                    value={RECOMMENDED_EMBEDDING_MODELS.some(m => m.id === model) ? '' : model}
-                                    onChange={e => { setModel(e.target.value); setSaved(false) }}
-                                />
-                            </div>
+                        <label className="text-xs text-muted-foreground mb-2 block font-medium">Download a model, then set it as default</label>
+                        <div className="grid grid-cols-1 gap-1.5 max-h-80 overflow-y-auto pr-1">
+                            {RECOMMENDED_EMBEDDING_MODELS.map(m => {
+                                const isSelected = model === m.id
+                                const isDownloaded = embDownloaded.has(m.id)
+                                const isDownloading = downloadingEmb === m.id
+                                const isDeleting = deletingEmb === m.id
+                                return (
+                                    <div
+                                        key={m.id}
+                                        className={`text-left p-3 rounded-xl border transition-all duration-200 ${isSelected
+                                            ? 'border-accent bg-accent/10 shadow-glass-sm'
+                                            : 'border-border/50 hover:border-border hover:bg-muted/20'
+                                        }`}
+                                    >
+                                        <div className="flex items-start gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => { if (isDownloaded) { setModel(m.id); setSaved(false) } }}
+                                                disabled={!isDownloaded}
+                                                className="mt-0.5 flex-shrink-0"
+                                                title={isDownloaded ? 'Select as default' : 'Download first'}
+                                            >
+                                                <div className={`w-3.5 h-3.5 rounded-full border transition-colors ${isSelected ? 'bg-accent border-accent' : isDownloaded ? 'border-border hover:border-accent/50' : 'border-border/30 opacity-40'}`} />
+                                            </button>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                                                    <span className={`text-xs font-medium ${isSelected ? 'text-foreground' : 'text-foreground/80'}`}>{m.name}</span>
+                                                    <span className={`text-[9px] px-1.5 py-0.5 rounded border font-medium ${QUALITY_COLORS[m.quality]}`}>{m.quality}</span>
+                                                    <span className="text-[9px] text-muted-foreground border border-border/40 px-1.5 py-0.5 rounded">{m.diskSize} disk</span>
+                                                    {m.dims && <span className="text-[9px] text-muted-foreground border border-border/40 px-1.5 py-0.5 rounded">{m.dims}d</span>}
+                                                    {isDownloaded && (
+                                                        <span className="text-[9px] px-1.5 py-0.5 rounded border font-medium bg-emerald-500/15 text-emerald-300 border-emerald-500/30">Downloaded</span>
+                                                    )}
+                                                </div>
+                                                <p className="text-[11px] text-muted-foreground leading-relaxed">{m.desc}</p>
+                                            </div>
+                                            <div className="flex items-center gap-1 flex-shrink-0">
+                                                {isDownloaded ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDeleteEmb(m.id)}
+                                                        disabled={isDeleting || isSelected}
+                                                        className="p-1 rounded text-red-400/60 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-30"
+                                                        title={isSelected ? 'Cannot delete active model' : 'Delete model'}
+                                                    >
+                                                        {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                                    </button>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDownloadEmb(m.id)}
+                                                        disabled={isDownloading || downloadingEmb !== null}
+                                                        className="p-1 rounded text-accent/70 hover:text-accent hover:bg-accent/10 transition-colors disabled:opacity-40"
+                                                        title="Download model"
+                                                    >
+                                                        {isDownloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )
+                            })}
                         </div>
                         <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
                             <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
                             <span>Changing the embedding model requires re-indexing all knowledge. Search results will be unavailable until re-indexing completes.</span>
                         </div>
-                        <button className="btn-primary text-xs py-1.5 px-3" onClick={handleSaveLocal} disabled={saving || !model.trim()}>
-                            {saved ? <><CheckCircle2 className="w-3.5 h-3.5" /> Saved</> : saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Save className="w-3.5 h-3.5" /> Save</>}
+                        <button
+                            className="btn-primary text-xs py-1.5 px-3"
+                            onClick={handleSaveLocal}
+                            disabled={saving || !model.trim() || !embDownloaded.has(model)}
+                            title={model && !embDownloaded.has(model) ? 'Download the model first' : ''}
+                        >
+                            {saved ? <><CheckCircle2 className="w-3.5 h-3.5" /> Saved</> : saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Save className="w-3.5 h-3.5" /> Set as Default</>}
                         </button>
                     </div>
                 )}
@@ -1579,6 +1680,19 @@ function AudioTab() {
     const [whisperExpanded, setWhisperExpanded] = useState(true)
     const [savingWhisper, setSavingWhisper] = useState(false)
     const [savedWhisper, setSavedWhisper] = useState(false)
+    const [downloadingModel, setDownloadingModel] = useState<string | null>(null)
+    const [deletingModel, setDeletingModel] = useState<string | null>(null)
+    const { data: whisperModelStatuses = [], refetch: refetchWhisper } = useQuery({
+        queryKey: ['whisper-models'],
+        queryFn: listWhisperModels,
+    })
+    const whisperDownloaded = useMemo(() => {
+        const set = new Set<string>()
+        for (const m of whisperModelStatuses as { id: string; downloaded: boolean }[]) {
+            if (m.downloaded) set.add(m.id)
+        }
+        return set
+    }, [whisperModelStatuses])
 
     const filteredFetchedModels = useMemo(() => {
         if (!fetchedModels) return []
@@ -1639,11 +1753,37 @@ function AudioTab() {
     useEffect(() => { setWhisperModel(localWhisperModel) }, [localWhisperModel])
 
     const handleSaveWhisper = async () => {
+        if (!whisperDownloaded.has(whisperModel)) return
         setSavingWhisper(true)
         await updateSetting('local_whisper_model', { value: whisperModel, category: 'llm' })
         qc.invalidateQueries({ queryKey: ['settings'] })
         setSavingWhisper(false); setSavedWhisper(true)
         setTimeout(() => setSavedWhisper(false), 2000)
+    }
+
+    const handleDownloadWhisper = async (modelId: string) => {
+        setDownloadingModel(modelId)
+        try {
+            await downloadWhisperModel(modelId)
+            refetchWhisper()
+        } finally {
+            setDownloadingModel(null)
+        }
+    }
+
+    const handleDeleteWhisper = async (modelId: string) => {
+        setDeletingModel(modelId)
+        try {
+            await deleteWhisperModel(modelId)
+            refetchWhisper()
+            // If the deleted model was the selected default, clear selection
+            if (whisperModel === modelId) {
+                setWhisperModel('')
+                setSavedWhisper(false)
+            }
+        } finally {
+            setDeletingModel(null)
+        }
     }
 
     const resetAddForm = () => {
@@ -1815,23 +1955,86 @@ function AudioTab() {
                         </div>
                         {whisperExpanded && (
                             <div className="border-t border-border/50 px-4 py-4 space-y-3 animate-fade-in">
-                                <label className="text-xs text-muted-foreground mb-2 block font-medium">Select a Whisper model (auto-downloaded from HuggingFace on first use)</label>
-                                <LocalModelPicker
-                                    models={RECOMMENDED_WHISPER_MODELS}
-                                    selected={whisperModel}
-                                    onSelect={id => { setWhisperModel(id); setSavedWhisper(false) }}
-                                />
-                                <div>
-                                    <label className="text-[10px] text-muted-foreground mb-1 block">Or enter a custom model ID</label>
-                                    <input
-                                        className="input text-xs"
-                                        placeholder="e.g. openai/whisper-medium.en"
-                                        value={RECOMMENDED_WHISPER_MODELS.some(m => m.id === whisperModel) ? '' : whisperModel}
-                                        onChange={e => { setWhisperModel(e.target.value); setSavedWhisper(false) }}
-                                    />
+                                <label className="text-xs text-muted-foreground mb-2 block font-medium">Download a Whisper model, then set it as default</label>
+                                <div className="grid grid-cols-1 gap-1.5 max-h-80 overflow-y-auto pr-1">
+                                    {RECOMMENDED_WHISPER_MODELS.map(m => {
+                                        const isSelected = whisperModel === m.id
+                                        const isDownloaded = whisperDownloaded.has(m.id)
+                                        const isDownloading = downloadingModel === m.id
+                                        const isDeleting = deletingModel === m.id
+                                        return (
+                                            <div
+                                                key={m.id}
+                                                className={`text-left p-3 rounded-xl border transition-all duration-200 ${isSelected
+                                                    ? 'border-accent bg-accent/10 shadow-glass-sm'
+                                                    : 'border-border/50 hover:border-border hover:bg-muted/20'
+                                                }`}
+                                            >
+                                                <div className="flex items-start gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => { if (isDownloaded) { setWhisperModel(m.id); setSavedWhisper(false) } }}
+                                                        disabled={!isDownloaded}
+                                                        className="mt-0.5 flex-shrink-0"
+                                                        title={isDownloaded ? 'Select as default' : 'Download first'}
+                                                    >
+                                                        <div className={`w-3.5 h-3.5 rounded-full border transition-colors ${isSelected ? 'bg-accent border-accent' : isDownloaded ? 'border-border hover:border-accent/50' : 'border-border/30 opacity-40'}`} />
+                                                    </button>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                                                            <span className={`text-xs font-medium ${isSelected ? 'text-foreground' : 'text-foreground/80'}`}>{m.name}</span>
+                                                            <span className={`text-[9px] px-1.5 py-0.5 rounded border font-medium ${QUALITY_COLORS[m.quality]}`}>{m.quality}</span>
+                                                            <span className="text-[9px] text-muted-foreground border border-border/40 px-1.5 py-0.5 rounded">{m.diskSize} disk</span>
+                                                            <span className="text-[9px] text-muted-foreground border border-border/40 px-1.5 py-0.5 rounded">{m.vramReq} VRAM</span>
+                                                            {isDownloaded && (
+                                                                <span className="text-[9px] px-1.5 py-0.5 rounded border font-medium bg-emerald-500/15 text-emerald-300 border-emerald-500/30">Downloaded</span>
+                                                            )}
+                                                        </div>
+                                                        {m.recommendedFor && m.recommendedFor.length > 0 && (
+                                                            <div className="flex items-center gap-1 flex-wrap mb-0.5">
+                                                                <span className="text-[9px] text-muted-foreground">Recommended for:</span>
+                                                                {m.recommendedFor.map(tier => (
+                                                                    <span key={tier} className={`text-[9px] px-1.5 py-0.5 rounded border font-medium ${VRAM_TIER_COLORS[tier]}`}>{tier} VRAM</span>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                        <p className="text-[11px] text-muted-foreground leading-relaxed">{m.desc}</p>
+                                                    </div>
+                                                    <div className="flex items-center gap-1 flex-shrink-0">
+                                                        {isDownloaded ? (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDeleteWhisper(m.id)}
+                                                                disabled={isDeleting || isSelected}
+                                                                className="p-1 rounded text-red-400/60 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-30"
+                                                                title={isSelected ? 'Cannot delete active model' : 'Delete model'}
+                                                            >
+                                                                {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDownloadWhisper(m.id)}
+                                                                disabled={isDownloading || downloadingModel !== null}
+                                                                className="p-1 rounded text-accent/70 hover:text-accent hover:bg-accent/10 transition-colors disabled:opacity-40"
+                                                                title="Download model"
+                                                            >
+                                                                {isDownloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
                                 </div>
-                                <button className="btn-primary text-xs py-1.5 px-3" onClick={handleSaveWhisper} disabled={savingWhisper || !whisperModel.trim()}>
-                                    {savedWhisper ? <><CheckCircle2 className="w-3.5 h-3.5" /> Saved</> : savingWhisper ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Save className="w-3.5 h-3.5" /> Save</>}
+                                <button
+                                    className="btn-primary text-xs py-1.5 px-3"
+                                    onClick={handleSaveWhisper}
+                                    disabled={savingWhisper || !whisperModel.trim() || !whisperDownloaded.has(whisperModel)}
+                                    title={whisperModel && !whisperDownloaded.has(whisperModel) ? 'Download the model first' : ''}
+                                >
+                                    {savedWhisper ? <><CheckCircle2 className="w-3.5 h-3.5" /> Saved</> : savingWhisper ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Save className="w-3.5 h-3.5" /> Set as Default</>}
                                 </button>
                             </div>
                         )}
@@ -1858,6 +2061,336 @@ function AudioTab() {
                     }) : <p className="text-xs text-muted-foreground italic px-1">No TTS models configured.</p>}
                 </div>
             )}
+        </div>
+    )
+}
+
+// ── CLIP Visual Model Tab ─────────────────────────────────────────────────────
+
+interface CLIPModelInfo {
+    id: string
+    name: string
+    diskSize: string
+    vramReq: string
+    dimension: number
+    quality: ModelQuality
+    desc: string
+    recommendedFor?: VramTier[]
+}
+
+const RECOMMENDED_CLIP_MODELS: CLIPModelInfo[] = [
+    {
+        id: 'clip-ViT-B-16', name: 'CLIP ViT-B/16',
+        diskSize: '600 MB', vramReq: '~1 GB', dimension: 512, quality: 'Balanced',
+        desc: 'Higher resolution variant of the base model. Better at fine-grained visual details.',
+        recommendedFor: ['≤4GB', '≤8GB'],
+    },
+    {
+        id: 'clip-ViT-B-32', name: 'CLIP ViT-B/32',
+        diskSize: '600 MB', vramReq: '<1 GB', dimension: 512, quality: 'Fast',
+        desc: 'Default model. Fast and memory-efficient, good for most image search use cases.',
+        recommendedFor: ['≤2GB', '≤4GB'],
+    },
+    {
+        id: 'clip-ViT-L-14', name: 'CLIP ViT-L/14',
+        diskSize: '1.7 GB', vramReq: '~3 GB', dimension: 768, quality: 'Best',
+        desc: 'Largest CLIP model. Best visual understanding and search accuracy.',
+        recommendedFor: ['≤8GB', '≤16GB'],
+    },
+]
+
+function CLIPTab() {
+    const qc = useQueryClient()
+
+    const [clipModel, setClipModel] = useState('')
+    const [savingClip, setSavingClip] = useState(false)
+    const [savedClip, setSavedClip] = useState(false)
+    const [downloadingModel, setDownloadingModel] = useState<string | null>(null)
+    const [deletingModel, setDeletingModel] = useState<string | null>(null)
+
+    const { data: clipStatuses = [], refetch: refetchClip } = useQuery({
+        queryKey: ['clip-models'],
+        queryFn: listCLIPModels,
+    })
+
+    const { data: clipDefault } = useQuery({
+        queryKey: ['clip-default'],
+        queryFn: getCLIPDefault,
+    })
+
+    const clipDownloaded = useMemo(() => {
+        const set = new Set<string>()
+        for (const m of clipStatuses as { id: string; downloaded: boolean }[]) {
+            if (m.downloaded) set.add(m.id)
+        }
+        return set
+    }, [clipStatuses])
+
+    const currentDefault = (clipDefault as { model_id?: string })?.model_id ?? ''
+    useEffect(() => { if (currentDefault) setClipModel(currentDefault) }, [currentDefault])
+
+    const handleDownloadClip = async (modelId: string) => {
+        setDownloadingModel(modelId)
+        try {
+            await downloadCLIPModel(modelId)
+            refetchClip()
+        } finally {
+            setDownloadingModel(null)
+        }
+    }
+
+    const handleDeleteClip = async (modelId: string) => {
+        setDeletingModel(modelId)
+        try {
+            await deleteCLIPModel(modelId)
+            refetchClip()
+            if (clipModel === modelId) {
+                setClipModel('')
+                setSavedClip(false)
+            }
+        } finally {
+            setDeletingModel(null)
+        }
+    }
+
+    const handleSaveClip = async () => {
+        if (!clipDownloaded.has(clipModel)) return
+        setSavingClip(true)
+        try {
+            await setCLIPDefault(clipModel)
+            qc.invalidateQueries({ queryKey: ['clip-default'] })
+            setSavedClip(true)
+            setTimeout(() => setSavedClip(false), 2000)
+        } finally {
+            setSavingClip(false)
+        }
+    }
+
+    return (
+        <div className="space-y-3">
+            <div>
+                <h3 className="text-sm font-medium">CLIP Visual Search Models</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    CLIP models generate visual embeddings for image search. Select and download a model, then set it as default. Changing the default model requires re-processing existing images to update their embeddings.
+                </p>
+            </div>
+
+            <div className="space-y-1.5">
+                {RECOMMENDED_CLIP_MODELS.map(m => {
+                    const isSelected = clipModel === m.id
+                    const isDownloaded = clipDownloaded.has(m.id)
+                    const isDownloading = downloadingModel === m.id
+                    const isDeleting = deletingModel === m.id
+                    const statusInfo = (clipStatuses as { id: string; disk_size?: string }[]).find(s => s.id === m.id)
+
+                    return (
+                        <div
+                            key={m.id}
+                            className={`glass-card-hover transition-all duration-300 ${isSelected ? 'ring-1 ring-accent/40' : ''}`}
+                        >
+                            <div className="px-4 py-3 flex items-start gap-3">
+                                {/* Radio selector */}
+                                <button
+                                    type="button"
+                                    onClick={() => isDownloaded && setClipModel(m.id)}
+                                    disabled={!isDownloaded}
+                                    className="mt-1 flex-shrink-0"
+                                    title={isDownloaded ? 'Select this model' : 'Download first'}
+                                >
+                                    <div className={`w-4 h-4 rounded-full border-2 transition-all flex items-center justify-center ${
+                                        isSelected ? 'border-accent bg-accent/20' : isDownloaded ? 'border-muted-foreground/40 hover:border-accent/60' : 'border-muted-foreground/20 opacity-40'
+                                    }`}>
+                                        {isSelected && <div className="w-2 h-2 rounded-full bg-accent" />}
+                                    </div>
+                                </button>
+
+                                {/* Info */}
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                                        <span className="font-medium text-sm">{m.name}</span>
+                                        <span className={`text-[9px] px-1.5 py-0.5 rounded border font-medium ${QUALITY_COLORS[m.quality]}`}>{m.quality}</span>
+                                        <span className="text-[9px] text-muted-foreground border border-border/40 px-1.5 py-0.5 rounded">{m.diskSize}</span>
+                                        <span className="text-[9px] text-muted-foreground border border-border/40 px-1.5 py-0.5 rounded">{m.vramReq} VRAM</span>
+                                        <span className="text-[9px] text-muted-foreground border border-border/40 px-1.5 py-0.5 rounded">{m.dimension}D</span>
+                                        {isDownloaded && (
+                                            <span className="text-[9px] px-1.5 py-0.5 rounded border font-medium bg-emerald-500/15 text-emerald-300 border-emerald-500/30">
+                                                Downloaded{statusInfo?.disk_size ? ` (${statusInfo.disk_size})` : ''}
+                                            </span>
+                                        )}
+                                        {m.recommendedFor?.map(tier => (
+                                            <span key={tier} className={`text-[8px] px-1.5 py-0.5 rounded border font-medium ${VRAM_TIER_COLORS[tier]}`}>{tier}</span>
+                                        ))}
+                                    </div>
+                                    <p className="text-[11px] text-muted-foreground leading-relaxed">{m.desc}</p>
+                                </div>
+
+                                {/* Actions */}
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                    {isDownloaded ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => handleDeleteClip(m.id)}
+                                            disabled={isDeleting}
+                                            className="p-1.5 rounded text-red-400/60 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-30"
+                                            title="Delete model"
+                                        >
+                                            {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                        </button>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={() => handleDownloadClip(m.id)}
+                                            disabled={isDownloading}
+                                            className="btn-primary text-xs py-1.5 px-3"
+                                            title="Download model"
+                                        >
+                                            {isDownloading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Downloading…</> : <><Download className="w-3.5 h-3.5" /> Download</>}
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )
+                })}
+            </div>
+
+            {/* Save default button */}
+            <div className="flex items-center gap-3">
+                <button
+                    type="button"
+                    onClick={handleSaveClip}
+                    disabled={savingClip || !clipModel.trim() || !clipDownloaded.has(clipModel) || clipModel === currentDefault}
+                    className="btn-primary text-xs py-1.5 px-4 gap-1.5"
+                    title={clipModel && !clipDownloaded.has(clipModel) ? 'Download the model first' : ''}
+                >
+                    {savingClip ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                    Set as Default
+                </button>
+                {savedClip && (
+                    <span className="text-xs text-emerald-400 flex items-center gap-1">
+                        <CheckCircle className="w-3.5 h-3.5" /> Saved
+                    </span>
+                )}
+                {currentDefault && (
+                    <span className="text-[10px] text-muted-foreground">
+                        Current: {RECOMMENDED_CLIP_MODELS.find(m => m.id === currentDefault)?.name || currentDefault}
+                    </span>
+                )}
+            </div>
+
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+                <p className="text-[11px] text-amber-300/90">
+                    Changing the CLIP model changes the embedding dimensions. Existing image embeddings will need to be re-processed via the image knowledge cards' re-extract action to use the new model.
+                </p>
+            </div>
+        </div>
+    )
+}
+
+// ── PDF Processing Tab ────────────────────────────────────────────────────────
+function PDFProcessingTab() {
+    const [deleting, setDeleting] = useState(false)
+    const { data: markerModels = [], refetch } = useQuery({
+        queryKey: ['marker-models'],
+        queryFn: listMarkerModels,
+        refetchInterval: (query) => {
+            const models = query.state.data as { downloading?: boolean }[] | undefined
+            return models?.[0]?.downloading ? 3000 : false
+        },
+    })
+
+    const model = (markerModels as { id: string; name: string; downloaded: boolean; downloading?: boolean; disk_size: string | null }[])[0]
+    const isDownloaded = model?.downloaded ?? false
+    const isDownloading = model?.downloading ?? false
+    const diskSize = model?.disk_size ?? null
+    const [localDownloading, setLocalDownloading] = useState(false)
+    const downloading = isDownloading || localDownloading
+
+    const handleDownload = async () => {
+        setLocalDownloading(true)
+        try {
+            await downloadMarkerModel()
+            refetch()
+        } finally {
+            setLocalDownloading(false)
+        }
+    }
+
+    const handleDelete = async () => {
+        setDeleting(true)
+        try {
+            await deleteMarkerModel()
+            refetch()
+        } finally {
+            setDeleting(false)
+        }
+    }
+
+    return (
+        <div className="space-y-3">
+            <div>
+                <h3 className="text-sm font-medium">PDF Processing</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    Marker PDF uses deep learning models for layout-aware text extraction from PDFs. Without it, basic PyMuPDF text extraction is used as a fallback.
+                </p>
+            </div>
+
+            <div className="glass-card-hover transition-all duration-300">
+                <div className="px-4 py-4 space-y-3">
+                    <div className="flex items-start gap-3">
+                        <div className="w-9 h-9 rounded-lg flex items-center justify-center border bg-red-500/10 border-red-500/20 flex-shrink-0">
+                            <FileText className="w-4.5 h-4.5 text-red-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                                <span className="font-medium text-sm">Marker PDF</span>
+                                <span className="text-[9px] px-1.5 py-0.5 rounded border font-medium bg-purple-500/15 text-purple-300 border-purple-500/30">Best</span>
+                                <span className="text-[9px] text-muted-foreground border border-border/40 px-1.5 py-0.5 rounded">~1.5 GB disk</span>
+                                <span className="text-[9px] text-muted-foreground border border-border/40 px-1.5 py-0.5 rounded">~3 GB VRAM</span>
+                                {isDownloaded && (
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded border font-medium bg-emerald-500/15 text-emerald-300 border-emerald-500/30">
+                                        Downloaded{diskSize ? ` (${diskSize})` : ''}
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                Layout-aware PDF extraction with table detection, OCR, and markdown output. Produces significantly better results than basic text extraction, especially for PDFs with complex layouts, tables, and multi-column text.
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                            {isDownloaded ? (
+                                <button
+                                    type="button"
+                                    onClick={handleDelete}
+                                    disabled={deleting}
+                                    className="p-1.5 rounded text-red-400/60 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-30"
+                                    title="Delete model"
+                                >
+                                    {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={handleDownload}
+                                    disabled={downloading}
+                                    className="btn-primary text-xs py-1.5 px-3"
+                                    title="Download model"
+                                >
+                                    {downloading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Downloading…</> : <><Download className="w-3.5 h-3.5" /> Download</>}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {!isDownloaded && (
+                        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+                            <p className="text-[11px] text-amber-300/90">
+                                Without this model, PDFs will be processed using basic text extraction (PyMuPDF) which may not handle complex layouts, tables, or scanned documents well.
+                            </p>
+                        </div>
+                    )}
+                </div>
+            </div>
         </div>
     )
 }
@@ -2005,7 +2538,7 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                 {saving ? 'Saving…' : 'Save Provider'}
             </button>
-            <p className="text-[10px] text-muted-foreground text-center">After saving, add models in the Chat, Vision, Embedding, or Audio tabs</p>
+            <p className="text-[10px] text-muted-foreground text-center">After saving, add models in the Reasoning, Vision, Embedding, or Audio tabs</p>
         </div>
     )
 }

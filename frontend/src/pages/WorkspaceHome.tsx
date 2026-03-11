@@ -1,33 +1,25 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { listKnowledge, deleteKnowledge, togglePin, toggleArchive, extractBookmarkContent, reprocessKnowledge, getKnowledgeThumbnailUrl } from '@/lib/api'
+import { listKnowledge, deleteKnowledge, togglePin, toggleArchive, extractBookmarkContent, reprocessKnowledge, getKnowledgeFileUrl } from '@/lib/api'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import { CopyButton } from '@/components/shared/CopyButton'
 import { openQuickKnowledge, type QuickKnowledgeType, FILE_BASED_TYPES } from '@/lib/quick-knowledge'
 import KnowledgeTypeGrid from '@/components/knowledge/KnowledgeTypeGrid'
-import { UnifiedKnowledgeModal } from '@/components/knowledge/UnifiedKnowledgeModal'
+import PreviewDispatcher from '@/components/knowledge/preview/PreviewDispatcher'
+import { KnowledgeCard as KnowledgeCardContent, isKnowledgeProcessing } from '@/components/knowledge/cards/KnowledgeCard'
 import { getShortcutDisplay } from '@/lib/keyboard'
 import {
     Search, FileText, Bookmark, Code2, Zap, Pin, Archive,
     Trash2, PinOff, ArchiveX, Loader2, Sparkles,
-    Inbox, CheckSquare, Square, Clock, ExternalLink, Copy, SortAsc,
-    ChevronDown, Tag, RefreshCw,
+    Inbox, CheckSquare, Square, ExternalLink, Copy, SortAsc,
+    ChevronDown, Tag, RefreshCw, Download,
     Image as ImageIcon, Music, FileType2, Table, Presentation,
 } from 'lucide-react'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem,
     ContextMenuSeparator, ContextMenuShortcut
 } from '@/components/ui/context-menu'
-import MarkdownIt from 'markdown-it'
-
-const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
-
-/// Preview renderer: links are displayed but not clickable (prevents navigation when clicking knowledge card)
-const mdPreview = new MarkdownIt({ html: false, linkify: false, typographer: true, breaks: true })
-// Disable link rendering - show as plain text instead
-mdPreview.renderer.rules.link_open = () => ''
-mdPreview.renderer.rules.link_close = () => ''
 
 interface KnowledgeListItem {
     id: string
@@ -56,16 +48,16 @@ interface KnowledgeListItem {
 
 const TYPE_OPTS = [
     { id: '', label: 'All types' },
-    { id: 'standard', label: 'Note', icon: FileText },
+    { id: 'note', label: 'Note', icon: FileText },
     { id: 'fleeting', label: 'Fleeting', icon: Zap },
     { id: 'bookmark', label: 'Bookmarks', icon: Bookmark },
     { id: 'gist', label: 'Gists', icon: Code2 },
     { id: 'image', label: 'Images', icon: ImageIcon },
     { id: 'audio', label: 'Audio', icon: Music },
     { id: 'pdf', label: 'PDFs', icon: FileType2 },
-    { id: 'docx', label: 'Word Docs', icon: FileText },
-    { id: 'xlsx', label: 'Spreadsheets', icon: Table },
-    { id: 'pptx', label: 'Presentations', icon: Presentation },
+    { id: 'document', label: 'Documents', icon: FileText },
+    { id: 'sheet', label: 'Sheets', icon: Table },
+    { id: 'slides', label: 'Slides', icon: Presentation },
 ]
 
 const SORT_OPTS = [
@@ -75,7 +67,7 @@ const SORT_OPTS = [
 ]
 
 const TYPE_META: Record<string, { icon: React.ComponentType<{ className?: string }>; label: string; color: string }> = {
-    standard: { icon: FileText, label: 'Note', color: 'text-blue-400' },
+    note: { icon: FileText, label: 'Note', color: 'text-blue-400' },
     fleeting: { icon: Zap, label: 'Fleeting', color: 'text-yellow-400' },
     bookmark: { icon: Bookmark, label: 'Bookmark', color: 'text-purple-400' },
     gist: { icon: Code2, label: 'Gist', color: 'text-green-400' },
@@ -83,7 +75,7 @@ const TYPE_META: Record<string, { icon: React.ComponentType<{ className?: string
     audio: { icon: Music, label: 'Audio', color: 'text-orange-400' },
     pdf: { icon: FileType2, label: 'PDF', color: 'text-red-400' },
     docx: { icon: FileText, label: 'Word', color: 'text-blue-300' },
-    xlsx: { icon: Table, label: 'Excel', color: 'text-green-300' },
+    sheet: { icon: Table, label: 'Sheet', color: 'text-green-300' },
     pptx: { icon: Presentation, label: 'PowerPoint', color: 'text-amber-400' },
 }
 
@@ -107,6 +99,8 @@ export default function WorkspaceHome() {
 
     // Track knowledge IDs currently undergoing re-extraction
     const [extractingIds, setExtractingIds] = useState<Set<string>>(new Set())
+    // Track knowledge IDs currently undergoing intelligence generation
+    const [intelligenceIds, setIntelligenceIds] = useState<Set<string>>(new Set())
 
     // Listen for background AI title/intelligence updates and refresh the grid
     const { on } = useWorkspaceWebSocket(workspaceId)
@@ -116,13 +110,29 @@ export default function WorkspaceHome() {
             qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
             const kid = msg.knowledge_id as string | undefined
             const fields = msg.fields as string[] | undefined
-            if (kid && fields && (fields.includes('content') || fields.includes('embedding_status'))) {
-                setExtractingIds(prev => {
-                    if (!prev.has(kid)) return prev
-                    const next = new Set(prev)
-                    next.delete(kid)
-                    return next
-                })
+            if (kid && fields) {
+                // Content extraction complete — intelligence generation likely starting
+                if (fields.includes('embedding_status') && !fields.includes('insights')) {
+                    setIntelligenceIds(prev => new Set(prev).add(kid))
+                }
+                // Intelligence generation complete
+                if (fields.includes('insights')) {
+                    setIntelligenceIds(prev => {
+                        if (!prev.has(kid)) return prev
+                        const next = new Set(prev)
+                        next.delete(kid)
+                        return next
+                    })
+                }
+                // Clear re-extraction tracking
+                if (fields.includes('content') || fields.includes('embedding_status')) {
+                    setExtractingIds(prev => {
+                        if (!prev.has(kid)) return prev
+                        const next = new Set(prev)
+                        next.delete(kid)
+                        return next
+                    })
+                }
             }
         })
     }, [on, qc, workspaceId])
@@ -176,7 +186,7 @@ export default function WorkspaceHome() {
         enabled: !!workspaceId,
     })
 
-    const handleCreate = (type: QuickKnowledgeType = 'standard') => {
+    const handleCreate = (type: QuickKnowledgeType = 'note') => {
         openQuickKnowledge(type)
     }
 
@@ -461,6 +471,7 @@ export default function WorkspaceHome() {
                                             onReprocess={() => handleReprocess(knowledgeRecord.id)}
                                             onDelete={() => handleDelete(knowledgeRecord.id)}
                                             isExtracting={extractingIds.has(knowledgeRecord.id)}
+                                            isGeneratingIntelligence={intelligenceIds.has(knowledgeRecord.id)}
                                             workspaceId={workspaceId}
                                         />
                                     ))}
@@ -473,7 +484,10 @@ export default function WorkspaceHome() {
                 {/* Bulk action floating toolbar */}
                 {hasSelection && (
                     <div
-                        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-card border border-accent/30 rounded-2xl px-4 py-2.5 flex items-center gap-3 shadow-2xl shadow-black/40 animate-slide-up"
+                        className="fixed bottom-6 inset-x-0 z-50 flex justify-center pointer-events-none animate-slide-up"
+                    >
+                    <div
+                        className="bg-card border border-accent/30 rounded-2xl px-4 py-2.5 flex items-center gap-3 shadow-2xl shadow-black/40 pointer-events-auto"
                     >
                         <span className="text-sm font-medium text-accent">{selected.size} selected</span>
                         <div className="w-px h-4 bg-border" />
@@ -491,12 +505,12 @@ export default function WorkspaceHome() {
                             Clear
                         </button>
                     </div>
+                    </div>
                 )}
 
-                {/* Unified knowledge modal — view mode */}
-                <UnifiedKnowledgeModal
-                    mode="view"
-                    knowledgeId={activeKnowledgeId ?? undefined}
+                {/* Knowledge preview panel */}
+                <PreviewDispatcher
+                    knowledgeId={activeKnowledgeId}
                     workspaceId={workspaceId}
                     isOpen={!!activeKnowledgeId}
                     onClose={() => setActiveKnowledgeId(null)}
@@ -622,7 +636,7 @@ function FittedTagRow({ tags }: { tags: string[] }) {
 
 function KnowledgeCard({
     knowledgeRecord, index, isSelected, anySelected, onSelect, onClick,
-    onPin, onArchive, onExtractBookmarkContent, onReprocess, onDelete, isExtracting, minWidthPx, maxHeightPx, workspaceId,
+    onPin, onArchive, onExtractBookmarkContent, onReprocess, onDelete, isExtracting, isGeneratingIntelligence, minWidthPx, maxHeightPx, workspaceId,
 }: {
     knowledgeRecord: KnowledgeListItem
     index: number
@@ -638,37 +652,28 @@ function KnowledgeCard({
     onReprocess: () => void
     onDelete: () => void
     isExtracting?: boolean
+    isGeneratingIntelligence?: boolean
     workspaceId: string
 }) {
-    const meta = TYPE_META[knowledgeRecord.type] ?? TYPE_META.standard
-    const TypeIcon = meta.icon
-    const displayTitle = knowledgeRecord.title?.trim() || knowledgeRecord.ai_title?.trim() || null
-    const isBookmarkScraping =
-        knowledgeRecord.type === 'bookmark'
-        && knowledgeRecord.embedding_status === 'scraping'
-    const isBookmarkContentMissing =
-        knowledgeRecord.type === 'bookmark'
-        && !knowledgeRecord.content_preview?.trim()
-        && !knowledgeRecord.url_title?.trim()
-    const bookmarkHost = (() => {
-        if (knowledgeRecord.type !== 'bookmark' || !knowledgeRecord.url) return null
-        try { return new URL(knowledgeRecord.url).hostname } catch { return knowledgeRecord.url }
-    })()
-
     const handleOpenUrl = (e: React.MouseEvent) => {
         e.stopPropagation()
         if (knowledgeRecord.url) window.open(knowledgeRecord.url, '_blank', 'noopener')
+    }
+    const handleDownload = (e: React.MouseEvent) => {
+        e.stopPropagation()
+        const a = document.createElement('a')
+        a.href = getKnowledgeFileUrl(workspaceId, knowledgeRecord.id)
+        a.download = knowledgeRecord.title || knowledgeRecord.ai_title || 'file'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
     }
     const runAction = (e: React.MouseEvent, action: () => void) => {
         e.stopPropagation()
         action()
     }
-    const actionBtnClass = 'inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/60 bg-muted/35 text-foreground/85 hover:bg-muted/55 hover:border-border transition-colors'
-    const selectClass = isSelected
-        ? 'border-accent bg-accent text-accent-foreground'
-        : anySelected
-            ? 'border-accent/50 bg-accent/10 text-accent'
-            : 'border-border/70 bg-background/70 text-muted-foreground hover:border-accent/50 hover:text-foreground'
+    const isProcessing = isKnowledgeProcessing(knowledgeRecord)
+    const floatingBtnClass = 'inline-flex h-6 w-6 items-center justify-center rounded-md border border-white/10 bg-black/70 text-white/90 hover:text-white hover:bg-black/85 backdrop-blur-md shadow-sm transition-colors'
 
     return (
         <ContextMenu>
@@ -682,178 +687,116 @@ function KnowledgeCard({
                     }}
                     onClick={onClick}
                 >
-                    <button
-                        className={`absolute top-0 right-0 z-20 h-8 w-8 rounded-tr-2xl rounded-bl-xl border flex items-center justify-center transition-colors ${selectClass}`}
-                        onClick={e => onSelect(knowledgeRecord.id, e)}
-                        aria-label={isSelected ? 'Deselect knowledge' : 'Select knowledge'}
-                    >
-                        {isSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
-                    </button>
-
-                    <div className="flex items-start justify-between gap-2 pr-8">
-                        <div className="min-w-0 flex items-center gap-1.5 flex-wrap">
-                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border border-border/60 bg-muted/40 ${meta.color}`}>
-                                <TypeIcon className="w-3 h-3" />
-                                {knowledgeRecord.type === 'fleeting' && <Clock className="w-3 h-3" />}
-                                {meta.label}
-                            </span>
-                            {bookmarkHost && (
-                                <span className="text-[10px] text-muted-foreground/95 max-w-[150px] truncate rounded-full border border-border/60 bg-muted/35 px-2 py-0.5">
-                                    {bookmarkHost}
-                                </span>
-                            )}
-                            {knowledgeRecord.type === 'gist' && knowledgeRecord.gist_language && (
-                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-green-500/10 text-green-300 border border-green-500/30">
-                                    {knowledgeRecord.gist_language}
-                                </span>
-                            )}
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                            {knowledgeRecord.is_pinned && <Pin className="w-3.5 h-3.5 text-amber-300" />}
-                            {isBookmarkScraping && <Loader2 className="w-3.5 h-3.5 text-accent animate-spin" />}
-                        </div>
-                    </div>
-
-                    <div className="mt-2">
-                        <h3 className={`font-semibold text-[15px] leading-snug line-clamp-2 ${displayTitle ? 'text-foreground' : 'text-muted-foreground/60 italic'}`}>
-                            {displayTitle ?? 'Untitled'}
-                        </h3>
-                    </div>
-
-                    {/* Thumbnail for image/pdf */}
-                    {(knowledgeRecord.type === 'image' || knowledgeRecord.type === 'pdf') && knowledgeRecord.thumbnail_path && (
-                        <div className="mt-2 rounded-lg overflow-hidden border border-border/40 bg-muted/20">
-                            <img
-                                src={getKnowledgeThumbnailUrl(workspaceId, knowledgeRecord.id)}
-                                alt={displayTitle ?? 'Preview'}
-                                className="w-full object-cover max-h-40"
-                                loading="lazy"
-                            />
-                        </div>
-                    )}
-
-                    <div className="mt-2 min-h-0 overflow-hidden">
-                        {isBookmarkScraping && isBookmarkContentMissing ? (
-                            <div className="text-[12px] text-muted-foreground/90 italic flex items-center gap-1.5">
-                                <Loader2 className="w-3 h-3 animate-spin text-accent" />
-                                Scraping bookmark content...
-                            </div>
-                        ) : knowledgeRecord.type === 'gist' ? (
-                            <div className="text-[11px] font-mono whitespace-pre-wrap line-clamp-7 text-foreground/84">
-                                {knowledgeRecord.content_preview || knowledgeRecord.title || ''}
-                            </div>
-                        ) : (
-                            <div
-                                className="text-[13px] text-foreground/88 line-clamp-7 leading-[1.45] prose prose-invert prose-p:my-0 prose-headings:my-0 prose-headings:text-[13px] prose-headings:font-medium prose-headings:leading-[1.45] prose-li:my-0 prose-ul:my-0 focus:outline-none max-w-none"
-                                dangerouslySetInnerHTML={{ __html: mdPreview.render(knowledgeRecord.content_preview || (knowledgeRecord.url_title ?? '')) }}
+                    {/* Floating action toolbar — top-right, visible on hover or when selected */}
+                    <div className={`absolute top-2 right-2 z-20 flex items-center gap-1 transition-opacity ${isSelected || anySelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                        {(knowledgeRecord.type === 'bookmark' || ['image', 'audio', 'pdf', 'document', 'sheet', 'slides'].includes(knowledgeRecord.type)) && (knowledgeRecord.type !== 'bookmark' || !!knowledgeRecord.url) && (
+                            <button
+                                className={floatingBtnClass}
+                                onClick={e => runAction(e, knowledgeRecord.type === 'bookmark' ? onExtractBookmarkContent : onReprocess)}
+                                title="Re-extract content"
+                                aria-label="Re-extract content"
+                                disabled={isExtracting}
+                            >
+                                <RefreshCw className={`w-3 h-3${isExtracting ? ' animate-spin' : ''}`} />
+                            </button>
+                        )}
+                        {['image', 'audio', 'pdf', 'document', 'sheet', 'slides'].includes(knowledgeRecord.type) && (
+                            <button
+                                className={floatingBtnClass}
+                                onClick={handleDownload}
+                                title="Download"
+                                aria-label="Download file"
+                            >
+                                <Download className="w-3 h-3" />
+                            </button>
+                        )}
+                        {knowledgeRecord.type === 'bookmark' && knowledgeRecord.url && (
+                            <button
+                                className={floatingBtnClass}
+                                onClick={handleOpenUrl}
+                                title="Open URL"
+                                aria-label="Open bookmark URL"
+                            >
+                                <ExternalLink className="w-3 h-3" />
+                            </button>
+                        )}
+                        {knowledgeRecord.type === 'bookmark' && knowledgeRecord.url && (
+                            <CopyButton
+                                content={knowledgeRecord.url}
+                                label="Copy URL"
+                                copiedLabel="Copied"
+                                iconOnly
+                                stopPropagation
+                                className={floatingBtnClass}
                             />
                         )}
+                        {knowledgeRecord.type === 'gist' && (
+                            <CopyButton
+                                content={knowledgeRecord.content_preview}
+                                label="Copy"
+                                copiedLabel="Done"
+                                iconOnly
+                                stopPropagation
+                                className={floatingBtnClass}
+                            />
+                        )}
+                        <button
+                            className={floatingBtnClass}
+                            onClick={e => runAction(e, onPin)}
+                            title={knowledgeRecord.is_pinned ? 'Unpin' : 'Pin'}
+                            aria-label={knowledgeRecord.is_pinned ? 'Unpin knowledge' : 'Pin knowledge'}
+                        >
+                            {knowledgeRecord.is_pinned ? <PinOff className="w-3 h-3" /> : <Pin className="w-3 h-3" />}
+                        </button>
+                        <button
+                            className={floatingBtnClass}
+                            onClick={e => runAction(e, onArchive)}
+                            title={knowledgeRecord.is_archived ? 'Restore' : 'Archive'}
+                            aria-label={knowledgeRecord.is_archived ? 'Restore knowledge' : 'Archive knowledge'}
+                        >
+                            {knowledgeRecord.is_archived ? <ArchiveX className="w-3 h-3" /> : <Archive className="w-3 h-3" />}
+                        </button>
+                        <button
+                            className={`${floatingBtnClass} hover:bg-red-500/70`}
+                            onClick={e => runAction(e, onDelete)}
+                            title="Delete"
+                            aria-label="Delete knowledge"
+                        >
+                            <Trash2 className="w-3 h-3" />
+                        </button>
+                        <button
+                            className={`${floatingBtnClass} ${isSelected ? 'bg-accent text-accent-foreground hover:bg-accent/80' : ''}`}
+                            onClick={e => onSelect(knowledgeRecord.id, e)}
+                            aria-label={isSelected ? 'Deselect knowledge' : 'Select knowledge'}
+                        >
+                            {isSelected ? <CheckSquare className="w-3 h-3" /> : <Square className="w-3 h-3" />}
+                        </button>
                     </div>
 
+                    {/* Card body — delegated to type-specific component */}
+                    <KnowledgeCardContent item={knowledgeRecord} workspaceId={workspaceId} slim />
+
+                    {/* Footer: tags + metadata */}
                     <div className="mt-3 pt-2 border-t border-border/45 space-y-1.5">
                         <FittedTagRow tags={knowledgeRecord.tags} />
 
-                        <div className="flex items-end justify-between gap-2">
-                            <div className="flex items-center gap-1 min-w-0 flex-1">
-                                {knowledgeRecord.embedding_status === 'done' && <Sparkles className="w-3 h-3 text-accent flex-shrink-0" />}
-                                <p className="text-[10px] text-muted-foreground/90 truncate">
-                                    Updated {new Date(knowledgeRecord.updated_at).toLocaleDateString()} · {knowledgeRecord.word_count} words · {knowledgeRecord.insights_count ?? 0} insights
-                                </p>
-                            </div>
-
-                            <div className="flex flex-shrink-0 items-center gap-1 self-end">
-                                {(knowledgeRecord.type === 'bookmark' || ['image', 'audio', 'pdf', 'docx', 'xlsx', 'pptx'].includes(knowledgeRecord.type)) && (knowledgeRecord.type !== 'bookmark' || !!knowledgeRecord.url) && (
-                                    <button
-                                        className={actionBtnClass}
-                                        onClick={e => runAction(e, knowledgeRecord.type === 'bookmark' ? onExtractBookmarkContent : onReprocess)}
-                                        title="Re-extract content"
-                                        aria-label="Re-extract content"
-                                        disabled={isExtracting}
-                                    >
-                                        <RefreshCw className={`w-3.5 h-3.5${isExtracting ? ' animate-spin' : ''}`} />
-                                    </button>
-                                )}
-                                {knowledgeRecord.type === 'bookmark' && knowledgeRecord.url && (
-                                    <button
-                                        className={actionBtnClass}
-                                        onClick={handleOpenUrl}
-                                        title="Open URL"
-                                        aria-label="Open bookmark URL"
-                                    >
-                                        <ExternalLink className="w-3.5 h-3.5" />
-                                    </button>
-                                )}
-                                {knowledgeRecord.type === 'bookmark' && knowledgeRecord.url && (
-                                    <CopyButton
-                                        content={knowledgeRecord.url}
-                                        label="Copy URL"
-                                        copiedLabel="Copied"
-                                        iconOnly
-                                        stopPropagation
-                                        className={actionBtnClass}
-                                    />
-                                )}
-                                {knowledgeRecord.type === 'gist' && (
-                                    <CopyButton
-                                        content={knowledgeRecord.content_preview}
-                                        label="Copy"
-                                        copiedLabel="Done"
-                                        iconOnly
-                                        stopPropagation
-                                        className={actionBtnClass}
-                                    />
-                                )}
-                                <button
-                                    className={actionBtnClass}
-                                    onClick={e => runAction(e, onPin)}
-                                    title={knowledgeRecord.is_pinned ? 'Unpin knowledge' : 'Pin knowledge'}
-                                    aria-label={knowledgeRecord.is_pinned ? 'Unpin knowledge' : 'Pin knowledge'}
-                                >
-                                    {knowledgeRecord.is_pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
-                                </button>
-                                <button
-                                    className={actionBtnClass}
-                                    onClick={e => runAction(e, onArchive)}
-                                    title={knowledgeRecord.is_archived ? 'Restore knowledge' : 'Archive knowledge'}
-                                    aria-label={knowledgeRecord.is_archived ? 'Restore knowledge' : 'Archive knowledge'}
-                                >
-                                    {knowledgeRecord.is_archived ? <ArchiveX className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
-                                </button>
-                                <button
-                                    className={`${actionBtnClass} text-red-300 border-red-400/25 hover:bg-red-500/10`}
-                                    onClick={e => runAction(e, onDelete)}
-                                    title="Delete knowledge"
-                                    aria-label="Delete knowledge"
-                                >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                            </div>
+                        <div className="flex items-center gap-1 min-w-0">
+                            {isProcessing ? (
+                                <Loader2 className="w-3 h-3 text-accent/70 animate-spin flex-shrink-0" />
+                            ) : isGeneratingIntelligence ? (
+                                <Sparkles className="w-3 h-3 text-accent animate-sparkle-pulse flex-shrink-0" />
+                            ) : knowledgeRecord.embedding_status === 'done' ? (
+                                <Sparkles className="w-3 h-3 text-accent flex-shrink-0" />
+                            ) : null}
+                            <p className="text-[10px] text-muted-foreground/90 truncate">
+                                {isProcessing
+                                    ? 'Processing…'
+                                    : isGeneratingIntelligence
+                                        ? 'Generating intelligence…'
+                                        : `Updated ${new Date(knowledgeRecord.updated_at).toLocaleDateString()} · ${knowledgeRecord.word_count} words · ${knowledgeRecord.insights_count ?? 0} insights`
+                                }
+                            </p>
                         </div>
-                    </div>
-
-                    {/* Keep text action buttons hidden for keyboard/screen-reader fallback */}
-                    <div className="sr-only">
-                        <button
-                            className="btn-ghost"
-                            onClick={e => runAction(e, onPin)}
-                        >
-                            {knowledgeRecord.is_pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
-                            {knowledgeRecord.is_pinned ? 'Unpin' : 'Pin'}
-                        </button>
-                        <button
-                            className="btn-ghost"
-                            onClick={e => runAction(e, onArchive)}
-                        >
-                            {knowledgeRecord.is_archived ? <ArchiveX className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
-                            {knowledgeRecord.is_archived ? 'Restore' : 'Archive'}
-                        </button>
-                        <button
-                            className="btn-ghost"
-                            onClick={e => runAction(e, onDelete)}
-                        >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            Delete
-                        </button>
                     </div>
                 </div>
             </ContextMenuTrigger>

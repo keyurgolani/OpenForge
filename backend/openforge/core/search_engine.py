@@ -102,7 +102,7 @@ class SearchEngine:
             "knowledge_id": payload.get("knowledge_id"),
             "conversation_id": payload.get("conversation_id"),
             "title": normalize_knowledge_title(payload.get("title")) or "",
-            "knowledge_type": payload.get("knowledge_type", "standard"),
+            "knowledge_type": payload.get("knowledge_type", "note"),
             "chunk_text": payload.get("chunk_text", ""),
             "header_path": payload.get("header_path", ""),
             "tags": payload.get("tags", []),

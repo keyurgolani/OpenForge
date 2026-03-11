@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { ReactElement } from 'react'
 import { searchKnowledge } from '@/lib/api'
 import { Search, Loader2, FileText, Bookmark, Code2, Zap, ExternalLink, Copy, SearchX, MessageSquare, Image as ImageIcon, Music, FileType2, Table, Presentation } from 'lucide-react'
-import { UnifiedKnowledgeModal } from '@/components/knowledge/UnifiedKnowledgeModal'
+import PreviewDispatcher from '@/components/knowledge/preview/PreviewDispatcher'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem
 } from '@/components/ui/context-menu'
@@ -19,31 +19,31 @@ const TYPE_ICONS: Record<string, ReactElement> = {
     bookmark: <Bookmark className="w-3.5 h-3.5" />,
     gist: <Code2 className="w-3.5 h-3.5" />,
     fleeting: <Zap className="w-3.5 h-3.5" />,
-    standard: <FileText className="w-3.5 h-3.5" />,
+    note: <FileText className="w-3.5 h-3.5" />,
     image: <ImageIcon className="w-3.5 h-3.5" />,
     audio: <Music className="w-3.5 h-3.5" />,
     pdf: <FileType2 className="w-3.5 h-3.5" />,
     docx: <FileText className="w-3.5 h-3.5" />,
-    xlsx: <Table className="w-3.5 h-3.5" />,
+    sheet: <Table className="w-3.5 h-3.5" />,
     pptx: <Presentation className="w-3.5 h-3.5" />,
     chat: <MessageSquare className="w-3.5 h-3.5" />,
 }
 
 const TYPE_META: Record<string, { label: string; color: string }> = {
-    standard: { label: 'Note', color: 'text-blue-400' },
+    note: { label: 'Note', color: 'text-blue-400' },
     fleeting: { label: 'Fleeting', color: 'text-yellow-400' },
     bookmark: { label: 'Bookmark', color: 'text-purple-400' },
     gist: { label: 'Gist', color: 'text-green-400' },
     image: { label: 'Image', color: 'text-pink-400' },
     audio: { label: 'Audio', color: 'text-orange-400' },
     pdf: { label: 'PDF', color: 'text-red-400' },
-    docx: { label: 'Word', color: 'text-blue-300' },
-    xlsx: { label: 'Excel', color: 'text-green-300' },
-    pptx: { label: 'Presentation', color: 'text-amber-400' },
+    document: { label: 'Document', color: 'text-blue-300' },
+    sheet: { label: 'Sheet', color: 'text-green-300' },
+    slides: { label: 'Slides', color: 'text-amber-400' },
     chat: { label: 'Chat', color: 'text-violet-400' },
 }
 
-const KNOWLEDGE_TYPES = ['', 'standard', 'fleeting', 'bookmark', 'gist', 'image', 'audio', 'pdf', 'docx', 'xlsx', 'pptx']
+const KNOWLEDGE_TYPES = ['', 'note', 'fleeting', 'bookmark', 'gist', 'image', 'audio', 'pdf', 'document', 'sheet', 'slides']
 
 interface SearchResult {
     knowledge_id: string | null
@@ -257,9 +257,9 @@ export default function SearchPage() {
                                                     >
                                                         {(() => {
                                                             const first = card.chunks[0]
-                                                            const typeKey = first.knowledge_type in TYPE_META ? first.knowledge_type : 'standard'
+                                                            const typeKey = first.knowledge_type in TYPE_META ? first.knowledge_type : 'note'
                                                             const typeMeta = TYPE_META[typeKey]
-                                                            const typeIcon = TYPE_ICONS[typeKey] ?? TYPE_ICONS.standard
+                                                            const typeIcon = TYPE_ICONS[typeKey] ?? TYPE_ICONS.note
                                                             return (
                                                                 <>
                                                                     <div className="flex items-start justify-between gap-3">
@@ -323,9 +323,8 @@ export default function SearchPage() {
             </>)}
             </div>
 
-            <UnifiedKnowledgeModal
-                mode="view"
-                knowledgeId={modalKnowledgeId ?? undefined}
+            <PreviewDispatcher
+                knowledgeId={modalKnowledgeId}
                 workspaceId={workspaceId}
                 isOpen={!!modalKnowledgeId}
                 onClose={() => setModalKnowledgeId(null)}

@@ -31,6 +31,38 @@ export const testConnection = (providerId: string): Promise<any> =>
 export const setDefaultProvider = (id: string): Promise<any> =>
     api.put(`/llm/providers/${id}/default`).then(r => r.data)
 
+// ── Local Models (Whisper + Embedding + CLIP + Marker) ──
+export const listWhisperModels = (): Promise<any> =>
+    api.get('/models/whisper').then(r => r.data)
+export const downloadWhisperModel = (modelId: string): Promise<any> =>
+    api.post('/models/whisper/download', { model_id: modelId }).then(r => r.data)
+export const deleteWhisperModel = (modelId: string): Promise<any> =>
+    api.delete(`/models/whisper/${modelId}`).then(r => r.data)
+export const listEmbeddingModelStatus = (modelIds: string): Promise<any> =>
+    api.get('/models/embeddings', { params: { model_ids: modelIds } }).then(r => r.data)
+export const downloadEmbeddingModel = (modelId: string): Promise<any> =>
+    api.post('/models/embeddings/download', { model_id: modelId }).then(r => r.data)
+export const deleteEmbeddingModel = (modelId: string): Promise<any> =>
+    api.delete(`/models/embeddings/${modelId}`).then(r => r.data)
+export const resolveKnowledgeIds = (ids: string[]): Promise<any> =>
+    api.post('/knowledge/resolve', { ids }).then(r => r.data)
+export const listCLIPModels = (): Promise<any> =>
+    api.get('/models/clip').then(r => r.data)
+export const downloadCLIPModel = (modelId: string): Promise<any> =>
+    api.post('/models/clip/download', { model_id: modelId }).then(r => r.data)
+export const deleteCLIPModel = (modelId: string): Promise<any> =>
+    api.delete(`/models/clip/${modelId}`).then(r => r.data)
+export const getCLIPDefault = (): Promise<any> =>
+    api.get('/models/clip/default').then(r => r.data)
+export const setCLIPDefault = (modelId: string): Promise<any> =>
+    api.put('/models/clip/default', { model_id: modelId }).then(r => r.data)
+export const listMarkerModels = (): Promise<any> =>
+    api.get('/models/marker').then(r => r.data)
+export const downloadMarkerModel = (): Promise<any> =>
+    api.post('/models/marker/download').then(r => r.data)
+export const deleteMarkerModel = (): Promise<any> =>
+    api.delete('/models/marker').then(r => r.data)
+
 // ── Workspaces ──
 export const listWorkspaces = (): Promise<any> => api.get('/workspaces').then(r => r.data)
 export const createWorkspace = (data: object): Promise<any> => api.post('/workspaces', data).then(r => r.data)

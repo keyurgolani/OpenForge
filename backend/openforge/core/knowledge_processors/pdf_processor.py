@@ -2,19 +2,27 @@
 
 Full pipeline:
 1. Extract PDF metadata (page count, author, title, creation date) via PyMuPDF
-2. Extract text content page-by-page via PyMuPDF
+2. Extract text content via Marker (layout-aware, run in subprocess) with PyMuPDF fallback
 3. Generate first-page thumbnail via PyMuPDF pixmap render
 4. Chunk text → embed → store in Qdrant
 """
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import os
+import sys
+import tempfile
 from pathlib import Path
 from typing import Optional
 from uuid import UUID
 
 logger = logging.getLogger("openforge.processors.pdf")
+
+# Timeout for the Marker subprocess (seconds).
+# Includes model download on first run, so generous limit.
+MARKER_SUBPROCESS_TIMEOUT = 300
 
 
 class PDFProcessor:
@@ -42,9 +50,9 @@ class PDFProcessor:
         except Exception as e:
             logger.warning("PDF metadata extraction failed for %s: %s", knowledge_id, e)
 
-        # ── Step 2: Text extraction ──
+        # ── Step 2: Text extraction (Marker subprocess with PyMuPDF fallback) ──
         try:
-            result["text"] = self._extract_text(file_path)
+            result["text"] = await self._extract_text(file_path)
         except Exception as e:
             logger.warning("PDF text extraction failed for %s: %s", knowledge_id, e)
 
@@ -110,8 +118,78 @@ class PDFProcessor:
         doc.close()
         return result
 
-    def _extract_text(self, file_path: str) -> str:
-        """Extract text from all pages using PyMuPDF."""
+    async def _extract_text(self, file_path: str) -> str:
+        """Extract text using Marker (in subprocess) with PyMuPDF fallback."""
+        marker_text = await self._extract_text_marker_subprocess(file_path)
+        if marker_text:
+            return marker_text
+        return self._extract_text_fallback(file_path)
+
+    async def _extract_text_marker_subprocess(self, file_path: str) -> str:
+        """Run Marker in an isolated subprocess so OOM/crash can't kill the API server."""
+        from openforge.config import get_settings
+
+        script = _MARKER_SUBPROCESS_SCRIPT
+        marker_dir = str(Path(get_settings().models_root) / "marker")
+
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".json", delete=False
+            ) as out_file:
+                out_path = out_file.name
+
+            env = {**os.environ, "DATALAB_MODELS_DIR": marker_dir}
+
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, "-c", script, file_path, out_path,
+                env=env,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=MARKER_SUBPROCESS_TIMEOUT
+                )
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.communicate()
+                logger.warning(
+                    "Marker subprocess timed out after %ds, falling back to PyMuPDF",
+                    MARKER_SUBPROCESS_TIMEOUT,
+                )
+                return ""
+
+            if proc.returncode != 0:
+                stderr_text = stderr.decode(errors="replace")[-500:] if stderr else ""
+                logger.warning(
+                    "Marker subprocess failed (exit %d): %s — falling back to PyMuPDF",
+                    proc.returncode, stderr_text,
+                )
+                return ""
+
+            # Read the output JSON
+            if os.path.exists(out_path) and os.path.getsize(out_path) > 0:
+                with open(out_path, "r") as f:
+                    data = json.load(f)
+                text = data.get("text", "")
+                if text:
+                    logger.info("Marker extraction succeeded (%d chars)", len(text))
+                return text[:100000]
+            return ""
+
+        except Exception as e:
+            logger.warning("Marker subprocess error: %s — falling back to PyMuPDF", e)
+            return ""
+        finally:
+            try:
+                if os.path.exists(out_path):
+                    os.unlink(out_path)
+            except Exception:
+                pass
+
+    def _extract_text_fallback(self, file_path: str) -> str:
+        """Extract text from all pages using PyMuPDF (basic fallback)."""
         import fitz
 
         doc = fitz.open(file_path)
@@ -126,7 +204,6 @@ class PDFProcessor:
         doc.close()
 
         full_text = "\n\n".join(text_parts)
-        # Limit to 100k chars for very large PDFs
         return full_text[:100000]
 
     def _generate_thumbnail(
@@ -173,6 +250,36 @@ class PDFProcessor:
             title=None,
             tags=[],
         )
+
+
+# ── Marker subprocess script ──
+# This runs in a separate Python process. If it OOMs or crashes,
+# only the subprocess dies — the FastAPI server stays alive.
+_MARKER_SUBPROCESS_SCRIPT = """
+import sys
+import json
+
+file_path = sys.argv[1]
+out_path = sys.argv[2]
+
+try:
+    from marker.converters.pdf import PdfConverter
+    from marker.models import create_model_dict
+
+    models = create_model_dict()
+    converter = PdfConverter(artifact_dict=models)
+    rendered = converter(file_path)
+    text = rendered.markdown or ""
+
+    with open(out_path, "w") as f:
+        json.dump({"text": text[:100000]}, f)
+
+except Exception as e:
+    # Write empty result so the parent knows it failed gracefully
+    with open(out_path, "w") as f:
+        json.dump({"text": "", "error": str(e)}, f)
+    sys.exit(1)
+"""
 
 
 pdf_processor = PDFProcessor()

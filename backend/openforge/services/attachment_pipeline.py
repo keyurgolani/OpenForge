@@ -110,9 +110,17 @@ class AudioAttachmentExtractor(AttachmentExtractor):
 
     async def extract(self, file_path: str) -> Optional[str]:
         try:
-            import whisper
-            model = whisper.load_model("base")  # Use 'base' model for chat attachments (fast)
-            result = model.transcribe(file_path, fp16=False, verbose=False)
+            from openforge.core.knowledge_processors.audio_processor import (
+                _get_whisper_model, _get_whisper_download_root,
+            )
+            import asyncio
+
+            download_root = _get_whisper_download_root()
+            # Use base model for chat attachments — fast and lightweight
+            model = _get_whisper_model("base", download_root=download_root)
+            result = await asyncio.to_thread(
+                model.transcribe, file_path, fp16=False, verbose=False
+            )
             text = result.get("text", "").strip()
             return text[:50000] or None
         except Exception:
@@ -130,10 +138,10 @@ class AudioAttachmentExtractor(AttachmentExtractor):
             return None
 
 
-class DocxAttachmentExtractor(AttachmentExtractor):
+class DocumentAttachmentExtractor(AttachmentExtractor):
     """Extracts text from DOCX files using python-docx."""
 
-    pipeline = "docx"
+    pipeline = "document"
 
     def matches(self, content_type: str, extension: str) -> bool:
         return (
@@ -161,10 +169,10 @@ class DocxAttachmentExtractor(AttachmentExtractor):
             return None
 
 
-class XlsxAttachmentExtractor(AttachmentExtractor):
-    """Extracts text from XLSX files using openpyxl."""
+class SheetAttachmentExtractor(AttachmentExtractor):
+    """Extracts text from XLSX/XLS files using openpyxl."""
 
-    pipeline = "xlsx"
+    pipeline = "sheet"
 
     def matches(self, content_type: str, extension: str) -> bool:
         return (
@@ -192,10 +200,10 @@ class XlsxAttachmentExtractor(AttachmentExtractor):
             return None
 
 
-class PptxAttachmentExtractor(AttachmentExtractor):
+class SlidesAttachmentExtractor(AttachmentExtractor):
     """Extracts text from PPTX files using python-pptx."""
 
-    pipeline = "pptx"
+    pipeline = "slides"
 
     def matches(self, content_type: str, extension: str) -> bool:
         return (
@@ -233,9 +241,9 @@ _EXTRACTORS: list[AttachmentExtractor] = [
     PDFAttachmentExtractor(),
     ImageAttachmentExtractor(),
     AudioAttachmentExtractor(),
-    DocxAttachmentExtractor(),
-    XlsxAttachmentExtractor(),
-    PptxAttachmentExtractor(),
+    DocumentAttachmentExtractor(),
+    SheetAttachmentExtractor(),
+    SlidesAttachmentExtractor(),
 ]
 
 

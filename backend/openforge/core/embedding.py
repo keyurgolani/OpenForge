@@ -1,3 +1,4 @@
+from pathlib import Path
 from sentence_transformers import SentenceTransformer
 from openforge.config import get_settings
 from collections import Counter
@@ -10,12 +11,19 @@ logger = logging.getLogger("openforge.embedding")
 _model: SentenceTransformer | None = None
 
 
+def _embeddings_cache_dir() -> str:
+    """Return the embedding model cache directory."""
+    settings = get_settings()
+    return str(Path(settings.models_root) / "embeddings")
+
+
 def get_embedding_model() -> SentenceTransformer:
     global _model
     if _model is None:
         settings = get_settings()
-        logger.info(f"Loading embedding model: {settings.embedding_model}")
-        _model = SentenceTransformer(settings.embedding_model)
+        cache_dir = _embeddings_cache_dir()
+        logger.info(f"Loading embedding model: {settings.embedding_model} from {cache_dir}")
+        _model = SentenceTransformer(settings.embedding_model, cache_folder=cache_dir)
         dim = _model.get_sentence_embedding_dimension()
         logger.info(f"Embedding model loaded. Dimension: {dim}")
     return _model

@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
-type KnowledgeType = 'standard' | 'fleeting' | 'bookmark' | 'gist'
+type KnowledgeType = 'note' | 'fleeting' | 'bookmark' | 'gist'
 
 const TYPE_CONFIG: Record<KnowledgeType, {
     label: string
@@ -17,7 +17,7 @@ const TYPE_CONFIG: Record<KnowledgeType, {
     titlePlaceholder: string
     contentPlaceholder: string
 }> = {
-    standard: {
+    note: {
         label: 'Note',
         Icon: FileText,
         color: 'text-blue-400',
@@ -55,7 +55,7 @@ interface Props {
     onClose: () => void
 }
 
-export function QuickKnowledgePanel({ open, defaultType = 'standard', onClose }: Props) {
+export function QuickKnowledgePanel({ open, defaultType = 'note', onClose }: Props) {
     const { workspaceId = '' } = useParams<{ workspaceId: string }>()
     const navigate = useNavigate()
     const qc = useQueryClient()
@@ -291,7 +291,7 @@ export function QuickKnowledgePanel({ open, defaultType = 'standard', onClose }:
                         </select>
                     )}
 
-                    {/* Title — only standard, bookmark, gist (fleeting = no title) */}
+                    {/* Title — only note, bookmark, gist (fleeting = no title) */}
                     {type !== 'fleeting' && (
                         <input
                             ref={titleRef}

@@ -68,7 +68,7 @@ async def lifespan(app: FastAPI):
                 for k in rows:
                     try:
                         await knowledge_processing_service._process_knowledge_background(
-                            k.id, k.workspace_id, k.content or "", k.type or "standard", k.title
+                            k.id, k.workspace_id, k.content or "", k.type or "note", k.title
                         )
                     except Exception as ke:
                         logger.warning("Re-index failed for knowledge %s: %s", k.id, ke)
@@ -77,6 +77,146 @@ async def lifespan(app: FastAPI):
                 logger.error("Background re-indexing failed: %s", e)
 
         asyncio.create_task(_reindex_all())
+
+    # Migrate Qdrant payloads from "standard" → "note" (idempotent)
+    def _migrate_qdrant_standard_to_note():
+        try:
+            from qdrant_client.models import Filter, FieldCondition, MatchValue
+            from openforge.db.qdrant_client import get_qdrant
+
+            client = get_qdrant()
+            collection = settings.qdrant_collection
+
+            filt = Filter(must=[FieldCondition(key="knowledge_type", match=MatchValue(value="standard"))])
+            offset = None
+            migrated = 0
+            while True:
+                points, next_offset = client.scroll(
+                    collection_name=collection, scroll_filter=filt, limit=100, offset=offset,
+                )
+                if not points:
+                    break
+                ids = [p.id for p in points]
+                client.set_payload(
+                    collection_name=collection,
+                    payload={"knowledge_type": "note"},
+                    points=ids,
+                )
+                migrated += len(ids)
+                if next_offset is None:
+                    break
+                offset = next_offset
+            if migrated:
+                logger.info("Migrated %d Qdrant points from knowledge_type='standard' to 'note'.", migrated)
+        except Exception as e:
+            logger.warning("Qdrant standard→note migration skipped: %s", e)
+
+    asyncio.create_task(asyncio.to_thread(_migrate_qdrant_standard_to_note))
+
+    # Migrate Qdrant payloads from "xlsx" → "sheet" (idempotent)
+    def _migrate_qdrant_xlsx_to_sheet():
+        try:
+            from qdrant_client.models import Filter, FieldCondition, MatchValue
+            from openforge.db.qdrant_client import get_qdrant
+
+            client = get_qdrant()
+            collection = settings.qdrant_collection
+
+            filt = Filter(must=[FieldCondition(key="knowledge_type", match=MatchValue(value="xlsx"))])
+            offset = None
+            migrated = 0
+            while True:
+                points, next_offset = client.scroll(
+                    collection_name=collection, scroll_filter=filt, limit=100, offset=offset,
+                )
+                if not points:
+                    break
+                ids = [p.id for p in points]
+                client.set_payload(
+                    collection_name=collection,
+                    payload={"knowledge_type": "sheet"},
+                    points=ids,
+                )
+                migrated += len(ids)
+                if next_offset is None:
+                    break
+                offset = next_offset
+            if migrated:
+                logger.info("Migrated %d Qdrant points from knowledge_type='xlsx' to 'sheet'.", migrated)
+        except Exception as e:
+            logger.warning("Qdrant xlsx→sheet migration skipped: %s", e)
+
+    asyncio.create_task(asyncio.to_thread(_migrate_qdrant_xlsx_to_sheet))
+
+    # Migrate Qdrant payloads from "docx" → "document" (idempotent)
+    def _migrate_qdrant_docx_to_document():
+        try:
+            from qdrant_client.models import Filter, FieldCondition, MatchValue
+            from openforge.db.qdrant_client import get_qdrant
+
+            client = get_qdrant()
+            collection = settings.qdrant_collection
+
+            filt = Filter(must=[FieldCondition(key="knowledge_type", match=MatchValue(value="docx"))])
+            offset = None
+            migrated = 0
+            while True:
+                points, next_offset = client.scroll(
+                    collection_name=collection, scroll_filter=filt, limit=100, offset=offset,
+                )
+                if not points:
+                    break
+                ids = [p.id for p in points]
+                client.set_payload(
+                    collection_name=collection,
+                    payload={"knowledge_type": "document"},
+                    points=ids,
+                )
+                migrated += len(ids)
+                if next_offset is None:
+                    break
+                offset = next_offset
+            if migrated:
+                logger.info("Migrated %d Qdrant points from knowledge_type='docx' to 'document'.", migrated)
+        except Exception as e:
+            logger.warning("Qdrant docx→document migration skipped: %s", e)
+
+    asyncio.create_task(asyncio.to_thread(_migrate_qdrant_docx_to_document))
+
+    # Migrate Qdrant payloads from "pptx" → "slides" (idempotent)
+    def _migrate_qdrant_pptx_to_slides():
+        try:
+            from qdrant_client.models import Filter, FieldCondition, MatchValue
+            from openforge.db.qdrant_client import get_qdrant
+
+            client = get_qdrant()
+            collection = settings.qdrant_collection
+
+            filt = Filter(must=[FieldCondition(key="knowledge_type", match=MatchValue(value="pptx"))])
+            offset = None
+            migrated = 0
+            while True:
+                points, next_offset = client.scroll(
+                    collection_name=collection, scroll_filter=filt, limit=100, offset=offset,
+                )
+                if not points:
+                    break
+                ids = [p.id for p in points]
+                client.set_payload(
+                    collection_name=collection,
+                    payload={"knowledge_type": "slides"},
+                    points=ids,
+                )
+                migrated += len(ids)
+                if next_offset is None:
+                    break
+                offset = next_offset
+            if migrated:
+                logger.info("Migrated %d Qdrant points from knowledge_type='pptx' to 'slides'.", migrated)
+        except Exception as e:
+            logger.warning("Qdrant pptx→slides migration skipped: %s", e)
+
+    asyncio.create_task(asyncio.to_thread(_migrate_qdrant_pptx_to_slides))
 
     # Register system agents and load custom agents
     try:

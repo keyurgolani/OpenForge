@@ -16,6 +16,10 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - MAIN_APP_URL=http://openforge:3000
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - HF_HOME=/models/huggingface
+      - SENTENCE_TRANSFORMERS_HOME=/models/embeddings
+      - DATALAB_MODELS_DIR=/models/marker
+      - MODELS_ROOT=/models
     volumes:
       - ${WORKSPACE_HOST_PATH:-./data/workspace}:/workspace
       - ${UPLOADS_HOST_PATH:-./data/uploads}:/uploads
@@ -47,8 +51,10 @@ services:
       - MAIN_APP_URL=http://openforge:3000
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
-      - HF_HOME=/models
-      - SENTENCE_TRANSFORMERS_HOME=/models
+      - HF_HOME=/models/huggingface
+      - SENTENCE_TRANSFORMERS_HOME=/models/embeddings
+      - DATALAB_MODELS_DIR=/models/marker
+      - MODELS_ROOT=/models
     volumes:
       - ${MODELS_HOST_PATH:-./data/models}:/models
       - ${SKILLS_HOST_PATH:-./data/skills}:/skills:ro

@@ -238,7 +238,7 @@ async def save_attachment_to_knowledge(
         )
     else:
         data = KnowledgeCreate(
-            type="standard",
+            type="note",
             title=attachment.filename or None,
             content=attachment.extracted_text,
         )

@@ -17,7 +17,7 @@ import {
     FileText, ChevronDown, Pencil, Check, Link2, ExternalLink,
     Download, File, FileImage, FileAudio, Music,
 } from 'lucide-react'
-import BlockNoteEditor from '@/components/knowledge/BlockNoteEditor'
+// EditorDispatcher available at @/components/knowledge/editors/EditorDispatcher for full CM6 editing
 import MarkdownIt from 'markdown-it'
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
@@ -32,11 +32,11 @@ function RenderedContent({ content, className }: { content: string; className?: 
     )
 }
 
-const MIN_KNOWLEDGE_INTELLIGENCE_WIDTH = 280
-const MAX_KNOWLEDGE_INTELLIGENCE_WIDTH = 620
-const DEFAULT_KNOWLEDGE_INTELLIGENCE_WIDTH = 340
+const MIN_KNOWLEDGE_INTELLIGENCE_PCT = 15
+const MAX_KNOWLEDGE_INTELLIGENCE_PCT = 40
+const DEFAULT_KNOWLEDGE_INTELLIGENCE_PCT = 25
 const KNOWLEDGE_INTELLIGENCE_COLLAPSED_WIDTH = 56
-const KNOWLEDGE_INTELLIGENCE_WIDTH_STORAGE_KEY = 'openforge.knowledge.intelligence.width'
+const KNOWLEDGE_INTELLIGENCE_WIDTH_STORAGE_KEY = 'openforge.knowledge.intelligence.pct'
 const KNOWLEDGE_INTELLIGENCE_COLLAPSED_STORAGE_KEY = 'openforge.knowledge.intelligence.collapsed'
 type KnowledgeIntelligenceSectionKey = 'summary' | 'tasks' | 'facts' | 'crucial_things' | 'timelines'
 const DISCARDABLE_DRAFT_CLEANUP_DELAY_MS = 700
@@ -44,8 +44,8 @@ const pendingDiscardableDraftCleanup = new Map<string, number>()
 const pendingKnowledgeExitIntelligence = new Map<string, number>()
 const AUTO_KNOWLEDGE_INTELLIGENCE_KEY = 'automation.auto_knowledge_intelligence_enabled'
 
-const clampKnowledgeIntelligenceWidth = (value: number) =>
-    Math.max(MIN_KNOWLEDGE_INTELLIGENCE_WIDTH, Math.min(MAX_KNOWLEDGE_INTELLIGENCE_WIDTH, value))
+const clampKnowledgeIntelligencePct = (value: number) =>
+    Math.max(MIN_KNOWLEDGE_INTELLIGENCE_PCT, Math.min(MAX_KNOWLEDGE_INTELLIGENCE_PCT, value))
 
 const parseBooleanSetting = (value: unknown, fallback: boolean) => {
     if (typeof value === 'boolean') return value
@@ -93,11 +93,11 @@ export default function KnowledgePage() {
         return window.localStorage.getItem(KNOWLEDGE_INTELLIGENCE_COLLAPSED_STORAGE_KEY) === '1'
     })
     const [activeKnowledgeIntelligenceSection, setActiveKnowledgeIntelligenceSection] = useState<KnowledgeIntelligenceSectionKey | null>('summary')
-    const [knowledgeIntelligenceWidth, setKnowledgeIntelligenceWidth] = useState<number>(() => {
-        if (typeof window === 'undefined') return DEFAULT_KNOWLEDGE_INTELLIGENCE_WIDTH
+    const [knowledgeIntelligencePct, setKnowledgeIntelligencePct] = useState<number>(() => {
+        if (typeof window === 'undefined') return DEFAULT_KNOWLEDGE_INTELLIGENCE_PCT
         const raw = window.localStorage.getItem(KNOWLEDGE_INTELLIGENCE_WIDTH_STORAGE_KEY)
-        const parsed = raw ? parseInt(raw, 10) : NaN
-        return Number.isFinite(parsed) ? clampKnowledgeIntelligenceWidth(parsed) : DEFAULT_KNOWLEDGE_INTELLIGENCE_WIDTH
+        const parsed = raw ? parseFloat(raw) : NaN
+        return Number.isFinite(parsed) ? clampKnowledgeIntelligencePct(parsed) : DEFAULT_KNOWLEDGE_INTELLIGENCE_PCT
     })
 
     // Edit mode state
@@ -173,7 +173,7 @@ export default function KnowledgePage() {
             const hasTags = Array.isArray(latest.knowledgeRecord?.tags) && latest.knowledgeRecord.tags.length > 0
             const hasIntelligence = !!aiSummaryText && hasInsights
             const shouldGenerateIntelligenceOnExit =
-                latest.knowledgeRecord?.type === 'standard'
+                latest.knowledgeRecord?.type === 'note'
                 && contentText.length > 20
                 && !hasIntelligence
 
@@ -254,7 +254,7 @@ export default function KnowledgePage() {
 
     useEffect(() => {
         if (!knowledgeRecord || !initialized) return
-        const type = knowledgeRecord.type ?? 'standard'
+        const type = knowledgeRecord.type ?? 'note'
         if (type === 'gist') {
             if (
                 debouncedGistCode === saveRef.current.gistCode &&
@@ -430,29 +430,31 @@ export default function KnowledgePage() {
     const handleKnowledgeIntelligenceResizeStart = (e: React.MouseEvent<HTMLButtonElement>) => {
         e.preventDefault()
         const startX = e.clientX
-        const startWidth = knowledgeIntelligenceWidth
-        let currentWidth = startWidth
+        const startPct = knowledgeIntelligencePct
+        const containerWidth = e.currentTarget.parentElement?.parentElement?.offsetWidth || window.innerWidth
+        let currentPct = startPct
 
         const onMouseMove = (moveEvent: MouseEvent) => {
-            const delta = startX - moveEvent.clientX
-            currentWidth = clampKnowledgeIntelligenceWidth(startWidth + delta)
-            setKnowledgeIntelligenceWidth(currentWidth)
+            const deltaPx = startX - moveEvent.clientX
+            const deltaPct = (deltaPx / containerWidth) * 100
+            currentPct = clampKnowledgeIntelligencePct(startPct + deltaPct)
+            setKnowledgeIntelligencePct(currentPct)
         }
 
         const onMouseUp = () => {
             window.removeEventListener('mousemove', onMouseMove)
             window.removeEventListener('mouseup', onMouseUp)
-            window.localStorage.setItem(KNOWLEDGE_INTELLIGENCE_WIDTH_STORAGE_KEY, String(currentWidth))
+            window.localStorage.setItem(KNOWLEDGE_INTELLIGENCE_WIDTH_STORAGE_KEY, String(currentPct))
         }
 
         window.addEventListener('mousemove', onMouseMove)
         window.addEventListener('mouseup', onMouseUp)
     }
 
-    const type = knowledgeRecord?.type ?? 'standard'
+    const type = knowledgeRecord?.type ?? 'note'
     const fileUrl = getKnowledgeFileUrl(workspaceId, knowledgeId)
     const metadata = knowledgeRecord?.file_metadata ?? {}
-    const isFileBased = ['image', 'audio', 'pdf', 'docx', 'xlsx', 'pptx'].includes(type)
+    const isFileBased = ['image', 'audio', 'pdf', 'document', 'sheet', 'slides'].includes(type)
 
     return (
         <div className="flex h-full min-h-0 gap-3">
@@ -536,7 +538,7 @@ export default function KnowledgePage() {
                             )}
 
                             {/* ── Standard Note ── */}
-                            {type === 'standard' && (
+                            {type === 'note' && (
                                 <div className="flex flex-col min-h-0">
                                     {isEditing ? (
                                         <input
@@ -554,14 +556,14 @@ export default function KnowledgePage() {
                                         </h1>
                                     )}
                                     {isEditing ? (
-                                        <BlockNoteEditor
-                                            initialContent={content}
-                                            onChange={markdown => {
-                                                if (markdown.trim().length > 0) hadMeaningfulInputRef.current = true
-                                                setContent(markdown)
+                                        <textarea
+                                            className="flex-1 min-h-[300px] w-full bg-transparent border border-border/30 rounded-xl p-4 text-sm resize-none outline-none text-foreground leading-relaxed placeholder-muted-foreground/40"
+                                            value={content}
+                                            onChange={e => {
+                                                if (e.target.value.trim().length > 0) hadMeaningfulInputRef.current = true
+                                                setContent(e.target.value)
                                             }}
-                                            editable
-                                            className="flex-1 min-h-[300px]"
+                                            placeholder="Start writing... (markdown supported)"
                                         />
                                     ) : (
                                         <RenderedContent
@@ -576,15 +578,14 @@ export default function KnowledgePage() {
                             {type === 'fleeting' && (
                                 <div className="flex flex-col min-h-0">
                                     {isEditing ? (
-                                        <BlockNoteEditor
-                                            initialContent={content}
-                                            onChange={markdown => {
-                                                if (markdown.trim().length > 0) hadMeaningfulInputRef.current = true
-                                                setContent(markdown)
+                                        <textarea
+                                            className="flex-1 min-h-[400px] w-full bg-transparent border border-border/30 rounded-xl p-4 text-sm resize-none outline-none text-foreground leading-relaxed placeholder-muted-foreground/40"
+                                            value={content}
+                                            onChange={e => {
+                                                if (e.target.value.trim().length > 0) hadMeaningfulInputRef.current = true
+                                                setContent(e.target.value)
                                             }}
-                                            editable
                                             placeholder="What's fleeting on your mind?"
-                                            className="flex-1 min-h-[400px]"
                                         />
                                     ) : (
                                         content.trim() ? (
@@ -648,14 +649,14 @@ export default function KnowledgePage() {
                                     <div>
                                         <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-2">Notes</p>
                                         {isEditing ? (
-                                            <BlockNoteEditor
-                                                initialContent={content}
-                                                onChange={markdown => {
-                                                    if (markdown.trim().length > 0) hadMeaningfulInputRef.current = true
-                                                    setContent(markdown)
+                                            <textarea
+                                                className="min-h-[200px] w-full bg-transparent border border-border/30 rounded-xl p-4 text-sm resize-none outline-none text-foreground leading-relaxed placeholder-muted-foreground/40"
+                                                value={content}
+                                                onChange={e => {
+                                                    if (e.target.value.trim().length > 0) hadMeaningfulInputRef.current = true
+                                                    setContent(e.target.value)
                                                 }}
-                                                editable
-                                                className="min-h-[200px]"
+                                                placeholder="Add notes about this bookmark..."
                                             />
                                         ) : (
                                             content.trim() ? (
@@ -744,11 +745,11 @@ export default function KnowledgePage() {
                                     <div>
                                         <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-2">Transcript</p>
                                         {isEditing ? (
-                                            <BlockNoteEditor
-                                                initialContent={content}
-                                                onChange={markdown => setContent(markdown)}
-                                                editable
-                                                className="min-h-[200px]"
+                                            <textarea
+                                                className="min-h-[200px] w-full bg-transparent border border-border/30 rounded-xl p-4 text-sm resize-none outline-none text-foreground leading-relaxed placeholder-muted-foreground/40"
+                                                value={content}
+                                                onChange={e => setContent(e.target.value)}
+                                                placeholder="Transcript content..."
                                             />
                                         ) : content.trim() ? (
                                             <RenderedContent content={content} />
@@ -926,13 +927,13 @@ export default function KnowledgePage() {
                                 </div>
                             )}
 
-                            {/* ── DOCX ── */}
-                            {type === 'docx' && (
+                            {/* ── Document ── */}
+                            {type === 'document' && (
                                 <div className="flex flex-col gap-4">
                                     <h1 className="text-2xl font-bold text-foreground">
                                         {title.trim() || knowledgeRecord.ai_title || (
                                             <span className="text-muted-foreground/40 flex items-center gap-2">
-                                                <File className="w-5 h-5" /> Word Document
+                                                <File className="w-5 h-5" /> Document
                                             </span>
                                         )}
                                     </h1>
@@ -942,7 +943,7 @@ export default function KnowledgePage() {
                                             <File className="w-5 h-5 text-accent" />
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium text-foreground truncate">{knowledgeRecord.original_filename || 'DOCX file'}</p>
+                                            <p className="text-sm font-medium text-foreground truncate">{knowledgeRecord.original_filename || 'Document file'}</p>
                                             <div className="flex flex-wrap gap-3 mt-1">
                                                 {knowledgeRecord.file_size && <span className="text-xs text-muted-foreground">{formatFileSize(knowledgeRecord.file_size)}</span>}
                                                 {metadata.word_count != null && <span className="text-xs text-muted-foreground">{metadata.word_count} words</span>}
@@ -974,13 +975,13 @@ export default function KnowledgePage() {
                                 </div>
                             )}
 
-                            {/* ── XLSX ── */}
-                            {type === 'xlsx' && (
+                            {/* ── Sheet ── */}
+                            {type === 'sheet' && (
                                 <div className="flex flex-col gap-4">
                                     <h1 className="text-2xl font-bold text-foreground">
                                         {title.trim() || knowledgeRecord.ai_title || (
                                             <span className="text-muted-foreground/40 flex items-center gap-2">
-                                                <File className="w-5 h-5" /> Spreadsheet
+                                                <File className="w-5 h-5" /> Sheet
                                             </span>
                                         )}
                                     </h1>
@@ -1027,13 +1028,13 @@ export default function KnowledgePage() {
                                 </div>
                             )}
 
-                            {/* ── PPTX ── */}
-                            {type === 'pptx' && (
+                            {/* ── Slides ── */}
+                            {type === 'slides' && (
                                 <div className="flex flex-col gap-4">
                                     <h1 className="text-2xl font-bold text-foreground">
                                         {title.trim() || knowledgeRecord.ai_title || (
                                             <span className="text-muted-foreground/40 flex items-center gap-2">
-                                                <File className="w-5 h-5" /> Presentation
+                                                <File className="w-5 h-5" /> Slides
                                             </span>
                                         )}
                                     </h1>
@@ -1043,7 +1044,7 @@ export default function KnowledgePage() {
                                             <File className="w-5 h-5 text-accent" />
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium text-foreground truncate">{knowledgeRecord.original_filename || 'PPTX file'}</p>
+                                            <p className="text-sm font-medium text-foreground truncate">{knowledgeRecord.original_filename || 'Slides file'}</p>
                                             <div className="flex flex-wrap gap-3 mt-1">
                                                 {knowledgeRecord.file_size && <span className="text-xs text-muted-foreground">{formatFileSize(knowledgeRecord.file_size)}</span>}
                                                 {metadata.slide_count != null && <span className="text-xs text-muted-foreground">{metadata.slide_count} slides</span>}
@@ -1090,7 +1091,7 @@ export default function KnowledgePage() {
             {/* ── Knowledge Intelligence Siderail ── */}
             <aside
                 className="relative z-10 flex flex-shrink-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-card/28 py-4 transition-[width] duration-200 ease-out"
-                style={{ width: isKnowledgeIntelligenceCollapsed ? `${KNOWLEDGE_INTELLIGENCE_COLLAPSED_WIDTH}px` : `${knowledgeIntelligenceWidth}px` }}
+                style={{ width: isKnowledgeIntelligenceCollapsed ? `${KNOWLEDGE_INTELLIGENCE_COLLAPSED_WIDTH}px` : `${knowledgeIntelligencePct}%` }}
             >
                 {!isKnowledgeIntelligenceCollapsed && (
                     <button

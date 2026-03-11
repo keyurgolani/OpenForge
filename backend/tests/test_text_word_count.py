@@ -13,7 +13,7 @@ class CountWordsTests(unittest.TestCase):
 
     def test_counts_markdown_code_blocks_using_code_tokens(self) -> None:
         content = "Before code.\n```ts\nuserAccountId=fooBar+baz42\n```\nAfter code."
-        self.assertEqual(count_words(content, knowledge_type="standard"), 7)
+        self.assertEqual(count_words(content, knowledge_type="note"), 7)
 
     def test_counts_sentence_in_gist_as_multiple_words(self) -> None:
         content = "This gist line is a full sentence."

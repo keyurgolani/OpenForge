@@ -29,9 +29,9 @@ class SaveToWorkspaceTool(BaseTool):
                 "content": {"type": "string", "description": "Content to save"},
                 "type": {
                     "type": "string",
-                    "enum": ["standard", "fleeting", "gist"],
-                    "default": "standard",
-                    "description": "Knowledge type: standard (notes), fleeting (temporary), gist (code snippets)",
+                    "enum": ["note", "fleeting", "gist"],
+                    "default": "note",
+                    "description": "Knowledge type: note (notes), fleeting (temporary), gist (code snippets)",
                 },
             },
             "required": ["title", "content"],
@@ -47,7 +47,7 @@ class SaveToWorkspaceTool(BaseTool):
                 resp = await client.post(url, json={
                     "title": params["title"],
                     "content": params["content"],
-                    "type": params.get("type", "standard"),
+                    "type": params.get("type", "note"),
                 })
                 resp.raise_for_status()
             data = resp.json()

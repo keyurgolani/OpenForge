@@ -1,21 +1,23 @@
-"""PPTX Processing Pipeline.
+"""Slides Processing Pipeline.
 
 1. Read all slides via python-pptx (title + body text + speaker notes)
 2. Extract metadata (slide count, has speaker notes)
-3. Chunk text → embed → store in Qdrant
+3. Generate thumbnail via LibreOffice
+4. Chunk text → embed → store in Qdrant
 """
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Optional
 from uuid import UUID
 
-logger = logging.getLogger("openforge.processors.pptx")
+logger = logging.getLogger("openforge.processors.slides")
 
 
-class PptxProcessor:
-    """Complete PPTX knowledge processing pipeline."""
+class SlidesProcessor:
+    """Complete slides (PPTX) knowledge processing pipeline."""
 
     async def process(
         self,
@@ -24,7 +26,7 @@ class PptxProcessor:
         workspace_id: UUID,
         db_session=None,
     ) -> dict:
-        """Run the full PPTX processing pipeline. Returns metadata dict."""
+        """Run the full slides processing pipeline. Returns metadata dict."""
         result = {
             "metadata": {},
             "text": "",
@@ -34,17 +36,33 @@ class PptxProcessor:
         try:
             result["text"], result["metadata"] = self._extract_text_and_metadata(file_path)
         except Exception as e:
-            logger.warning("PPTX extraction failed for %s: %s", knowledge_id, e)
+            logger.warning("Slides extraction failed for %s: %s", knowledge_id, e)
 
-        # ── Step 2: Embed text ──
+        # ── Step 2: Thumbnail ──
+        thumbnail_path = None
+        try:
+            from openforge.config import get_settings
+            from openforge.core.knowledge_processors.thumbnail_utils import generate_office_thumbnail
+
+            settings = get_settings()
+            thumbnails_dir = os.path.join(settings.uploads_root, "knowledge-thumbnails")
+            os.makedirs(thumbnails_dir, exist_ok=True)
+            thumb_file = os.path.join(thumbnails_dir, f"{knowledge_id}.webp")
+            if generate_office_thumbnail(file_path, thumb_file):
+                thumbnail_path = thumb_file
+        except Exception as e:
+            logger.warning("Slides thumbnail generation failed for %s: %s", knowledge_id, e)
+
+        # ── Step 3: Embed text ──
         if result["text"] and len(result["text"].strip()) >= 20:
             try:
                 await self._embed_text(knowledge_id, workspace_id, result["text"])
             except Exception as e:
-                logger.warning("PPTX text embedding failed for %s: %s", knowledge_id, e)
+                logger.warning("Slides text embedding failed for %s: %s", knowledge_id, e)
 
         metadata = result["metadata"]
         return {
+            "thumbnail_path": thumbnail_path,
             "file_metadata": {
                 "slide_count": metadata.get("slide_count"),
                 "has_notes": metadata.get("has_notes"),
@@ -130,10 +148,10 @@ class PptxProcessor:
             knowledge_id=knowledge_id,
             workspace_id=workspace_id,
             content=text,
-            knowledge_type="pptx",
+            knowledge_type="slides",
             title=None,
             tags=[],
         )
 
 
-pptx_processor = PptxProcessor()
+slides_processor = SlidesProcessor()

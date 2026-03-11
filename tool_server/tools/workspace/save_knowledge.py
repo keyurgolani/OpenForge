@@ -32,9 +32,9 @@ class SaveKnowledgeTool(BaseTool):
                 "content": {"type": "string", "description": "Content to save"},
                 "type": {
                     "type": "string",
-                    "enum": ["standard", "fleeting", "gist"],
-                    "default": "standard",
-                    "description": "Knowledge type: standard (notes/documents), fleeting (quick temporary thought), gist (code snippet)",
+                    "enum": ["note", "fleeting", "gist"],
+                    "default": "note",
+                    "description": "Knowledge type: note (notes/documents), fleeting (quick temporary thought), gist (code snippet)",
                 },
             },
             "required": ["title", "content"],
@@ -50,7 +50,7 @@ class SaveKnowledgeTool(BaseTool):
                 resp = await client.post(url, json={
                     "title": params["title"],
                     "content": params["content"],
-                    "type": params.get("type", "standard"),
+                    "type": params.get("type", "note"),
                 })
                 resp.raise_for_status()
             data = resp.json()

@@ -8,6 +8,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     tesseract-ocr \
     ffmpeg \
+    libreoffice-common \
+    libreoffice-writer \
+    libreoffice-calc \
+    libreoffice-impress \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
@@ -26,6 +30,7 @@ ENV PYTHONPATH=/app/backend
 ENV PYTHONUNBUFFERED=1
 ENV HF_HOME=/models
 ENV SENTENCE_TRANSFORMERS_HOME=/models
+ENV DATALAB_MODELS_DIR=/models/marker
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD celery -A openforge.worker.celery_app inspect ping -d celery@$HOSTNAME || exit 1

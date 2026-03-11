@@ -116,7 +116,7 @@ class Knowledge(Base):
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
     )
-    type: Mapped[str] = mapped_column(String(20), nullable=False, default="standard")
+    type: Mapped[str] = mapped_column(String(20), nullable=False, default="note")
     title: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False, default="")
     url: Mapped[Optional[str]] = mapped_column(String(2000), nullable=True)

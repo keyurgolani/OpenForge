@@ -17,7 +17,7 @@ router = APIRouter()
 # Variables available:
 #   {knowledge_title}  - Knowledge title (or AI-generated title)
 #   {knowledge_content} - Full knowledge content (up to 8000 chars)
-#   {knowledge_type}   - Knowledge type (standard, fleeting, bookmark, gist)
+#   {knowledge_type}   - Knowledge type (note, fleeting, bookmark, gist)
 #   {url}             - Bookmark URL
 #   {tags}            - Comma-separated knowledge tags
 #   {language}        - Gist programming language

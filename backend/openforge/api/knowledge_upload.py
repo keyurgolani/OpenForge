@@ -1,6 +1,6 @@
 """
 Knowledge Upload API — file upload for file-based knowledge types.
-Supports: Image, Audio, PDF, DOCX, XLSX, PPTX
+Supports: Image, Audio, PDF, Document (DOCX), Sheet (XLSX), Slides (PPTX)
 """
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
@@ -43,22 +43,22 @@ ALLOWED_UPLOAD_TYPES: dict[str, dict] = {
     "application/pdf": {"knowledge_type": "pdf", "extensions": [".pdf"]},
     # Word
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
-        "knowledge_type": "docx",
+        "knowledge_type": "document",
         "extensions": [".docx"],
     },
-    "application/msword": {"knowledge_type": "docx", "extensions": [".doc"]},
+    "application/msword": {"knowledge_type": "document", "extensions": [".doc"]},
     # Excel
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
-        "knowledge_type": "xlsx",
+        "knowledge_type": "sheet",
         "extensions": [".xlsx"],
     },
-    "application/vnd.ms-excel": {"knowledge_type": "xlsx", "extensions": [".xls"]},
+    "application/vnd.ms-excel": {"knowledge_type": "sheet", "extensions": [".xls"]},
     # PowerPoint
     "application/vnd.openxmlformats-officedocument.presentationml.presentation": {
-        "knowledge_type": "pptx",
+        "knowledge_type": "slides",
         "extensions": [".pptx"],
     },
-    "application/vnd.ms-powerpoint": {"knowledge_type": "pptx", "extensions": [".ppt"]},
+    "application/vnd.ms-powerpoint": {"knowledge_type": "slides", "extensions": [".ppt"]},
 }
 
 # Extension-based fallback mapping
@@ -72,7 +72,7 @@ MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
 
 def _resolve_knowledge_type(content_type: str, filename: str) -> Optional[str]:
     """Resolve the knowledge type from content type or file extension."""
-    ct = content_type.strip().lower()
+    ct = content_type.strip().lower().split(";")[0].strip()
     ext = os.path.splitext(filename)[1].lower()
 
     # Check MIME type first
@@ -104,7 +104,7 @@ async def upload_knowledge_file(
         raise HTTPException(
             status_code=400,
             detail=f"File type '{content_type}' ({ext}) is not supported. "
-            f"Supported: images, audio, PDF, DOCX, XLSX, PPTX.",
+            f"Supported: images, audio, PDF, DOCX, XLSX/XLS, PPTX.",
         )
 
     # Read file content
@@ -302,15 +302,15 @@ async def _run_processor(
     elif knowledge_type == "pdf":
         from openforge.core.knowledge_processors.pdf_processor import pdf_processor
         return await pdf_processor.process(knowledge_id, file_path, workspace_id, db_session)
-    elif knowledge_type == "docx":
-        from openforge.core.knowledge_processors.docx_processor import docx_processor
-        return await docx_processor.process(knowledge_id, file_path, workspace_id, db_session)
-    elif knowledge_type == "xlsx":
-        from openforge.core.knowledge_processors.xlsx_processor import xlsx_processor
-        return await xlsx_processor.process(knowledge_id, file_path, workspace_id, db_session)
-    elif knowledge_type == "pptx":
-        from openforge.core.knowledge_processors.pptx_processor import pptx_processor
-        return await pptx_processor.process(knowledge_id, file_path, workspace_id, db_session)
+    elif knowledge_type == "document":
+        from openforge.core.knowledge_processors.document_processor import document_processor
+        return await document_processor.process(knowledge_id, file_path, workspace_id, db_session)
+    elif knowledge_type == "sheet":
+        from openforge.core.knowledge_processors.sheet_processor import sheet_processor
+        return await sheet_processor.process(knowledge_id, file_path, workspace_id, db_session)
+    elif knowledge_type == "slides":
+        from openforge.core.knowledge_processors.slides_processor import slides_processor
+        return await slides_processor.process(knowledge_id, file_path, workspace_id, db_session)
     else:
         logger.warning("No processor for knowledge type: %s", knowledge_type)
         return {}
@@ -334,7 +334,7 @@ async def reprocess_knowledge_file(
     if not knowledge:
         raise HTTPException(status_code=404, detail="Knowledge not found")
 
-    reprocessable_types = {"image", "audio", "pdf", "docx", "xlsx", "pptx"}
+    reprocessable_types = {"image", "audio", "pdf", "document", "sheet", "slides"}
     if knowledge.type not in reprocessable_types:
         raise HTTPException(
             status_code=400,

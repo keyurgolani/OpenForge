@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends, BackgroundTasks
+from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 from typing import Optional
@@ -19,6 +21,65 @@ from openforge.utils.task_audit import (
 from openforge.utils.title import normalize_knowledge_title
 
 router = APIRouter()
+
+# Separate router for non-workspace-scoped endpoints
+knowledge_global_router = APIRouter()
+
+
+class KnowledgeResolveRequest(BaseModel):
+    ids: list[str]
+
+
+class KnowledgeResolvedItem(BaseModel):
+    id: str
+    title: str | None
+    type: str | None
+    workspace_id: str | None
+    workspace_name: str | None
+
+
+@knowledge_global_router.post("/knowledge/resolve", response_model=list[KnowledgeResolvedItem])
+async def resolve_knowledge_ids(body: KnowledgeResolveRequest, db: AsyncSession = Depends(get_db)):
+    """Resolve knowledge IDs to their titles, types, and workspace names — cross-workspace."""
+    from openforge.db.models import Knowledge, Workspace
+
+    if not body.ids or len(body.ids) > 50:
+        return []
+
+    valid_ids = []
+    for raw_id in body.ids:
+        try:
+            valid_ids.append(UUID(raw_id))
+        except ValueError:
+            continue
+
+    if not valid_ids:
+        return []
+
+    result = await db.execute(
+        select(
+            Knowledge.id,
+            Knowledge.title,
+            Knowledge.ai_title,
+            Knowledge.type,
+            Knowledge.workspace_id,
+            Workspace.name.label("workspace_name"),
+        )
+        .join(Workspace, Knowledge.workspace_id == Workspace.id)
+        .where(Knowledge.id.in_(valid_ids))
+    )
+    rows = result.all()
+
+    return [
+        KnowledgeResolvedItem(
+            id=str(row.id),
+            title=row.title or row.ai_title,
+            type=row.type,
+            workspace_id=str(row.workspace_id),
+            workspace_name=row.workspace_name,
+        )
+        for row in rows
+    ]
 
 
 async def _get_prompt(db: AsyncSession, prompt_id: str, **kwargs) -> str:

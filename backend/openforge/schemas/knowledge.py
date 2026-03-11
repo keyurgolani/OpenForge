@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 from typing import Optional, Any, Literal
 from uuid import UUID
 from datetime import datetime
@@ -6,9 +6,16 @@ from datetime import datetime
 
 class KnowledgeCreate(BaseModel):
     type: Literal[
-        "standard", "fleeting", "bookmark", "gist",
-        "image", "audio", "pdf", "docx", "xlsx", "pptx",
-    ] = "standard"
+        "note", "standard", "fleeting", "bookmark", "gist",
+        "image", "audio", "pdf", "document", "sheet", "slides",
+    ] = "note"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_standard_to_note(cls, values):
+        if isinstance(values, dict) and values.get("type") == "standard":
+            values["type"] = "note"
+        return values
     title: Optional[str] = None
     content: Optional[str] = ""
     url: Optional[str] = None

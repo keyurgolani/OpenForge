@@ -9,7 +9,7 @@ import { getShortcutDisplay } from '@/lib/keyboard'
 import { onQuickKnowledgeOpen, type QuickKnowledgeType } from '@/lib/quick-knowledge'
 import CommandPalette from '@/components/shared/CommandPalette'
 import HITLFab from '@/components/shared/HITLFab'
-import { UnifiedKnowledgeModal } from '@/components/knowledge/UnifiedKnowledgeModal'
+import CreateDispatcher from '@/components/knowledge/create/CreateDispatcher'
 import KnowledgeTypeGrid from '@/components/knowledge/KnowledgeTypeGrid'
 import { ModeToggle } from '@/components/mode-toggle'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
@@ -90,7 +90,7 @@ export default function AppShell() {
     const location = useLocation()
     const [sidebarOpen, setSidebarOpen] = useState(true)
     const [showKnowledgeCreate, setShowKnowledgeCreate] = useState(false)
-    const [createDispatchType, setCreateDispatchType] = useState<QuickKnowledgeType>('standard')
+    const [createDispatchType, setCreateDispatchType] = useState<QuickKnowledgeType>('note')
     const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
     const [workspaceQuery, setWorkspaceQuery] = useState('')
     const [activeInsightSection, setActiveInsightSection] = useState<InsightSectionKey | null>('tasks')
@@ -156,7 +156,7 @@ export default function AppShell() {
     const currentSectionMeta = useMemo(() => {
         if (location.pathname.includes('/chat')) {
             return {
-                title: 'Workspace Chat',
+                title: 'Workspace Agent',
                 description: 'Ask questions, review context, and manage conversations.',
             }
         }
@@ -228,13 +228,13 @@ export default function AppShell() {
     )
 
     // Keyboard shortcuts
-    const openQuickPanel = useCallback((type: QuickKnowledgeType = 'standard') => {
+    const openQuickPanel = useCallback((type: QuickKnowledgeType = 'note') => {
         setCreateDispatchType(type)
         setShowKnowledgeCreate(true)
     }, [])
 
     const handleNewKnowledge = useCallback(() => {
-        openQuickPanel('standard')
+        openQuickPanel('note')
     }, [openQuickPanel])
 
     useKeyboardShortcut('b', true, () => setSidebarOpen(p => !p), { ignoreInputs: false })
@@ -504,7 +504,7 @@ export default function AppShell() {
                                         <Search className="w-4 h-4" /> Search
                                     </Link>
                                     <Link to={`/w/${workspaceId}/chat`} className={`sidebar-item ${isActive('/chat') ? 'active' : ''}`}>
-                                        <MessageSquare className="w-4 h-4" /> Chat
+                                        <MessageSquare className="w-4 h-4" /> Agent
                                     </Link>
                                 </nav>
                             </div>
@@ -536,7 +536,7 @@ export default function AppShell() {
                                 <div>
                                     <div className="flex items-center gap-1 px-2 mb-1">
                                         <MessageSquare className="w-3 h-3 text-muted-foreground" />
-                                        <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Recent Chats</span>
+                                        <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Recent Conversations</span>
                                     </div>
                                     {recentConversations.slice(0, 5).map(c => {
                                         const isRenaming = renamingConversationId === c.id
@@ -662,7 +662,7 @@ export default function AppShell() {
                             </Link>
                             <Link
                                 to={`/w/${workspaceId}/chat`}
-                                title="Chat"
+                                title="Agent"
                                 className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isActive('/chat') ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
                             >
                                 <MessageSquare className="w-4 h-4" />
@@ -743,8 +743,7 @@ export default function AppShell() {
                     </div>
                 </header>
 
-                <UnifiedKnowledgeModal
-                    mode="create"
+                <CreateDispatcher
                     type={createDispatchType}
                     workspaceId={workspaceId}
                     isOpen={showKnowledgeCreate}

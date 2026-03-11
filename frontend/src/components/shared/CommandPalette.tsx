@@ -54,7 +54,7 @@ export default function CommandPalette() {
         close()
     }, [close])
 
-    const handleCreateKnowledge = (type: QuickKnowledgeType = 'standard') => {
+    const handleCreateKnowledge = (type: QuickKnowledgeType = 'note') => {
         if (!workspaceId) return
         openQuickKnowledge(type)
         close()
@@ -114,7 +114,7 @@ export default function CommandPalette() {
                             <Command.Group heading="Actions" className={GROUP_CLASS}>
                                 {workspaceId && (
                                     <>
-                                        <PaletteItem icon={<Plus className="w-4 h-4" />} onSelect={() => handleCreateKnowledge('standard')}>New Knowledge</PaletteItem>
+                                        <PaletteItem icon={<Plus className="w-4 h-4" />} onSelect={() => handleCreateKnowledge('note')}>New Knowledge</PaletteItem>
                                         <PaletteItem icon={<Zap className="w-4 h-4" />} onSelect={() => handleCreateKnowledge('fleeting')}>New Fleeting Note</PaletteItem>
                                         <PaletteItem icon={<Bookmark className="w-4 h-4" />} onSelect={() => handleCreateKnowledge('bookmark')}>New Bookmark</PaletteItem>
                                         <PaletteItem icon={<Code2 className="w-4 h-4" />} onSelect={() => handleCreateKnowledge('gist')}>New Code Gist</PaletteItem>

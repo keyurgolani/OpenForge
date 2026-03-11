@@ -18,6 +18,7 @@ from openforge.api import hitl as hitl_api
 from openforge.api import agent as agent_api
 from openforge.api import agents as agents_api
 from openforge.api import tool_permissions as tool_permissions_api
+from openforge.api import models as models_api
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -26,6 +27,7 @@ api_router.include_router(settings_module.onboarding_router, prefix="/onboarding
 api_router.include_router(llm_management.router, prefix="/llm", tags=["llm"])
 api_router.include_router(workspaces.router, prefix="/workspaces", tags=["workspaces"])
 api_router.include_router(knowledge.router, prefix="/workspaces", tags=["knowledge"])
+api_router.include_router(knowledge.knowledge_global_router, tags=["knowledge"])
 api_router.include_router(knowledge_upload.router, prefix="/workspaces", tags=["knowledge-upload"])
 api_router.include_router(conversations.router, prefix="/workspaces", tags=["conversations"])
 api_router.include_router(search.router, prefix="/workspaces", tags=["search"])
@@ -41,3 +43,4 @@ api_router.include_router(hitl_api.router, prefix="/hitl", tags=["hitl"])
 api_router.include_router(agent_api.router, prefix="/agent", tags=["agent"])
 api_router.include_router(agents_api.router, prefix="/agents", tags=["agents"])
 api_router.include_router(tool_permissions_api.router, prefix="/tools", tags=["tool-permissions"])
+api_router.include_router(models_api.router, prefix="/models", tags=["models"])

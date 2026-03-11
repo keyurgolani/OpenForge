@@ -53,7 +53,7 @@ async def visual_search(
     try:
         from openforge.core.knowledge_processors.image_processor import ImageProcessor
 
-        clip_model = ImageProcessor._get_clip_model()
+        clip_model = await ImageProcessor._get_clip_model_async()
         query_embedding = clip_model.encode(img, normalize_embeddings=True).tolist()
     except Exception as e:
         logger.error("CLIP encoding failed: %s", e)

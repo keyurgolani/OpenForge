@@ -1,4 +1,4 @@
-"""XLSX Processing Pipeline.
+"""Sheet Processing Pipeline.
 
 1. Read all sheets via openpyxl, convert each to markdown table
 2. Extract metadata (sheet names, row/column counts per sheet)
@@ -11,11 +11,11 @@ from pathlib import Path
 from typing import Optional
 from uuid import UUID
 
-logger = logging.getLogger("openforge.processors.xlsx")
+logger = logging.getLogger("openforge.processors.sheet")
 
 
-class XlsxProcessor:
-    """Complete XLSX knowledge processing pipeline."""
+class SheetProcessor:
+    """Complete sheet knowledge processing pipeline."""
 
     async def process(
         self,
@@ -24,7 +24,7 @@ class XlsxProcessor:
         workspace_id: UUID,
         db_session=None,
     ) -> dict:
-        """Run the full XLSX processing pipeline. Returns metadata dict."""
+        """Run the full sheet processing pipeline. Returns metadata dict."""
         result = {
             "metadata": {},
             "text": "",
@@ -37,20 +37,20 @@ class XlsxProcessor:
             result["text"] = text
             result["sheet_info"] = sheet_info
         except Exception as e:
-            logger.warning("XLSX extraction failed for %s: %s", knowledge_id, e)
+            logger.warning("Sheet extraction failed for %s: %s", knowledge_id, e)
 
         # ── Step 2: Extract metadata ──
         try:
             result["metadata"] = self._extract_metadata(file_path, result["sheet_info"])
         except Exception as e:
-            logger.warning("XLSX metadata extraction failed for %s: %s", knowledge_id, e)
+            logger.warning("Sheet metadata extraction failed for %s: %s", knowledge_id, e)
 
         # ── Step 3: Embed text ──
         if result["text"] and len(result["text"].strip()) >= 20:
             try:
                 await self._embed_text(knowledge_id, workspace_id, result["text"])
             except Exception as e:
-                logger.warning("XLSX text embedding failed for %s: %s", knowledge_id, e)
+                logger.warning("Sheet text embedding failed for %s: %s", knowledge_id, e)
 
         metadata = result["metadata"]
         return {
@@ -130,7 +130,7 @@ class XlsxProcessor:
         return full_text[:100000], sheet_info
 
     def _extract_metadata(self, file_path: str, sheet_info: list[dict]) -> dict:
-        """Extract XLSX metadata."""
+        """Extract sheet metadata."""
         total_rows = sum(s.get("rows", 0) for s in sheet_info)
 
         return {
@@ -150,10 +150,10 @@ class XlsxProcessor:
             knowledge_id=knowledge_id,
             workspace_id=workspace_id,
             content=text,
-            knowledge_type="xlsx",
+            knowledge_type="sheet",
             title=None,
             tags=[],
         )
 
 
-xlsx_processor = XlsxProcessor()
+sheet_processor = SheetProcessor()

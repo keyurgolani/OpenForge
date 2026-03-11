@@ -30,7 +30,7 @@ class WorkspaceListKnowledgeTool(BaseTool):
             "properties": {
                 "type": {
                     "type": "string",
-                    "enum": ["standard", "fleeting", "bookmark", "gist", "image", "audio", "pdf", "docx", "xlsx", "pptx"],
+                    "enum": ["note", "fleeting", "bookmark", "gist", "image", "audio", "pdf", "document", "sheet", "slides"],
                     "description": "Filter by knowledge type (omit to return all types)",
                 },
                 "page_size": {
@@ -56,7 +56,7 @@ class WorkspaceListKnowledgeTool(BaseTool):
                 {
                     "id": k["id"],
                     "title": k.get("title") or "(untitled)",
-                    "type": k.get("type", "standard"),
+                    "type": k.get("type", "note"),
                     "tags": k.get("tags", []),
                 }
                 for k in items

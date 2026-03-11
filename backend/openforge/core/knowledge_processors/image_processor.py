@@ -26,16 +26,63 @@ class ImageProcessor:
 
     _clip_model = None
 
+    _clip_model_id: str | None = None
+
     @classmethod
-    def _get_clip_model(cls):
-        """Lazy-load CLIP model (cached at class level)."""
+    async def _resolve_clip_model_id(cls) -> str:
+        """Resolve the active CLIP model — DB config overrides env default."""
+        from openforge.config import get_settings
+        settings = get_settings()
+        try:
+            from openforge.db.postgres import AsyncSessionLocal
+            from openforge.services.config_service import config_service
+            async with AsyncSessionLocal() as db:
+                cfg = await config_service.get_config(db, "clip_model")
+                if cfg and cfg.value:
+                    val = cfg.value
+                    if isinstance(val, dict):
+                        val = val.get("value", "")
+                    if val:
+                        return str(val)
+        except Exception:
+            pass
+        return settings.clip_model
+
+    @classmethod
+    async def _get_clip_model_async(cls):
+        """Lazy-load CLIP model (cached at class level), reading config from DB."""
         if cls._clip_model is None:
             try:
                 from sentence_transformers import SentenceTransformer
                 from openforge.config import get_settings
                 settings = get_settings()
-                logger.info("Loading CLIP model: %s", settings.clip_model)
-                cls._clip_model = SentenceTransformer(settings.clip_model)
+                cache_dir = str(Path(settings.models_root) / "clip")
+                model_id = await cls._resolve_clip_model_id()
+                logger.info("Loading CLIP model: %s from %s", model_id, cache_dir)
+                import asyncio
+                cls._clip_model = await asyncio.to_thread(
+                    SentenceTransformer, model_id, cache_folder=cache_dir
+                )
+                cls._clip_model_id = model_id
+                logger.info("CLIP model loaded.")
+            except Exception as e:
+                logger.error("Failed to load CLIP model: %s", e)
+                raise
+        return cls._clip_model
+
+    @classmethod
+    def _get_clip_model(cls):
+        """Sync access to the cached CLIP model (must be loaded first via _get_clip_model_async)."""
+        if cls._clip_model is None:
+            try:
+                from sentence_transformers import SentenceTransformer
+                from openforge.config import get_settings
+                settings = get_settings()
+                cache_dir = str(Path(settings.models_root) / "clip")
+                logger.info("Loading CLIP model (sync fallback): %s from %s", settings.clip_model, cache_dir)
+                cls._clip_model = SentenceTransformer(
+                    settings.clip_model, cache_folder=cache_dir
+                )
                 logger.info("CLIP model loaded.")
             except Exception as e:
                 logger.error("Failed to load CLIP model: %s", e)
@@ -197,7 +244,7 @@ class ImageProcessor:
         client = get_qdrant()
         collection = settings.qdrant_visual_collection
 
-        clip_model = self._get_clip_model()
+        clip_model = await self._get_clip_model_async()
         img = Image.open(file_path)
         if img.mode != "RGB":
             img = img.convert("RGB")

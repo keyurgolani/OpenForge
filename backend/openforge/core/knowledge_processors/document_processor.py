@@ -1,21 +1,23 @@
-"""DOCX Processing Pipeline.
+"""Document Processing Pipeline.
 
 1. Extract text as paragraphs via python-docx (with heading levels)
 2. Extract metadata (author, title, word count, paragraph count)
-3. Chunk text → embed → store in Qdrant
+3. Generate thumbnail via LibreOffice
+4. Chunk text → embed → store in Qdrant
 """
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Optional
 from uuid import UUID
 
-logger = logging.getLogger("openforge.processors.docx")
+logger = logging.getLogger("openforge.processors.document")
 
 
-class DocxProcessor:
-    """Complete DOCX knowledge processing pipeline."""
+class DocumentProcessor:
+    """Complete document (DOCX) knowledge processing pipeline."""
 
     async def process(
         self,
@@ -24,7 +26,7 @@ class DocxProcessor:
         workspace_id: UUID,
         db_session=None,
     ) -> dict:
-        """Run the full DOCX processing pipeline. Returns metadata dict."""
+        """Run the full document processing pipeline. Returns metadata dict."""
         result = {
             "metadata": {},
             "text": "",
@@ -34,23 +36,39 @@ class DocxProcessor:
         try:
             result["text"] = self._extract_text(file_path)
         except Exception as e:
-            logger.warning("DOCX text extraction failed for %s: %s", knowledge_id, e)
+            logger.warning("Document text extraction failed for %s: %s", knowledge_id, e)
 
         # ── Step 2: Extract metadata ──
         try:
             result["metadata"] = self._extract_metadata(file_path)
         except Exception as e:
-            logger.warning("DOCX metadata extraction failed for %s: %s", knowledge_id, e)
+            logger.warning("Document metadata extraction failed for %s: %s", knowledge_id, e)
 
-        # ── Step 3: Embed text ──
+        # ── Step 3: Thumbnail ──
+        thumbnail_path = None
+        try:
+            from openforge.config import get_settings
+            from openforge.core.knowledge_processors.thumbnail_utils import generate_office_thumbnail
+
+            settings = get_settings()
+            thumbnails_dir = os.path.join(settings.uploads_root, "knowledge-thumbnails")
+            os.makedirs(thumbnails_dir, exist_ok=True)
+            thumb_file = os.path.join(thumbnails_dir, f"{knowledge_id}.webp")
+            if generate_office_thumbnail(file_path, thumb_file):
+                thumbnail_path = thumb_file
+        except Exception as e:
+            logger.warning("Document thumbnail generation failed for %s: %s", knowledge_id, e)
+
+        # ── Step 4: Embed text ──
         if result["text"] and len(result["text"].strip()) >= 20:
             try:
                 await self._embed_text(knowledge_id, workspace_id, result["text"])
             except Exception as e:
-                logger.warning("DOCX text embedding failed for %s: %s", knowledge_id, e)
+                logger.warning("Document text embedding failed for %s: %s", knowledge_id, e)
 
         metadata = result["metadata"]
         return {
+            "thumbnail_path": thumbnail_path,
             "file_metadata": {
                 "author": metadata.get("author"),
                 "doc_title": metadata.get("title"),
@@ -141,10 +159,10 @@ class DocxProcessor:
             knowledge_id=knowledge_id,
             workspace_id=workspace_id,
             content=text,
-            knowledge_type="docx",
+            knowledge_type="document",
             title=None,
             tags=[],
         )
 
 
-docx_processor = DocxProcessor()
+document_processor = DocumentProcessor()

@@ -13,6 +13,7 @@ import {
     getWorkspace,
     listWorkspaces,
     getKnowledge,
+    resolveKnowledgeIds,
     saveAttachmentToKnowledge,
     exportConversation,
     approveHITL,
@@ -39,8 +40,8 @@ const md = new MarkdownIt({ html: false, linkify: true, typographer: true, break
 
 // Knowledge subtype display labels (matches TYPE_META in SearchPage)
 const KNOWLEDGE_TYPE_LABELS: Record<string, string> = {
-    standard: 'Note', fleeting: 'Fleeting', bookmark: 'Bookmark', gist: 'Gist',
-    image: 'Image', audio: 'Audio', pdf: 'PDF', docx: 'Word', xlsx: 'Excel', pptx: 'Presentation',
+    note: 'Note', fleeting: 'Fleeting', bookmark: 'Bookmark', gist: 'Gist',
+    image: 'Image', audio: 'Audio', pdf: 'PDF', document: 'Document', sheet: 'Sheet', slides: 'Slides',
 }
 
 interface MentionResolutionMaps {
@@ -48,14 +49,15 @@ interface MentionResolutionMaps {
     chatsById: Map<string, string>         // id → title
     knowledgeById: Map<string, string>     // id → title
     knowledgeTypeById: Map<string, string> // id → knowledge_type
+    knowledgeWorkspaceById: Map<string, { workspaceId: string; workspaceName: string }> // id → workspace info
     workspacesByName: Map<string, string>  // name (lower) → id
     chatsByName: Map<string, string>       // title (lower) → id
 }
 
-// Encode knowledge entity as label with embedded type: "K|{type}|{title}"
+// Encode knowledge entity as label with embedded type + workspace: "K|{type}|{wsName}|{title}"
 // Workspace/Chat labels stay as "Workspace: {name}" / "Chat: {title}" for @mention compat
-function knLabel(title: string, type?: string) {
-    return `K\u200b${type || ''}\u200b${title}`
+function knLabel(title: string, type?: string, wsName?: string) {
+    return `K\u200b${type || ''}\u200b${wsName || ''}\u200b${title}`
 }
 
 /** Pre-process agent response content to turn contextual IDs into markdown links. */
@@ -72,8 +74,11 @@ function injectIdLinks(
             const lc = uuid.toLowerCase()
             const title = maps?.knowledgeById.get(lc)
             const type = maps?.knowledgeTypeById.get(lc)
-            const label = title ? knLabel(title, type) : knLabel(uuid.slice(0, 8) + '…')
-            return `${pre}[${label}](/w/${workspaceId}/knowledge/${uuid})${post}`
+            const knWs = maps?.knowledgeWorkspaceById.get(lc)
+            const targetWs = knWs?.workspaceId || workspaceId
+            const crossWsName = knWs && knWs.workspaceId !== workspaceId ? knWs.workspaceName : undefined
+            const label = title ? knLabel(title, type, crossWsName) : knLabel(uuid.slice(0, 8) + '…')
+            return `${pre}[${label}](/w/${targetWs}/knowledge/${uuid})${post}`
         }
     )
     // conversation_id / chat_id: <uuid>
@@ -125,8 +130,11 @@ function injectIdLinks(
                 if (chatTitle) return `[Chat: ${chatTitle}](/w/${workspaceId}/chat/${uuid})`
                 const knTitle = maps.knowledgeById.get(lc)
                 const knType = maps.knowledgeTypeById.get(lc)
-                const label = knTitle ? knLabel(knTitle, knType) : knLabel(uuid.slice(0, 8) + '…')
-                return `[${label}](/w/${workspaceId}/knowledge/${uuid})`
+                const knWs = maps.knowledgeWorkspaceById.get(lc)
+                const targetWs = knWs?.workspaceId || workspaceId
+                const crossWsName = knWs && knWs.workspaceId !== workspaceId ? knWs.workspaceName : undefined
+                const label = knTitle ? knLabel(knTitle, knType, crossWsName) : knLabel(uuid.slice(0, 8) + '…')
+                return `[${label}](/w/${targetWs}/knowledge/${uuid})`
             }
         )
     }
@@ -135,7 +143,7 @@ function injectIdLinks(
 
 // Zero-width space U+200B is used as separator in knowledge labels — safe since it
 // never appears in user-generated titles and survives markdown-it rendering unchanged.
-const ENTITY_CARD_RE = /<a href="([^"]*)">(Workspace: [^<]+|Chat: [^<]+|K\u200b[^\u200b]*\u200b[^<]+)<\/a>/g
+const ENTITY_CARD_RE = /<a href="([^"]*)">(Workspace: [^<]+|Chat: [^<]+|K\u200b[^<]+)<\/a>/g
 
 function entityCardHtml(href: string, label: string): string {
     if (label.startsWith('Workspace: ')) {
@@ -150,18 +158,22 @@ function entityCardHtml(href: string, label: string): string {
             `<span class="entity-link-meta"><span class="entity-link-badge">Chat</span></span>` +
             `<span class="entity-link-name">${title}</span></a>`
     }
-    // Knowledge — label is "K\u200b{type}\u200b{title}"
+    // Knowledge — label is "K\u200b{type}\u200b{wsName}\u200b{title}"
     const zw = '\u200b'
-    const first = label.indexOf(zw)
-    const second = label.indexOf(zw, first + 1)
-    const knType = label.slice(first + 1, second)
-    const knTitle = label.slice(second + 1)
+    const parts = label.split(zw)
+    // parts[0] = "K", parts[1] = type, parts[2] = wsName, parts[3] = title
+    const knType = parts[1] || ''
+    const wsName = parts[2] || ''
+    const knTitle = parts.slice(3).join(zw) || parts.slice(2).join(zw) || label
     const typeLabel = knType ? (KNOWLEDGE_TYPE_LABELS[knType] || knType) : ''
     const typeChip = typeLabel
         ? `<span class="entity-link-subtype">${typeLabel}</span>`
         : ''
+    const wsChip = wsName
+        ? `<span class="entity-link-subtype entity-link-workspace-chip">@ ${wsName}</span>`
+        : ''
     return `<a href="${href}" class="entity-link entity-link--knowledge">` +
-        `<span class="entity-link-meta"><span class="entity-link-badge">Knowledge</span>${typeChip}</span>` +
+        `<span class="entity-link-meta"><span class="entity-link-badge">Knowledge</span>${typeChip}${wsChip}</span>` +
         `<span class="entity-link-name">${knTitle}</span></a>`
 }
 
@@ -174,16 +186,16 @@ function renderMessageContent(
     return html.replace(ENTITY_CARD_RE, (_, href, label) => entityCardHtml(href, label))
 }
 
-const MIN_CHAT_LIST_WIDTH = 280
-const MAX_CHAT_LIST_WIDTH = 560
-const DEFAULT_CHAT_LIST_WIDTH = 320
+const MIN_CHAT_LIST_PCT = 15
+const MAX_CHAT_LIST_PCT = 40
+const DEFAULT_CHAT_LIST_PCT = 25
 const CHAT_LIST_COLLAPSED_WIDTH = 56
-const CHAT_LIST_WIDTH_STORAGE_KEY = 'openforge.shell.chat.list.width'
+const CHAT_LIST_WIDTH_STORAGE_KEY = 'openforge.shell.chat.list.pct'
 const CHAT_LIST_COLLAPSED_STORAGE_KEY = 'openforge.shell.chat.list.collapsed'
 const CHAT_STREAMING_SAFE_GAP = 10
 
-const clampChatListWidth = (value: number) =>
-    Math.max(MIN_CHAT_LIST_WIDTH, Math.min(MAX_CHAT_LIST_WIDTH, value))
+const clampChatListPct = (value: number) =>
+    Math.max(MIN_CHAT_LIST_PCT, Math.min(MAX_CHAT_LIST_PCT, value))
 
 interface Message {
     id: string
@@ -264,11 +276,11 @@ export default function ChatPage() {
     const composerShellRef = useRef<HTMLDivElement>(null)
     const [composerHeight, setComposerHeight] = useState(188)
     const [messagesViewportHeight, setMessagesViewportHeight] = useState(0)
-    const [chatListWidth, setChatListWidth] = useState<number>(() => {
-        if (typeof window === 'undefined') return DEFAULT_CHAT_LIST_WIDTH
+    const [chatListPct, setChatListPct] = useState<number>(() => {
+        if (typeof window === 'undefined') return DEFAULT_CHAT_LIST_PCT
         const raw = window.localStorage.getItem(CHAT_LIST_WIDTH_STORAGE_KEY)
-        const parsed = raw ? parseInt(raw, 10) : NaN
-        return Number.isFinite(parsed) ? clampChatListWidth(parsed) : DEFAULT_CHAT_LIST_WIDTH
+        const parsed = raw ? parseFloat(raw) : NaN
+        return Number.isFinite(parsed) ? clampChatListPct(parsed) : DEFAULT_CHAT_LIST_PCT
     })
     const [activeChatRailSection, setActiveChatRailSection] = useState<'conversations' | 'trash' | null>('conversations')
     const [isChatListCollapsed, setIsChatListCollapsed] = useState(() => {
@@ -363,7 +375,7 @@ export default function ChatPage() {
         () => (conversationsWithArchived as Conversation[]).filter(conv => conv.is_archived),
         [conversationsWithArchived]
     )
-    const [resolvedKnowledgeTitles, setResolvedKnowledgeTitles] = useState<Map<string, { title: string; knowledgeType: string }>>(new Map())
+    const [resolvedKnowledgeTitles, setResolvedKnowledgeTitles] = useState<Map<string, { title: string; knowledgeType: string; workspaceId?: string; workspaceName?: string }>>(new Map())
     const fetchingKnowledgeIds = useRef<Set<string>>(new Set())
 
     const mentionMaps = useMemo<MentionResolutionMaps>(() => {
@@ -383,6 +395,7 @@ export default function ChatPage() {
         }
         const knowledgeById = new Map<string, string>()
         const knowledgeTypeById = new Map<string, string>()
+        const knowledgeWorkspaceById = new Map<string, { workspaceId: string; workspaceName: string }>()
         for (const msg of messages) {
             for (const src of msg.context_sources ?? []) {
                 if (src.knowledge_id && src.title) {
@@ -390,11 +403,12 @@ export default function ChatPage() {
                 }
             }
         }
-        for (const [id, { title, knowledgeType }] of resolvedKnowledgeTitles) {
+        for (const [id, { title, knowledgeType, workspaceId: wsId, workspaceName: wsName }] of resolvedKnowledgeTitles) {
             knowledgeById.set(id, title)
             if (knowledgeType) knowledgeTypeById.set(id, knowledgeType)
+            if (wsId) knowledgeWorkspaceById.set(id, { workspaceId: wsId, workspaceName: wsName || '' })
         }
-        return { workspacesById, chatsById, knowledgeById, knowledgeTypeById, workspacesByName, chatsByName }
+        return { workspacesById, chatsById, knowledgeById, knowledgeTypeById, knowledgeWorkspaceById, workspacesByName, chatsByName }
     }, [allWorkspaces, conversationsWithArchived, messages, resolvedKnowledgeTitles])
 
     // Async-resolve titles for bare UUIDs in message content that aren't already known
@@ -418,20 +432,16 @@ export default function ChatPage() {
         }
         if (candidates.size === 0) return
         for (const id of candidates) fetchingKnowledgeIds.current.add(id)
-        Promise.allSettled(
-            [...candidates].map(async (id) => {
-                try {
-                    const record = await getKnowledge(workspaceId, id)
-                    return { id, title: record?.title || null, knowledgeType: record?.knowledge_type || '' }
-                } catch {
-                    return { id, title: null, knowledgeType: '' }
-                }
-            })
-        ).then(results => {
-            const updates = new Map<string, { title: string; knowledgeType: string }>()
+        resolveKnowledgeIds([...candidates]).then((results: { id: string; title: string | null; type: string | null; workspace_id: string | null; workspace_name: string | null }[]) => {
+            const updates = new Map<string, { title: string; knowledgeType: string; workspaceId?: string; workspaceName?: string }>()
             for (const r of results) {
-                if (r.status === 'fulfilled' && r.value.title) {
-                    updates.set(r.value.id, { title: r.value.title, knowledgeType: r.value.knowledgeType })
+                if (r.title) {
+                    updates.set(r.id.toLowerCase(), {
+                        title: r.title,
+                        knowledgeType: r.type || '',
+                        workspaceId: r.workspace_id || undefined,
+                        workspaceName: r.workspace_name || undefined,
+                    })
                 }
             }
             if (updates.size > 0) {
@@ -441,7 +451,7 @@ export default function ChatPage() {
                     return next
                 })
             }
-        })
+        }).catch(() => { /* silently ignore resolve failures */ })
     }, [messages, workspaceId]) // eslint-disable-line react-hooks/exhaustive-deps
     const activeConversationRecord = useMemo(
         () => (conversationsWithArchived as Conversation[]).find(conv => conv.id === activeCid) ?? null,
@@ -1122,19 +1132,21 @@ export default function ChatPage() {
     const handleChatListResizeStart = (e: React.MouseEvent<HTMLButtonElement>) => {
         e.preventDefault()
         const startX = e.clientX
-        const startWidth = chatListWidth
-        let currentWidth = startWidth
+        const startPct = chatListPct
+        const containerWidth = e.currentTarget.parentElement?.parentElement?.offsetWidth || window.innerWidth
+        let currentPct = startPct
 
         const onMouseMove = (moveEvent: MouseEvent) => {
-            const delta = startX - moveEvent.clientX
-            currentWidth = clampChatListWidth(startWidth + delta)
-            setChatListWidth(currentWidth)
+            const deltaPx = startX - moveEvent.clientX
+            const deltaPct = (deltaPx / containerWidth) * 100
+            currentPct = clampChatListPct(startPct + deltaPct)
+            setChatListPct(currentPct)
         }
 
         const onMouseUp = () => {
             window.removeEventListener('mousemove', onMouseMove)
             window.removeEventListener('mouseup', onMouseUp)
-            window.localStorage.setItem(CHAT_LIST_WIDTH_STORAGE_KEY, String(currentWidth))
+            window.localStorage.setItem(CHAT_LIST_WIDTH_STORAGE_KEY, String(currentPct))
         }
 
         window.addEventListener('mousemove', onMouseMove)
@@ -1580,7 +1592,7 @@ export default function ChatPage() {
             {/* Conversation list rail (right edge, similar to workspace insights position) */}
             <aside
                 className="relative z-10 flex-shrink-0 overflow-hidden rounded-2xl border border-border/60 bg-card/28 py-4 flex flex-col transition-[width] duration-200 ease-out"
-                style={{ width: isChatListCollapsed ? `${CHAT_LIST_COLLAPSED_WIDTH}px` : `${chatListWidth}px` }}
+                style={{ width: isChatListCollapsed ? `${CHAT_LIST_COLLAPSED_WIDTH}px` : `${chatListPct}%` }}
             >
                 {!isChatListCollapsed && (
                     <button
