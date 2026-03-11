@@ -9,6 +9,7 @@ import {
     permanentlyDeleteConversation,
     updateConversation,
     listProviders,
+    listSettings,
     getWorkspace,
     listWorkspaces,
     getKnowledge,
@@ -333,6 +334,10 @@ export default function ChatPage() {
         queryKey: ['providers'],
         queryFn: listProviders,
     })
+    const { data: appSettings = [] } = useQuery<{ key: string; value: unknown }[]>({
+        queryKey: ['settings'],
+        queryFn: listSettings,
+    })
 
     const {
         streamingContent,
@@ -466,11 +471,43 @@ export default function ChatPage() {
         return best?.id ?? null
     }, [activeConversations])
 
-    // Build model options from providers (provider + enabled model pairs)
+    // Build model options from system_chat_models setting (primary) and provider records (fallback)
     const modelOptions = useMemo(() => {
         const options: ModelOption[] = []
         const seen = new Set<string>()
+        const providerMap = new Map<string, ProviderRecord>()
+        for (const p of providers as ProviderRecord[]) providerMap.set(p.id, p)
 
+        // Primary source: system_chat_models setting
+        const chatModelsSetting = appSettings.find(s => s.key === 'system_chat_models')
+        const chatModels = Array.isArray(chatModelsSetting?.value) ? chatModelsSetting.value as { provider_id: string; model_id: string; model_name: string; is_default?: boolean }[] : []
+
+        for (const entry of chatModels) {
+            const pid = entry.provider_id
+            const modelId = (entry.model_id ?? '').trim()
+            if (!modelId || !pid) continue
+
+            const dedupeKey = `${pid}:${modelId}`
+            if (seen.has(dedupeKey)) continue
+            seen.add(dedupeKey)
+
+            const provider = providerMap.get(pid)
+            const providerLabel = provider ? (sanitizeProviderDisplayName(provider.display_name) || provider.provider_name) : pid.slice(0, 8)
+            const modelName = (entry.model_name ?? modelId).trim()
+            const providerName = provider?.provider_name ?? ''
+
+            options.push({
+                key: dedupeKey,
+                providerId: pid,
+                modelId,
+                providerLabel,
+                modelLabel: modelName,
+                label: `${providerLabel} · ${modelName}`,
+                searchText: `${providerLabel} ${providerName} ${modelName} ${modelId}`.toLowerCase(),
+            })
+        }
+
+        // Fallback: provider.enabled_models / default_model for providers not covered above
         for (const provider of providers as ProviderRecord[]) {
             const enabled = provider.enabled_models ?? []
             const candidateModels = enabled.length > 0
@@ -500,7 +537,7 @@ export default function ChatPage() {
         }
 
         return options.sort((a, b) => a.label.localeCompare(b.label))
-    }, [providers])
+    }, [providers, appSettings])
 
     const selectedOption = modelOptions.find(o => o.key === selectedModelKey)
     const filteredModelOptions = useMemo(() => {
@@ -521,17 +558,30 @@ export default function ChatPage() {
     // Determine the default model label
     const defaultLabel = useMemo(() => {
         if (!workspace) return 'Default model'
+
+        const chatModelsSetting = appSettings.find(s => s.key === 'system_chat_models')
+        const chatModels = Array.isArray(chatModelsSetting?.value) ? chatModelsSetting.value as { provider_id: string; model_id: string; model_name: string; is_default?: boolean }[] : []
+        const systemDefault = chatModels.find(m => m.is_default) ?? chatModels[0]
+
         if (workspace.llm_provider_id) {
             const dp = (providers as ProviderRecord[]).find(p => p.id === workspace.llm_provider_id)
             if (dp) {
-                const modelName = workspace.llm_model || dp.default_model || 'provider default'
+                const modelName = workspace.llm_model || dp.default_model || systemDefault?.model_name || 'provider default'
                 return `${sanitizeProviderDisplayName(dp.display_name) || dp.provider_name} · ${modelName} (Workspace default)`
             }
         }
         const sys = (providers as ProviderRecord[]).find(p => p.is_system_default)
-        if (sys) return `${sanitizeProviderDisplayName(sys.display_name) || sys.provider_name} · ${sys.default_model || 'provider default'} (System default)`
+        if (sys) {
+            const sysModelName = sys.default_model || chatModels.find(m => m.provider_id === sys.id)?.model_name || 'provider default'
+            return `${sanitizeProviderDisplayName(sys.display_name) || sys.provider_name} · ${sysModelName} (System default)`
+        }
+        if (systemDefault) {
+            const dp = (providers as ProviderRecord[]).find(p => p.id === systemDefault.provider_id)
+            const provLabel = dp ? (sanitizeProviderDisplayName(dp.display_name) || dp.provider_name) : ''
+            return `${provLabel} · ${systemDefault.model_name} (System default)`
+        }
         return 'Default model'
-    }, [workspace, providers])
+    }, [workspace, providers, appSettings])
 
     useEffect(() => {
         if (conversationId !== activeCid) {

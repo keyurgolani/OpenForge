@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from uuid import UUID
 from typing import Optional, Union
-from openforge.db.models import LLMProvider, Workspace
+from openforge.db.models import Config, LLMProvider, Workspace
 from openforge.schemas.llm import (
     LLMProviderCreate,
     LLMProviderUpdate,
@@ -167,6 +167,29 @@ class LLMService:
             )
             provider = p_result.scalar_one_or_none()
 
+        # Load system_chat_models setting (used for provider and model fallback)
+        _chat_models_entries: list[dict] = []
+        if not provider or not model_override:
+            cfg_result = await db.execute(
+                select(Config).where(Config.key == "system_chat_models")
+            )
+            cfg_row = cfg_result.scalar_one_or_none()
+            if cfg_row and isinstance(cfg_row.value, list):
+                _chat_models_entries = cfg_row.value
+
+        if not provider and _chat_models_entries:
+            # Fall back to the default model's provider from system_chat_models
+            default_entry = next((e for e in _chat_models_entries if e.get("is_default")), None)
+            entry = default_entry or _chat_models_entries[0]
+            if entry.get("provider_id"):
+                try:
+                    p_result = await db.execute(
+                        select(LLMProvider).where(LLMProvider.id == UUID(entry["provider_id"]))
+                    )
+                    provider = p_result.scalar_one_or_none()
+                except (ValueError, KeyError):
+                    pass
+
         if not provider:
             raise HTTPException(status_code=400, detail="No LLM provider configured")
 
@@ -174,7 +197,7 @@ class LLMService:
         if provider.api_key_enc:
             api_key = decrypt_value(provider.api_key_enc)
 
-        # Priority: explicit override > workspace override > provider default
+        # Priority: explicit override > workspace override > provider default > system_chat_models setting
         model = (
             model_override
             or (workspace.llm_model if workspace and workspace.llm_model else None)
@@ -182,6 +205,22 @@ class LLMService:
             or ((provider.enabled_models or [{}])[0].get("id") if provider.enabled_models else None)
             or ""
         )
+
+        # Fall back to the system_chat_models setting
+        if not model and _chat_models_entries:
+            provider_id_str = str(provider.id)
+            # Prefer the default model for this provider
+            for entry in _chat_models_entries:
+                if entry.get("provider_id") == provider_id_str and entry.get("is_default"):
+                    model = entry.get("model_id", "")
+                    break
+            # Otherwise take the first model for this provider
+            if not model:
+                for entry in _chat_models_entries:
+                    if entry.get("provider_id") == provider_id_str and entry.get("model_id"):
+                        model = entry["model_id"]
+                        break
+
         if not model:
             raise HTTPException(
                 status_code=400,

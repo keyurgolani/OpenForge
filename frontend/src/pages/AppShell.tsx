@@ -113,7 +113,7 @@ export default function AppShell() {
     const { setCommandPaletteOpen } = useUIStore()
     const qc = useQueryClient()
 
-    const { data: workspaces = [] } = useQuery({ queryKey: ['workspaces'], queryFn: listWorkspaces })
+    const { data: workspaces = [], isFetched: workspacesFetched } = useQuery({ queryKey: ['workspaces'], queryFn: listWorkspaces })
     const { data: hitlCount = 0 } = useQuery({
         queryKey: ['hitl-count'],
         queryFn: async () => { const r = await countPendingHITL(); return r.pending ?? 0 },
@@ -130,9 +130,19 @@ export default function AppShell() {
         enabled: !!workspaceId,
     })
 
-    const ws = (workspaces as { id: string; name: string; icon: string; color: string }[])
-        .find(w => w.id === workspaceId)
     const workspaceList = workspaces as { id: string; name: string; icon: string; color: string }[]
+    const ws = workspaceList.find(w => w.id === workspaceId)
+
+    // Redirect when workspace doesn't exist
+    useEffect(() => {
+        if (!workspacesFetched) return
+        if (ws) return // current workspace found — nothing to do
+        if (workspaceList.length === 0) {
+            navigate('/onboarding', { replace: true })
+        } else {
+            navigate(`/w/${workspaceList[0].id}/settings`, { replace: true })
+        }
+    }, [workspacesFetched, ws, workspaceList, navigate])
     const recentConversations = conversations as SidebarConversation[]
     const workspaceMenuRef = useRef<HTMLDivElement | null>(null)
     const conversationRenameInputRef = useRef<HTMLInputElement | null>(null)

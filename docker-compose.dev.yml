@@ -13,6 +13,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-debug}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
       - TOOL_SERVER_URL=http://tool-server:8001
+      - REDIS_URL=redis://redis:6379/0
     volumes:
       - ${WORKSPACE_HOST_PATH:-./data/workspace}:/workspace
       - ${UPLOADS_HOST_PATH:-./data/uploads}:/uploads
@@ -22,6 +23,8 @@ services:
       postgres:
         condition: service_healthy
       qdrant:
+        condition: service_started
+      redis:
         condition: service_started
       tool-server:
         condition: service_started

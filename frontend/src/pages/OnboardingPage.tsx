@@ -351,9 +351,10 @@ function ModelsSetupStep({ onNext, loading }: { onNext: () => void; loading: boo
     const [providerModels, setProviderModels] = useState<{ id: string; name: string }[]>([])
     const [fetchingModels, setFetchingModels] = useState(false)
     const [fetchAttempted, setFetchAttempted] = useState(false)
-    const [selectedModelId, setSelectedModelId] = useState('')
+    const [selectedModelIds, setSelectedModelIds] = useState<Set<string>>(new Set())
     const [modelSearch, setModelSearch] = useState('')
     const [fetchError, setFetchError] = useState<string | null>(null)
+    const [manualModelId, setManualModelId] = useState('')
 
     const { data: providers = [] } = useQuery<ProviderOption[]>({ queryKey: ['providers'], queryFn: listProviders })
     const { data: settings = [] } = useQuery<Array<{ key: string; value: unknown }>>({ queryKey: ['app-settings'], queryFn: listSettings })
@@ -379,8 +380,8 @@ function ModelsSetupStep({ onNext, loading }: { onNext: () => void; loading: boo
     }
 
     const handleFetchModels = async (pid: string) => {
-        if (!pid) { setProviderModels([]); setSelectedModelId(''); setFetchAttempted(false); return }
-        setFetchingModels(true); setFetchError(null); setProviderModels([]); setSelectedModelId(''); setFetchAttempted(false)
+        if (!pid) { setProviderModels([]); setSelectedModelIds(new Set()); setFetchAttempted(false); return }
+        setFetchingModels(true); setFetchError(null); setProviderModels([]); setSelectedModelIds(new Set()); setFetchAttempted(false)
         try {
             const list = await listModels(pid)
             setProviderModels(list)
@@ -394,22 +395,39 @@ function ModelsSetupStep({ onNext, loading }: { onNext: () => void; loading: boo
     }
 
     const handleProviderChange = (pid: string) => {
-        setAddProviderId(pid); setModelSearch(''); setFetchAttempted(false); handleFetchModels(pid)
+        setAddProviderId(pid); setModelSearch(''); setManualModelId(''); setFetchAttempted(false); handleFetchModels(pid)
     }
 
-    const handleAddModel = () => {
-        if (!addProviderId || !selectedModelId) return
-        const modelName = providerModels.find(m => m.id === selectedModelId)?.name ?? selectedModelId
+    const toggleModelSelection = (modelId: string) => {
+        setSelectedModelIds(prev => {
+            const next = new Set(prev)
+            if (next.has(modelId)) next.delete(modelId)
+            else next.add(modelId)
+            return next
+        })
+    }
+
+    const handleAddModels = () => {
+        if (!addProviderId) return
+        const idsToAdd = manualModelId ? [manualModelId] : Array.from(selectedModelIds)
+        if (idsToAdd.length === 0) return
+
         const existing = currentModels
-        if (existing.some(m => m.provider_id === addProviderId && m.model_id === selectedModelId)) return
-        const newModel: TypedModel = {
-            provider_id: addProviderId,
-            model_id: selectedModelId,
-            model_name: modelName,
-            is_default: existing.length === 0,
+        const newModels: TypedModel[] = []
+        for (const modelId of idsToAdd) {
+            if (existing.some(m => m.provider_id === addProviderId && m.model_id === modelId)) continue
+            const modelName = providerModels.find(m => m.id === modelId)?.name ?? modelId
+            newModels.push({
+                provider_id: addProviderId,
+                model_id: modelId,
+                model_name: modelName,
+                is_default: existing.length === 0 && newModels.length === 0,
+            })
         }
-        setCurrentModels([...existing, newModel])
-        setSelectedModelId(''); setModelSearch('')
+        if (newModels.length > 0) {
+            setCurrentModels([...existing, ...newModels])
+        }
+        setSelectedModelIds(new Set()); setModelSearch(''); setManualModelId('')
     }
 
     const handleRemoveModel = (providerId: string, modelId: string) => {
@@ -476,7 +494,7 @@ function ModelsSetupStep({ onNext, loading }: { onNext: () => void; loading: boo
                 {TYPE_TABS.map(t => (
                     <button
                         key={t.key}
-                        onClick={() => { setActiveType(t.key); setAddProviderId(''); setProviderModels([]); setSelectedModelId(''); setModelSearch(''); setFetchError(null) }}
+                        onClick={() => { setActiveType(t.key); setAddProviderId(''); setProviderModels([]); setSelectedModelIds(new Set()); setManualModelId(''); setModelSearch(''); setFetchError(null) }}
                         className={`flex-1 py-1.5 px-2 rounded-md text-xs font-medium transition-all ${activeType === t.key ? 'bg-accent text-accent-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                     >
                         {t.label}
@@ -536,14 +554,14 @@ function ModelsSetupStep({ onNext, loading }: { onNext: () => void; loading: boo
                 {fetchError && (
                     <div className="space-y-1">
                         <p className="text-xs text-red-400">{fetchError}</p>
-                        <input className="input text-xs" placeholder="Enter model ID manually (e.g. gpt-4o)" value={selectedModelId} onChange={e => setSelectedModelId(e.target.value)} />
+                        <input className="input text-xs" placeholder="Enter model ID manually (e.g. gpt-4o)" value={manualModelId} onChange={e => setManualModelId(e.target.value)} />
                     </div>
                 )}
 
                 {!fetchError && fetchAttempted && !fetchingModels && providerModels.length === 0 && (
                     <div className="space-y-1">
                         <p className="text-xs text-muted-foreground">This provider doesn't support model listing. Enter the model ID manually.</p>
-                        <input className="input text-xs" placeholder="Enter model ID (e.g. meta-llama/Meta-Llama-3-8B-Instruct)" value={selectedModelId} onChange={e => setSelectedModelId(e.target.value)} />
+                        <input className="input text-xs" placeholder="Enter model ID (e.g. meta-llama/Meta-Llama-3-8B-Instruct)" value={manualModelId} onChange={e => setManualModelId(e.target.value)} />
                     </div>
                 )}
 
@@ -554,23 +572,34 @@ function ModelsSetupStep({ onNext, loading }: { onNext: () => void; loading: boo
                             <input className="input text-xs pl-7" placeholder={`Filter ${providerModels.length} models…`} value={modelSearch} onChange={e => setModelSearch(e.target.value)} />
                         </div>
                         <div className="max-h-40 overflow-y-auto rounded-lg border border-border/50 bg-background/30 divide-y divide-border/20">
-                            {filteredProviderModels.map(m => (
-                                <button key={m.id} onClick={() => setSelectedModelId(m.id)}
-                                    className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-muted/30 transition-colors ${selectedModelId === m.id ? 'bg-accent/10 text-foreground' : 'text-muted-foreground'}`}>
-                                    <div className={`w-3 h-3 rounded-full border flex-shrink-0 transition-colors ${selectedModelId === m.id ? 'bg-accent border-accent' : 'border-border'}`} />
-                                    {m.name}
-                                </button>
-                            ))}
+                            {filteredProviderModels.map(m => {
+                                const isSelected = selectedModelIds.has(m.id)
+                                const alreadyAdded = currentModels.some(cm => cm.provider_id === addProviderId && cm.model_id === m.id)
+                                return (
+                                    <button key={m.id} onClick={() => !alreadyAdded && toggleModelSelection(m.id)}
+                                        disabled={alreadyAdded}
+                                        className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${alreadyAdded ? 'opacity-40 cursor-not-allowed' : 'hover:bg-muted/30'} ${isSelected ? 'bg-accent/10 text-foreground' : 'text-muted-foreground'}`}>
+                                        <div className={`w-3 h-3 rounded flex-shrink-0 border transition-colors flex items-center justify-center ${isSelected ? 'bg-accent border-accent' : 'border-border'}`}>
+                                            {isSelected && <CheckCircle2 className="w-2.5 h-2.5 text-accent-foreground" />}
+                                        </div>
+                                        {m.name}
+                                        {alreadyAdded && <span className="ml-auto text-[10px] text-muted-foreground">added</span>}
+                                    </button>
+                                )
+                            })}
                         </div>
+                        {selectedModelIds.size > 0 && (
+                            <p className="text-[11px] text-muted-foreground">{selectedModelIds.size} model{selectedModelIds.size > 1 ? 's' : ''} selected</p>
+                        )}
                     </>
                 )}
 
                 <button
                     className="btn-primary w-full justify-center py-2 text-xs"
-                    onClick={handleAddModel}
-                    disabled={!addProviderId || !selectedModelId}
+                    onClick={handleAddModels}
+                    disabled={!addProviderId || (selectedModelIds.size === 0 && !manualModelId)}
                 >
-                    <Plus className="w-3 h-3" /> Add Model
+                    <Plus className="w-3 h-3" /> Add {selectedModelIds.size > 1 ? `${selectedModelIds.size} Models` : 'Model'}
                 </button>
             </div>
 

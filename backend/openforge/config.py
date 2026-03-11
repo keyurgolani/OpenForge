@@ -44,8 +44,8 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = "redis://redis:6379/0"
 
-    # Celery agent execution (set to false to run agents inline for debugging)
-    use_celery_agents: bool = True
+    # Celery agent execution (set to true when celery-worker service is running)
+    use_celery_agents: bool = False
 
     # Tool server
     tool_server_url: str = "http://tool-server:8001"

@@ -112,19 +112,23 @@ async def workspace_websocket(websocket: WebSocket, workspace_id: str):
                 _mid = model_id
                 _mentions = mentions
 
-                if settings.use_celery_agents:
-                    # Dispatch to Celery worker
-                    await _dispatch_celery_agent(
-                        workspace_id=_wid,
-                        conversation_id=_cid,
-                        content=_content,
-                        attachment_ids=_att,
-                        provider_id=_pid,
-                        model_id=_mid,
-                        mentions=_mentions,
-                    )
-                else:
-                    # Inline execution (fallback)
+                _use_celery = settings.use_celery_agents
+                if _use_celery:
+                    try:
+                        await _dispatch_celery_agent(
+                            workspace_id=_wid,
+                            conversation_id=_cid,
+                            content=_content,
+                            attachment_ids=_att,
+                            provider_id=_pid,
+                            model_id=_mid,
+                            mentions=_mentions,
+                        )
+                    except Exception as _celery_err:
+                        logger.warning("Celery dispatch failed, falling back to inline: %s", _celery_err)
+                        _use_celery = False
+
+                if not _use_celery:
                     from openforge.services.agent_execution_engine import agent_engine
 
                     async def _run_agent():
