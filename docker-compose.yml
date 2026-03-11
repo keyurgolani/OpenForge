@@ -120,11 +120,25 @@ services:
       - MAIN_APP_URL=http://openforge:3000
       - REDIS_URL=redis://redis:6379/0
       - LOG_LEVEL=${LOG_LEVEL:-warning}
+      - SEARXNG_URL=http://searxng:8080
     volumes:
       - ${WORKSPACE_HOST_PATH:-./data/workspace}:/workspace
       - ${SKILLS_HOST_PATH:-./data/skills}:/skills
     depends_on:
       - redis
+      - searxng
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  searxng:
+    image: searxng/searxng:latest
+    environment:
+      - SEARXNG_BASE_URL=http://searxng:8080
+    volumes:
+      - ${SEARXNG_DATA_PATH:-./docker/searxng}:/etc/searxng:rw
     restart: unless-stopped
     deploy:
       resources:

@@ -19,6 +19,7 @@ class ToolServerSettings(BaseSettings):
     shell_timeout_seconds: int = 30
     skills_dir: str = "/skills"
     skills_root: str = "/skills"
+    searxng_url: str = "http://searxng:8080"
 
 
 @lru_cache()
