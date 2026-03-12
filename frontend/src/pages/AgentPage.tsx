@@ -28,7 +28,7 @@ import {
     Plus, Send, Square, Loader2, MessageSquare, Trash2, Bot, User, Sparkles,
     ChevronDown, ChevronRight, ChevronLeft, ChevronUp, ChevronsUp, ExternalLink, Check, Pencil,
     Paperclip, X, Copy, Search, Brain, Wrench, BookmarkPlus, Network, ShieldAlert, ShieldCheck, ShieldX, AtSign,
-    CheckCircle2, XCircle, RotateCcw, Trash
+    CheckCircle2, XCircle, RotateCcw, Trash, BookOpen, Clock, Activity
 } from 'lucide-react'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem,
@@ -194,7 +194,7 @@ const DEFAULT_CHAT_LIST_PCT = 25
 const CHAT_LIST_COLLAPSED_WIDTH = 56
 const CHAT_LIST_WIDTH_STORAGE_KEY = 'openforge.shell.chat.list.pct'
 const CHAT_LIST_COLLAPSED_STORAGE_KEY = 'openforge.shell.chat.list.collapsed'
-const CHAT_STREAMING_SAFE_GAP = 10
+const CHAT_STREAMING_SAFE_GAP = 4
 
 const clampChatListPct = (value: number) =>
     Math.max(MIN_CHAT_LIST_PCT, Math.min(MAX_CHAT_LIST_PCT, value))
@@ -708,7 +708,7 @@ export default function AgentPage() {
         if (!element) return
 
         const updateHeight = () => {
-            setComposerHeight(Math.max(104, Math.ceil(element.getBoundingClientRect().height)))
+            setComposerHeight(Math.max(80, Math.ceil(element.getBoundingClientRect().height)))
         }
 
         updateHeight()
@@ -1318,7 +1318,8 @@ export default function AgentPage() {
                                                     />
                                                 )}
                                                 {streamingModelLabel && (
-                                                    <div className="chat-workflow-step chat-section-reveal w-fit">
+                                                    <div className="chat-workflow-step chat-workflow-step--iconic chat-section-reveal w-fit">
+                                                        <ChatTimelineDot type="llm" />
                                                         <span className="chat-subsection-toggle" style={{ cursor: 'default' }}>
                                                             <Bot className="h-3 w-3" />
                                                             <span>LLM</span>
@@ -1381,7 +1382,8 @@ export default function AgentPage() {
                                                             entry={entry as TimelinePromptOptimized}
                                                         />
                                                     ) : (
-                                                        <div key={entry.call_id} className="chat-workflow-step chat-section-reveal">
+                                                        <div key={entry.call_id} className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--tool chat-section-reveal">
+                                                            <ChatTimelineDot type="tool" />
                                                             <ToolCallCard
                                                                 callId={entry.call_id}
                                                                 toolName={entry.tool_name}
@@ -1393,7 +1395,8 @@ export default function AgentPage() {
                                                     )
                                                 )}
                                                 {(streamingContent || isInterrupted) && (
-                                                <div className={`chat-workflow-step chat-section-reveal ${streamingContent ? 'chat-workflow-step-live' : ''}`}>
+                                                <div className={`chat-workflow-step chat-workflow-step--iconic chat-workflow-step--response chat-section-reveal ${streamingContent ? 'chat-workflow-step-live' : ''}`}>
+                                                    <ChatTimelineDot type="response" />
                                                     <div className="chat-workflow-header">
                                                         <MessageSquare className="h-3.5 w-3.5" />
                                                         <span>Response</span>
@@ -1448,7 +1451,7 @@ export default function AgentPage() {
                                     </div>
                                 )}
                             </div>
-                            <div ref={composerShellRef} className="chat-composer-shell pointer-events-none absolute inset-x-0 bottom-0 z-20 px-4 py-2 md:px-6 md:py-3">
+                            <div ref={composerShellRef} className="chat-composer-shell pointer-events-none absolute inset-x-0 bottom-0 z-20 px-4 py-1 md:px-6 md:py-1.5">
                                 {activeConversationIsArchived && (
                                     <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100 pointer-events-auto">
                                         <span className="leading-relaxed">This chat is in Trash. Restore it to continue sending messages.</span>
@@ -2526,6 +2529,29 @@ const MentionEditor = React.forwardRef<MentionEditorHandle, {
     )
 })
 
+// ── Timeline icon dot ────────────────────────────────────────────────────────
+
+function ChatTimelineDot({ type }: { type: string }) {
+    const configs: Record<string, { icon: React.ReactNode; className: string }> = {
+        thinking: { icon: <Brain className="h-3 w-3" />, className: 'bg-zinc-900 border-zinc-500/30 text-zinc-400' },
+        tool: { icon: <Wrench className="h-3 w-3" />, className: 'bg-cyan-950 border-cyan-500/30 text-cyan-400' },
+        hitl: { icon: <ShieldAlert className="h-3 w-3" />, className: 'bg-amber-950 border-amber-500/30 text-amber-400' },
+        subagent: { icon: <Network className="h-3 w-3" />, className: 'bg-purple-950 border-purple-500/30 text-purple-400' },
+        response: { icon: <MessageSquare className="h-3 w-3" />, className: 'bg-emerald-950 border-emerald-500/30 text-emerald-400' },
+        prompt: { icon: <Sparkles className="h-3 w-3" />, className: 'bg-violet-950 border-violet-500/30 text-violet-400' },
+        attachment: { icon: <Paperclip className="h-3 w-3" />, className: 'bg-sky-950 border-sky-500/30 text-sky-400' },
+        source: { icon: <BookOpen className="h-3 w-3" />, className: 'bg-indigo-950 border-indigo-500/30 text-indigo-400' },
+        llm: { icon: <Bot className="h-3 w-3" />, className: 'bg-card border-accent/30 text-accent/80' },
+        meta: { icon: <Clock className="h-3 w-3" />, className: 'bg-zinc-900 border-zinc-600/30 text-zinc-500' },
+    }
+    const cfg = configs[type] ?? { icon: <Activity className="h-3 w-3" />, className: 'bg-card border-border text-muted-foreground' }
+    return (
+        <div className={`chat-timeline-dot ${cfg.className}`}>
+            {cfg.icon}
+        </div>
+    )
+}
+
 // ── Reusable thinking block ──────────────────────────────────────────────────
 const THINKING_STREAM_MAX_HEIGHT = 160
 
@@ -2624,7 +2650,8 @@ function ThinkingBlock({
     }
 
     return (
-        <div className="chat-workflow-step">
+        <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--thinking">
+            <ChatTimelineDot type="thinking" />
             <button className={`chat-subsection-toggle ${open ? 'chat-subsection-toggle-open' : ''}`} onClick={toggle}>
                 {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                 <Brain className="w-3 h-3" />
@@ -2764,7 +2791,8 @@ function SubagentCard({
             : <XCircle className="w-3 h-3 text-red-400" />
 
     return (
-        <div className="chat-workflow-step chat-section-reveal">
+        <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--subagent chat-section-reveal">
+            <ChatTimelineDot type="subagent" />
             <button className={`chat-subsection-toggle ${open ? 'chat-subsection-toggle-open' : ''}`} onClick={toggle}>
                 {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                 <Network className="w-3 h-3" />
@@ -2814,7 +2842,8 @@ function SubagentCard({
                                                 isActiveStream={isRunning && !step.done && idx === timelineSource.length - 1}
                                             />
                                         ) : step.type === 'tool_call' ? (
-                                            <div key={step.call_id ?? idx} className="chat-workflow-step">
+                                            <div key={step.call_id ?? idx} className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--tool">
+                                                <ChatTimelineDot type="tool" />
                                                 <ToolCallCard
                                                     callId={step.call_id ?? String(idx)}
                                                     toolName={step.tool_name ?? ''}
@@ -2857,7 +2886,8 @@ function SubagentCard({
 function PromptOptimizedCard({ entry }: { entry: TimelinePromptOptimized }) {
     const [expanded, setExpanded] = useState(false)
     return (
-        <div className="chat-workflow-step chat-section-reveal">
+        <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--prompt chat-section-reveal">
+            <ChatTimelineDot type="prompt" />
             <button
                 className="chat-subsection-toggle"
                 onClick={() => setExpanded(prev => !prev)}
@@ -2963,7 +2993,8 @@ function HITLCard({
     const action = entry.tool_id.split('.').slice(1).join('.')
 
     return (
-        <div className="chat-workflow-step chat-section-reveal">
+        <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--hitl chat-section-reveal">
+            <ChatTimelineDot type="hitl" />
             <button
                 type="button"
                 className={`chat-subsection-toggle ${open ? 'chat-subsection-toggle-open' : ''}`}
@@ -3154,7 +3185,8 @@ function StreamingAttachmentsBadge({ atts, workspaceId }: { atts: AttachmentProc
         setOpen(prev => !prev)
     }
     return (
-        <div className="chat-workflow-step">
+        <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--attachment">
+            <ChatTimelineDot type="attachment" />
             <button className={`chat-subsection-toggle ${open ? 'chat-subsection-toggle-open' : ''}`} onClick={toggle}>
                 {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                 {`Processed ${atts.length} Attachment${atts.length === 1 ? '' : 's'}`}
@@ -3190,7 +3222,8 @@ function StreamingSourcesBadge({ sources, workspaceId }: { sources: ContextSourc
         setOpen(prev => !prev)
     }
     return (
-        <div className="chat-workflow-step">
+        <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--source">
+            <ChatTimelineDot type="source" />
             <button className={`chat-subsection-toggle ${open ? 'chat-subsection-toggle-open' : ''}`} onClick={toggle}>
                 {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                 {`Used ${sources.length} Knowledge ${sources.length === 1 ? 'Record' : 'Records'}`}
@@ -3381,7 +3414,8 @@ function ChatMessageCard({
                         {hasWorkflowSteps && (
                             <div className="chat-workflow-stack w-full">
                                 {attachmentsProcessed.length > 0 && (
-                                    <div className="chat-workflow-step">
+                                    <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--attachment">
+                                        <ChatTimelineDot type="attachment" />
                                         <button
                                             className={`chat-subsection-toggle ${attachmentsOpen ? 'chat-subsection-toggle-open' : ''}`}
                                             onClick={() => {
@@ -3425,7 +3459,8 @@ function ChatMessageCard({
                                     </div>
                                 )}
                                 {msg.context_sources && msg.context_sources.length > 0 && (
-                                    <div className="chat-workflow-step">
+                                    <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--source">
+                                        <ChatTimelineDot type="source" />
                                         <button
                                             className={`chat-subsection-toggle ${sourcesOpen ? 'chat-subsection-toggle-open' : ''}`}
                                             onClick={() => {
@@ -3482,7 +3517,8 @@ function ChatMessageCard({
                                     </div>
                                 )}
                                 {modelLabel && (
-                                    <div className="chat-workflow-step chat-section-reveal w-fit">
+                                    <div className="chat-workflow-step chat-workflow-step--iconic chat-section-reveal w-fit">
+                                        <ChatTimelineDot type="llm" />
                                         <span className="chat-subsection-toggle" style={{ cursor: 'default' }}>
                                             <Bot className="h-3 w-3" />
                                             <span>LLM</span>
@@ -3519,7 +3555,8 @@ function ChatMessageCard({
                                                 readonly
                                             />
                                         ) : (
-                                            <div key={entry.call_id} className="chat-workflow-step chat-section-reveal">
+                                            <div key={entry.call_id} className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--tool chat-section-reveal">
+                                                <ChatTimelineDot type="tool" />
                                                 <ToolCallCard
                                                     callId={entry.call_id}
                                                     toolName={entry.tool_name}
@@ -3532,7 +3569,8 @@ function ChatMessageCard({
                                     )
                                     : <>
                                         {(msg.tool_calls?.length ?? 0) > 0 && (
-                                            <div className="chat-workflow-step">
+                                            <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--tool">
+                                                <ChatTimelineDot type="tool" />
                                                 <div className="glass-card chat-section-reveal px-4 py-3">
                                                     <div className="mb-2 flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
                                                         <Wrench className="h-3 w-3" />
@@ -3560,7 +3598,8 @@ function ChatMessageCard({
                                         )}
                                     </>
                                 }
-                                <div className="chat-workflow-step chat-section-reveal">
+                                <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--response chat-section-reveal">
+                                    <ChatTimelineDot type="response" />
                                     <div className="chat-workflow-header">
                                         <MessageSquare className="h-3.5 w-3.5" />
                                         <span>Response</span>
@@ -3586,7 +3625,8 @@ function ChatMessageCard({
                                         )}
                                     </div>
                                 </div>
-                                <div className="chat-workflow-step chat-section-reveal">
+                                <div className="chat-workflow-step chat-workflow-step--iconic chat-section-reveal">
+                                    <ChatTimelineDot type="meta" />
                                     <span className="chat-message-meta flex items-center gap-1.5 pl-1 pt-0.5">
                                         {new Date(msg.created_at).toLocaleTimeString()}
                                         {generationSeconds && ` · Took ${generationSeconds}s`}
