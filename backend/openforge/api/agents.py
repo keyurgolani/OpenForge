@@ -1,23 +1,55 @@
-"""Agent framework API endpoints: definitions, executions, and workspace agent management."""
+"""Agent framework API endpoints: definitions, executions, memory, and workspace agent management."""
 
 from __future__ import annotations
 
+import uuid as _uuid_mod
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from openforge.db.postgres import get_db
-from openforge.db.models import AgentDefinitionModel, AgentExecution, Workspace
+from openforge.db.models import AgentDefinitionModel, AgentExecution, Conversation, Workspace
 from openforge.schemas.agent import (
     AgentDefinitionResponse,
     AgentDefinitionUpdate,
     AgentExecutionResponse,
+    AgentTriggerRequest,
+    AgentMemoryStoreRequest,
+    AgentMemoryRecallRequest,
+    AgentMemoryForgetRequest,
     WorkspaceAgentUpdate,
 )
 from openforge.core.agent_registry import agent_registry
 
 router = APIRouter()
+
+
+# ── Helpers ──
+
+
+async def _build_agent_name_map(db: AsyncSession) -> dict[str, str]:
+    result = await db.execute(select(AgentDefinitionModel))
+    return {a.id: a.name for a in result.scalars().all()}
+
+
+async def _build_workspace_name_map(db: AsyncSession) -> dict[str, str]:
+    result = await db.execute(select(Workspace))
+    return {str(w.id): w.name for w in result.scalars().all()}
+
+
+def _enrich_executions(
+    executions: list[AgentExecution],
+    agent_names: dict[str, str],
+    workspace_names: dict[str, str],
+) -> list[AgentExecutionResponse]:
+    out: list[AgentExecutionResponse] = []
+    for ex in executions:
+        resp = AgentExecutionResponse.model_validate(ex)
+        resp.agent_name = agent_names.get(ex.agent_id)
+        resp.workspace_name = workspace_names.get(str(ex.workspace_id))
+        out.append(resp)
+    return out
 
 
 # ── Agent Definitions ──
@@ -29,6 +61,30 @@ async def list_agents(db: AsyncSession = Depends(get_db)):
         select(AgentDefinitionModel).order_by(AgentDefinitionModel.name)
     )
     return list(result.scalars().all())
+
+
+# Static paths must be registered before /{agent_id} to avoid conflicts
+@router.get("/executions", response_model=list[AgentExecutionResponse])
+async def list_all_executions(
+    status: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db),
+):
+    """List all agent executions globally (no workspace filter)."""
+    q = (
+        select(AgentExecution)
+        .order_by(AgentExecution.started_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    if status:
+        q = q.where(AgentExecution.status == status)
+    result = await db.execute(q)
+    executions = list(result.scalars().all())
+    agent_names = await _build_agent_name_map(db)
+    ws_names = await _build_workspace_name_map(db)
+    return _enrich_executions(executions, agent_names, ws_names)
 
 
 @router.get("/{agent_id}", response_model=AgentDefinitionResponse)
@@ -143,7 +199,10 @@ async def list_executions(
     if status:
         q = q.where(AgentExecution.status == status)
     result = await db.execute(q)
-    return list(result.scalars().all())
+    executions = list(result.scalars().all())
+    agent_names = await _build_agent_name_map(db)
+    ws_names = await _build_workspace_name_map(db)
+    return _enrich_executions(executions, agent_names, ws_names)
 
 
 @router.get(
@@ -219,3 +278,157 @@ async def get_conversation_stream_state(
         "execution_id": str(exec_record.id),
         "status": exec_record.status,
     }
+
+
+# ── Agent Trigger ──
+
+
+@router.post("/{agent_id}/trigger")
+async def trigger_agent(
+    agent_id: str,
+    body: AgentTriggerRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Trigger an agent execution with a given instruction."""
+    # Verify agent exists
+    agent_def = agent_registry.get(agent_id)
+    if not agent_def:
+        raise HTTPException(404, "Agent not found")
+
+    # Verify workspace exists
+    ws = await db.get(Workspace, body.workspace_id)
+    if not ws:
+        raise HTTPException(404, "Workspace not found")
+
+    # Create conversation for this triggered run
+    conv = Conversation(
+        workspace_id=body.workspace_id,
+        title=f"Triggered: {agent_def.name}",
+        is_subagent=False,
+    )
+    db.add(conv)
+    await db.flush()
+
+    # Create execution record
+    execution_id = _uuid_mod.uuid4()
+    db.add(AgentExecution(
+        id=execution_id,
+        workspace_id=body.workspace_id,
+        conversation_id=conv.id,
+        agent_id=agent_id,
+        status="queued",
+    ))
+    await db.commit()
+
+    # Dispatch via Celery if available, otherwise run inline
+    from openforge.config import get_settings
+    settings = get_settings()
+
+    if settings.use_celery_agents:
+        try:
+            from openforge.worker.tasks import execute_agent_task
+            execute_agent_task.delay(
+                execution_id=str(execution_id),
+                workspace_id=str(body.workspace_id),
+                conversation_id=str(conv.id),
+                user_message=body.instruction,
+                agent_id=agent_id,
+                agent_enabled=agent_def.tools_enabled,
+                agent_tool_categories=agent_def.allowed_tool_categories or [],
+                agent_max_tool_loops=agent_def.max_iterations,
+                attachment_ids=[],
+                provider_id=None,
+                model_id=None,
+                mentions=[],
+            )
+        except Exception:
+            # Fall back to inline
+            import asyncio
+            from openforge.db.postgres import AsyncSessionLocal
+            from openforge.services.agent_execution_engine import agent_engine
+
+            async def _run():
+                async with AsyncSessionLocal() as run_db:
+                    await agent_engine.run(
+                        workspace_id=body.workspace_id,
+                        conversation_id=conv.id,
+                        user_content=body.instruction,
+                        db=run_db,
+                        agent=agent_def,
+                        execution_id=str(execution_id),
+                    )
+
+            asyncio.create_task(_run())
+    else:
+        import asyncio
+        from openforge.db.postgres import AsyncSessionLocal
+        from openforge.services.agent_execution_engine import agent_engine
+
+        async def _run():
+            async with AsyncSessionLocal() as run_db:
+                await agent_engine.run(
+                    workspace_id=body.workspace_id,
+                    conversation_id=conv.id,
+                    user_content=body.instruction,
+                    db=run_db,
+                    agent=agent_def,
+                    execution_id=str(execution_id),
+                )
+
+        asyncio.create_task(_run())
+
+    return {"execution_id": str(execution_id), "conversation_id": str(conv.id)}
+
+
+# ── Persistent Agent Memory ──
+
+
+@router.post("/memory/store")
+async def memory_store(
+    body: AgentMemoryStoreRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Store a persistent agent memory entry."""
+    from openforge.services.agent_memory_service import agent_memory_service
+
+    memory = await agent_memory_service.store(
+        db=db,
+        workspace_id=body.workspace_id,
+        agent_id=body.agent_id,
+        content=body.content,
+        memory_type=body.memory_type,
+        confidence=body.confidence,
+    )
+    return {"id": str(memory.id), "status": "stored"}
+
+
+@router.post("/memory/recall")
+async def memory_recall(
+    body: AgentMemoryRecallRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Recall persistent agent memories via semantic search."""
+    from openforge.services.agent_memory_service import agent_memory_service
+
+    results = await agent_memory_service.recall(
+        db=db,
+        workspace_id=body.workspace_id,
+        query=body.query,
+        limit=body.limit,
+        agent_id=body.agent_id,
+    )
+    return {"memories": results}
+
+
+@router.post("/memory/forget")
+async def memory_forget(
+    body: AgentMemoryForgetRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Forget (soft-delete) a persistent memory entry."""
+    from openforge.services.agent_memory_service import agent_memory_service
+
+    ok = await agent_memory_service.forget(db=db, memory_id=body.memory_id)
+    if not ok:
+        raise HTTPException(404, "Memory not found")
+    return {"status": "forgotten"}

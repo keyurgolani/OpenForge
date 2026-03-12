@@ -70,7 +70,13 @@ export interface TimelineHITLRequest {
     status: 'pending' | 'approved' | 'denied'
 }
 
-export type TimelineEntry = TimelineThinking | TimelineToolCall | TimelineSubagentInvocation | TimelineHITLRequest
+export interface TimelinePromptOptimized {
+    type: 'prompt_optimized'
+    original: string
+    optimized: string
+}
+
+export type TimelineEntry = TimelineThinking | TimelineToolCall | TimelineSubagentInvocation | TimelineHITLRequest | TimelinePromptOptimized
 
 // Legacy aliases kept for any callers that still reference them
 export type ToolCall = { call_id: string; tool_name: string; arguments: Record<string, unknown> }
@@ -98,6 +104,7 @@ interface SendMessageOptions {
     model_id?: string
     attachment_ids?: string[]
     mentions?: Mention[]
+    optimize?: boolean
 }
 
 export function useStreamingChat(conversationId: string | null) {
@@ -372,6 +379,20 @@ export function useStreamingChat(conversationId: string | null) {
                     return updated
                 })
             }),
+            on('chat_prompt_optimized', (msg) => {
+                const m = msg as { conversation_id: string; data: { original: string; optimized: string } }
+                if (m.conversation_id !== conversationId) return
+                const entry: TimelinePromptOptimized = {
+                    type: 'prompt_optimized',
+                    original: m.data.original,
+                    optimized: m.data.optimized,
+                }
+                setTimeline(prev => {
+                    const updated = [...prev, entry]
+                    timelineRef.current = updated
+                    return updated
+                })
+            }),
             on('chat_done', (msg) => {
                 const m = msg as { conversation_id: string; message_id: string; interrupted?: boolean }
                 if (m.conversation_id !== conversationId) return
@@ -555,6 +576,7 @@ export function useStreamingChat(conversationId: string | null) {
         if (options?.model_id) payload.model_id = options.model_id
         if (options?.attachment_ids?.length) payload.attachment_ids = options.attachment_ids
         if (options?.mentions?.length) payload.mentions = options.mentions
+        if (options?.optimize) payload.optimize = true
         const sent = send(payload)
         if (!sent) {
             setIsStreaming(false)

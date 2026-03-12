@@ -91,6 +91,7 @@ def _msg_to_response(m: Message) -> MessageResponse:
         tool_calls=m.tool_calls,
         timeline=m.timeline,
         is_interrupted=m.is_interrupted,
+        provider_metadata=m.provider_metadata,
         created_at=m.created_at,
     )
 
@@ -105,6 +106,7 @@ def _conv_to_response(conv: Conversation, last_preview: str | None = None) -> Co
         is_archived=conv.is_archived,
         archived_at=conv.archived_at,
         is_subagent=conv.is_subagent,
+        subagent_agent_id=conv.subagent_agent_id,
         message_count=conv.message_count,
         last_message_at=conv.last_message_at,
         last_message_preview=last_preview,
@@ -190,7 +192,14 @@ class ConversationService:
         await self.purge_expired_archived_conversations(db, workspace_id=workspace_id)
         query = select(Conversation).where(Conversation.workspace_id == workspace_id)
         if category == "subagent":
-            query = query.where(Conversation.is_subagent == True, Conversation.is_archived == False)  # noqa: E712
+            query = query.where(
+                Conversation.is_subagent == True,  # noqa: E712
+                Conversation.is_archived == False,  # noqa: E712
+                or_(
+                    Conversation.subagent_agent_id.is_(None),
+                    Conversation.subagent_agent_id == "workspace_agent",
+                ),
+            )
         elif category == "trash":
             query = query.where(Conversation.is_archived == True)  # noqa: E712
         elif include_archived:
@@ -341,7 +350,13 @@ class ConversationService:
             Conversation.is_archived == False,  # noqa: E712
         )
         if category == "subagent":
-            query = query.where(Conversation.is_subagent == True)  # noqa: E712
+            query = query.where(
+                Conversation.is_subagent == True,  # noqa: E712
+                or_(
+                    Conversation.subagent_agent_id.is_(None),
+                    Conversation.subagent_agent_id == "workspace_agent",
+                ),
+            )
         else:
             query = query.where(Conversation.is_subagent == False)  # noqa: E712
         result = await db.execute(query)
@@ -433,6 +448,7 @@ class ConversationService:
         tool_calls: list | None = None,
         timeline: list | None = None,
         is_interrupted: bool = False,
+        provider_metadata: dict | None = None,
     ) -> Message:
         msg = Message(
             conversation_id=conversation_id,
@@ -447,6 +463,7 @@ class ConversationService:
             tool_calls=tool_calls,
             timeline=timeline,
             is_interrupted=is_interrupted,
+            provider_metadata=provider_metadata,
         )
         db.add(msg)
 

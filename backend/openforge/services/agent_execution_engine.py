@@ -706,6 +706,7 @@ class AgentExecutionEngine:
         provider_id: Optional[str] = None,
         model_id: Optional[str] = None,
         mentions: Optional[List[dict]] = None,
+        optimize: bool = False,
     ):
         """Full agent execution pipeline, parameterized by AgentDefinition."""
         workspace_key = str(workspace_id)
@@ -748,8 +749,10 @@ class AgentExecutionEngine:
             await self._update_execution_record(db, execution_id, status="running")
 
         # 1. Save user message
+        _user_metadata = {"optimize": True} if optimize else None
         user_message = await conversation_service.add_message(
-            db, conversation_id, role="user", content=user_content
+            db, conversation_id, role="user", content=user_content,
+            provider_metadata=_user_metadata,
         )
 
         try:
@@ -845,6 +848,14 @@ class AgentExecutionEngine:
                     else _agent_prompt_default
                 )
 
+            # 5a-ii. Augment router/council prompts with available agent list
+            if agent.id in ("router_agent", "council_agent"):
+                from openforge.core.agent_registry import agent_registry as _ar
+                all_agents = _ar.list_all()
+                available = [a for a in all_agents if a.id not in ("router_agent", "council_agent")]
+                agent_list_text = "\n".join(f"- **{a.id}**: {a.description}" for a in available)
+                system_prompt += f"\n\n## Available Agents\n{agent_list_text}"
+
             # 5b. Agent mode disabled notice
             if not agent.tools_enabled:
                 system_prompt = system_prompt + (
@@ -861,6 +872,20 @@ class AgentExecutionEngine:
             skills_section = self._build_skills_section(installed_skills, agent)
             if skills_section:
                 system_prompt = system_prompt + skills_section
+
+            # 5d. Prompt optimization instruction
+            if optimize and agent.id != "optimizer_agent":
+                system_prompt += (
+                    "\n\n## Prompt Optimization Required\n"
+                    "The user has enabled prompt optimization for this message. "
+                    "As your FIRST action before doing anything else, you MUST invoke the "
+                    "`agent.invoke` tool with `agent_id` set to `\"optimizer_agent\"` and "
+                    "`instruction` set to the user's exact message. The optimizer agent "
+                    "will return an improved, more specific version of the prompt. "
+                    "You MUST then use that optimized prompt as the basis for your "
+                    "response instead of the original user message. "
+                    "Do NOT skip this step — prompt optimization is mandatory when enabled.\n"
+                )
 
             extra_context_parts = [p for p in [attachment_context, url_context, mention_context] if p]
             assembled = context_assembler.assemble(
@@ -1646,6 +1671,7 @@ class AgentExecutionEngine:
         workspace_id: UUID,
         instruction: str,
         db: AsyncSession,
+        agent_id: Optional[str] = None,
         parent_execution_id: Optional[str] = None,
         parent_conversation_id: Optional[UUID] = None,
         parent_workspace_id: Optional[UUID] = None,
@@ -1662,11 +1688,30 @@ class AgentExecutionEngine:
             workspace_id=workspace_id,
             title=f"[subagent] {instruction[:80]}",
             is_subagent=True,
+            subagent_agent_id=agent_id or "workspace_agent",
         )
         db.add(temp_conv)
         await db.commit()
         await db.refresh(temp_conv)
         conv_id = temp_conv.id
+
+        # Resolve specific agent if agent_id is provided
+        target_agent: AgentDefinition | None = None
+        if agent_id:
+            from openforge.core.agent_registry import agent_registry as _sub_reg
+            target_agent = _sub_reg.get(agent_id)
+
+        # Create AgentExecution record for subagent invocations so they appear in Recent Executions
+        sub_exec_id = uuid.uuid4()
+        sub_exec = AgentExecution(
+            id=sub_exec_id,
+            workspace_id=workspace_id,
+            conversation_id=conv_id,
+            agent_id=agent_id or "workspace_agent",
+            status="running",
+        )
+        db.add(sub_exec)
+        await db.commit()
 
         try:
             await conversation_service.add_message(db, conv_id, role="user", content=instruction)
@@ -1676,6 +1721,14 @@ class AgentExecutionEngine:
                     db, workspace_id
                 )
             except Exception as exc:
+                try:
+                    await db.refresh(sub_exec)
+                    sub_exec.status = "failed"
+                    sub_exec.error_message = f"Could not get LLM provider: {exc}"
+                    sub_exec.completed_at = datetime.now(timezone.utc)
+                    await db.commit()
+                except Exception:
+                    pass
                 return {
                     "response": f"Error: could not get LLM provider: {exc}",
                     "timeline": [],
@@ -1684,48 +1737,55 @@ class AgentExecutionEngine:
 
             openai_tools: list[dict] = []
             fn_name_to_tool_info_sub: dict[str, dict] = {}
-            try:
-                raw_tools = await tool_dispatcher.list_tools()
-                for t in raw_tools:
-                    fn = _tool_id_to_fn_name(t["id"])
-                    fn_name_to_tool_info_sub[fn] = {
-                        "type": "builtin",
-                        "tool_id": t["id"],
-                        "risk_level": t.get("risk_level", "low"),
-                    }
-                openai_tools = _tools_to_openai_schema(raw_tools)
-            except Exception:
-                pass
+            # Tool-less agents (e.g. optimizer) skip tool loading
+            if not target_agent or target_agent.tools_enabled:
+                try:
+                    raw_tools = await tool_dispatcher.list_tools()
+                    for t in raw_tools:
+                        fn = _tool_id_to_fn_name(t["id"])
+                        fn_name_to_tool_info_sub[fn] = {
+                            "type": "builtin",
+                            "tool_id": t["id"],
+                            "risk_level": t.get("risk_level", "low"),
+                        }
+                    openai_tools = _tools_to_openai_schema(raw_tools)
+                except Exception:
+                    pass
 
-            system_prompt = (
-                "You are an autonomous AI subagent operating inside OpenForge. "
-                "You have been delegated a specific task by another agent. "
-                "You MUST complete the task fully and autonomously — there is NO user present "
-                "and you CANNOT ask for clarification or more details.\n\n"
-                f"**You are already running inside workspace `{workspace_id}`.** "
-                "All `workspace.*` and `filesystem.*` tools targeted at this workspace operate on it directly. "
-                "Do NOT call `agent.invoke` to access this workspace — use your tools directly. "
-                "Only use `agent.invoke` if you need to reach a DIFFERENT workspace.\n\n"
-                "## Tool categories\n"
-                "- `workspace.*` — the user's persistent content: knowledge records and chat conversations\n"
-                "  - `workspace.search` — semantically search knowledge and past chats by topic\n"
-                "  - `workspace.list_chats` — list all conversations to find one by title\n"
-                "  - `workspace.read_chat` — read the full messages of a conversation by ID\n"
-                "  - `workspace.list_knowledge` — browse knowledge records\n"
-                "  - `workspace.save_knowledge` — create a new knowledge record\n"
-                "  - `workspace.delete_knowledge` — delete a knowledge record\n"
-                "- `memory.*` — your private execution scratchpad (ephemeral, invisible to user)\n"
-                "  - `memory.store` / `memory.recall` / `memory.forget`\n"
-                "- `filesystem.*` — files on the workspace disk\n"
-                "- `agent.invoke` — delegate a task to a DIFFERENT workspace's agent (not needed for this workspace)\n\n"
-                "## Rules\n"
-                "1. NEVER say 'I need more details' or ask any questions — search and find the answer yourself.\n"
-                "2. Try at least 2–3 different searches before concluding something cannot be found.\n"
-                "3. When you find a `conversation_id` in search results, immediately call `workspace.read_chat` to read the full content.\n"
-                "4. When asked to summarize a chat: use `workspace.list_chats` to find it by title, then `workspace.read_chat` to read its messages.\n"
-                "5. Return a complete, useful response — not a description of what you attempted.\n"
-                "6. Only call tools listed in your tool schema — never invent tool names.\n"
-            )
+            # Use the target agent's system prompt if available,
+            # otherwise use the default subagent prompt
+            if target_agent and target_agent.system_prompt:
+                system_prompt = target_agent.system_prompt
+            else:
+                system_prompt = (
+                    "You are an autonomous AI subagent operating inside OpenForge. "
+                    "You have been delegated a specific task by another agent. "
+                    "You MUST complete the task fully and autonomously — there is NO user present "
+                    "and you CANNOT ask for clarification or more details.\n\n"
+                    f"**You are already running inside workspace `{workspace_id}`.** "
+                    "All `workspace.*` and `filesystem.*` tools targeted at this workspace operate on it directly. "
+                    "Do NOT call `agent.invoke` to access this workspace — use your tools directly. "
+                    "Only use `agent.invoke` if you need to reach a DIFFERENT workspace.\n\n"
+                    "## Tool categories\n"
+                    "- `workspace.*` — the user's persistent content: knowledge records and chat conversations\n"
+                    "  - `workspace.search` — semantically search knowledge and past chats by topic\n"
+                    "  - `workspace.list_chats` — list all conversations to find one by title\n"
+                    "  - `workspace.read_chat` — read the full messages of a conversation by ID\n"
+                    "  - `workspace.list_knowledge` — browse knowledge records\n"
+                    "  - `workspace.save_knowledge` — create a new knowledge record\n"
+                    "  - `workspace.delete_knowledge` — delete a knowledge record\n"
+                    "- `memory.*` — your private execution scratchpad (ephemeral, invisible to user)\n"
+                    "  - `memory.store` / `memory.recall` / `memory.forget`\n"
+                    "- `filesystem.*` — files on the workspace disk\n"
+                    "- `agent.invoke` — delegate a task to a DIFFERENT workspace's agent (not needed for this workspace)\n\n"
+                    "## Rules\n"
+                    "1. NEVER say 'I need more details' or ask any questions — search and find the answer yourself.\n"
+                    "2. Try at least 2–3 different searches before concluding something cannot be found.\n"
+                    "3. When you find a `conversation_id` in search results, immediately call `workspace.read_chat` to read the full content.\n"
+                    "4. When asked to summarize a chat: use `workspace.list_chats` to find it by title, then `workspace.read_chat` to read its messages.\n"
+                    "5. Return a complete, useful response — not a description of what you attempted.\n"
+                    "6. Only call tools listed in your tool schema — never invent tool names.\n"
+                )
 
             rag_results: list = []
             try:
@@ -1937,6 +1997,20 @@ class AgentExecutionEngine:
                 db, conv_id, role="assistant", content=full_response, timeline=timeline
             )
 
+            # Update execution record on success
+            tool_count = sum(1 for t in timeline if t.get("type") == "tool_call")
+            iter_count = sum(1 for t in timeline if t.get("type") == "thinking")
+            try:
+                await db.refresh(sub_exec)
+                sub_exec.status = "completed"
+                sub_exec.timeline = timeline
+                sub_exec.tool_calls_count = tool_count
+                sub_exec.iteration_count = max(iter_count, 1)
+                sub_exec.completed_at = datetime.now(timezone.utc)
+                await db.commit()
+            except Exception:
+                logger.warning("Failed to update subagent execution record")
+
             return {
                 "response": full_response,
                 "timeline": timeline,
@@ -1944,6 +2018,15 @@ class AgentExecutionEngine:
             }
         except Exception as exc:
             logger.error("Subagent execution error: %s", exc)
+            # Update execution record on failure
+            try:
+                await db.refresh(sub_exec)
+                sub_exec.status = "failed"
+                sub_exec.error_message = str(exc)
+                sub_exec.completed_at = datetime.now(timezone.utc)
+                await db.commit()
+            except Exception:
+                logger.warning("Failed to update subagent execution record on error")
             return {
                 "response": f"Subagent error: {exc}",
                 "timeline": [],

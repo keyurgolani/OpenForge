@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy import (
-    String, Text, Boolean, Integer, DateTime, ForeignKey,
+    String, Text, Boolean, Integer, Float, DateTime, ForeignKey,
     Index, CheckConstraint, LargeBinary, UniqueConstraint
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
@@ -185,6 +185,7 @@ class Conversation(Base):
     is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     is_subagent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    subagent_agent_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     message_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_message_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -463,4 +464,86 @@ class TaskLog(Base):
     __table_args__ = (
         Index("idx_task_logs_started", "started_at"),
         Index("idx_task_logs_type", "task_type", "started_at"),
+    )
+
+
+class AgentMemory(Base):
+    """Persistent agent memory entries with vector embeddings and time-weighted recall."""
+    __tablename__ = "agent_memory"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    agent_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    memory_type: Mapped[str] = mapped_column(String(20), nullable=False, default="observation")
+    decay_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0.01)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    access_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=now_utc
+    )
+    last_accessed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=now_utc
+    )
+
+    __table_args__ = (
+        Index("idx_agent_memory_workspace", "workspace_id", "is_active"),
+        Index("idx_agent_memory_agent", "agent_id", "is_active"),
+    )
+
+
+class AgentSchedule(Base):
+    """Scheduled agent trigger definitions with cron expressions."""
+    __tablename__ = "agent_schedules"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    agent_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    instruction: Mapped[str] = mapped_column(Text, nullable=False)
+    cron_expression: Mapped[str] = mapped_column(String(100), nullable=False)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    run_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=now_utc
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc
+    )
+
+    __table_args__ = (
+        Index("idx_agent_schedules_workspace", "workspace_id"),
+        Index("idx_agent_schedules_next_run", "is_enabled", "next_run_at"),
+    )
+
+
+class ContinuousTarget(Base):
+    """Persistent output targets that agents can update incrementally."""
+    __tablename__ = "continuous_targets"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    knowledge_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("knowledge.id", ondelete="SET NULL"), nullable=True
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=now_utc
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc
+    )
+
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "name", name="uq_continuous_target_name"),
     )

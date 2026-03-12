@@ -30,6 +30,7 @@ class MessageResponse(BaseModel):
     tool_calls: Optional[list] = None
     timeline: Optional[list] = None
     is_interrupted: bool = False
+    provider_metadata: Optional[dict] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -44,6 +45,7 @@ class ConversationResponse(BaseModel):
     is_archived: bool = False
     archived_at: Optional[datetime] = None
     is_subagent: bool = False
+    subagent_agent_id: Optional[str] = None
     message_count: int = 0
     last_message_at: Optional[datetime] = None
     last_message_preview: Optional[str] = None

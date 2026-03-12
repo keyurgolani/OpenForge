@@ -18,6 +18,7 @@ const EditorDispatcher = lazy(() => import('./components/knowledge/editors/Edito
 const AgentPage = lazy(() => import('./pages/AgentPage'))
 const SearchPage = lazy(() => import('./pages/SearchPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const AgentsPage = lazy(() => import('./pages/AgentsPage'))
 const ExecutionListPage = lazy(() => import('./pages/ExecutionListPage'))
 const ExecutionMonitorPage = lazy(() => import('./pages/ExecutionMonitorPage'))
 
@@ -131,6 +132,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                 <Route path="agent/:conversationId" element={
                                     <ErrorBoundary>
                                         <AgentPage />
+                                    </ErrorBoundary>
+                                } />
+                                <Route path="agents" element={
+                                    <ErrorBoundary>
+                                        <AgentsPage />
                                     </ErrorBoundary>
                                 } />
                                 <Route path="search" element={

@@ -74,6 +74,7 @@ class TaskScheduler:
 
     async def _tick(self) -> None:
         now = datetime.now(timezone.utc)
+        await self._check_agent_schedules(now)
         async with AsyncSessionLocal() as db:
             cfg_result = await db.execute(select(Config).where(Config.category == "schedule"))
             schedule_configs: dict[str, dict] = {
@@ -140,6 +141,114 @@ class TaskScheduler:
                     logger.warning("Skipping scheduled task '%s': %s", task_id, exc.detail)
                 except Exception as exc:
                     logger.warning("Failed to enqueue scheduled task '%s': %s", task_id, exc)
+
+
+    async def _check_agent_schedules(self, now: datetime) -> None:
+        """Check for due agent schedules and trigger them."""
+        try:
+            from croniter import croniter
+            from openforge.db.models import AgentSchedule
+            from openforge.core.agent_registry import agent_registry
+
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(AgentSchedule).where(
+                        AgentSchedule.is_enabled == True,
+                        AgentSchedule.next_run_at <= now,
+                    )
+                )
+                due_schedules = result.scalars().all()
+
+                for schedule in due_schedules:
+                    try:
+                        agent_def = agent_registry.get(schedule.agent_id)
+                        if not agent_def:
+                            logger.warning("Scheduled agent '%s' not found, skipping.", schedule.agent_id)
+                            continue
+
+                        # Trigger the agent via the internal trigger mechanism
+                        import uuid as _uuid_mod
+                        from openforge.db.models import AgentExecution, Conversation
+
+                        conv = Conversation(
+                            workspace_id=schedule.workspace_id,
+                            title=f"Scheduled: {schedule.name}",
+                            is_subagent=False,
+                        )
+                        db.add(conv)
+                        await db.flush()
+
+                        execution_id = _uuid_mod.uuid4()
+                        db.add(AgentExecution(
+                            id=execution_id,
+                            workspace_id=schedule.workspace_id,
+                            conversation_id=conv.id,
+                            agent_id=schedule.agent_id,
+                            status="queued",
+                        ))
+
+                        # Update schedule metadata
+                        schedule.last_run_at = now
+                        schedule.run_count += 1
+                        cron = croniter(schedule.cron_expression, now)
+                        schedule.next_run_at = cron.get_next(datetime).replace(tzinfo=timezone.utc)
+
+                        await db.commit()
+
+                        # Dispatch execution
+                        from openforge.config import get_settings
+                        settings = get_settings()
+
+                        if settings.use_celery_agents:
+                            try:
+                                from openforge.worker.tasks import execute_agent_task
+                                execute_agent_task.delay(
+                                    execution_id=str(execution_id),
+                                    workspace_id=str(schedule.workspace_id),
+                                    conversation_id=str(conv.id),
+                                    user_message=schedule.instruction,
+                                    agent_id=schedule.agent_id,
+                                    agent_enabled=agent_def.tools_enabled,
+                                    agent_tool_categories=agent_def.allowed_tool_categories or [],
+                                    agent_max_tool_loops=agent_def.max_iterations,
+                                    attachment_ids=[],
+                                    provider_id=None,
+                                    model_id=None,
+                                    mentions=[],
+                                )
+                            except Exception as e:
+                                logger.warning("Celery dispatch for schedule '%s' failed: %s", schedule.name, e)
+                        else:
+                            import asyncio
+                            from openforge.services.agent_execution_engine import agent_engine
+
+                            _wid = schedule.workspace_id
+                            _cid = conv.id
+                            _inst = schedule.instruction
+                            _eid = str(execution_id)
+                            _agent = agent_def
+
+                            async def _run_scheduled():
+                                async with AsyncSessionLocal() as run_db:
+                                    await agent_engine.run(
+                                        workspace_id=_wid,
+                                        conversation_id=_cid,
+                                        user_content=_inst,
+                                        db=run_db,
+                                        agent=_agent,
+                                        execution_id=_eid,
+                                    )
+
+                            asyncio.create_task(_run_scheduled())
+
+                        logger.info("Scheduled agent '%s' triggered for workspace %s.", schedule.name, schedule.workspace_id)
+                    except Exception as e:
+                        logger.warning("Failed to trigger schedule '%s': %s", schedule.name, e)
+        except ImportError:
+            # croniter not installed — skip silently
+            pass
+        except Exception as e:
+            logger.warning("Agent schedule check failed: %s", e)
 
 
 task_scheduler = TaskScheduler()

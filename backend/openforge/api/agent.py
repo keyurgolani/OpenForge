@@ -23,6 +23,7 @@ router = APIRouter()
 class SubagentRequest(BaseModel):
     instruction: str
     workspace_id: str
+    agent_id: Optional[str] = None
     parent_execution_id: Optional[str] = None
     parent_conversation_id: Optional[str] = None
     parent_workspace_id: Optional[str] = None
@@ -76,6 +77,7 @@ async def invoke_subagent(
             workspace_id=workspace_id,
             instruction=req.instruction,
             db=db,
+            agent_id=req.agent_id,
             parent_execution_id=req.parent_execution_id,
             parent_conversation_id=parent_conv_id,
             parent_workspace_id=parent_ws_id,

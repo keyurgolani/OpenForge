@@ -17,6 +17,7 @@ import {
     listEmbeddingModelStatus, downloadEmbeddingModel, deleteEmbeddingModel,
     listCLIPModels, downloadCLIPModel, deleteCLIPModel, getCLIPDefault, setCLIPDefault,
     listMarkerModels, downloadMarkerModel, deleteMarkerModel,
+    listAgents, updateAgent,
 } from '@/lib/api'
 import {
     Globe2, Loader2, Trash2, CheckCircle2, XCircle, Star, Plus,
@@ -87,8 +88,8 @@ function WorkspaceFilterSelect({ value, onChange }: { value: string; onChange: (
     )
 }
 
-type SettingsTab = 'workspaces' | 'llm' | 'prompts' | 'jobs' | 'skills' | 'tools' | 'mcp' | 'hitl' | 'audit' | 'export'
-const SETTINGS_TABS: SettingsTab[] = ['workspaces', 'llm', 'prompts', 'jobs', 'skills', 'tools', 'mcp', 'hitl', 'audit', 'export']
+type SettingsTab = 'workspaces' | 'agents' | 'llm' | 'prompts' | 'jobs' | 'skills' | 'tools' | 'mcp' | 'hitl' | 'audit' | 'export'
+const SETTINGS_TABS: SettingsTab[] = ['workspaces', 'agents', 'llm', 'prompts', 'jobs', 'skills', 'tools', 'mcp', 'hitl', 'audit', 'export']
 const toSettingsTab = (value: string | null): SettingsTab => {
     const normalized = value === 'schedules' ? 'jobs' : value
     return SETTINGS_TABS.includes(normalized as SettingsTab) ? (normalized as SettingsTab) : 'workspaces'
@@ -134,6 +135,7 @@ export default function SettingsPage() {
 
     const TABS = [
         { id: 'workspaces' as const, label: 'Workspaces', Icon: FolderOpen },
+        { id: 'agents' as const, label: 'Agents', Icon: Zap },
         { id: 'llm' as const, label: 'AI Models', Icon: Bot },
         { id: 'prompts' as const, label: 'Prompts', Icon: Sliders },
         { id: 'jobs' as const, label: 'Jobs', Icon: Timer },
@@ -283,6 +285,7 @@ export default function SettingsPage() {
                             }}
                         />
                     )}
+                    {activeTab === 'agents' && <AgentsSettingsTab />}
                     {activeTab === 'llm' && <LLMSettings />}
                     {activeTab === 'prompts' && <PromptsTab />}
                     {activeTab === 'jobs' && <JobsTab />}
@@ -407,9 +410,6 @@ function WorkspaceCard({ workspace: ws, providers, onDeleted, onSaved }: {
     const [kiModel, setKiModel] = useState(ws.knowledge_intelligence_model ?? '')
     const [visionProviderId, setVisionProviderId] = useState(ws.vision_provider_id ?? '')
     const [visionModel, setVisionModel] = useState(ws.vision_model ?? '')
-    const [agentEnabled, setAgentEnabled] = useState(ws.agent_enabled ?? false)
-    const [agentToolCategories, setAgentToolCategories] = useState<string[]>(ws.agent_tool_categories ?? [])
-    const [agentMaxToolLoops, setAgentMaxToolLoops] = useState(ws.agent_max_tool_loops ?? 20)
     const [saving, setSaving] = useState(false)
 
     const { data: settings = [] } = useQuery({ queryKey: ['settings'], queryFn: listSettings })
@@ -454,23 +454,6 @@ function WorkspaceCard({ workspace: ws, providers, onDeleted, onSaved }: {
         setVisionProviderId(pid); setVisionModel(rest.join(':'))
     }
 
-    const { data: toolRegistryData } = useQuery({
-        queryKey: ['tool-registry'],
-        queryFn: getToolRegistry,
-        enabled: agentEnabled,
-        staleTime: 60_000,
-    })
-    const availableToolCategories = useMemo(() => {
-        const tools: any[] = toolRegistryData?.tools ?? []
-        if (!Array.isArray(tools)) return []
-        const cats = Array.from(new Set(
-            tools
-                .map((t: any) => t.category as string)
-                .filter((c: string) => c && c !== 'agent')
-        )).sort() as string[]
-        return cats
-    }, [toolRegistryData])
-    const DANGEROUS_CATEGORIES = new Set(['shell', 'git'])
     const [saved, setSaved] = useState(false)
     const [deleting, setDeleting] = useState(false)
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -489,9 +472,6 @@ function WorkspaceCard({ workspace: ws, providers, onDeleted, onSaved }: {
             knowledge_intelligence_model: kiModel || null,
             vision_provider_id: visionProviderId || null,
             vision_model: visionModel || null,
-            agent_enabled: agentEnabled,
-            agent_tool_categories: agentToolCategories,
-            agent_max_tool_loops: agentMaxToolLoops,
         })
         setSaving(false); setSaved(true)
         setTimeout(() => setSaved(false), 2000)
@@ -650,91 +630,6 @@ function WorkspaceCard({ workspace: ws, providers, onDeleted, onSaved }: {
                         </div>
                     </div>
 
-                    <div className="border-t border-border/40 pt-3 space-y-3">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-xs font-medium">Agent Mode</p>
-                                <p className="text-xs text-muted-foreground mt-0.5">Enable tool use for this workspace's chat.</p>
-                            </div>
-                            <button
-                                type="button"
-                                role="switch"
-                                aria-checked={agentEnabled}
-                                onClick={() => setAgentEnabled(v => !v)}
-                                className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none ${agentEnabled ? 'bg-accent' : 'bg-muted'}`}
-                            >
-                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${agentEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
-                            </button>
-                        </div>
-
-                        {agentEnabled && (
-                            <>
-                                <div className="space-y-2">
-                                    <p className="text-xs text-muted-foreground">
-                                        Enabled tool categories:
-                                        {!toolRegistryData && <span className="ml-2 text-muted-foreground/50 italic">loading…</span>}
-                                    </p>
-                                    {availableToolCategories.length > 0 ? (
-                                        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                                            {availableToolCategories.map(cat => {
-                                                const checked = agentToolCategories.includes(cat)
-                                                const isDangerous = DANGEROUS_CATEGORIES.has(cat)
-                                                return (
-                                                    <label
-                                                        key={cat}
-                                                        className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-colors ${checked ? 'border-accent/40 bg-accent/10 text-foreground' : 'border-border/50 bg-muted/20 text-muted-foreground hover:bg-muted/40'}`}
-                                                    >
-                                                        <input
-                                                            type="checkbox"
-                                                            className="sr-only"
-                                                            checked={checked}
-                                                            onChange={() => setAgentToolCategories(prev =>
-                                                                checked ? prev.filter(c => c !== cat) : [...prev, cat]
-                                                            )}
-                                                        />
-                                                        <span className={`h-3.5 w-3.5 flex-shrink-0 rounded border ${checked ? 'border-accent bg-accent' : 'border-border'} flex items-center justify-center`}>
-                                                            {checked && <Check className="h-2.5 w-2.5 text-accent-foreground" />}
-                                                        </span>
-                                                        <span className="capitalize">{cat}</span>
-                                                        {isDangerous && <Shield className="h-3 w-3 text-amber-400 flex-shrink-0" aria-label="Elevated risk" />}
-                                                    </label>
-                                                )
-                                            })}
-                                        </div>
-                                    ) : toolRegistryData ? (
-                                        <p className="text-xs text-muted-foreground/60 italic">No tool categories available.</p>
-                                    ) : (
-                                        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                                            {[...Array(6)].map((_, i) => (
-                                                <div key={i} className="h-9 rounded-lg border border-border/40 bg-muted/20 skeleton" />
-                                            ))}
-                                        </div>
-                                    )}
-                                    {agentToolCategories.some(c => DANGEROUS_CATEGORIES.has(c)) && (
-                                        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
-                                            <Shield className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
-                                            <span>Shell and Git tools can execute arbitrary commands in the workspace. Only enable if you trust the workspace content.</span>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="space-y-1.5 pt-1">
-                                    <p className="text-xs text-muted-foreground">Max tool loop iterations:</p>
-                                    <div className="flex items-center gap-3">
-                                        <input
-                                            type="number"
-                                            min={1}
-                                            max={100}
-                                            value={agentMaxToolLoops}
-                                            onChange={e => setAgentMaxToolLoops(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
-                                            className="input w-20 text-sm"
-                                        />
-                                        <span className="text-xs text-muted-foreground">Maximum number of tool calls the agent can make per response before being forced to summarize.</span>
-                                    </div>
-                                </div>
-                            </>
-                        )}
-                    </div>
-
                     <button className="btn-primary text-xs py-1.5 px-3" onClick={handleSave} disabled={saving}>
                         {saved
                             ? <><CheckCircle2 className="w-3.5 h-3.5" /> Saved</>
@@ -754,6 +649,383 @@ function WorkspaceCard({ workspace: ws, providers, onDeleted, onSaved }: {
                 onConfirm={confirmDelete}
                 onCancel={() => setDeleteConfirmOpen(false)}
             />
+        </div>
+    )
+}
+
+// ── Agents Settings Tab ───────────────────────────────────────────────────────
+
+type AgentsSubTab = 'workspace' | 'general'
+
+type AgentRaw = {
+    id: string
+    name: string
+    description: string | null
+    is_system: boolean
+    icon: string | null
+    config: Record<string, any>
+}
+
+function AgentsSettingsTab() {
+    const [subTab, setSubTab] = useState<AgentsSubTab>('workspace')
+
+    const SUB_TABS: { id: AgentsSubTab; label: string; Icon: React.ElementType }[] = [
+        { id: 'workspace', label: 'Workspace', Icon: FolderOpen },
+        { id: 'general', label: 'General', Icon: Settings2 },
+    ]
+
+    return (
+        <div className="space-y-4">
+            <div>
+                <h3 className="font-semibold text-sm">Agents</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Configure workspace agent settings and manage agent definitions.</p>
+            </div>
+            <div className="flex gap-1.5 p-1 glass-card w-fit rounded-xl">
+                {SUB_TABS.map(({ id, label, Icon }) => (
+                    <button
+                        key={id}
+                        onClick={() => setSubTab(id)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${subTab === id
+                            ? 'bg-accent/20 text-accent ring-1 ring-accent/30'
+                            : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
+                        }`}
+                    >
+                        <Icon className="w-3.5 h-3.5" />
+                        {label}
+                    </button>
+                ))}
+            </div>
+
+            {subTab === 'workspace' && <AgentsWorkspaceSubTab />}
+            {subTab === 'general' && <AgentsGeneralSubTab />}
+        </div>
+    )
+}
+
+function AgentsWorkspaceSubTab() {
+    const qc = useQueryClient()
+    const { data: workspaces = [] } = useQuery({ queryKey: ['workspaces'], queryFn: listWorkspaces })
+
+    return (
+        <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">Configure agent mode, tool categories, and max iterations per workspace.</p>
+            {(workspaces as WorkspaceRow[]).map(ws => (
+                <WorkspaceAgentCard key={ws.id} workspace={ws} onSaved={() => qc.invalidateQueries({ queryKey: ['workspaces'] })} />
+            ))}
+            {(workspaces as WorkspaceRow[]).length === 0 && (
+                <div className="text-center py-8 glass-card rounded-xl">
+                    <FolderOpen className="w-8 h-8 mx-auto mb-2 opacity-25" />
+                    <p className="text-xs text-muted-foreground/60">No workspaces configured.</p>
+                </div>
+            )}
+        </div>
+    )
+}
+
+function WorkspaceAgentCard({ workspace: ws, onSaved }: { workspace: WorkspaceRow; onSaved: () => void }) {
+    const [expanded, setExpanded] = useState(false)
+    const [agentEnabled, setAgentEnabled] = useState(ws.agent_enabled ?? false)
+    const [agentToolCategories, setAgentToolCategories] = useState<string[]>(ws.agent_tool_categories ?? [])
+    const [agentMaxToolLoops, setAgentMaxToolLoops] = useState(ws.agent_max_tool_loops ?? 20)
+    const [saving, setSaving] = useState(false)
+    const [saved, setSaved] = useState(false)
+
+    const { data: toolRegistryData } = useQuery({
+        queryKey: ['tool-registry'],
+        queryFn: getToolRegistry,
+        enabled: expanded,
+        staleTime: 60_000,
+    })
+    const availableToolCategories = useMemo(() => {
+        const tools: any[] = toolRegistryData?.tools ?? []
+        if (!Array.isArray(tools)) return []
+        return Array.from(new Set(
+            tools.map((t: any) => t.category as string).filter((c: string) => c && c !== 'agent')
+        )).sort() as string[]
+    }, [toolRegistryData])
+    const DANGEROUS_CATEGORIES = new Set(['shell', 'git'])
+
+    const handleSave = async () => {
+        setSaving(true)
+        await updateWorkspace(ws.id, {
+            agent_enabled: agentEnabled,
+            agent_tool_categories: agentToolCategories,
+            agent_max_tool_loops: agentMaxToolLoops,
+        })
+        setSaving(false); setSaved(true)
+        setTimeout(() => setSaved(false), 2000)
+        onSaved()
+    }
+
+    return (
+        <div className="glass-card-hover transition-all duration-300">
+            <div
+                className="flex cursor-pointer items-center gap-3 px-4 py-3"
+                role="button"
+                tabIndex={0}
+                onClick={() => setExpanded(p => !p)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(p => !p) } }}
+            >
+                <div className="w-9 h-9 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0">
+                    {getWorkspaceIcon(ws.icon)}
+                </div>
+                <div className="flex-1 min-w-0">
+                    <span className="font-medium text-sm">{ws.name}</span>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                        {agentEnabled ? 'Agent enabled' : 'Agent disabled'}
+                        {agentEnabled && ` · ${agentToolCategories.length || 'all'} tool categories · max ${agentMaxToolLoops} loops`}
+                    </p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className={`w-2 h-2 rounded-full ${agentEnabled ? 'bg-emerald-400' : 'bg-muted-foreground/30'}`} />
+                    {expanded ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+                </div>
+            </div>
+
+            {expanded && (
+                <div className="border-t border-border/50 px-4 py-4 space-y-3 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-xs font-medium">Agent Mode</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">Enable tool use for this workspace's chat.</p>
+                        </div>
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked={agentEnabled}
+                            onClick={() => setAgentEnabled(v => !v)}
+                            className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none ${agentEnabled ? 'bg-accent' : 'bg-muted'}`}
+                        >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${agentEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                        </button>
+                    </div>
+
+                    {agentEnabled && (
+                        <>
+                            <div className="space-y-2">
+                                <p className="text-xs text-muted-foreground">Enabled tool categories:</p>
+                                {availableToolCategories.length > 0 ? (
+                                    <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                                        {availableToolCategories.map(cat => {
+                                            const checked = agentToolCategories.includes(cat)
+                                            const isDangerous = DANGEROUS_CATEGORIES.has(cat)
+                                            return (
+                                                <label
+                                                    key={cat}
+                                                    className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-colors ${checked ? 'border-accent/40 bg-accent/10 text-foreground' : 'border-border/50 bg-muted/20 text-muted-foreground hover:bg-muted/40'}`}
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        className="sr-only"
+                                                        checked={checked}
+                                                        onChange={() => setAgentToolCategories(prev =>
+                                                            checked ? prev.filter(c => c !== cat) : [...prev, cat]
+                                                        )}
+                                                    />
+                                                    <span className={`h-3.5 w-3.5 flex-shrink-0 rounded border ${checked ? 'border-accent bg-accent' : 'border-border'} flex items-center justify-center`}>
+                                                        {checked && <Check className="h-2.5 w-2.5 text-accent-foreground" />}
+                                                    </span>
+                                                    <span className="capitalize">{cat}</span>
+                                                    {isDangerous && <Shield className="h-3 w-3 text-amber-400 flex-shrink-0" />}
+                                                </label>
+                                            )
+                                        })}
+                                    </div>
+                                ) : toolRegistryData ? (
+                                    <p className="text-xs text-muted-foreground/60 italic">No tool categories available.</p>
+                                ) : (
+                                    <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                                        {[...Array(6)].map((_, i) => (
+                                            <div key={i} className="h-9 rounded-lg border border-border/40 bg-muted/20 skeleton" />
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            <div className="space-y-1.5 pt-1">
+                                <p className="text-xs text-muted-foreground">Max tool loop iterations:</p>
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        max={100}
+                                        value={agentMaxToolLoops}
+                                        onChange={e => setAgentMaxToolLoops(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+                                        className="input w-20 text-sm"
+                                    />
+                                    <span className="text-xs text-muted-foreground">Maximum tool calls per response.</span>
+                                </div>
+                            </div>
+                        </>
+                    )}
+
+                    <button className="btn-primary text-xs py-1.5 px-3" onClick={handleSave} disabled={saving}>
+                        {saved
+                            ? <><CheckCircle2 className="w-3.5 h-3.5" /> Saved</>
+                            : saving
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <><Save className="w-3.5 h-3.5" /> Save</>}
+                    </button>
+                </div>
+            )}
+        </div>
+    )
+}
+
+function AgentsGeneralSubTab() {
+    const qc = useQueryClient()
+    const { data: agents = [], isLoading } = useQuery<AgentRaw[]>({
+        queryKey: ['agents'],
+        queryFn: listAgents,
+    })
+
+    return (
+        <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">Manage system and custom agent definitions.</p>
+            {isLoading && (
+                <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                </div>
+            )}
+            {!isLoading && agents.length === 0 && (
+                <div className="text-center py-8 glass-card rounded-xl">
+                    <Bot className="w-8 h-8 mx-auto mb-2 opacity-25" />
+                    <p className="text-xs text-muted-foreground/60">No agent definitions found.</p>
+                </div>
+            )}
+            {(agents as AgentRaw[]).map(agent => (
+                <AgentDefinitionCard
+                    key={agent.id}
+                    agent={agent}
+                    onSaved={() => qc.invalidateQueries({ queryKey: ['agents'] })}
+                />
+            ))}
+        </div>
+    )
+}
+
+function AgentDefinitionCard({ agent, onSaved }: { agent: AgentRaw; onSaved: () => void }) {
+    const c = agent.config ?? {}
+    const [expanded, setExpanded] = useState(false)
+    const [systemPrompt, setSystemPrompt] = useState<string>(c.system_prompt ?? '')
+    const [ragEnabled, setRagEnabled] = useState(c.rag_enabled ?? false)
+    const [ragThreshold, setRagThreshold] = useState(c.rag_score_threshold ?? 0.35)
+    const [ragLimit, setRagLimit] = useState(c.rag_limit ?? 5)
+    const [maxIterations, setMaxIterations] = useState(c.max_iterations ?? 20)
+    const [saving, setSaving] = useState(false)
+    const [saved, setSaved] = useState(false)
+
+    const toolCategories: string[] = c.allowed_tool_categories ?? []
+
+    const handleSave = async () => {
+        setSaving(true)
+        await updateAgent(agent.id, {
+            config: {
+                system_prompt: systemPrompt,
+                rag_enabled: ragEnabled,
+                rag_score_threshold: ragThreshold,
+                rag_limit: ragLimit,
+                max_iterations: maxIterations,
+            },
+        })
+        setSaving(false); setSaved(true)
+        setTimeout(() => setSaved(false), 2000)
+        onSaved()
+    }
+
+    return (
+        <div className="glass-card-hover transition-all duration-300">
+            <div
+                className="flex cursor-pointer items-center gap-3 px-4 py-3"
+                role="button"
+                tabIndex={0}
+                onClick={() => setExpanded(p => !p)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(p => !p) } }}
+            >
+                <div className="w-9 h-9 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0">
+                    {agent.icon ? <span className="text-lg">{agent.icon}</span> : <Bot className="w-4 h-4 text-accent" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm">{agent.name}</span>
+                        <span className={`text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded-full ${
+                            agent.is_system
+                                ? 'bg-blue-500/15 text-blue-400 ring-1 ring-blue-500/30'
+                                : 'bg-violet-500/15 text-violet-400 ring-1 ring-violet-500/30'
+                        }`}>
+                            {agent.is_system ? 'System' : 'Custom'}
+                        </span>
+                    </div>
+                    {agent.description && <p className="text-xs text-muted-foreground truncate mt-0.5">{agent.description}</p>}
+                </div>
+                {expanded ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />}
+            </div>
+
+            {expanded && (
+                <div className="border-t border-border/50 px-4 py-4 space-y-4 animate-fade-in">
+                    {/* System Prompt */}
+                    <div>
+                        <label className="text-xs text-muted-foreground block mb-1.5">System Prompt</label>
+                        <textarea
+                            className="input w-full h-32 resize-none text-xs font-mono"
+                            value={systemPrompt}
+                            onChange={e => setSystemPrompt(e.target.value)}
+                            placeholder="System prompt for this agent..."
+                        />
+                    </div>
+
+                    {/* Tool categories (read-only display) */}
+                    <div>
+                        <label className="text-xs text-muted-foreground block mb-1.5">Tool Categories</label>
+                        <div className="flex flex-wrap gap-1.5">
+                            {toolCategories.length > 0 ? toolCategories.map(cat => (
+                                <span key={cat} className="text-[10px] px-2 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/20">
+                                    {cat}
+                                </span>
+                            )) : (
+                                <span className="text-xs text-muted-foreground/60">All tools enabled</span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* RAG Settings */}
+                    <div className="space-y-3 border border-border/40 rounded-xl p-4">
+                        <div className="flex items-center justify-between">
+                            <label className="text-xs font-medium">RAG (Knowledge Retrieval)</label>
+                            <button className="btn-ghost p-0.5" onClick={() => setRagEnabled(!ragEnabled)}>
+                                {ragEnabled
+                                    ? <span className="relative inline-flex h-5 w-9 rounded-full bg-accent"><span className="inline-block h-4 w-4 transform rounded-full bg-white shadow translate-x-4 mt-0.5 ml-0.5" /></span>
+                                    : <span className="relative inline-flex h-5 w-9 rounded-full bg-muted"><span className="inline-block h-4 w-4 transform rounded-full bg-white shadow translate-x-0 mt-0.5 ml-0.5" /></span>}
+                            </button>
+                        </div>
+                        {ragEnabled && (
+                            <div className="space-y-2">
+                                <div>
+                                    <label className="text-[10px] text-muted-foreground block mb-1">Threshold: {ragThreshold.toFixed(2)}</label>
+                                    <input type="range" min="0" max="1" step="0.05" value={ragThreshold} onChange={e => setRagThreshold(parseFloat(e.target.value))} className="w-full accent-accent" />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] text-muted-foreground block mb-1">Limit: {ragLimit}</label>
+                                    <input type="range" min="1" max="20" step="1" value={ragLimit} onChange={e => setRagLimit(parseInt(e.target.value))} className="w-full accent-accent" />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Max iterations */}
+                    <div>
+                        <label className="text-xs text-muted-foreground block mb-1.5">Max Iterations: {maxIterations}</label>
+                        <input type="range" min="1" max="50" step="1" value={maxIterations} onChange={e => setMaxIterations(parseInt(e.target.value))} className="w-full accent-accent" />
+                    </div>
+
+                    <button className="btn-primary text-xs py-1.5 px-3" onClick={handleSave} disabled={saving}>
+                        {saved
+                            ? <><CheckCircle2 className="w-3.5 h-3.5" /> Saved</>
+                            : saving
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <><Save className="w-3.5 h-3.5" /> Save</>}
+                    </button>
+                </div>
+            )}
         </div>
     )
 }

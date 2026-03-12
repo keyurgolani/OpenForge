@@ -93,6 +93,7 @@ async def workspace_websocket(websocket: WebSocket, workspace_id: str):
                 provider_id = data.get("provider_id")
                 model_id = data.get("model_id")
                 mentions = data.get("mentions", [])
+                optimize = data.get("optimize", False)
                 if not conversation_id or not content:
                     await ws_manager.send_to_connection(websocket, {
                         "type": "chat_error",
@@ -111,6 +112,8 @@ async def workspace_websocket(websocket: WebSocket, workspace_id: str):
                 _pid = provider_id
                 _mid = model_id
                 _mentions = mentions
+                _optimize = optimize
+                logger.info("DEBUG WS chat_message: optimize=%s use_celery=%s", _optimize, settings.use_celery_agents)
 
                 _use_celery = settings.use_celery_agents
                 if _use_celery:
@@ -123,6 +126,7 @@ async def workspace_websocket(websocket: WebSocket, workspace_id: str):
                             provider_id=_pid,
                             model_id=_mid,
                             mentions=_mentions,
+                            optimize=_optimize,
                         )
                     except Exception as _celery_err:
                         logger.warning("Celery dispatch failed, falling back to inline: %s", _celery_err)
@@ -142,6 +146,7 @@ async def workspace_websocket(websocket: WebSocket, workspace_id: str):
                                 provider_id=_pid,
                                 model_id=_mid,
                                 mentions=_mentions,
+                                optimize=_optimize,
                             )
 
                     _asyncio.create_task(_run_agent())
@@ -237,6 +242,7 @@ async def _dispatch_celery_agent(
     provider_id: str | None,
     model_id: str | None,
     mentions: list,
+    optimize: bool = False,
 ) -> None:
     """Create an execution record and dispatch to Celery."""
     import uuid as _uuid
@@ -276,4 +282,5 @@ async def _dispatch_celery_agent(
         provider_id=provider_id,
         model_id=model_id,
         mentions=mentions,
+        optimize=optimize,
     )

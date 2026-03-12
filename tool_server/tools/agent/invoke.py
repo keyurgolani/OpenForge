@@ -45,6 +45,13 @@ class InvokeAgentTool(BaseTool):
                         "Provide this when delegating to a different workspace."
                     ),
                 },
+                "agent_id": {
+                    "type": "string",
+                    "description": (
+                        "ID of a specific agent to invoke (e.g. 'optimizer_agent'). "
+                        "If omitted, the workspace's default agent is used."
+                    ),
+                },
             },
             "required": ["instruction"],
         }
@@ -67,6 +74,9 @@ class InvokeAgentTool(BaseTool):
             "parent_conversation_id": context.conversation_id or None,
             "parent_workspace_id": context.workspace_id or None,
         }
+        agent_id = params.get("agent_id")
+        if agent_id:
+            payload["agent_id"] = agent_id
 
         try:
             async with httpx.AsyncClient(timeout=300.0) as client:

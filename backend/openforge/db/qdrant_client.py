@@ -104,6 +104,40 @@ async def init_qdrant_collection() -> bool:
     return needs_reindex
 
 
+async def init_memory_collection() -> None:
+    """Create the agent memory collection if it doesn't exist."""
+    settings = get_settings()
+    client = get_qdrant()
+    collection_name = "openforge_memory"
+
+    collections = client.get_collections().collections
+    exists = any(c.name == collection_name for c in collections)
+
+    if not exists:
+        logger.info("Creating agent memory collection: %s", collection_name)
+        client.create_collection(
+            collection_name=collection_name,
+            vectors_config=models.VectorParams(
+                size=settings.embedding_dimension,
+                distance=models.Distance.COSINE,
+            ),
+        )
+
+        for field, schema in [
+            ("workspace_id", models.PayloadSchemaType.KEYWORD),
+            ("agent_id", models.PayloadSchemaType.KEYWORD),
+            ("memory_id", models.PayloadSchemaType.KEYWORD),
+            ("memory_type", models.PayloadSchemaType.KEYWORD),
+        ]:
+            client.create_payload_index(
+                collection_name=collection_name,
+                field_name=field,
+                field_schema=schema,
+            )
+
+        logger.info("Memory collection '%s' created.", collection_name)
+
+
 async def init_visual_collection() -> None:
     """Create the CLIP visual search collection if it doesn't exist."""
     settings = get_settings()

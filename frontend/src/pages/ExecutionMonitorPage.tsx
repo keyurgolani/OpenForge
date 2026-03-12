@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { getExecution, getAgent } from '@/lib/api'
+import { getExecution, getAgent, getConversation } from '@/lib/api'
 import { formatDistanceToNow } from 'date-fns'
 import {
-    Brain, Wrench, Shield, Bot, Clock, ArrowLeft, MessageCircle,
+    Brain, Wrench, Shield, Bot, Clock, ArrowLeft, MessageCircle, User,
     Activity, CheckCircle2, XCircle, AlertTriangle, ChevronDown, ChevronRight,
 } from 'lucide-react'
 
@@ -324,6 +324,16 @@ export default function ExecutionMonitorPage() {
         enabled: !!execution?.agent_id,
     })
 
+    const { data: conversation } = useQuery({
+        queryKey: ['conversation', workspaceId, execution?.conversation_id],
+        queryFn: () => getConversation(workspaceId!, execution!.conversation_id),
+        enabled: !!workspaceId && !!execution?.conversation_id,
+    })
+
+    const userMessage = conversation?.messages?.find((m: any) => m.role === 'user')
+    const assistantMessages = conversation?.messages?.filter((m: any) => m.role === 'assistant') ?? []
+    const lastAssistantMessage = assistantMessages[assistantMessages.length - 1]
+
     // ── Loading state ────────────────────────────────────────────────────────
 
     if (isLoading) {
@@ -443,6 +453,19 @@ export default function ExecutionMonitorPage() {
                     )}
                 </div>
 
+                {/* ── User Request ────────────────────────────────────────────── */}
+                {userMessage && (
+                    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-md px-6 py-4">
+                        <div className="flex items-center gap-2 mb-2">
+                            <User className="h-4 w-4 text-blue-400/70" />
+                            <span className="text-xs font-medium text-blue-400/80">User Request</span>
+                        </div>
+                        <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">
+                            {userMessage.content}
+                        </p>
+                    </div>
+                )}
+
                 {/* ── Timeline ───────────────────────────────────────────────── */}
                 <div>
                     <h2 className="text-sm font-medium text-foreground/70 mb-4 flex items-center gap-2">
@@ -482,6 +505,19 @@ export default function ExecutionMonitorPage() {
                         </div>
                     )}
                 </div>
+
+                {/* ── Agent Response ──────────────────────────────────────────── */}
+                {lastAssistantMessage && (
+                    <div className="rounded-2xl border border-emerald-500/10 bg-emerald-500/[0.02] backdrop-blur-md px-6 py-4">
+                        <div className="flex items-center gap-2 mb-2">
+                            <Bot className="h-4 w-4 text-emerald-400/70" />
+                            <span className="text-xs font-medium text-emerald-400/80">Agent Response</span>
+                        </div>
+                        <div className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">
+                            {lastAssistantMessage.content}
+                        </div>
+                    </div>
+                )}
 
             </div>
         </div>

@@ -43,6 +43,59 @@ WORKSPACE_AGENT = AgentDefinition(
 )
 
 
+ROUTER_AGENT = AgentDefinition(
+    id="router_agent",
+    name="Request Router",
+    description="Examines incoming requests and delegates to the most appropriate specialized agent.",
+    system_prompt=(
+        "You are a request router. Given a user's request, examine the available agents "
+        "and their capabilities listed below, then delegate to the single best-fit agent "
+        "using agent.invoke.\n\n"
+        "If no specialized agent fits, delegate to workspace_agent (the general-purpose assistant).\n"
+        "You MUST invoke exactly one agent. Do not answer the request yourself."
+    ),
+    execution_mode="streaming",
+    max_iterations=5,
+    tools_enabled=True,
+    allowed_tool_categories=["agent"],
+    is_system=True,
+)
+
+COUNCIL_AGENT = AgentDefinition(
+    id="council_agent",
+    name="Response Council",
+    description="Spawns multiple agents for the same request, evaluates responses, selects the best.",
+    system_prompt=(
+        "You are a response council chairman. Your process:\n"
+        "1. Identify 2-3 agents that could reasonably answer the user's request\n"
+        "2. Invoke each with the same request using agent.invoke\n"
+        "3. Evaluate which response is best (accuracy, completeness, helpfulness)\n"
+        "4. Return the best response with a brief explanation of your selection\n\n"
+        "Use agent.invoke for each candidate."
+    ),
+    execution_mode="streaming",
+    max_iterations=15,
+    tools_enabled=True,
+    allowed_tool_categories=["agent"],
+    is_system=True,
+)
+
+OPTIMIZER_AGENT = AgentDefinition(
+    id="optimizer_agent",
+    name="Prompt Optimizer",
+    description="Rewrites prompts to be more specific, well-structured, and effective.",
+    system_prompt=(
+        "Rewrite the user's prompt to be more specific, unambiguous, and well-structured.\n"
+        "Preserve intent exactly. Do NOT answer the question. Return ONLY the improved prompt."
+    ),
+    execution_mode="streaming",
+    max_iterations=3,
+    tools_enabled=False,
+    rag_enabled=False,
+    is_system=True,
+)
+
+
 class AgentRegistry:
     """Manages agent definitions. System agents registered at startup; custom from DB."""
 

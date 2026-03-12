@@ -31,6 +31,7 @@ def _to_response(workspace: Workspace, knowledge_count: int = 0, conv_count: int
         sort_order=workspace.sort_order,
         agent_enabled=workspace.agent_enabled,
         agent_tool_categories=list(workspace.agent_tool_categories or []),
+        agent_max_tool_loops=workspace.agent_max_tool_loops,
         knowledge_count=knowledge_count,
         conversation_count=conv_count,
         created_at=workspace.created_at,
@@ -136,6 +137,8 @@ class WorkspaceService:
             ws.agent_enabled = data.agent_enabled
         if data.agent_tool_categories is not None:
             ws.agent_tool_categories = data.agent_tool_categories
+        if data.agent_max_tool_loops is not None:
+            ws.agent_max_tool_loops = data.agent_max_tool_loops
 
         await db.commit()
         await db.refresh(ws)

@@ -1,7 +1,11 @@
 """Celery application configuration for agent execution workers."""
 
+import logging
 from celery import Celery
+from celery.signals import worker_init
 from openforge.config import get_settings
+
+logger = logging.getLogger("openforge.worker")
 
 settings = get_settings()
 
@@ -23,3 +27,14 @@ celery_app.conf.update(
 
 # Auto-discover tasks
 celery_app.autodiscover_tasks(["openforge.worker"])
+
+
+@worker_init.connect
+def register_system_agents(**_kwargs):
+    """Register system agent definitions when the Celery worker starts."""
+    from openforge.core.agent_registry import (
+        agent_registry, WORKSPACE_AGENT, ROUTER_AGENT, COUNCIL_AGENT, OPTIMIZER_AGENT,
+    )
+    for agent_def in [WORKSPACE_AGENT, ROUTER_AGENT, COUNCIL_AGENT, OPTIMIZER_AGENT]:
+        agent_registry.register_system_agent(agent_def)
+    logger.info("Celery worker: registered %d system agents.", len(agent_registry.list_all()))

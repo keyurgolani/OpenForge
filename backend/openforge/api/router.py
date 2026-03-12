@@ -17,6 +17,8 @@ from openforge.api import export as export_api
 from openforge.api import hitl as hitl_api
 from openforge.api import agent as agent_api
 from openforge.api import agents as agents_api
+from openforge.api import agent_schedules as agent_schedules_api
+from openforge.api import targets as targets_api
 from openforge.api import tool_permissions as tool_permissions_api
 from openforge.api import models as models_api
 
@@ -42,5 +44,7 @@ api_router.include_router(export_api.router, prefix="/export", tags=["export"])
 api_router.include_router(hitl_api.router, prefix="/hitl", tags=["hitl"])
 api_router.include_router(agent_api.router, prefix="/agent", tags=["agent"])
 api_router.include_router(agents_api.router, prefix="/agents", tags=["agents"])
+api_router.include_router(agent_schedules_api.router, prefix="/workspaces", tags=["agent-schedules"])
+api_router.include_router(targets_api.router, prefix="/workspaces", tags=["targets"])
 api_router.include_router(tool_permissions_api.router, prefix="/tools", tags=["tool-permissions"])
 api_router.include_router(models_api.router, prefix="/models", tags=["models"])

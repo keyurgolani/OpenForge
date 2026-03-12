@@ -22,10 +22,10 @@ import {
     bulkRestoreConversations,
     bulkPermanentlyDeleteConversations,
 } from '@/lib/api'
-import { useStreamingChat, type Mention, type TimelineToolCall, type TimelineSubagentInvocation, type TimelineHITLRequest, type SubagentTimelineStep } from '@/hooks/useStreamingChat'
+import { useStreamingChat, type Mention, type TimelineToolCall, type TimelineSubagentInvocation, type TimelineHITLRequest, type TimelinePromptOptimized, type SubagentTimelineStep } from '@/hooks/useStreamingChat'
 import { useToast } from '@/components/shared/ToastProvider'
 import {
-    Plus, Send, Square, Loader2, MessageSquare, Trash2, Bot, User,
+    Plus, Send, Square, Loader2, MessageSquare, Trash2, Bot, User, Sparkles,
     ChevronDown, ChevronRight, ChevronLeft, ChevronUp, ChevronsUp, ExternalLink, Check, Pencil,
     Paperclip, X, Copy, Search, Brain, Wrench, BookmarkPlus, Network, ShieldAlert, ShieldCheck, ShieldX, AtSign,
     CheckCircle2, XCircle, RotateCcw, Trash
@@ -217,6 +217,7 @@ interface Message {
         | TimelineHITLRequest
     > | null
     is_interrupted?: boolean
+    provider_metadata?: { optimize?: boolean; [key: string]: unknown } | null
     created_at: string
 }
 
@@ -307,6 +308,7 @@ export default function AgentPage() {
     // File attachments
     const [attachments, setAttachments] = useState<File[]>([])
     const [uploadingFiles, setUploadingFiles] = useState(false)
+    const [optimizeEnabled, setOptimizeEnabled] = useState(() => sessionStorage.getItem('optimizeEnabled') === 'true')
     const [streamResponseExpanded, setStreamResponseExpanded] = useState(false)
     const [streamResponseHasHiddenTop, setStreamResponseHasHiddenTop] = useState(false)
     const { data: workspace } = useQuery({
@@ -1125,13 +1127,14 @@ export default function AgentPage() {
             navigate(`/w/${workspaceId}/agent/${conv.id}`)
         }
 
-        const override: { provider_id?: string; model_id?: string; attachment_ids?: string[]; mentions?: Mention[] } = {}
+        const override: { provider_id?: string; model_id?: string; attachment_ids?: string[]; mentions?: Mention[]; optimize?: boolean } = {}
         if (selectedOption) {
             override.provider_id = selectedOption.providerId
             override.model_id = selectedOption.modelId
         }
         if (attachmentIds.length > 0) override.attachment_ids = attachmentIds
         if (activeMentions.length > 0) override.mentions = activeMentions
+        if (optimizeEnabled) override.optimize = true
 
         const sent = sendMessage(msg, override, targetCid)
         if (!sent) {
@@ -1371,6 +1374,11 @@ export default function AgentPage() {
                                                             entry={entry}
                                                             workspaceId={workspaceId}
                                                             conversationId={activeCid ?? ''}
+                                                        />
+                                                    ) : entry.type === 'prompt_optimized' ? (
+                                                        <PromptOptimizedCard
+                                                            key={`optimized-${i}`}
+                                                            entry={entry as TimelinePromptOptimized}
                                                         />
                                                     ) : (
                                                         <div key={entry.call_id} className="chat-workflow-step chat-section-reveal">
@@ -1615,6 +1623,19 @@ export default function AgentPage() {
                                             >
                                                 <AtSign className="h-3.5 w-3.5" />
                                                 Mention
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className={`chat-control-pill transition-colors ${
+                                                    optimizeEnabled
+                                                        ? 'bg-accent/15 border-accent/40 text-accent'
+                                                        : ''
+                                                }`}
+                                                onClick={() => setOptimizeEnabled(prev => { const next = !prev; sessionStorage.setItem('optimizeEnabled', String(next)); return next })}
+                                                title={optimizeEnabled ? 'Prompt optimization enabled' : 'Enable prompt optimization'}
+                                            >
+                                                <Sparkles className={`h-3.5 w-3.5 ${optimizeEnabled ? 'text-accent' : ''}`} />
+                                                Optimize
                                             </button>
                                         </div>
 
@@ -2687,6 +2708,10 @@ function SubagentCard({
 
     const instruction = (agentArgs?.instruction as string) || 'Subagent task'
     const targetWorkspaceId = agentArgs?.workspace_id as string | undefined
+    const agentId = agentArgs?.agent_id as string | undefined
+    const agentDisplayName = agentId
+        ? agentId.replace(/_agent$/, '').split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+        : 'Workspace'
 
     const timelineSource = entry?.subagent_timeline ?? liveTimeline ?? []
     const toolSteps = timelineSource.filter(
@@ -2743,9 +2768,9 @@ function SubagentCard({
             <button className={`chat-subsection-toggle ${open ? 'chat-subsection-toggle-open' : ''}`} onClick={toggle}>
                 {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                 <Network className="w-3 h-3" />
-                <span>Subagent</span>
+                <span className="text-muted-foreground/70">Agent.Invoke</span>
                 <span className="text-muted-foreground/40 mx-0.5">·</span>
-                <span className="text-accent/60 text-[11px] font-mono">{toolName}</span>
+                <span>Subagent: {agentDisplayName}</span>
                 {statusIcon}
             </button>
             <div ref={blockRef} className={`chat-collapse w-full ${open ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
@@ -2771,7 +2796,7 @@ function SubagentCard({
                             <div className="px-4 py-3">
                                 <div className="flex items-center gap-2 text-[11px] text-muted-foreground/50">
                                     <Loader2 className="w-3 h-3 animate-spin" />
-                                    <span>Subagent running…</span>
+                                    <span>{agentDisplayName} agent running…</span>
                                 </div>
                             </div>
                         )}
@@ -2829,6 +2854,34 @@ function SubagentCard({
 }
 
 // ── HITL approval card ────────────────────────────────────────────────────────
+function PromptOptimizedCard({ entry }: { entry: TimelinePromptOptimized }) {
+    const [expanded, setExpanded] = useState(false)
+    return (
+        <div className="chat-workflow-step chat-section-reveal">
+            <button
+                className="chat-subsection-toggle"
+                onClick={() => setExpanded(prev => !prev)}
+            >
+                <Sparkles className="h-3 w-3 text-accent" />
+                <span>Prompt Optimized</span>
+                {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            </button>
+            {expanded && (
+                <div className="mt-2 space-y-2 text-xs">
+                    <div>
+                        <span className="text-muted-foreground font-medium block mb-0.5">Original:</span>
+                        <div className="bg-muted/20 rounded-lg px-3 py-2 text-foreground/80 whitespace-pre-wrap">{entry.original}</div>
+                    </div>
+                    <div>
+                        <span className="text-accent/80 font-medium block mb-0.5">Optimized:</span>
+                        <div className="bg-accent/5 border border-accent/15 rounded-lg px-3 py-2 text-foreground/90 whitespace-pre-wrap">{entry.optimized}</div>
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
 function HITLCard({
     entry,
     workspaceId: _workspaceId,
@@ -3317,6 +3370,12 @@ function ChatMessageCard({
                                         if (a) { const h = a.getAttribute('href'); if (h?.startsWith('/')) { e.preventDefault(); navigate(h) } }
                                     }}
                                 />
+                                {msg.provider_metadata?.optimize && (
+                                    <div className="flex items-center gap-1 mt-1.5 text-[10px] text-accent/70" title="Prompt optimization enabled">
+                                        <Sparkles className="h-2.5 w-2.5" />
+                                        <span>Optimize</span>
+                                    </div>
+                                )}
                             </div>
                         )}
                         {hasWorkflowSteps && (

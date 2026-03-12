@@ -19,7 +19,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { formatDistanceToNow } from 'date-fns'
 import MarkdownIt from 'markdown-it'
 import {
-    Home, MessageSquare, Search, Settings, Plus, Folder,
+    Home, MessageSquare, Search, Settings, Plus, Folder, Bot,
     FileText, Pin, Archive, Bookmark, Code2, Zap, WifiOff,
     PanelLeft, ChevronDown, ChevronLeft, ChevronRight, Brain, CheckSquare, Calendar, Star, Pencil, Trash2, Download,
     ShieldAlert, ShieldCheck, ShieldX, Check, X, Clock, Loader2, ExternalLink,
@@ -96,6 +96,7 @@ export default function AppShell() {
     const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
     const [workspaceQuery, setWorkspaceQuery] = useState('')
     const [activeInsightSection, setActiveInsightSection] = useState<InsightSectionKey | null>('tasks')
+    const [agentSublistOpen, setAgentSublistOpen] = useState(true)
     const [renamingConversationId, setRenamingConversationId] = useState<string | null>(null)
     const [renamingConversationDraft, setRenamingConversationDraft] = useState('')
     const [deleteModalOpen, setDeleteModalOpen] = useState(false)
@@ -560,9 +561,97 @@ export default function AppShell() {
                                     <Link to={`/w/${workspaceId}/search`} className={`sidebar-item ${isActive('/search') ? 'active' : ''}`}>
                                         <Search className="w-4 h-4" /> Search
                                     </Link>
-                                    <Link to={`/w/${workspaceId}/agent`} className={`sidebar-item ${isActive('/agent') ? 'active' : ''}`}>
-                                        <MessageSquare className="w-4 h-4" /> Workspace Agent
-                                    </Link>
+                                    {/* Workspace Agent with expandable recent conversations */}
+                                    <div>
+                                        <div className="flex items-center">
+                                            <Link to={`/w/${workspaceId}/agent`} className={`sidebar-item flex-1 ${isActive('/agent') && !isActive('/agents') ? 'active' : ''}`}>
+                                                <MessageSquare className="w-4 h-4" /> Workspace Agent
+                                            </Link>
+                                            {recentConversations.length > 0 && (
+                                                <button
+                                                    className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors flex-shrink-0"
+                                                    onClick={() => setAgentSublistOpen(p => !p)}
+                                                >
+                                                    {agentSublistOpen
+                                                        ? <ChevronDown className="w-3 h-3" />
+                                                        : <ChevronRight className="w-3 h-3" />}
+                                                </button>
+                                            )}
+                                        </div>
+                                        {agentSublistOpen && recentConversations.length > 0 && (
+                                            <div className="ml-3 mt-0.5 border-l border-border/30 pl-2 space-y-0.5">
+                                                {recentConversations.slice(0, 5).map(c => {
+                                                    const isRenaming = renamingConversationId === c.id
+                                                    return (
+                                                    <ContextMenu key={c.id}>
+                                                        <ContextMenuTrigger asChild>
+                                                            {isRenaming ? (
+                                                                <div className={`sidebar-item text-xs ${isActive(`/agent/${c.id}`) ? 'active' : ''}`}>
+                                                                    <MessageSquare className="w-3 h-3" />
+                                                                    <input
+                                                                        ref={conversationRenameInputRef}
+                                                                        className="w-full bg-transparent text-xs outline-none border-b border-accent/45"
+                                                                        value={renamingConversationDraft}
+                                                                        onChange={(event) => setRenamingConversationDraft(event.target.value)}
+                                                                        onBlur={() => { void commitRenameConversation() }}
+                                                                        onKeyDown={(event) => {
+                                                                            if (event.key === 'Enter') {
+                                                                                event.preventDefault()
+                                                                                void commitRenameConversation()
+                                                                                return
+                                                                            }
+                                                                            if (event.key === 'Escape') {
+                                                                                event.preventDefault()
+                                                                                cancelRenameConversation()
+                                                                            }
+                                                                        }}
+                                                                        onClick={(event) => event.stopPropagation()}
+                                                                    />
+                                                                </div>
+                                                            ) : (
+                                                                <Link to={`/w/${workspaceId}/agent/${c.id}`} className={`sidebar-item text-xs ${isActive(`/agent/${c.id}`) ? 'active' : ''}`}>
+                                                                    <MessageSquare className="w-3 h-3" />
+                                                                    <span className="truncate">{c.title ?? 'New Chat'}</span>
+                                                                </Link>
+                                                            )}
+                                                        </ContextMenuTrigger>
+                                                        <ContextMenuContent className="w-48">
+                                                            <ContextMenuItem
+                                                                onSelect={(event) => {
+                                                                    event.preventDefault()
+                                                                    beginRenameConversation(c.id, c.title ?? null)
+                                                                }}
+                                                                className="gap-2"
+                                                            >
+                                                                <Pencil className="w-4 h-4" /> Rename Chat
+                                                            </ContextMenuItem>
+                                                            <ContextMenuSeparator />
+                                                            <ContextMenuItem
+                                                                onSelect={(event) => {
+                                                                    event.preventDefault()
+                                                                    void handleTrashConversation(c.id)
+                                                                }}
+                                                                className="gap-2 text-red-500 focus:text-red-400 focus:bg-red-500/10"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" /> Move to Trash
+                                                            </ContextMenuItem>
+                                                            <ContextMenuItem
+                                                                onSelect={(event) => {
+                                                                    event.preventDefault()
+                                                                    setConversationToDelete({ id: c.id, title: c.title ?? null })
+                                                                    setDeleteModalOpen(true)
+                                                                }}
+                                                                className="gap-2 text-red-500 focus:text-red-400 focus:bg-red-500/10"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" /> Delete Permanently
+                                                            </ContextMenuItem>
+                                                        </ContextMenuContent>
+                                                    </ContextMenu>
+                                                    )
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
                                 </nav>
                             </div>
                         </div>
@@ -588,84 +677,13 @@ export default function AppShell() {
                                 </div>
                             )}
 
-                            {/* Recent conversations */}
-                            {recentConversations.length > 0 && (
-                                <div>
-                                    <div className="flex items-center gap-1 px-2 mb-1">
-                                        <MessageSquare className="w-3 h-3 text-muted-foreground" />
-                                        <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Recent Conversations</span>
-                                    </div>
-                                    {recentConversations.slice(0, 5).map(c => {
-                                        const isRenaming = renamingConversationId === c.id
-                                        return (
-                                        <ContextMenu key={c.id}>
-                                            <ContextMenuTrigger asChild>
-                                                {isRenaming ? (
-                                                    <div className={`sidebar-item text-xs ${isActive(`/agent/${c.id}`) ? 'active' : ''}`}>
-                                                        <MessageSquare className="w-3 h-3" />
-                                                        <input
-                                                            ref={conversationRenameInputRef}
-                                                            className="w-full bg-transparent text-xs outline-none border-b border-accent/45"
-                                                            value={renamingConversationDraft}
-                                                            onChange={(event) => setRenamingConversationDraft(event.target.value)}
-                                                            onBlur={() => { void commitRenameConversation() }}
-                                                            onKeyDown={(event) => {
-                                                                if (event.key === 'Enter') {
-                                                                    event.preventDefault()
-                                                                    void commitRenameConversation()
-                                                                    return
-                                                                }
-                                                                if (event.key === 'Escape') {
-                                                                    event.preventDefault()
-                                                                    cancelRenameConversation()
-                                                                }
-                                                            }}
-                                                            onClick={(event) => event.stopPropagation()}
-                                                        />
-                                                    </div>
-                                                ) : (
-                                                    <Link to={`/w/${workspaceId}/agent/${c.id}`} className={`sidebar-item text-xs ${isActive(`/agent/${c.id}`) ? 'active' : ''}`}>
-                                                        <MessageSquare className="w-3 h-3" />
-                                                        <span className="truncate">{c.title ?? 'New Chat'}</span>
-                                                    </Link>
-                                                )}
-                                            </ContextMenuTrigger>
-                                            <ContextMenuContent className="w-48">
-                                                <ContextMenuItem
-                                                    onSelect={(event) => {
-                                                        event.preventDefault()
-                                                        beginRenameConversation(c.id, c.title ?? null)
-                                                    }}
-                                                    className="gap-2"
-                                                >
-                                                    <Pencil className="w-4 h-4" /> Rename Chat
-                                                </ContextMenuItem>
-                                                <ContextMenuSeparator />
-                                                <ContextMenuItem
-                                                    onSelect={(event) => {
-                                                        event.preventDefault()
-                                                        void handleTrashConversation(c.id)
-                                                    }}
-                                                    className="gap-2 text-red-500 focus:text-red-400 focus:bg-red-500/10"
-                                                >
-                                                    <Trash2 className="w-4 h-4" /> Move to Trash
-                                                </ContextMenuItem>
-                                                <ContextMenuItem
-                                                    onSelect={(event) => {
-                                                        event.preventDefault()
-                                                        setConversationToDelete({ id: c.id, title: c.title ?? null })
-                                                        setDeleteModalOpen(true)
-                                                    }}
-                                                    className="gap-2 text-red-500 focus:text-red-400 focus:bg-red-500/10"
-                                                >
-                                                    <Trash2 className="w-4 h-4" /> Delete Permanently
-                                                </ContextMenuItem>
-                                            </ContextMenuContent>
-                                        </ContextMenu>
-                                        )
-                                    })}
-                                </div>
-                            )}
+                        </div>
+
+                        {/* Agents — workspace-agnostic, pinned to bottom */}
+                        <div className="flex-shrink-0 border-t border-border/40 px-4 py-2">
+                            <Link to={`/w/${workspaceId}/agents`} className={`sidebar-item ${isActive('/agents') ? 'active' : ''}`}>
+                                <Bot className="w-4 h-4" /> Agents
+                            </Link>
                         </div>
 
                         {/* Settings — bottom of sidebar, same style as workspace selector */}
@@ -720,13 +738,22 @@ export default function AppShell() {
                             <Link
                                 to={`/w/${workspaceId}/agent`}
                                 title="Workspace Agent"
-                                className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isActive('/agent') ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
+                                className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isActive('/agent') && !isActive('/agents') ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
                             >
                                 <MessageSquare className="w-4 h-4" />
                             </Link>
                         </nav>
 
                         <div className="flex-1" />
+
+                        {/* Agents — workspace-agnostic */}
+                        <Link
+                            to={`/w/${workspaceId}/agents`}
+                            title="Agents"
+                            className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isActive('/agents') ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
+                        >
+                            <Bot className="w-4 h-4" />
+                        </Link>
 
                         {/* Settings */}
                         <Link

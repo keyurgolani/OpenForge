@@ -38,9 +38,10 @@ async def lifespan(app: FastAPI):
     # Initialize Qdrant collections
     needs_reindex = False
     try:
-        from openforge.db.qdrant_client import init_qdrant_collection, init_visual_collection
+        from openforge.db.qdrant_client import init_qdrant_collection, init_visual_collection, init_memory_collection
         needs_reindex = await init_qdrant_collection()
         await init_visual_collection()
+        await init_memory_collection()
     except Exception as e:
         logger.warning(f"Qdrant initialization failed (continuing): {e}")
 
@@ -235,11 +236,15 @@ async def lifespan(app: FastAPI):
     # Register system agents and load custom agents
     try:
         from openforge.db.postgres import AsyncSessionLocal
-        from openforge.core.agent_registry import agent_registry, WORKSPACE_AGENT
+        from openforge.core.agent_registry import (
+            agent_registry, WORKSPACE_AGENT, ROUTER_AGENT, COUNCIL_AGENT, OPTIMIZER_AGENT,
+        )
 
-        agent_registry.register_system_agent(WORKSPACE_AGENT)
+        for agent_def in [WORKSPACE_AGENT, ROUTER_AGENT, COUNCIL_AGENT, OPTIMIZER_AGENT]:
+            agent_registry.register_system_agent(agent_def)
         async with AsyncSessionLocal() as db:
-            await agent_registry.upsert_to_db(db, WORKSPACE_AGENT)
+            for agent_def in [WORKSPACE_AGENT, ROUTER_AGENT, COUNCIL_AGENT, OPTIMIZER_AGENT]:
+                await agent_registry.upsert_to_db(db, agent_def)
             await agent_registry.load_custom_agents(db)
         logger.info("Agent registry initialized.")
     except Exception as e:
