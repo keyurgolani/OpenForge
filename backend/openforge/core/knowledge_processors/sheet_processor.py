@@ -2,11 +2,13 @@
 
 1. Read all sheets via openpyxl, convert each to markdown table
 2. Extract metadata (sheet names, row/column counts per sheet)
-3. Chunk text → embed → store in Qdrant
+3. Generate placeholder thumbnail
+4. Chunk text → embed → store in Qdrant
 """
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Optional
 from uuid import UUID
@@ -45,7 +47,21 @@ class SheetProcessor:
         except Exception as e:
             logger.warning("Sheet metadata extraction failed for %s: %s", knowledge_id, e)
 
-        # ── Step 3: Embed text ──
+        # ── Step 3: Thumbnail ──
+        thumbnail_path = None
+        try:
+            from openforge.config import get_settings
+
+            settings = get_settings()
+            thumbnails_dir = os.path.join(settings.uploads_root, "knowledge-thumbnails")
+            os.makedirs(thumbnails_dir, exist_ok=True)
+            thumb_file = os.path.join(thumbnails_dir, f"{knowledge_id}.webp")
+            if self._generate_sheet_placeholder(thumb_file):
+                thumbnail_path = thumb_file
+        except Exception as e:
+            logger.warning("Sheet thumbnail generation failed for %s: %s", knowledge_id, e)
+
+        # ── Step 4: Embed text ──
         if result["text"] and len(result["text"].strip()) >= 20:
             try:
                 await self._embed_text(knowledge_id, workspace_id, result["text"])
@@ -54,6 +70,7 @@ class SheetProcessor:
 
         metadata = result["metadata"]
         return {
+            "thumbnail_path": thumbnail_path,
             "file_metadata": {
                 "sheet_names": metadata.get("sheet_names", []),
                 "sheet_details": metadata.get("sheet_details", []),
@@ -128,6 +145,50 @@ class SheetProcessor:
 
         full_text = "\n".join(parts)
         return full_text[:100000], sheet_info
+
+    @staticmethod
+    def _generate_sheet_placeholder(output_path: str) -> bool:
+        """Generate a simple table-grid placeholder thumbnail for sheets."""
+        try:
+            from PIL import Image, ImageDraw
+
+            width, height = 300, 200
+            img = Image.new("RGB", (width, height), (30, 30, 35))
+            draw = ImageDraw.Draw(img)
+
+            rows, cols = 5, 4
+            margin_x, margin_y = 40, 30
+            cell_w = (width - 2 * margin_x) // cols
+            cell_h = (height - 2 * margin_y) // rows
+            grid_color = (52, 180, 130)
+            header_color = (40, 80, 65)
+
+            # Shade header row
+            draw.rectangle(
+                [(margin_x, margin_y), (width - margin_x, margin_y + cell_h)],
+                fill=header_color,
+            )
+
+            # Draw grid lines
+            for r in range(rows + 1):
+                y = margin_y + r * cell_h
+                draw.line(
+                    [(margin_x, y), (width - margin_x, y)],
+                    fill=grid_color,
+                    width=1,
+                )
+            for c in range(cols + 1):
+                x = margin_x + c * cell_w
+                draw.line(
+                    [(x, margin_y), (x, height - margin_y)],
+                    fill=grid_color,
+                    width=1,
+                )
+
+            img.save(output_path, "WEBP", quality=85)
+            return True
+        except Exception:
+            return False
 
     def _extract_metadata(self, file_path: str, sheet_info: list[dict]) -> dict:
         """Extract sheet metadata."""

@@ -24,7 +24,7 @@ export default function EditorShell({ toolbar, siderail, children }: EditorShell
 
                 {/* Optional side rail */}
                 {siderail && (
-                    <aside className="flex-shrink-0 w-64 border-l border-border/40 overflow-y-auto hidden lg:block">
+                    <aside className="flex-shrink-0 w-80 border-l border-border/40 overflow-y-auto hidden lg:block">
                         {siderail}
                     </aside>
                 )}

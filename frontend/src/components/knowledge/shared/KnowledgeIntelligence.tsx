@@ -47,6 +47,7 @@ export function GenerateIntelligenceButton({ knowledge, workspaceId }: Knowledge
         try {
             await generateKnowledgeIntelligence(workspaceId, knowledge.id)
             qc.invalidateQueries({ queryKey: ['knowledge-detail', workspaceId, knowledge.id] })
+            qc.invalidateQueries({ queryKey: ['knowledge-item', knowledge.id] })
             qc.invalidateQueries({ queryKey: ['knowledge'] })
         } finally {
             setGenerating(false)

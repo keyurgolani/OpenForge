@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Brain } from 'lucide-react'
 import { EditorView, keymap, lineNumbers } from '@codemirror/view'
 import { EditorState, type Extension } from '@codemirror/state'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
@@ -9,6 +9,8 @@ import { updateKnowledge } from '@/lib/api'
 import { baseExtensions } from '@/components/knowledge/shared/CodeMirrorTheme'
 import EditorShell from '@/components/knowledge/shared/EditorShell'
 import EditorToolbar from '@/components/knowledge/shared/EditorToolbar'
+import KnowledgeIntelligence, { GenerateIntelligenceButton } from '@/components/knowledge/shared/KnowledgeIntelligence'
+import { cn } from '@/lib/utils'
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -49,8 +51,19 @@ export default function GistEditor({ knowledge, workspaceId }: GistEditorProps) 
     const [language, setLanguage] = useState(knowledge.gist_language || 'typescript')
     const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
     const [showLangPicker, setShowLangPicker] = useState(false)
+    const [showIntelligence, setShowIntelligence] = useState(() =>
+        localStorage.getItem('openforge.knowledge.intelligence.collapsed') !== 'true',
+    )
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const contentRef = useRef(knowledge.content || '')
+
+    const toggleIntelligence = useCallback(() => {
+        setShowIntelligence(prev => {
+            const next = !prev
+            localStorage.setItem('openforge.knowledge.intelligence.collapsed', String(!next))
+            return next
+        })
+    }, [])
 
     // Auto-save (debounced 700ms)
     const save = useCallback(
@@ -181,10 +194,36 @@ export default function GistEditor({ knowledge, workspaceId }: GistEditorProps) 
                                     </>
                                 )}
                             </div>
+
+                            {/* Intelligence toggle */}
+                            <button
+                                type="button"
+                                onClick={toggleIntelligence}
+                                className={cn(
+                                    'p-1.5 rounded-lg transition-colors',
+                                    showIntelligence
+                                        ? 'text-accent-foreground bg-accent/20'
+                                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
+                                )}
+                                title={showIntelligence ? 'Hide intelligence' : 'Show intelligence'}
+                                aria-label={showIntelligence ? 'Hide intelligence' : 'Show intelligence'}
+                            >
+                                <Brain className="w-4 h-4" />
+                            </button>
                         </>
                     }
                 />
             }
+            siderail={showIntelligence ? (
+                <div className="pt-4">
+                    <KnowledgeIntelligence
+                        knowledge={knowledge}
+                        workspaceId={workspaceId}
+                        headerExtra={<GenerateIntelligenceButton knowledge={knowledge} workspaceId={workspaceId} />}
+                        onCollapse={toggleIntelligence}
+                    />
+                </div>
+            ) : undefined}
         >
             <div ref={editorRef} className="flex-1 min-h-0 overflow-y-auto" />
         </EditorShell>

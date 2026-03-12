@@ -14,7 +14,7 @@ import './index.css'
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage'))
 const AppShell = lazy(() => import('./pages/AppShell'))
 const WorkspaceHome = lazy(() => import('./pages/WorkspaceHome'))
-const KnowledgePage = lazy(() => import('./pages/KnowledgePage'))
+const EditorDispatcher = lazy(() => import('./components/knowledge/editors/EditorDispatcher'))
 const AgentPage = lazy(() => import('./pages/AgentPage'))
 const SearchPage = lazy(() => import('./pages/SearchPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
@@ -120,7 +120,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                 } />
                                 <Route path="knowledge/:knowledgeId" element={
                                     <ErrorBoundary>
-                                        <KnowledgePage />
+                                        <EditorDispatcher />
                                     </ErrorBoundary>
                                 } />
                                 <Route path="agent" element={

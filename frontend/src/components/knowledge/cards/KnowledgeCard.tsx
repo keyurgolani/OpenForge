@@ -4,6 +4,7 @@ import { FleetingCard } from './FleetingCard'
 import { BookmarkCard } from './BookmarkCard'
 import { GistCard } from './GistCard'
 import { ImageCard } from './ImageCard'
+import { AudioCard } from './AudioCard'
 import { FileCard } from './FileCard'
 
 interface KnowledgeCardProps {
@@ -31,6 +32,7 @@ export function KnowledgeCard({ item, workspaceId, slim }: KnowledgeCardProps) {
         case 'image':
             return <ImageCard item={item} workspaceId={workspaceId} slim={slim} isProcessing={processing} />
         case 'audio':
+            return <AudioCard item={item} slim={slim} isProcessing={processing} />
         case 'pdf':
         case 'document':
         case 'sheet':

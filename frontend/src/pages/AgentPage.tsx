@@ -294,6 +294,7 @@ export default function AgentPage() {
     const suppressAutoSelectRef = useRef(false)
     const [stickToBottom, setStickToBottom] = useState(true)
     const stickToBottomRef = useRef(true)
+    const wasStreamingRef = useRef(false)
 
     // Per-message model override
     const [selectedModelKey, setSelectedModelKey] = useState('')
@@ -628,6 +629,19 @@ export default function AgentPage() {
             setStreamResponseHasHiddenTop(false)
         }
     }, [activeCid, isStreaming, streamingContent])
+
+    // On chat_done, ensure the full response is visible
+    useEffect(() => {
+        if (wasStreamingRef.current && !isStreaming) {
+            const container = messagesContainerRef.current
+            if (container) {
+                container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
+                stickToBottomRef.current = true
+                setStickToBottom(true)
+            }
+        }
+        wasStreamingRef.current = isStreaming
+    }, [isStreaming])
 
     // Track thinking content length for scroll updates during streaming
     const streamingThinkingContentLength = useMemo(() => {
@@ -1163,7 +1177,7 @@ export default function AgentPage() {
     const handleMessagesScroll = (event: React.UIEvent<HTMLDivElement>) => {
         const el = event.currentTarget
         const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-        const atBottom = distanceFromBottom <= 64
+        const atBottom = distanceFromBottom <= 50
         stickToBottomRef.current = atBottom
         setStickToBottom(atBottom)
     }
