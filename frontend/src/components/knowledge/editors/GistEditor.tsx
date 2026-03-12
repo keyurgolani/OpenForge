@@ -186,7 +186,7 @@ export default function GistEditor({ knowledge, workspaceId }: GistEditorProps) 
                 />
             }
         >
-            <div ref={editorRef} className="h-full overflow-y-auto" />
+            <div ref={editorRef} className="flex-1 min-h-0 overflow-y-auto" />
         </EditorShell>
     )
 }

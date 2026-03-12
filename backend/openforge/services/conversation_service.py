@@ -104,6 +104,7 @@ def _conv_to_response(conv: Conversation, last_preview: str | None = None) -> Co
         is_pinned=conv.is_pinned,
         is_archived=conv.is_archived,
         archived_at=conv.archived_at,
+        is_subagent=conv.is_subagent,
         message_count=conv.message_count,
         last_message_at=conv.last_message_at,
         last_message_preview=last_preview,
@@ -180,12 +181,23 @@ class ConversationService:
         return _conv_to_response(conv)
 
     async def list_conversations(
-        self, db: AsyncSession, workspace_id: UUID, include_archived: bool = False
+        self,
+        db: AsyncSession,
+        workspace_id: UUID,
+        include_archived: bool = False,
+        category: str = "chats",
     ) -> list[ConversationResponse]:
         await self.purge_expired_archived_conversations(db, workspace_id=workspace_id)
         query = select(Conversation).where(Conversation.workspace_id == workspace_id)
-        if not include_archived:
-            query = query.where(Conversation.is_archived == False)
+        if category == "subagent":
+            query = query.where(Conversation.is_subagent == True, Conversation.is_archived == False)  # noqa: E712
+        elif category == "trash":
+            query = query.where(Conversation.is_archived == True)  # noqa: E712
+        elif include_archived:
+            pass  # return everything
+        else:
+            # Default "chats": active non-subagent conversations
+            query = query.where(Conversation.is_subagent == False, Conversation.is_archived == False)  # noqa: E712
         query = query.order_by(Conversation.last_message_at.desc().nullslast(), Conversation.created_at.desc())
         result = await db.execute(query)
         convs = result.scalars().all()
@@ -316,6 +328,94 @@ class ConversationService:
             )
         except Exception as e:
             logger.warning("Failed to delete Qdrant chat embeddings for conversation %s: %s", conversation_id, e)
+
+    async def trash_all_conversations(
+        self,
+        db: AsyncSession,
+        workspace_id: UUID,
+        category: str = "chats",
+    ) -> int:
+        """Move all conversations in a category to trash."""
+        query = select(Conversation).where(
+            Conversation.workspace_id == workspace_id,
+            Conversation.is_archived == False,  # noqa: E712
+        )
+        if category == "subagent":
+            query = query.where(Conversation.is_subagent == True)  # noqa: E712
+        else:
+            query = query.where(Conversation.is_subagent == False)  # noqa: E712
+        result = await db.execute(query)
+        convs = result.scalars().all()
+        now = datetime.now(timezone.utc)
+        for conv in convs:
+            conv.is_archived = True
+            conv.archived_at = now
+            conv.updated_at = now
+        await db.commit()
+        return len(convs)
+
+    async def restore_all_conversations(
+        self,
+        db: AsyncSession,
+        workspace_id: UUID,
+    ) -> int:
+        """Restore all conversations from trash."""
+        result = await db.execute(
+            select(Conversation).where(
+                Conversation.workspace_id == workspace_id,
+                Conversation.is_archived == True,  # noqa: E712
+            )
+        )
+        convs = result.scalars().all()
+        now = datetime.now(timezone.utc)
+        for conv in convs:
+            conv.is_archived = False
+            conv.archived_at = None
+            conv.updated_at = now
+        await db.commit()
+        return len(convs)
+
+    async def permanently_delete_all_conversations(
+        self,
+        db: AsyncSession,
+        workspace_id: UUID,
+    ) -> int:
+        """Permanently delete all conversations in trash."""
+        result = await db.execute(
+            select(Conversation).where(
+                Conversation.workspace_id == workspace_id,
+                Conversation.is_archived == True,  # noqa: E712
+            )
+        )
+        convs = result.scalars().all()
+        conv_ids = [str(c.id) for c in convs]
+        for conv in convs:
+            await db.delete(conv)
+        await db.commit()
+        # Clean up Qdrant embeddings
+        try:
+            from openforge.db.qdrant_client import get_qdrant
+            from openforge.config import get_settings
+            from qdrant_client import models as qdrant_models
+            client = get_qdrant()
+            settings = get_settings()
+            for cid in conv_ids:
+                client.delete(
+                    collection_name=settings.qdrant_collection,
+                    points_selector=qdrant_models.FilterSelector(
+                        filter=qdrant_models.Filter(
+                            must=[
+                                qdrant_models.FieldCondition(
+                                    key="conversation_id",
+                                    match=qdrant_models.MatchValue(value=cid),
+                                )
+                            ]
+                        )
+                    ),
+                )
+        except Exception as e:
+            logger.warning("Failed to delete Qdrant embeddings during bulk delete: %s", e)
+        return len(conv_ids)
 
     async def add_message(
         self,

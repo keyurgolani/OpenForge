@@ -45,7 +45,7 @@ export default function NotePreview({ knowledge, workspaceId, onClose }: NotePre
                 </>
             }
             leftRail={<KnowledgeMetadata knowledge={knowledge} />}
-            siderail={<KnowledgeIntelligence knowledge={knowledge} workspaceId={workspaceId} />}
+            siderail={(onCollapse) => <KnowledgeIntelligence knowledge={knowledge} workspaceId={workspaceId} onCollapse={onCollapse} />}
         >
             <div className="space-y-5">
                 {/* Rendered markdown */}

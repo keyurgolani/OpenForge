@@ -73,7 +73,7 @@ export default function FleetingPreview({ knowledge, workspaceId, onClose }: Fle
                 </>
             }
             leftRail={<KnowledgeMetadata knowledge={knowledge} />}
-            siderail={<KnowledgeIntelligence knowledge={knowledge} workspaceId={workspaceId} />}
+            siderail={(onCollapse) => <KnowledgeIntelligence knowledge={knowledge} workspaceId={workspaceId} onCollapse={onCollapse} />}
         >
             <div className="space-y-4">
                 {/* Always-editable textarea */}

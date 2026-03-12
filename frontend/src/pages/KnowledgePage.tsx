@@ -133,10 +133,14 @@ export default function KnowledgePage() {
     // Initialize state from fetched record (once)
     useEffect(() => {
         if (knowledgeRecord && !initialized) {
-            setTitle(knowledgeRecord.title ?? '')
-            setContent(knowledgeRecord.content ?? '')
-            setGistCode(knowledgeRecord.content ?? '')
-            setGistLang(knowledgeRecord.gist_language ?? 'typescript')
+            const initTitle = knowledgeRecord.title ?? ''
+            const initContent = knowledgeRecord.content ?? ''
+            const initGistLang = knowledgeRecord.gist_language ?? 'typescript'
+            setTitle(initTitle)
+            setContent(initContent)
+            setGistCode(initContent)
+            setGistLang(initGistLang)
+            saveRef.current = { content: initContent, title: initTitle, gistCode: initContent, gistLang: initGistLang }
             setInitialized(true)
         }
     }, [knowledgeRecord, initialized])

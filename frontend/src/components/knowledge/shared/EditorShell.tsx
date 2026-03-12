@@ -18,7 +18,7 @@ export default function EditorShell({ toolbar, siderail, children }: EditorShell
             {/* Content area */}
             <div className={cn('flex-1 min-h-0 overflow-hidden', siderail ? 'flex' : '')}>
                 {/* Main content — scrollable */}
-                <div className="flex-1 min-w-0 overflow-y-auto">
+                <div className="flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col">
                     {children}
                 </div>
 

@@ -19,9 +19,12 @@ router = APIRouter()
 async def list_conversations(
     workspace_id: UUID,
     include_archived: bool = False,
+    category: str = Query("chats", regex="^(chats|subagent|trash)$"),
     db: AsyncSession = Depends(get_db),
 ):
-    return await conversation_service.list_conversations(db, workspace_id, include_archived)
+    return await conversation_service.list_conversations(
+        db, workspace_id, include_archived=include_archived, category=category,
+    )
 
 
 @router.post("/{workspace_id}/conversations", response_model=ConversationResponse, status_code=201)
@@ -30,6 +33,38 @@ async def create_conversation(
 ):
     return await conversation_service.create_conversation(db, workspace_id, body)
 
+
+# ── Bulk routes (must be above {conversation_id} routes) ──────────────────────
+
+@router.post("/{workspace_id}/conversations/bulk/trash")
+async def bulk_trash_conversations(
+    workspace_id: UUID,
+    category: str = Query("chats", regex="^(chats|subagent)$"),
+    db: AsyncSession = Depends(get_db),
+):
+    count = await conversation_service.trash_all_conversations(db, workspace_id, category)
+    return {"trashed": count}
+
+
+@router.post("/{workspace_id}/conversations/bulk/restore")
+async def bulk_restore_conversations(
+    workspace_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    count = await conversation_service.restore_all_conversations(db, workspace_id)
+    return {"restored": count}
+
+
+@router.delete("/{workspace_id}/conversations/bulk/permanent", status_code=200)
+async def bulk_permanently_delete_conversations(
+    workspace_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    count = await conversation_service.permanently_delete_all_conversations(db, workspace_id)
+    return {"deleted": count}
+
+
+# ── Single-conversation routes ────────────────────────────────────────────────
 
 @router.get("/{workspace_id}/conversations/{conversation_id}", response_model=ConversationWithMessages)
 async def get_conversation(

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useWorkspaceWebSocket } from './useWorkspaceWebSocket'
 import { useQueryClient } from '@tanstack/react-query'
+import { getConversationStreamState, listExecutions } from '@/lib/api'
 
 interface Source {
     knowledge_id: string
@@ -82,6 +83,8 @@ interface StreamSnapshot {
     sources?: Source[]
     tool_calls?: ToolCall[]
     tool_results?: Record<string, ToolResult>
+    timeline?: TimelineEntry[]
+    status?: string
 }
 
 export interface Mention {
@@ -139,6 +142,9 @@ export function useStreamingChat(conversationId: string | null) {
         latestThinkingRef.current = ''
     }
 
+    // Track whether a resume has populated streaming state for this conversation
+    const resumePopulatedRef = useRef(false)
+
     // RAF drain loop — runs only while isStreaming is true.
     // Dynamic velocity: take ceil(queue.length / 15) chars per frame so the
     // buffer catches up quickly when bursting and slows to 1 char/frame when
@@ -165,6 +171,7 @@ export function useStreamingChat(conversationId: string | null) {
     }, [isStreaming])
 
     useEffect(() => {
+        resumePopulatedRef.current = false
         resetStreamState()
     }, [conversationId])
 
@@ -176,29 +183,39 @@ export function useStreamingChat(conversationId: string | null) {
                 const m = msg as { conversation_id: string; data?: StreamSnapshot }
                 if (m.conversation_id !== conversationId) return
                 const snapshot = m.data ?? {}
-                // Reconstruct timeline from snapshot (legacy format)
-                const reconstructed: TimelineEntry[] = []
-                const thinking = snapshot.thinking ?? ''
-                if (thinking) {
-                    reconstructed.push({ type: 'thinking', content: thinking })
-                    latestThinkingRef.current = thinking
-                }
-                const toolCalls = Array.isArray(snapshot.tool_calls) ? snapshot.tool_calls : []
-                const toolResults = (snapshot.tool_results && typeof snapshot.tool_results === 'object')
-                    ? snapshot.tool_results : {}
-                for (const tc of toolCalls) {
-                    const result = toolResults[tc.call_id]
-                    reconstructed.push({
-                        type: 'tool_call',
-                        call_id: tc.call_id,
-                        tool_name: tc.tool_name,
-                        arguments: tc.arguments,
-                        ...(result ? { success: result.success, output: result.output, error: result.error } : {}),
-                    })
+
+                // Mark as populated so the polling loop stops
+                resumePopulatedRef.current = true
+
+                // Use full timeline if available, otherwise reconstruct from legacy fields
+                let reconstructed: TimelineEntry[]
+                if (Array.isArray(snapshot.timeline) && snapshot.timeline.length > 0) {
+                    reconstructed = snapshot.timeline
+                    const lastThinking = [...snapshot.timeline].reverse().find(e => e.type === 'thinking')
+                    if (lastThinking) latestThinkingRef.current = (lastThinking as TimelineThinking).content
+                } else {
+                    reconstructed = []
+                    const thinking = snapshot.thinking ?? ''
+                    if (thinking) {
+                        reconstructed.push({ type: 'thinking', content: thinking })
+                        latestThinkingRef.current = thinking
+                    }
+                    const toolCalls = Array.isArray(snapshot.tool_calls) ? snapshot.tool_calls : []
+                    const toolResults = (snapshot.tool_results && typeof snapshot.tool_results === 'object')
+                        ? snapshot.tool_results : {}
+                    for (const tc of toolCalls) {
+                        const result = toolResults[tc.call_id]
+                        reconstructed.push({
+                            type: 'tool_call',
+                            call_id: tc.call_id,
+                            tool_name: tc.tool_name,
+                            arguments: tc.arguments,
+                            ...(result ? { success: result.success, output: result.output, error: result.error } : {}),
+                        })
+                    }
                 }
                 setTimeline(reconstructed)
                 timelineRef.current = reconstructed
-                // Bypass jitter buffer for snapshot — we have the full content already
                 const content = snapshot.content ?? ''
                 tokenQueueRef.current = ''
                 displayedContentRef.current = content
@@ -206,6 +223,7 @@ export function useStreamingChat(conversationId: string | null) {
                 setAttachmentsProcessed(Array.isArray(snapshot.attachments_processed) ? snapshot.attachments_processed : [])
                 setSources(Array.isArray(snapshot.sources) ? snapshot.sources : [])
                 setIsStreaming(true)
+                setIsInterrupted(false)
                 setLastError(null)
             }),
             on('chat_attachments_processed', (msg) => {
@@ -217,6 +235,8 @@ export function useStreamingChat(conversationId: string | null) {
             on('chat_token', (msg) => {
                 const m = msg as { conversation_id: string; data: string }
                 if (m.conversation_id !== conversationId) return
+                // Live event arrived — stop resume polling
+                resumePopulatedRef.current = true
                 // Push to jitter-buffer queue; the RAF loop drains it smoothly
                 tokenQueueRef.current += m.data
                 // Mark the last thinking entry as done and record duration
@@ -398,10 +418,126 @@ export function useStreamingChat(conversationId: string | null) {
         return () => unsubs.forEach(u => u())
     }, [conversationId, on, queryClient, workspaceId])
 
+    // Helper: apply a stream state snapshot (from REST or WS) to local state
+    const applySnapshot = useCallback((state: {
+        content?: string; thinking?: string; timeline?: TimelineEntry[];
+        attachments_processed?: AttachmentProcessed[]; sources?: Source[];
+    }) => {
+        resumePopulatedRef.current = true
+        let reconstructed: TimelineEntry[] = []
+        if (Array.isArray(state.timeline) && state.timeline.length > 0) {
+            reconstructed = state.timeline
+            const lastThinking = [...state.timeline].reverse().find((e: TimelineEntry) => e.type === 'thinking')
+            if (lastThinking) latestThinkingRef.current = (lastThinking as TimelineThinking).content
+        } else {
+            const thinking = state.thinking ?? ''
+            if (thinking) {
+                reconstructed.push({ type: 'thinking', content: thinking })
+                latestThinkingRef.current = thinking
+            }
+        }
+        setTimeline(reconstructed)
+        timelineRef.current = reconstructed
+        const content = state.content ?? ''
+        tokenQueueRef.current = ''
+        displayedContentRef.current = content
+        setStreamingContent(content)
+        setAttachmentsProcessed(Array.isArray(state.attachments_processed) ? state.attachments_processed : [])
+        setSources(Array.isArray(state.sources) ? state.sources : [])
+        setIsStreaming(true)
+        setIsInterrupted(false)
+        setLastError(null)
+    }, [])
+
+    // Unified stream resume: polls for active execution on mount and retries
+    // until streaming state is populated or no active execution is found.
+    // Combines REST snapshot retrieval with WS resume to be resilient to timing.
+    useEffect(() => {
+        if (!conversationId || !workspaceId) return
+
+        let cancelled = false
+        let pollTimer: ReturnType<typeof setTimeout> | null = null
+        let attempt = 0
+        const MAX_ATTEMPTS = 6
+
+        const tryResume = async () => {
+            if (cancelled || resumePopulatedRef.current) return
+            attempt++
+
+            // 1. Try the dedicated stream-state REST endpoint (most reliable)
+            try {
+                const state = await getConversationStreamState(workspaceId, conversationId)
+                if (cancelled || resumePopulatedRef.current) return
+                if (state?.active) {
+                    if (state.content || state.thinking || (Array.isArray(state.timeline) && state.timeline.length > 0)) {
+                        applySnapshot(state)
+                    } else {
+                        setIsStreaming(true)
+                        setLastError(null)
+                    }
+                    // Also send WS resume to start receiving live events
+                    if (isConnected) {
+                        send({ type: 'chat_stream_resume', conversation_id: conversationId })
+                    }
+                    if (resumePopulatedRef.current) return
+                    // State was minimal — retry to get richer snapshot
+                    if (attempt < MAX_ATTEMPTS) {
+                        pollTimer = setTimeout(tryResume, 2000)
+                    }
+                    return
+                }
+            } catch {
+                // Endpoint may not exist — fall through
+            }
+
+            // 2. Fallback: check running/paused_hitl executions via list API
+            try {
+                const execs = await listExecutions(workspaceId)
+                if (cancelled || resumePopulatedRef.current) return
+                const match = Array.isArray(execs)
+                    ? execs.find((e: { conversation_id: string; status: string }) =>
+                        e.conversation_id === conversationId &&
+                        (e.status === 'running' || e.status === 'paused_hitl'))
+                    : null
+                if (match) {
+                    setIsStreaming(true)
+                    setLastError(null)
+                    if (isConnected) {
+                        send({ type: 'chat_stream_resume', conversation_id: conversationId })
+                    }
+                    if (attempt < MAX_ATTEMPTS) {
+                        pollTimer = setTimeout(tryResume, 2000)
+                    }
+                    return
+                }
+            } catch {
+                // non-critical
+            }
+
+            // No active execution found — retry a few times in case of timing
+            if (attempt < 3) {
+                pollTimer = setTimeout(tryResume, 1500)
+            }
+        }
+
+        // Invalidate cached queries so conversation data re-fetches
+        queryClient.invalidateQueries({ queryKey: ['conversation', conversationId] })
+        queryClient.invalidateQueries({ queryKey: ['conversations', workspaceId] })
+
+        // Start resume attempt immediately
+        tryResume()
+
+        return () => {
+            cancelled = true
+            if (pollTimer) clearTimeout(pollTimer)
+        }
+    }, [conversationId, workspaceId, queryClient, applySnapshot, isConnected, send])
+
+    // When WS reconnects, send a resume to re-register for live events
     useEffect(() => {
         if (!conversationId || !isConnected) return
         send({ type: 'chat_stream_resume', conversation_id: conversationId })
-    }, [conversationId, isConnected, send])
+    }, [isConnected, conversationId, send])
 
     const sendMessage = useCallback((content: string, options?: SendMessageOptions, conversationOverride?: string) => {
         const targetConversationId = conversationOverride ?? conversationId
@@ -411,6 +547,7 @@ export function useStreamingChat(conversationId: string | null) {
             return false
         }
         resetStreamState(false)
+        resumePopulatedRef.current = true  // fresh stream, no resume needed
         setIsStreaming(true)
         setSources([])
         const payload: Record<string, unknown> = { type: 'chat_message', conversation_id: targetConversationId, content }

@@ -1,6 +1,6 @@
 import { Bookmark, ExternalLink, Globe } from 'lucide-react'
 import type { KnowledgeListItem } from './types'
-import { TagRow, PinIndicator, formatTimestamp, mdPreview, ProcessingSkeleton } from './shared'
+import { TagRow, PinIndicator, formatTimestamp, ProcessingSkeleton } from './shared'
 
 function extractDomain(url: string | null): string | null {
     if (!url) return null
@@ -44,42 +44,49 @@ export function BookmarkCard({ item, slim, isProcessing }: { item: KnowledgeList
                 <PinIndicator isPinned={item.is_pinned} />
             </div>
 
-            {/* Title */}
-            <h3 className={`font-semibold text-[15px] leading-snug line-clamp-2 ${displayTitle ? 'text-foreground' : 'text-muted-foreground/60 italic'}`}>
-                {displayTitle ?? 'Untitled Bookmark'}
-            </h3>
-
-            {/* URL link */}
-            {item.url && (
-                <a
-                    href={item.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={e => e.stopPropagation()}
-                    className="group/link flex items-center gap-2 text-[11px] text-purple-300/70 hover:text-purple-300 transition-colors truncate"
-                >
-                    {favicon ? (
+            {/* Thumbnail area — favicon hero or icon placeholder (matches image/pdf/doc layout) */}
+            <div className="flex items-center justify-center rounded-lg border border-border/30 bg-purple-500/5 py-5 relative">
+                {favicon ? (
+                    <>
                         <img
                             src={favicon}
                             alt=""
-                            className="w-3.5 h-3.5 rounded-sm shrink-0"
+                            className="w-8 h-8 rounded-md"
                             onError={e => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden') }}
                         />
-                    ) : null}
-                    <Globe className={`w-3 h-3 shrink-0 ${favicon ? 'hidden' : ''}`} />
-                    <span className="truncate">{item.url}</span>
-                    <ExternalLink className="w-3 h-3 shrink-0 opacity-0 group-hover/link:opacity-100 transition-opacity" />
-                </a>
-            )}
+                        <Bookmark className="w-8 h-8 text-purple-400 opacity-40 hidden" />
+                    </>
+                ) : (
+                    <Bookmark className="w-8 h-8 text-purple-400 opacity-40" />
+                )}
+                {/* URL overlay */}
+                {item.url && (
+                    <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        className="absolute bottom-1.5 right-1.5 flex items-center gap-1 text-[9px] text-purple-300/60 hover:text-purple-300 transition-colors bg-black/30 rounded-md px-1.5 py-0.5 backdrop-blur-sm"
+                    >
+                        <Globe className="w-2.5 h-2.5 shrink-0" />
+                        <span className="truncate max-w-[120px]">{domain}</span>
+                        <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-60" />
+                    </a>
+                )}
+            </div>
 
-            {/* Content preview — rendered markdown or processing skeleton */}
+            {/* Title */}
+            <h3 className={`font-semibold text-[14px] leading-snug line-clamp-2 ${displayTitle ? 'text-foreground' : 'text-muted-foreground/60 italic'}`}>
+                {displayTitle ?? 'Untitled Bookmark'}
+            </h3>
+
+            {/* Content preview */}
             {isProcessing && !item.content_preview ? (
-                <ProcessingSkeleton lines={3} />
+                <ProcessingSkeleton lines={2} />
             ) : item.content_preview ? (
-                <div
-                    className="text-[13px] text-foreground/70 line-clamp-4 leading-relaxed prose prose-invert prose-p:my-0 prose-headings:my-0 prose-headings:text-[13px] prose-headings:font-medium prose-li:my-0 prose-ul:my-0 max-w-none"
-                    dangerouslySetInnerHTML={{ __html: mdPreview.render(item.content_preview) }}
-                />
+                <p className="text-[11px] text-foreground/55 line-clamp-2 leading-relaxed">
+                    {item.content_preview}
+                </p>
             ) : null}
 
             {!slim && (

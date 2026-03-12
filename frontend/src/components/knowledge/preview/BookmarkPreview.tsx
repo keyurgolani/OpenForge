@@ -82,7 +82,7 @@ export default function BookmarkPreview({ knowledge, workspaceId, onClose }: Boo
                 </>
             }
             leftRail={<KnowledgeMetadata knowledge={knowledge} />}
-            siderail={<KnowledgeIntelligence knowledge={knowledge} workspaceId={workspaceId} />}
+            siderail={(onCollapse) => <KnowledgeIntelligence knowledge={knowledge} workspaceId={workspaceId} onCollapse={onCollapse} />}
         >
             <div className="space-y-5">
                 {/* URL banner */}

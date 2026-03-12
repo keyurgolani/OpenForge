@@ -68,7 +68,7 @@ export default function AudioPreview({ knowledge, workspaceId, onClose }: AudioP
                 </>
             }
             leftRail={<KnowledgeMetadata knowledge={knowledge} />}
-            siderail={<KnowledgeIntelligence knowledge={knowledge} workspaceId={workspaceId} />}
+            siderail={(onCollapse) => <KnowledgeIntelligence knowledge={knowledge} workspaceId={workspaceId} onCollapse={onCollapse} />}
         >
             <div className="space-y-5">
                 {/* Audio player */}

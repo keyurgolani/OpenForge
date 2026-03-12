@@ -218,6 +218,7 @@ class AgentExecutionEngine:
         tool_calls: list | None = None,
         sources: list | None = None,
         attachments_processed: list | None = None,
+        timeline: list | None = None,
     ) -> None:
         """Write current stream state to Redis hash for reconnection support."""
         if not await self._should_use_redis():
@@ -231,6 +232,7 @@ class AgentExecutionEngine:
                 "tool_calls": json.dumps(tool_calls or [], default=str),
                 "sources": json.dumps(sources or [], default=str),
                 "attachments_processed": json.dumps(attachments_processed or [], default=str),
+                "timeline": json.dumps(timeline or [], default=str),
             }
             await redis.hset(f"stream_state:{execution_id}", mapping=mapping)
             await redis.expire(f"stream_state:{execution_id}", 3600)
@@ -304,6 +306,8 @@ class AgentExecutionEngine:
                                     "attachments_processed": json.loads(
                                         state.get("attachments_processed", "[]")
                                     ),
+                                    "timeline": json.loads(state.get("timeline", "[]")),
+                                    "status": exec_record.status,
                                 },
                             })
                             return
@@ -728,8 +732,20 @@ class AgentExecutionEngine:
             )
             return
 
-        # Update execution record to running
-        await self._update_execution_record(db, execution_id, status="running")
+        # Ensure execution record exists (inline mode skips _dispatch_celery_agent)
+        existing = await db.get(AgentExecution, UUID(execution_id))
+        if not existing:
+            db.add(AgentExecution(
+                id=UUID(execution_id),
+                workspace_id=workspace_id,
+                conversation_id=conversation_id,
+                agent_id=agent.id,
+                status="running",
+            ))
+            await db.commit()
+        else:
+            # Update execution record to running
+            await self._update_execution_record(db, execution_id, status="running")
 
         # 1. Save user message
         user_message = await conversation_service.add_message(
@@ -1080,19 +1096,15 @@ class AgentExecutionEngine:
                     all_tool_calls_made.append(call_record)
                     tool_calls_count += 1
 
-                    await self._publish(
-                        execution_id, workspace_id, "chat_tool_call",
-                        conversation_id=conversation_id,
-                        data=call_record,
-                    )
+                    # Update execution tracking (defer chat_tool_call publish
+                    # until after HITL check so HITL card appears first)
                     await self._update_stream_state(
                         execution_id,
                         content=full_response,
                         thinking=full_thinking,
                         tool_calls=all_tool_calls_made,
+                        timeline=timeline,
                     )
-
-                    # Update execution tracking
                     await self._update_execution_record(
                         db, execution_id,
                         tool_calls_count=tool_calls_count,
@@ -1115,7 +1127,12 @@ class AgentExecutionEngine:
                         )
 
                     if policy_decision == "blocked":
-                        # Tool is blocked — return error to agent
+                        # Tool is blocked — publish tool_call then result
+                        await self._publish(
+                            execution_id, workspace_id, "chat_tool_call",
+                            conversation_id=conversation_id,
+                            data=call_record,
+                        )
                         result = {
                             "success": False,
                             "error": f"Tool '{tool_id}' is blocked by administrator policy.",
@@ -1144,6 +1161,7 @@ class AgentExecutionEngine:
                         )
                         continue
 
+                    hitl_steering = ""
                     if tool_info and policy_decision == "hitl_required":
                         action_summary = (
                             f"Agent wants to execute '{tool_id}' with: "
@@ -1186,6 +1204,15 @@ class AgentExecutionEngine:
                             },
                         )
 
+                        # Persist timeline with HITL entry so reconnecting clients see it
+                        await self._update_stream_state(
+                            execution_id,
+                            content=full_response,
+                            thinking=full_thinking,
+                            tool_calls=all_tool_calls_made,
+                            timeline=timeline,
+                        )
+
                         # Update execution status to paused
                         await self._update_execution_record(
                             db, execution_id, status="paused_hitl"
@@ -1197,6 +1224,13 @@ class AgentExecutionEngine:
                         await self._update_execution_record(
                             db, execution_id, status="running"
                         )
+
+                        # Read resolution note for user steering
+                        async with AsyncSessionLocal() as hitl_db:
+                            from openforge.db.models import HITLRequest as HITLModel
+                            _hitl_row = await hitl_db.get(HITLModel, uuid.UUID(hitl_id))
+                            if _hitl_row and _hitl_row.resolution_note:
+                                hitl_steering = _hitl_row.resolution_note
 
                         # Update timeline entry with resolution
                         for i, entry in enumerate(timeline):
@@ -1216,10 +1250,22 @@ class AgentExecutionEngine:
                             },
                         )
 
+                        # Persist resolved timeline for reconnecting clients
+                        await self._update_stream_state(
+                            execution_id,
+                            content=full_response,
+                            thinking=full_thinking,
+                            tool_calls=all_tool_calls_made,
+                            timeline=timeline,
+                        )
+
                         if not hitl_approved:
+                            deny_msg = f"Tool '{tool_id}' was denied by user approval check."
+                            if hitl_steering:
+                                deny_msg += f"\n\nUser feedback: {hitl_steering}"
                             result = {
                                 "success": False,
-                                "error": f"Tool '{tool_id}' was denied by user approval check.",
+                                "error": deny_msg,
                             }
                             tool_results_for_messages.append({
                                 "tool_call_id": call_id,
@@ -1227,23 +1273,55 @@ class AgentExecutionEngine:
                             })
                             continue
 
+                    # Publish tool call to frontend (after HITL gate so
+                    # the HITL card appears before the tool call badge)
+                    # Add pending tool_call to timeline for reconnecting clients
+                    timeline.append({
+                        "type": "tool_call",
+                        "call_id": call_id,
+                        "tool_name": tool_id,
+                        "arguments": arguments,
+                    })
+                    await self._publish(
+                        execution_id, workspace_id, "chat_tool_call",
+                        conversation_id=conversation_id,
+                        data=call_record,
+                    )
+                    await self._update_stream_state(
+                        execution_id,
+                        content=full_response,
+                        thinking=full_thinking,
+                        tool_calls=all_tool_calls_made,
+                        timeline=timeline,
+                    )
+
                     # Execute via the appropriate backend (timed)
                     tool_started_at = datetime.now(timezone.utc)
                     call_start_perf = time.perf_counter()
 
                     if not tool_info:
-                        available = ", ".join(
-                            _fn_name_to_tool_id(k)
-                            for k in sorted(fn_name_to_tool_info.keys())
+                        # Unrecognised function name — forward to tool server
+                        # which can resolve aliases before failing.
+                        result = await tool_dispatcher.execute(
+                            tool_id=tool_id,
+                            params=arguments,
+                            workspace_id=str(workspace_id),
+                            execution_id=execution_id,
+                            conversation_id=str(conversation_id) if conversation_id else "",
                         )
-                        result = {
-                            "success": False,
-                            "error": (
-                                f"Tool '{tool_id}' is not available — it was not included "
-                                f"in the tool schema provided to you. Only call tools that "
-                                f"appear in your schema. Available tools: {available}"
-                            ),
-                        }
+                        if not result.get("success"):
+                            available = ", ".join(
+                                _fn_name_to_tool_id(k)
+                                for k in sorted(fn_name_to_tool_info.keys())
+                            )
+                            result = {
+                                "success": False,
+                                "error": (
+                                    f"Tool '{tool_id}' is not available. "
+                                    f"Do NOT retry this same tool name. "
+                                    f"Available tools: {available}"
+                                ),
+                            }
                     elif tool_info["type"] == "mcp":
                         from openforge.services.mcp_service import execute_mcp_tool
                         result = await execute_mcp_tool(
@@ -1263,6 +1341,14 @@ class AgentExecutionEngine:
                     call_duration_ms = int((time.perf_counter() - call_start_perf) * 1000)
                     tool_finished_at = datetime.now(timezone.utc)
 
+                    # Helper: find and update pending tool_call entry or append
+                    def _update_or_append_tool_timeline(entry: dict) -> None:
+                        for idx, t in enumerate(timeline):
+                            if t.get("type") == "tool_call" and t.get("call_id") == call_id:
+                                timeline[idx] = entry
+                                return
+                        timeline.append(entry)
+
                     # Special handling: agent.invoke → subagent_invocation
                     if tool_id == "agent.invoke" and result.get("success"):
                         subagent_out = result.get("output") or {}
@@ -1280,7 +1366,7 @@ class AgentExecutionEngine:
                             "subagent_timeline": subagent_timeline,
                             "subagent_conversation_id": subagent_conv_id,
                         }
-                        timeline.append(invocation_entry)
+                        _update_or_append_tool_timeline(invocation_entry)
 
                         await self._publish(
                             execution_id, workspace_id, "chat_subagent_invocation",
@@ -1317,7 +1403,7 @@ class AgentExecutionEngine:
                     _output = result.get("output")
                     if isinstance(_output, str) and len(_output) > 2000:
                         _output = _output[:2000] + "…"
-                    timeline.append({
+                    _update_or_append_tool_timeline({
                         "type": "tool_call",
                         "call_id": call_id,
                         "tool_name": tool_id,
@@ -1339,6 +1425,13 @@ class AgentExecutionEngine:
                         execution_id, workspace_id, "chat_tool_result",
                         conversation_id=conversation_id,
                         data=result_record,
+                    )
+                    await self._update_stream_state(
+                        execution_id,
+                        content=full_response,
+                        thinking=full_thinking,
+                        tool_calls=all_tool_calls_made,
+                        timeline=timeline,
                     )
 
                     asyncio.create_task(
@@ -1370,6 +1463,10 @@ class AgentExecutionEngine:
                             result_content += f"\n[Output truncated at {result.get('original_length')} chars]"
                     else:
                         result_content = f"Tool error: {result.get('error', 'Unknown error')}"
+
+                    # Inject HITL steering after tool result for approved requests
+                    if hitl_steering:
+                        result_content += f"\n\n[User guidance at approval time]: {hitl_steering}"
 
                     tool_results_for_messages.append({
                         "tool_call_id": call_id,
@@ -1564,7 +1661,7 @@ class AgentExecutionEngine:
         temp_conv = Conversation(
             workspace_id=workspace_id,
             title=f"[subagent] {instruction[:80]}",
-            is_archived=True,
+            is_subagent=True,
         )
         db.add(temp_conv)
         await db.commit()

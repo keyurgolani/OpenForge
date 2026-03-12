@@ -39,6 +39,36 @@ def _extract_meaningful(text: str) -> str:
     return '\n'.join(lines)
 
 
+def _parse_source(raw: str) -> tuple[str, list[str]]:
+    """
+    Normalize a source string into (owner/repo, [skill_names]).
+
+    Accepted formats:
+      - https://skills.sh/owner/repo/skill       → ("owner/repo", ["skill"])
+      - https://skills.sh/owner/repo              → ("owner/repo", [])
+      - https://github.com/owner/repo             → ("owner/repo", [])
+      - owner/repo/skill                          → ("owner/repo", ["skill"])
+      - owner/repo                                → ("owner/repo", [])
+    """
+    s = raw.strip().rstrip("/")
+
+    # Strip known URL prefixes
+    for prefix in ("https://skills.sh/", "http://skills.sh/",
+                   "https://github.com/", "http://github.com/"):
+        if s.lower().startswith(prefix):
+            s = s[len(prefix):]
+            break
+
+    parts = [p for p in s.split("/") if p]
+    if len(parts) >= 3:
+        # owner/repo/skill-name (possibly more segments, take first 3)
+        return f"{parts[0]}/{parts[1]}", [parts[2]]
+    if len(parts) == 2:
+        return f"{parts[0]}/{parts[1]}", []
+    # Fallback: return as-is
+    return raw.strip(), []
+
+
 class InstallSkillTool(BaseTool):
     @property
     def id(self): return "skills.install"
@@ -90,7 +120,13 @@ class InstallSkillTool(BaseTool):
         if not source:
             return ToolResult(success=False, error="source is required")
 
-        skill_names: list[str] = params.get("skill_names") or []
+        skill_names: list[str] = list(params.get("skill_names") or [])
+
+        # Normalize source: handle skills.sh URLs, github URLs, and owner/repo/skill paths
+        source, extra_skills = _parse_source(source)
+        for s in extra_skills:
+            if s not in skill_names:
+                skill_names.append(s)
         settings = get_settings()
         skills_root = settings.skills_root
 

@@ -74,6 +74,19 @@ export function getWorkspaceIcon(iconName: string | null): React.ReactNode {
     return <IconComponent className="w-4 h-4" />
 }
 
+function WorkspaceFilterSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+    const { data: workspaces = [] } = useQuery({ queryKey: ['workspaces'], queryFn: listWorkspaces, staleTime: 60_000 })
+    const wsList = workspaces as { id: string; name: string; icon: string }[]
+    return (
+        <select className="input text-xs py-1.5 pr-7 w-auto" value={value} onChange={e => onChange(e.target.value)}>
+            <option value="">All workspaces</option>
+            {wsList.map(ws => (
+                <option key={ws.id} value={ws.id}>{ws.name}</option>
+            ))}
+        </select>
+    )
+}
+
 type SettingsTab = 'workspaces' | 'llm' | 'prompts' | 'jobs' | 'skills' | 'tools' | 'mcp' | 'hitl' | 'audit' | 'export'
 const SETTINGS_TABS: SettingsTab[] = ['workspaces', 'llm', 'prompts', 'jobs', 'skills', 'tools', 'mcp', 'hitl', 'audit', 'export']
 const toSettingsTab = (value: string | null): SettingsTab => {
@@ -4027,10 +4040,10 @@ function SkillsTab() {
                 <h4 className="text-sm font-medium flex items-center gap-2"><Plus className="w-3.5 h-3.5 text-accent" /> Install Skills</h4>
                 <div className="space-y-2">
                     <div>
-                        <label className="text-xs text-muted-foreground mb-1 block">GitHub source</label>
+                        <label className="text-xs text-muted-foreground mb-1 block">Source</label>
                         <input
                             className="input text-sm"
-                            placeholder="owner/repo  or  https://github.com/owner/repo"
+                            placeholder="owner/repo/skill  or  https://skills.sh/owner/repo/skill"
                             value={source}
                             onChange={e => setSource(e.target.value)}
                             onKeyDown={e => { if (e.key === 'Enter') void handleInstall() }}
@@ -4223,45 +4236,37 @@ function StatusIcon({ status }: { status: string }) {
 // ── HITL Dashboard Tab ────────────────────────────────────────────────────────
 interface HITLRequest {
     id: string
-    execution_id: string | null
     workspace_id: string
-    tool_call_id: string
-    tool_name: string
-    tool_arguments: Record<string, unknown>
+    conversation_id: string
+    tool_id: string
+    tool_input: Record<string, unknown>
+    action_summary: string
     risk_level: string
     status: string
     resolution_note: string | null
     created_at: string
     resolved_at: string | null
-    resolved_by: string | null
 }
 
 function HITLDashboardTab() {
     const qc = useQueryClient()
-    const [subTab, setSubTab] = useState<'pending' | 'history'>('pending')
+    const [filterWorkspace, setFilterWorkspace] = useState('')
 
     const { data: pendingData, isLoading: loadingPending } = useQuery({
-        queryKey: ['hitl-pending'],
-        queryFn: listPendingHITL,
+        queryKey: ['hitl-pending', filterWorkspace],
+        queryFn: () => listPendingHITL({ workspace_id: filterWorkspace || undefined }),
         refetchInterval: 5_000,
     })
     const pending: HITLRequest[] = pendingData ?? []
 
-    const { data: historyData, isLoading: loadingHistory } = useQuery({
-        queryKey: ['hitl-history'],
-        queryFn: () => getHITLHistory({ limit: 100 }),
-        enabled: subTab === 'history',
-    })
-    const history: HITLRequest[] = historyData ?? []
-
-    const [actionNote, setActionNote] = useState('')
+    const [actionNotes, setActionNotes] = useState<Record<string, string>>({})
     const [acting, setActing] = useState<string | null>(null)
 
     const handleApprove = async (id: string) => {
         setActing(id)
         try {
-            await approveHITL(id, actionNote || undefined)
-            setActionNote('')
+            await approveHITL(id, actionNotes[id] || undefined)
+            setActionNotes(prev => { const n = { ...prev }; delete n[id]; return n })
             qc.invalidateQueries({ queryKey: ['hitl-pending'] })
             qc.invalidateQueries({ queryKey: ['hitl-history'] })
         } finally {
@@ -4272,8 +4277,8 @@ function HITLDashboardTab() {
     const handleDeny = async (id: string) => {
         setActing(id)
         try {
-            await denyHITL(id, actionNote || undefined)
-            setActionNote('')
+            await denyHITL(id, actionNotes[id] || undefined)
+            setActionNotes(prev => { const n = { ...prev }; delete n[id]; return n })
             qc.invalidateQueries({ queryKey: ['hitl-pending'] })
             qc.invalidateQueries({ queryKey: ['hitl-history'] })
         } finally {
@@ -4283,83 +4288,71 @@ function HITLDashboardTab() {
 
     return (
         <div className="space-y-5">
-            <div>
-                <h3 className="font-semibold text-sm">Human-in-the-Loop</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                    Review and approve or deny tool calls that require human oversight. Configure per-tool permissions in the Native Tools tab.
-                </p>
+            <div className="flex items-start justify-between gap-3">
+                <div>
+                    <h3 className="font-semibold text-sm">Human-in-the-Loop</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                        Review and approve or deny tool calls that require human oversight. Configure per-tool permissions in the Native Tools tab. History of resolved requests is in the Audit tab.
+                    </p>
+                </div>
+                <WorkspaceFilterSelect value={filterWorkspace} onChange={setFilterWorkspace} />
             </div>
 
-            {/* Sub-tab selector */}
-            <div className="flex gap-1 p-1 glass-card rounded-xl w-fit">
-                {(['pending', 'history'] as const).map(tab => (
-                    <button
-                        key={tab}
-                        onClick={() => setSubTab(tab)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors capitalize ${
-                            subTab === tab
-                                ? 'bg-accent/20 text-accent ring-1 ring-accent/30'
-                                : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
-                        }`}
-                    >
-                        {tab === 'pending' && <ShieldAlert className="w-3.5 h-3.5" />}
-                        {tab === 'history' && <History className="w-3.5 h-3.5" />}
-                        {tab}
-                        {tab === 'pending' && pending.length > 0 && (
-                            <span className="ml-1 text-[10px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full font-semibold">
-                                {pending.length}
-                            </span>
-                        )}
-                    </button>
-                ))}
-            </div>
+            <div className="space-y-3">
+                {loadingPending && (
+                    <div className="flex items-center justify-center py-16">
+                        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                    </div>
+                )}
 
-            {subTab === 'pending' && (
-                <div className="space-y-3">
-                    {loadingPending && (
-                        <div className="flex items-center justify-center py-16">
-                            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                        </div>
-                    )}
+                {!loadingPending && pending.length === 0 && (
+                    <div className="text-center py-16 text-muted-foreground glass-card rounded-xl">
+                        <CheckCircle className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                        <p className="text-sm">No pending approvals.</p>
+                        <p className="text-xs mt-1 opacity-60">Tool calls requiring review will appear here.</p>
+                    </div>
+                )}
 
-                    {!loadingPending && pending.length === 0 && (
-                        <div className="text-center py-16 text-muted-foreground glass-card rounded-xl">
-                            <CheckCircle className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                            <p className="text-sm">No pending approvals.</p>
-                            <p className="text-xs mt-1 opacity-60">Tool calls requiring review will appear here.</p>
-                        </div>
-                    )}
-
-                    {pending.map(req => (
-                        <div key={req.id} className="glass-card rounded-xl p-4 space-y-3 border-amber-500/20">
-                            <div className="flex items-start justify-between gap-3">
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="font-medium text-sm">{req.tool_name}</span>
-                                        <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${RISK_STYLES[req.risk_level] ?? RISK_STYLES.medium}`}>
-                                            {req.risk_level}
-                                        </span>
-                                    </div>
-                                    <p className="text-[10px] text-muted-foreground/60 mt-1">
-                                        {new Date(req.created_at).toLocaleString()}
-                                        {req.execution_id && <span className="ml-2">Execution: {req.execution_id.slice(0, 8)}…</span>}
-                                    </p>
+                {pending.map(req => (
+                    <div key={req.id} className="glass-card rounded-xl p-4 space-y-3 border border-amber-500/20">
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-mono font-medium text-sm">{req.tool_id}</span>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${RISK_STYLES[req.risk_level] ?? RISK_STYLES.medium}`}>
+                                        {req.risk_level}
+                                    </span>
                                 </div>
+                                {req.action_summary && (
+                                    <p className="text-xs text-muted-foreground mt-1">{req.action_summary}</p>
+                                )}
+                                <p className="text-[10px] text-muted-foreground/60 mt-1">
+                                    {new Date(req.created_at).toLocaleString()}
+                                    <span className="ml-2">Conversation: {req.conversation_id.slice(0, 8)}…</span>
+                                </p>
                             </div>
+                        </div>
 
-                            {/* Arguments preview */}
-                            <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[10px] text-foreground/60 bg-muted/30 rounded-lg p-3 border border-border/40 max-h-40">
-                                {JSON.stringify(req.tool_arguments, null, 2)}
-                            </pre>
+                        {/* Input parameters */}
+                        {req.tool_input && Object.keys(req.tool_input).length > 0 && (
+                            <div>
+                                <p className="text-[10px] text-muted-foreground/70 font-medium mb-1 uppercase tracking-wide">Input Parameters</p>
+                                <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[10px] text-foreground/60 bg-muted/30 rounded-lg p-3 border border-border/40 max-h-48 overflow-y-auto">
+                                    {JSON.stringify(req.tool_input, null, 2)}
+                                </pre>
+                            </div>
+                        )}
 
-                            {/* Action row */}
-                            <div className="flex items-center gap-2">
-                                <input
-                                    className="input text-xs flex-1"
-                                    placeholder="Optional note…"
-                                    value={acting === req.id ? actionNote : ''}
-                                    onChange={e => { setActing(req.id); setActionNote(e.target.value) }}
-                                />
+                        {/* Action row */}
+                        <div className="space-y-2">
+                            <textarea
+                                className="w-full rounded-lg border border-border/50 bg-background/30 px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 resize-none focus:outline-none focus:ring-1 focus:ring-accent/40"
+                                placeholder="Optional: add guidance for the agent..."
+                                rows={2}
+                                value={actionNotes[req.id] ?? ''}
+                                onChange={e => setActionNotes(prev => ({ ...prev, [req.id]: e.target.value }))}
+                            />
+                            <div className="flex gap-2">
                                 <button
                                     className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 hover:bg-emerald-500/25 transition-colors disabled:opacity-50"
                                     onClick={() => void handleApprove(req.id)}
@@ -4378,64 +4371,15 @@ function HITLDashboardTab() {
                                 </button>
                             </div>
                         </div>
-                    ))}
-                </div>
-            )}
-
-            {subTab === 'history' && (
-                <div className="space-y-3">
-                    {loadingHistory && (
-                        <div className="flex items-center justify-center py-16">
-                            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                        </div>
-                    )}
-
-                    {!loadingHistory && history.length === 0 && (
-                        <div className="text-center py-16 text-muted-foreground glass-card rounded-xl">
-                            <History className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                            <p className="text-sm">No HITL history yet.</p>
-                        </div>
-                    )}
-
-                    {history.map(req => (
-                        <div key={req.id} className="glass-card rounded-xl px-4 py-3 flex items-center gap-3">
-                            {req.status === 'approved' && <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />}
-                            {req.status === 'denied' && <XCircle className="w-4 h-4 text-red-400 flex-shrink-0" />}
-                            {req.status !== 'approved' && req.status !== 'denied' && <Circle className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-sm font-medium">{req.tool_name}</span>
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${
-                                        req.status === 'approved'
-                                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                            : req.status === 'denied'
-                                                ? 'bg-red-500/10 text-red-400 border-red-500/20'
-                                                : 'bg-muted/30 text-muted-foreground border-border/40'
-                                    }`}>
-                                        {req.status}
-                                    </span>
-                                </div>
-                                <div className="flex items-center gap-3 mt-0.5">
-                                    <span className="text-[10px] text-muted-foreground/60">
-                                        {new Date(req.created_at).toLocaleString()}
-                                    </span>
-                                    {req.resolution_note && (
-                                        <span className="text-[10px] text-muted-foreground/50 truncate">
-                                            {req.resolution_note}
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
+                    </div>
+                ))}
+            </div>
         </div>
     )
 }
 
 function AuditTab() {
-    const [subTab, setSubTab] = useState<'history' | 'tool-calls' | 'logs'>('history')
+    const [subTab, setSubTab] = useState<'history' | 'tool-calls' | 'hitl' | 'logs'>('history')
 
     return (
         <div className={subTab === 'logs' ? 'h-full min-h-0 flex flex-col gap-6' : 'space-y-6'}>
@@ -4459,6 +4403,15 @@ function AuditTab() {
                     <Wrench className="w-4 h-4" /> Tool Calls
                 </button>
                 <button
+                    onClick={() => setSubTab('hitl')}
+                    className={`flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-300 whitespace-nowrap ${subTab === 'hitl'
+                        ? 'bg-accent/20 text-accent ring-1 ring-accent/30'
+                        : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
+                        }`}
+                >
+                    <ShieldAlert className="w-4 h-4" /> HITL History
+                </button>
+                <button
                     onClick={() => setSubTab('logs')}
                     className={`flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-300 whitespace-nowrap ${subTab === 'logs'
                         ? 'bg-accent/20 text-accent ring-1 ring-accent/30'
@@ -4471,6 +4424,7 @@ function AuditTab() {
 
             {subTab === 'history' && <JobHistorySubTab />}
             {subTab === 'tool-calls' && <ToolCallLogsSubTab />}
+            {subTab === 'hitl' && <HITLHistorySubTab />}
             {subTab === 'logs' && (
                 <div className="min-h-0 flex-1">
                     <ContainerLogsSubTab />
@@ -4480,11 +4434,128 @@ function AuditTab() {
     )
 }
 
+function HITLHistorySubTab() {
+    const [filterWorkspace, setFilterWorkspace] = useState('')
+    const { data: historyData, isLoading } = useQuery({
+        queryKey: ['hitl-history', filterWorkspace],
+        queryFn: () => getHITLHistory({ workspace_id: filterWorkspace || undefined, limit: 200 }),
+    })
+    const history: HITLRequest[] = historyData ?? []
+    const [expandedId, setExpandedId] = useState<string | null>(null)
+
+    return (
+        <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+                <h3 className="font-semibold text-sm">Resolved HITL Requests</h3>
+                <WorkspaceFilterSelect value={filterWorkspace} onChange={setFilterWorkspace} />
+            </div>
+            {isLoading && (
+                <div className="flex items-center justify-center py-16">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+            )}
+
+            {!isLoading && history.length === 0 && (
+                <div className="text-center py-16 text-muted-foreground glass-card rounded-xl">
+                    <History className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                    <p className="text-sm">No HITL history yet.</p>
+                </div>
+            )}
+
+            {history.map(req => {
+                const isExpanded = expandedId === req.id
+                return (
+                    <div key={req.id} className="glass-card rounded-xl overflow-hidden">
+                        <button
+                            type="button"
+                            className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/20 transition-colors"
+                            onClick={() => setExpandedId(isExpanded ? null : req.id)}
+                        >
+                            {isExpanded
+                                ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                                : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />}
+                            {req.status === 'approved' && <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />}
+                            {req.status === 'denied' && <XCircle className="w-4 h-4 text-red-400 flex-shrink-0" />}
+                            {req.status !== 'approved' && req.status !== 'denied' && <Circle className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-sm font-mono font-medium">{req.tool_id}</span>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${RISK_STYLES[req.risk_level] ?? RISK_STYLES.medium}`}>
+                                        {req.risk_level}
+                                    </span>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${
+                                        req.status === 'approved'
+                                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                            : req.status === 'denied'
+                                                ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                                                : 'bg-muted/30 text-muted-foreground border-border/40'
+                                    }`}>
+                                        {req.status}
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-3 mt-0.5">
+                                    <span className="text-[10px] text-muted-foreground/60">
+                                        {new Date(req.created_at).toLocaleString()}
+                                    </span>
+                                    {req.resolved_at && (
+                                        <span className="text-[10px] text-muted-foreground/60">
+                                            Resolved: {new Date(req.resolved_at).toLocaleString()}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        </button>
+
+                        {isExpanded && (
+                            <div className="px-4 pb-4 pt-1 space-y-3 border-t border-border/40">
+                                {req.action_summary && (
+                                    <div>
+                                        <p className="text-[10px] text-muted-foreground/70 font-medium mb-1 uppercase tracking-wide">Action Summary</p>
+                                        <p className="text-xs text-foreground/80">{req.action_summary}</p>
+                                    </div>
+                                )}
+
+                                {req.tool_input && Object.keys(req.tool_input).length > 0 && (
+                                    <div>
+                                        <p className="text-[10px] text-muted-foreground/70 font-medium mb-1 uppercase tracking-wide">Input Parameters</p>
+                                        <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[10px] text-foreground/60 bg-muted/30 rounded-lg p-3 border border-border/40 max-h-48 overflow-y-auto">
+                                            {JSON.stringify(req.tool_input, null, 2)}
+                                        </pre>
+                                    </div>
+                                )}
+
+                                {req.resolution_note && (
+                                    <div>
+                                        <p className="text-[10px] text-muted-foreground/70 font-medium mb-1 uppercase tracking-wide">User Note</p>
+                                        <p className="text-xs text-foreground/70 bg-muted/20 rounded-lg px-3 py-2 border border-border/30">{req.resolution_note}</p>
+                                    </div>
+                                )}
+
+                                <div className="grid grid-cols-2 gap-3 text-[10px]">
+                                    <div>
+                                        <span className="text-muted-foreground/70 font-medium uppercase tracking-wide">Conversation</span>
+                                        <p className="font-mono text-foreground/60 mt-0.5">{req.conversation_id}</p>
+                                    </div>
+                                    <div>
+                                        <span className="text-muted-foreground/70 font-medium uppercase tracking-wide">Workspace</span>
+                                        <p className="font-mono text-foreground/60 mt-0.5">{req.workspace_id}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )
+            })}
+        </div>
+    )
+}
+
 function JobHistorySubTab() {
     const [filterType, setFilterType] = useState('')
+    const [filterWorkspace, setFilterWorkspace] = useState('')
     const { data: history = [], isLoading, refetch } = useQuery<TaskLogEntry[]>({
-        queryKey: ['task-history', filterType],
-        queryFn: () => getTaskHistory({ task_type: filterType || undefined, limit: 100 }),
+        queryKey: ['task-history', filterType, filterWorkspace],
+        queryFn: () => getTaskHistory({ task_type: filterType || undefined, workspace_id: filterWorkspace || undefined, limit: 100 }),
         refetchInterval: (query) => {
             const d = query.state.data as TaskLogEntry[] | undefined
             const active = d?.some(l => l.status === 'running')
@@ -4506,6 +4577,7 @@ function JobHistorySubTab() {
                     <h3 className="font-semibold text-sm">Background Task Executions</h3>
                 </div>
                 <div className="flex items-center gap-2">
+                    <WorkspaceFilterSelect value={filterWorkspace} onChange={setFilterWorkspace} />
                     <select
                         className="input text-xs py-1.5 pr-7 w-auto"
                         value={filterType}
@@ -4604,11 +4676,12 @@ interface ToolCallLogEntry {
 
 function ToolCallLogsSubTab() {
     const [filterTool, setFilterTool] = useState('')
+    const [filterWorkspace, setFilterWorkspace] = useState('')
     const [expanded, setExpanded] = useState<string | null>(null)
 
     const { data: logs = [], isLoading, refetch } = useQuery<ToolCallLogEntry[]>({
-        queryKey: ['tool-call-logs', filterTool],
-        queryFn: () => getToolCallLogs({ tool_name: filterTool || undefined, limit: 100 }),
+        queryKey: ['tool-call-logs', filterTool, filterWorkspace],
+        queryFn: () => getToolCallLogs({ tool_name: filterTool || undefined, workspace_id: filterWorkspace || undefined, limit: 100 }),
         refetchInterval: false,
     })
 
@@ -4625,6 +4698,7 @@ function ToolCallLogsSubTab() {
             <div className="flex items-center justify-between gap-3">
                 <h3 className="font-semibold text-sm">Agent Tool Call Executions</h3>
                 <div className="flex items-center gap-2">
+                    <WorkspaceFilterSelect value={filterWorkspace} onChange={setFilterWorkspace} />
                     <select
                         className="input text-xs py-1.5 pr-7 w-auto"
                         value={filterTool}

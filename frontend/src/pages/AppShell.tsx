@@ -1,14 +1,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Outlet, useNavigate, useParams, Link, useLocation } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { listWorkspaces, listKnowledge, listConversations, updateConversation, deleteConversation, permanentlyDeleteConversation, exportConversation, countPendingHITL } from '@/lib/api'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { listWorkspaces, listKnowledge, listConversations, updateConversation, deleteConversation, permanentlyDeleteConversation, exportConversation, countPendingHITL, listPendingHITL, approveHITL, denyHITL } from '@/lib/api'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import { useUIStore } from '@/stores/uiStore'
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
 import { getShortcutDisplay } from '@/lib/keyboard'
 import { onQuickKnowledgeOpen, type QuickKnowledgeType } from '@/lib/quick-knowledge'
 import CommandPalette from '@/components/shared/CommandPalette'
-import HITLFab from '@/components/shared/HITLFab'
 import CreateDispatcher from '@/components/knowledge/create/CreateDispatcher'
 import KnowledgeTypeGrid from '@/components/knowledge/KnowledgeTypeGrid'
 import { ModeToggle } from '@/components/mode-toggle'
@@ -16,11 +15,14 @@ import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator,
 } from '@/components/ui/context-menu'
+import { AnimatePresence, motion } from 'framer-motion'
+import { formatDistanceToNow } from 'date-fns'
 import MarkdownIt from 'markdown-it'
 import {
     Home, MessageSquare, Search, Settings, Plus, Folder,
     FileText, Pin, Archive, Bookmark, Code2, Zap, WifiOff,
-    PanelLeft, ChevronDown, ChevronLeft, ChevronRight, Brain, CheckSquare, Calendar, Star, Pencil, Trash2, Download, ShieldAlert,
+    PanelLeft, ChevronDown, ChevronLeft, ChevronRight, Brain, CheckSquare, Calendar, Star, Pencil, Trash2, Download,
+    ShieldAlert, ShieldCheck, ShieldX, Check, X, Clock, Loader2, ExternalLink,
 } from 'lucide-react'
 import { getWorkspaceIcon } from '@/pages/SettingsPage'
 
@@ -114,11 +116,6 @@ export default function AppShell() {
     const qc = useQueryClient()
 
     const { data: workspaces = [], isFetched: workspacesFetched } = useQuery({ queryKey: ['workspaces'], queryFn: listWorkspaces })
-    const { data: hitlCount = 0 } = useQuery({
-        queryKey: ['hitl-count'],
-        queryFn: async () => { const r = await countPendingHITL(); return r.pending ?? 0 },
-        refetchInterval: 5000,
-    })
     const { data: knowledgeData } = useQuery({
         queryKey: ['knowledge', workspaceId],
         queryFn: () => listKnowledge(workspaceId, { page_size: 200 }),
@@ -126,9 +123,64 @@ export default function AppShell() {
     })
     const { data: conversations = [] } = useQuery({
         queryKey: ['conversations', workspaceId],
-        queryFn: () => listConversations(workspaceId),
+        queryFn: () => listConversations(workspaceId, { category: 'chats' }),
         enabled: !!workspaceId,
     })
+
+    // ── HITL notification state ────────────────────────────────────────────────
+    const [hitlShadeOpen, setHitlShadeOpen] = useState(false)
+    const [hitlNotes, setHitlNotes] = useState<Record<string, string>>({})
+    const [hitlProcessing, setHitlProcessing] = useState<Set<string>>(new Set())
+    const hitlShadeRef = useRef<HTMLDivElement | null>(null)
+    const { data: hitlCountData } = useQuery({
+        queryKey: ['hitl-pending-count'],
+        queryFn: countPendingHITL,
+        refetchInterval: 5000,
+    })
+    const hitlPendingCount = hitlCountData?.pending ?? 0
+    const { data: hitlPendingRequests = [] } = useQuery<{ id: string; workspace_id: string; conversation_id: string; tool_id: string; tool_input: any; action_summary: string; risk_level: string; status: string; created_at: string }[]>({
+        queryKey: ['hitl-pending-list'],
+        queryFn: () => listPendingHITL(),
+        enabled: hitlShadeOpen,
+        refetchInterval: hitlShadeOpen ? 5000 : false,
+    })
+    const hitlApproveMutation = useMutation({
+        mutationFn: ({ id, note }: { id: string; note?: string }) => approveHITL(id, note),
+        onMutate: ({ id }) => setHitlProcessing(prev => new Set(prev).add(id)),
+        onSettled: (_d, _e, { id }) => {
+            setHitlProcessing(prev => { const n = new Set(prev); n.delete(id); return n })
+            setHitlNotes(prev => { const n = { ...prev }; delete n[id]; return n })
+            qc.invalidateQueries({ queryKey: ['hitl-pending-count'] })
+            qc.invalidateQueries({ queryKey: ['hitl-pending-list'] })
+            qc.invalidateQueries({ queryKey: ['hitl-pending'] })
+        },
+    })
+    const hitlDenyMutation = useMutation({
+        mutationFn: ({ id, note }: { id: string; note?: string }) => denyHITL(id, note),
+        onMutate: ({ id }) => setHitlProcessing(prev => new Set(prev).add(id)),
+        onSettled: (_d, _e, { id }) => {
+            setHitlProcessing(prev => { const n = new Set(prev); n.delete(id); return n })
+            setHitlNotes(prev => { const n = { ...prev }; delete n[id]; return n })
+            qc.invalidateQueries({ queryKey: ['hitl-pending-count'] })
+            qc.invalidateQueries({ queryKey: ['hitl-pending-list'] })
+            qc.invalidateQueries({ queryKey: ['hitl-pending'] })
+        },
+    })
+    // Auto-close shade when all requests are resolved
+    useEffect(() => {
+        if (hitlPendingCount === 0) setHitlShadeOpen(false)
+    }, [hitlPendingCount])
+    // Close shade on outside click
+    useEffect(() => {
+        if (!hitlShadeOpen) return
+        const handler = (e: MouseEvent) => {
+            if (hitlShadeRef.current && !hitlShadeRef.current.contains(e.target as Node)) setHitlShadeOpen(false)
+        }
+        const escHandler = (e: KeyboardEvent) => { if (e.key === 'Escape') setHitlShadeOpen(false) }
+        window.addEventListener('mousedown', handler)
+        window.addEventListener('keydown', escHandler)
+        return () => { window.removeEventListener('mousedown', handler); window.removeEventListener('keydown', escHandler) }
+    }, [hitlShadeOpen])
 
     const workspaceList = workspaces as { id: string; name: string; icon: string; color: string }[]
     const ws = workspaceList.find(w => w.id === workspaceId)
@@ -328,7 +380,6 @@ export default function AppShell() {
         try {
             await deleteConversation(workspaceId, conversationId)
             qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
-            qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'archived'] })
             if (location.pathname.includes(`/agent/${conversationId}`)) {
                 navigate(`/w/${workspaceId}/agent`)
             }
@@ -341,11 +392,9 @@ export default function AppShell() {
         if (!conversationToDelete) return
         setDeleteLoading(true)
         try {
-            // Soft-delete first (required before permanent delete)
             await deleteConversation(workspaceId, conversationToDelete.id)
             await permanentlyDeleteConversation(workspaceId, conversationToDelete.id)
             qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
-            qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'archived'] })
             if (location.pathname.includes(`/agent/${conversationToDelete.id}`)) {
                 navigate(`/w/${workspaceId}/agent`)
             }
@@ -393,7 +442,6 @@ export default function AppShell() {
     return (
         <div className="relative flex h-screen gap-3 overflow-hidden p-3">
             <CommandPalette />
-            <HITLFab />
             {/* Sidebar */}
             <aside className={`${sidebarOpen ? 'w-72' : 'w-14'} flex-shrink-0 transition-[width] duration-300 overflow-hidden flex flex-col glass-card`}>
                 {sidebarOpen ? (
@@ -455,7 +503,16 @@ export default function AppShell() {
                                                             setWorkspaceMenuOpen(false)
                                                             setWorkspaceQuery('')
                                                             if (workspace.id !== workspaceId) {
-                                                                navigate(`/w/${workspace.id}`)
+                                                                // Preserve the current sub-path when switching workspaces
+                                                                const prefix = `/w/${workspaceId}`
+                                                                const subPath = location.pathname.startsWith(prefix)
+                                                                    ? location.pathname.slice(prefix.length)
+                                                                    : ''
+                                                                // Drop knowledge-specific IDs and conversation IDs since they're workspace-specific
+                                                                const keepPath = subPath.startsWith('/agent/') ? '/agent'
+                                                                    : subPath.startsWith('/knowledge/') ? ''
+                                                                    : subPath
+                                                                navigate(`/w/${workspace.id}${keepPath}`)
                                                             }
                                                         }}
                                                     >
@@ -720,8 +777,6 @@ export default function AppShell() {
                         <span className="text-muted-foreground font-mono">{shortcutDisplay.commandPalette}</span>
                     </button>
 
-                    <ModeToggle />
-
                     <div className="relative group inline-flex h-8 shadow-sm rounded-md">
                         <button
                             className="bg-accent text-accent-foreground hover:bg-accent/90 px-3.5 py-1.5 rounded-l-md text-xs font-semibold flex items-center gap-1.5 border-r border-accent-foreground/20 transition-colors"
@@ -741,6 +796,125 @@ export default function AppShell() {
                             <KnowledgeTypeGrid onSelect={openQuickPanel} />
                         </div>
                     </div>
+
+                    {/* HITL notification — only visible when requests are pending */}
+                    <AnimatePresence>
+                    {hitlPendingCount > 0 && (
+                    <motion.div
+                        ref={hitlShadeRef}
+                        className="relative"
+                        initial={{ opacity: 0, scale: 0.6, x: 20 }}
+                        animate={{ opacity: 1, scale: 1, x: 0 }}
+                        exit={{ opacity: 0, scale: 0.6, x: 20 }}
+                        transition={{ type: 'spring', stiffness: 400, damping: 22, mass: 0.8 }}
+                    >
+                        <button
+                            type="button"
+                            onClick={() => setHitlShadeOpen(prev => !prev)}
+                            className="relative p-2 rounded-lg border transition-colors border-amber-400/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"
+                            aria-label={`${hitlPendingCount} pending HITL approvals`}
+                            title={`${hitlPendingCount} pending approval${hitlPendingCount > 1 ? 's' : ''}`}
+                        >
+                            <ShieldAlert className="w-4 h-4" />
+                            <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-red-500 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm">
+                                {hitlPendingCount > 99 ? '99+' : hitlPendingCount}
+                            </span>
+                        </button>
+
+                        {hitlShadeOpen && (
+                            <>
+                            <div className="fixed inset-0 z-[199] bg-black/40 backdrop-blur-sm" onClick={() => setHitlShadeOpen(false)} />
+                            <div className="absolute top-full right-0 mt-2 z-[200] w-[380px] max-h-[70vh] flex flex-col rounded-xl shadow-2xl border border-border/60 overflow-hidden bg-card">
+                                {/* Shade header */}
+                                <div className="flex items-center justify-between px-4 py-3 border-b border-border/40 flex-shrink-0">
+                                    <div className="flex items-center gap-2">
+                                        <ShieldAlert className="w-4 h-4 text-amber-400" />
+                                        <span className="text-sm font-semibold">Pending Approvals</span>
+                                    </div>
+                                    <button type="button" onClick={() => setHitlShadeOpen(false)} className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors">
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+
+                                {/* Shade body */}
+                                <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
+                                    {hitlPendingRequests.length === 0 ? (
+                                        <div className="flex flex-col items-center py-8 text-muted-foreground">
+                                            <ShieldCheck className="w-8 h-8 mb-2 opacity-40" />
+                                            <p className="text-xs">No pending requests</p>
+                                        </div>
+                                    ) : hitlPendingRequests.map((req) => {
+                                        const isProcessing = hitlProcessing.has(req.id)
+                                        let timeAgo: string
+                                        try { timeAgo = formatDistanceToNow(new Date(req.created_at), { addSuffix: true }) } catch { timeAgo = '' }
+                                        return (
+                                            <div key={req.id} className={`rounded-xl border border-border/40 bg-muted/50 p-3 space-y-2 transition-opacity ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="text-xs font-mono font-semibold text-foreground truncate">{req.tool_id}</p>
+                                                        <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">{req.action_summary}</p>
+                                                    </div>
+                                                    <span className={`flex-shrink-0 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded-md border ${
+                                                        req.risk_level === 'critical' || req.risk_level === 'high' ? 'bg-red-500/15 text-red-400 border-red-500/25' :
+                                                        req.risk_level === 'medium' ? 'bg-yellow-500/15 text-yellow-400 border-yellow-500/25' :
+                                                        'bg-emerald-500/15 text-emerald-400 border-emerald-500/25'
+                                                    }`}>{req.risk_level}</span>
+                                                </div>
+
+                                                {req.tool_input && Object.keys(req.tool_input).length > 0 && (
+                                                    <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[10px] text-muted-foreground bg-muted/20 rounded-lg p-2 border border-border/30 max-h-24 overflow-y-auto">
+                                                        {JSON.stringify(req.tool_input, null, 2)}
+                                                    </pre>
+                                                )}
+
+                                                <textarea
+                                                    value={hitlNotes[req.id] ?? ''}
+                                                    onChange={e => setHitlNotes(prev => ({ ...prev, [req.id]: e.target.value }))}
+                                                    placeholder="Optional guidance..."
+                                                    rows={1}
+                                                    className="w-full rounded-lg border border-border/40 bg-muted/15 px-2.5 py-1 text-[11px] text-foreground placeholder:text-muted-foreground/50 resize-none focus:outline-none focus:ring-1 focus:ring-accent/40"
+                                                />
+
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        {timeAgo && (
+                                                            <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                                                                <Clock className="w-3 h-3" />
+                                                                {timeAgo}
+                                                            </span>
+                                                        )}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => { setHitlShadeOpen(false); navigate(`/w/${req.workspace_id}/agent/${req.conversation_id}`) }}
+                                                            className="flex items-center gap-1 text-[10px] text-accent/70 hover:text-accent transition-colors"
+                                                        >
+                                                            <ExternalLink className="w-3 h-3" />
+                                                            View
+                                                        </button>
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 ml-auto">
+                                                        <button type="button" onClick={() => hitlDenyMutation.mutate({ id: req.id, note: hitlNotes[req.id] || undefined })} disabled={isProcessing}
+                                                            className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-colors disabled:opacity-50">
+                                                            <X className="w-3 h-3" /> Deny
+                                                        </button>
+                                                        <button type="button" onClick={() => hitlApproveMutation.mutate({ id: req.id, note: hitlNotes[req.id] || undefined })} disabled={isProcessing}
+                                                            className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors disabled:opacity-50">
+                                                            <Check className="w-3 h-3" /> Approve
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+                            </>
+                        )}
+                    </motion.div>
+                    )}
+                    </AnimatePresence>
+
+                    <ModeToggle />
                 </header>
 
                 <CreateDispatcher
@@ -894,22 +1068,7 @@ export default function AppShell() {
                 </div>
             </div>
 
-            {/* HITL Approval FAB */}
-            {(hitlCount as number) > 0 && (
-                <Link
-                    to={`/w/${workspaceId}/agent`}
-                    className="fixed bottom-6 right-6 z-[300] flex items-center gap-2.5 rounded-2xl border border-amber-400/50 bg-amber-500/15 px-4 py-2.5 text-amber-200 shadow-2xl backdrop-blur-sm transition-all hover:bg-amber-500/25 hover:border-amber-400/70"
-                    title="Pending tool approvals require your attention"
-                >
-                    <ShieldAlert className="h-4 w-4 flex-shrink-0" />
-                    <span className="text-sm font-medium">
-                        {hitlCount} Approval{(hitlCount as number) !== 1 ? 's' : ''} Pending
-                    </span>
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/30 text-[11px] font-bold text-amber-100">
-                        {hitlCount as number}
-                    </span>
-                </Link>
-            )}
+            {/* HITL FAB rendered globally in main.tsx */}
 
             <ConfirmModal
                 isOpen={deleteModalOpen}

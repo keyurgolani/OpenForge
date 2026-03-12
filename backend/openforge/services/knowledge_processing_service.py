@@ -575,23 +575,33 @@ class KnowledgeProcessingService:
             raise HTTPException(status_code=404, detail="Knowledge not found")
 
         content_changed = False
+        any_changed = False
         if data.title is not None:
-            knowledge_record.title = normalize_knowledge_title(data.title)
+            new_title = normalize_knowledge_title(data.title)
+            if new_title != knowledge_record.title:
+                knowledge_record.title = new_title
+                any_changed = True
         if data.content is not None and data.content != knowledge_record.content:
             knowledge_record.content = data.content
             knowledge_record.word_count = count_words(data.content, knowledge_type=knowledge_record.type)
             knowledge_record.embedding_status = "pending"
             content_changed = True
-        if data.url is not None:
+            any_changed = True
+        if data.url is not None and data.url != knowledge_record.url:
             knowledge_record.url = data.url
-        if data.gist_language is not None:
+            any_changed = True
+        if data.gist_language is not None and data.gist_language != knowledge_record.gist_language:
             knowledge_record.gist_language = data.gist_language
-        if data.is_pinned is not None:
+            any_changed = True
+        if data.is_pinned is not None and data.is_pinned != knowledge_record.is_pinned:
             knowledge_record.is_pinned = data.is_pinned
-        if data.is_archived is not None:
+            any_changed = True
+        if data.is_archived is not None and data.is_archived != knowledge_record.is_archived:
             knowledge_record.is_archived = data.is_archived
+            any_changed = True
 
-        knowledge_record.updated_at = datetime.now(timezone.utc)
+        if any_changed:
+            knowledge_record.updated_at = datetime.now(timezone.utc)
         await db.commit()
         await db.refresh(knowledge_record, ["tags"])
 

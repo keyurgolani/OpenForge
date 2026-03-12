@@ -41,6 +41,7 @@ function getRiskColor(level: string): string {
 export default function HITLFab() {
     const [modalOpen, setModalOpen] = useState(false)
     const [processingIds, setProcessingIds] = useState<Set<string>>(new Set())
+    const [notes, setNotes] = useState<Record<string, string>>({})
     const backdropRef = useRef<HTMLDivElement>(null)
     const queryClient = useQueryClient()
 
@@ -56,7 +57,7 @@ export default function HITLFab() {
     // Fetch full list only when modal is open
     const { data: pendingRequests = [] } = useQuery<HITLRequest[]>({
         queryKey: ['hitl-pending-list'],
-        queryFn: listPendingHITL,
+        queryFn: () => listPendingHITL(),
         enabled: modalOpen,
         refetchInterval: modalOpen ? 5000 : false,
     })
@@ -73,8 +74,10 @@ export default function HITLFab() {
                 next.delete(id)
                 return next
             })
+            setNotes(prev => { const n = { ...prev }; delete n[id]; return n })
             queryClient.invalidateQueries({ queryKey: ['hitl-pending-count'] })
             queryClient.invalidateQueries({ queryKey: ['hitl-pending-list'] })
+            queryClient.invalidateQueries({ queryKey: ['hitl-pending'] })
         },
     })
 
@@ -90,8 +93,10 @@ export default function HITLFab() {
                 next.delete(id)
                 return next
             })
+            setNotes(prev => { const n = { ...prev }; delete n[id]; return n })
             queryClient.invalidateQueries({ queryKey: ['hitl-pending-count'] })
             queryClient.invalidateQueries({ queryKey: ['hitl-pending-list'] })
+            queryClient.invalidateQueries({ queryKey: ['hitl-pending'] })
         },
     })
 
@@ -154,46 +159,45 @@ export default function HITLFab() {
 
     return (
         <>
-            {/* Floating Action Button */}
+            {/* Floating Action Button — right edge, vertically centered */}
             <button
                 type="button"
                 onClick={() => setModalOpen(true)}
-                className="fixed bottom-6 right-6 z-[9990] w-14 h-14 rounded-full
-                    bg-white/10 backdrop-blur-xl border border-white/20
+                className="fixed right-0 top-1/2 z-[9990]
+                    flex items-center gap-1.5 pl-2.5 pr-1.5 py-2
+                    rounded-l-xl
+                    bg-amber-500/15 backdrop-blur-xl border border-r-0 border-amber-400/40
                     shadow-lg shadow-black/20
-                    flex items-center justify-center
-                    hover:bg-white/15 hover:border-white/30 hover:scale-105
-                    active:scale-95
-                    transition-all duration-200 ease-out"
-                style={{
-                    animation: 'hitl-fab-enter 0.3s ease-out both',
-                }}
+                    hover:bg-amber-500/25 hover:border-amber-400/60 hover:pl-3.5
+                    active:scale-[0.97]
+                    transition-all duration-200 ease-out
+                    animate-hitl-fab-slide-in"
+                style={{ transform: 'translateY(-50%)' }}
                 aria-label={`${pendingCount} pending HITL approvals`}
             >
-                <Shield className="w-6 h-6 text-white/80" />
-
-                {/* Red badge */}
-                {pendingCount > 0 && (
-                    <span
-                        className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1.5
-                            bg-red-500 rounded-full
-                            flex items-center justify-center
-                            text-[11px] font-bold text-white
-                            shadow-md shadow-red-500/30"
-                        style={{
-                            animation: 'hitl-badge-pop 0.2s ease-out both 0.15s',
-                        }}
-                    >
-                        {pendingCount > 99 ? '99+' : pendingCount}
-                    </span>
-                )}
+                <Shield className="w-4 h-4 text-amber-300" />
+                <span
+                    className="min-w-[18px] h-[18px] px-1
+                        bg-red-500 rounded-full
+                        flex items-center justify-center
+                        text-[10px] font-bold text-white
+                        shadow-sm shadow-red-500/30"
+                    style={{
+                        animation: 'hitl-badge-pop 0.2s ease-out both 0.15s',
+                    }}
+                >
+                    {pendingCount > 99 ? '99+' : pendingCount}
+                </span>
             </button>
 
             {/* Inline keyframes */}
             <style>{`
-                @keyframes hitl-fab-enter {
-                    from { opacity: 0; transform: scale(0.7) translateY(20px); }
-                    to   { opacity: 1; transform: scale(1) translateY(0); }
+                @keyframes hitl-fab-slide-in {
+                    from { opacity: 0; translate: 100% 0; }
+                    to   { opacity: 1; translate: 0 0; }
+                }
+                .animate-hitl-fab-slide-in {
+                    animation: hitl-fab-slide-in 0.3s ease-out both;
                 }
                 @keyframes hitl-badge-pop {
                     from { opacity: 0; transform: scale(0.5); }
@@ -310,18 +314,18 @@ export default function HITLFab() {
                                             key={req.id}
                                             className={`
                                                 rounded-xl border border-white/5 bg-white/[0.03]
-                                                p-4 transition-opacity duration-200
+                                                p-4 space-y-3 transition-opacity duration-200
                                                 ${isProcessing ? 'opacity-50 pointer-events-none' : ''}
                                             `}
                                         >
                                             {/* Top row: tool name + risk badge */}
-                                            <div className="flex items-start justify-between gap-2 mb-2">
+                                            <div className="flex items-start justify-between gap-2">
                                                 <div className="min-w-0 flex-1">
-                                                    <p className="text-sm font-semibold text-white truncate">
+                                                    <p className="text-sm font-mono font-semibold text-white truncate">
                                                         {req.tool_id}
                                                     </p>
-                                                    <p className="text-xs text-neutral-500 truncate mt-0.5">
-                                                        Agent: {req.workspace_id}
+                                                    <p className="text-xs text-neutral-400 mt-0.5 line-clamp-2">
+                                                        {req.action_summary}
                                                     </p>
                                                 </div>
                                                 <span
@@ -332,10 +336,21 @@ export default function HITLFab() {
                                                 </span>
                                             </div>
 
-                                            {/* Action summary */}
-                                            <p className="text-xs text-neutral-300 leading-relaxed line-clamp-2 mb-3">
-                                                {req.action_summary}
-                                            </p>
+                                            {/* Input parameters */}
+                                            {req.tool_input && Object.keys(req.tool_input).length > 0 && (
+                                                <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[10px] text-neutral-400 bg-white/[0.03] rounded-lg p-2.5 border border-white/5 max-h-32 overflow-y-auto">
+                                                    {JSON.stringify(req.tool_input, null, 2)}
+                                                </pre>
+                                            )}
+
+                                            {/* Guidance textarea */}
+                                            <textarea
+                                                value={notes[req.id] ?? ''}
+                                                onChange={e => setNotes(prev => ({ ...prev, [req.id]: e.target.value }))}
+                                                placeholder="Optional: add guidance for the agent..."
+                                                rows={2}
+                                                className="w-full rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] text-white placeholder:text-neutral-500 resize-none focus:outline-none focus:ring-1 focus:ring-amber-400/40"
+                                            />
 
                                             {/* Bottom row: time + actions */}
                                             <div className="flex items-center justify-between gap-2">
@@ -347,7 +362,7 @@ export default function HITLFab() {
                                                 <div className="flex items-center gap-2">
                                                     <button
                                                         type="button"
-                                                        onClick={() => denyMutation.mutate({ id: req.id })}
+                                                        onClick={() => denyMutation.mutate({ id: req.id, note: notes[req.id] || undefined })}
                                                         disabled={isProcessing}
                                                         className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium
                                                             rounded-lg bg-red-500/10 text-red-400 border border-red-500/20
@@ -359,7 +374,7 @@ export default function HITLFab() {
                                                     </button>
                                                     <button
                                                         type="button"
-                                                        onClick={() => approveMutation.mutate({ id: req.id })}
+                                                        onClick={() => approveMutation.mutate({ id: req.id, note: notes[req.id] || undefined })}
                                                         disabled={isProcessing}
                                                         className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium
                                                             rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20

@@ -184,19 +184,19 @@ export default function NoteEditor({ knowledge, workspaceId }: NoteEditorProps) 
                 />
             }
         >
-            <div className={cn('h-full', showPreview ? 'flex' : '')}>
+            <div className={cn('flex-1 min-h-0', showPreview ? 'flex' : 'flex flex-col')}>
                 {/* Editor pane */}
                 <div
                     ref={editorRef}
                     className={cn(
-                        'h-full overflow-y-auto',
+                        'min-h-0 flex-1 overflow-y-auto',
                         showPreview ? 'w-1/2 border-r border-border/30' : 'w-full',
                     )}
                 />
 
                 {/* Preview pane */}
                 {showPreview && (
-                    <div className="w-1/2 h-full overflow-y-auto px-6 py-4">
+                    <div className="w-1/2 min-h-0 flex-1 overflow-y-auto px-6 py-4">
                         <div
                             className="prose prose-sm prose-invert max-w-none text-foreground/85 leading-relaxed"
                             dangerouslySetInnerHTML={{ __html: previewHtml }}

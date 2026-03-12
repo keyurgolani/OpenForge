@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence, useMotionValue, useTransform, useDragControls, type PanInfo } from 'framer-motion'
-import { X, PanelRightClose, ChevronLeft, Brain } from 'lucide-react'
+import { X, ChevronLeft, Brain } from 'lucide-react'
 
 interface PreviewShellProps {
     isOpen: boolean
@@ -9,7 +9,7 @@ interface PreviewShellProps {
     title?: string
     actions?: ReactNode
     children: ReactNode
-    siderail?: ReactNode
+    siderail?: ReactNode | ((onCollapse: () => void) => ReactNode)
     leftRail?: ReactNode
 }
 
@@ -56,11 +56,19 @@ export default function PreviewShell({
         if (!isOpen) setRailOpen(false)
     }, [isOpen, siderail])
 
-    // Lock body scroll when open
+    // Lock body scroll and blur app content when open
     useEffect(() => {
         if (isOpen) {
             document.body.style.overflow = 'hidden'
-            return () => { document.body.style.overflow = '' }
+            const root = document.getElementById('root')
+            if (root) {
+                root.style.filter = 'blur(6px) saturate(0.7)'
+                root.style.transition = 'filter 0.2s ease'
+            }
+            return () => {
+                document.body.style.overflow = ''
+                if (root) root.style.filter = ''
+            }
         }
     }, [isOpen])
 
@@ -120,7 +128,7 @@ export default function PreviewShell({
                 <>
                     {/* Backdrop */}
                     <motion.div
-                        className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-md"
+                        className="fixed inset-0 z-[60] bg-black/60"
                         style={{ opacity: backdropOpacity }}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
@@ -154,9 +162,9 @@ export default function PreviewShell({
                         </div>
 
                         {/* Header */}
-                        <div className="relative flex items-center justify-center px-5 py-2 border-b border-border/40 flex-shrink-0">
+                        <div className="relative flex items-center justify-center px-5 py-2 flex-shrink-0">
                             {title && (
-                                <h2 className="text-sm font-semibold text-foreground truncate text-center px-24">
+                                <h2 className="text-base font-semibold text-foreground truncate text-center px-24">
                                     {title}
                                 </h2>
                             )}
@@ -177,7 +185,7 @@ export default function PreviewShell({
                         <div className="flex min-h-0 overflow-hidden gap-2 p-2 pt-0">
                             {/* Left rail — metadata, desktop only */}
                             {leftRail && (
-                                <div className="hidden md:flex flex-shrink-0 w-[20%] overflow-y-auto rounded-2xl border border-border/60 bg-card/28 px-4 py-4 select-text">
+                                <div className="hidden md:flex flex-shrink-0 w-72 overflow-y-auto rounded-2xl border border-border/60 bg-card/28 px-4 py-4 select-text">
                                     {leftRail}
                                 </div>
                             )}
@@ -189,27 +197,13 @@ export default function PreviewShell({
 
                             {/* Right siderail — desktop only */}
                             {siderail && railOpen && (
-                                <div className="hidden md:flex flex-col flex-shrink-0 relative overflow-hidden rounded-2xl border border-border/60 bg-card/28 transition-[width] duration-200 ease-out" style={{ width: `${railPct}%` }}>
+                                <div className="hidden md:flex flex-col flex-shrink-0 relative overflow-hidden rounded-2xl border border-border/60 bg-card/28 py-4 transition-[width] duration-200 ease-out select-text" style={{ width: `${railPct}%` }}>
                                     {/* Resize handle */}
                                     <div
-                                        className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-accent/40 active:bg-accent/60 transition-colors z-10"
+                                        className="absolute -left-1 top-0 bottom-0 w-2 cursor-col-resize bg-transparent hover:bg-accent/25 active:bg-accent/35 transition-colors z-10"
                                         onPointerDown={handleResizeStart}
                                     />
-                                    {/* Close rail button */}
-                                    <div className="flex justify-end px-3 pt-3 pb-0 flex-shrink-0">
-                                        <button
-                                            type="button"
-                                            onClick={() => setRailOpen(false)}
-                                            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-                                            aria-label="Hide intelligence"
-                                            title="Hide intelligence"
-                                        >
-                                            <PanelRightClose className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                    <div className="flex-1 overflow-y-auto px-4 py-4 pt-1 select-text">
-                                        {siderail}
-                                    </div>
+                                    {typeof siderail === 'function' ? siderail(() => setRailOpen(false)) : siderail}
                                 </div>
                             )}
 
@@ -244,7 +238,7 @@ export default function PreviewShell({
                         {/* Siderail — mobile: inline below content */}
                         {siderail && (
                             <div className="md:hidden border-t border-border/30 px-5 py-4 overflow-y-auto max-h-[40vh] select-text">
-                                {siderail}
+                                {typeof siderail === 'function' ? siderail(() => setRailOpen(false)) : siderail}
                             </div>
                         )}
                     </motion.div>

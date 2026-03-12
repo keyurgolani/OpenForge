@@ -71,7 +71,7 @@ export function GenerateIntelligenceButton({ knowledge, workspaceId }: Knowledge
     )
 }
 
-export default function KnowledgeIntelligence({ knowledge, workspaceId, headerExtra }: KnowledgeIntelligenceProps & { headerExtra?: React.ReactNode }) {
+export default function KnowledgeIntelligence({ knowledge, workspaceId, headerExtra, onCollapse }: KnowledgeIntelligenceProps & { headerExtra?: React.ReactNode; onCollapse?: () => void }) {
     const [expanded, setExpanded] = useState<SectionKey | null>('summary')
 
     const summaryText = (knowledge?.ai_summary ?? '').trim()
@@ -104,7 +104,20 @@ export default function KnowledgeIntelligence({ knowledge, workspaceId, headerEx
                         </div>
                         <p className="text-xs text-muted-foreground/90">Summary and extracted insights.</p>
                     </div>
-                    {headerExtra}
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {headerExtra}
+                        {onCollapse && (
+                            <button
+                                type="button"
+                                onClick={onCollapse}
+                                className="w-7 h-7 rounded-md border border-border/70 bg-card/60 flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-accent/50 transition-colors"
+                                aria-label="Collapse intelligence sidebar"
+                                title="Collapse intelligence"
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
                 </div>
                 <div className="flex items-center gap-2">
                     <div className="flex-shrink-0 rounded-full border border-border/70 bg-muted/60 px-2.5 py-1 text-[11px] font-medium text-foreground/80">

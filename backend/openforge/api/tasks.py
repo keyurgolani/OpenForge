@@ -504,6 +504,7 @@ async def run_task_now(
 @router.get("/history", response_model=list[TaskLogOut])
 async def get_task_history(
     task_type: Optional[str] = None,
+    workspace_id: Optional[str] = None,
     limit: int = Query(default=50, le=200),
     db: AsyncSession = Depends(get_db),
 ):
@@ -511,6 +512,11 @@ async def get_task_history(
     query = select(TaskLog).order_by(desc(TaskLog.started_at)).limit(limit)
     if task_type:
         query = query.where(TaskLog.task_type == task_type)
+    if workspace_id:
+        try:
+            query = query.where(TaskLog.workspace_id == UUID(workspace_id))
+        except ValueError:
+            pass
     result = await db.execute(query)
     logs = result.scalars().all()
     return [

@@ -76,6 +76,32 @@ TOOL_ALIASES: dict[str, str] = {
     "editor.read":            "filesystem.read_file",
     "code_editor.open":       "filesystem.read_file",
     "code_editor.read":       "filesystem.read_file",
+
+    # workspace tools — models often invent read_knowledge or use wrong names
+    "workspace.read_knowledge":     "workspace.search",
+    "workspace.get_knowledge":      "workspace.search",
+    "workspace.find_knowledge":     "workspace.search",
+    "workspace.query":              "workspace.search",
+    "workspace.read":               "workspace.search",
+    "workspace.find":               "workspace.search",
+    "workspace.create_knowledge":   "workspace.save_knowledge",
+    "workspace.add_knowledge":      "workspace.save_knowledge",
+    "workspace.remove_knowledge":   "workspace.delete_knowledge",
+
+    # Unprefixed workspace shorthands
+    "workspace_search":             "workspace.search",
+    "search_knowledge":             "workspace.search",
+    "read_knowledge":               "workspace.search",
+    "list_knowledge":               "workspace.list_knowledge",
+    "save_knowledge":               "workspace.save_knowledge",
+    "delete_knowledge":             "workspace.delete_knowledge",
+
+    # memory tools — common mistakes
+    "memory.save":                  "memory.store",
+    "memory.get":                   "memory.recall",
+    "memory.retrieve":              "memory.recall",
+    "memory.delete":                "memory.forget",
+    "memory.remove":                "memory.forget",
 }
 
 

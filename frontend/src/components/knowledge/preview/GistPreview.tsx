@@ -42,7 +42,7 @@ export default function GistPreview({ knowledge, workspaceId, onClose }: GistPre
                 </>
             }
             leftRail={<KnowledgeMetadata knowledge={knowledge} />}
-            siderail={<KnowledgeIntelligence knowledge={knowledge} workspaceId={workspaceId} />}
+            siderail={(onCollapse) => <KnowledgeIntelligence knowledge={knowledge} workspaceId={workspaceId} onCollapse={onCollapse} />}
         >
             <div className="space-y-4">
                 {/* Code block */}

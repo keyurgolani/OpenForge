@@ -2,7 +2,7 @@ import asyncio
 import os
 from protocol import BaseTool, ToolContext, ToolResult
 from config import get_settings
-from tools.skills.install import _strip_ansi, _extract_meaningful
+from tools.skills.install import _strip_ansi, _extract_meaningful, _parse_source
 
 
 class SearchSkillsTool(BaseTool):
@@ -46,6 +46,9 @@ class SearchSkillsTool(BaseTool):
         source = (params.get("source") or "").strip()
         if not source:
             return ToolResult(success=False, error="source is required")
+
+        # Normalize source: handle skills.sh URLs, github URLs, and owner/repo/skill paths
+        source, _ = _parse_source(source)
 
         settings = get_settings()
         env = os.environ.copy()

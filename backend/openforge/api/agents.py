@@ -165,3 +165,57 @@ async def get_execution(
     if not execution:
         raise HTTPException(404, "Execution not found")
     return execution
+
+
+@router.get("/workspace/{workspace_id}/conversations/{conversation_id}/stream-state")
+async def get_conversation_stream_state(
+    workspace_id: UUID,
+    conversation_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return live stream state for a conversation if an execution is active."""
+    import json
+
+    result = await db.execute(
+        select(AgentExecution)
+        .where(
+            AgentExecution.conversation_id == conversation_id,
+            AgentExecution.workspace_id == workspace_id,
+            AgentExecution.status.in_(["running", "paused_hitl"]),
+        )
+        .order_by(AgentExecution.started_at.desc())
+        .limit(1)
+    )
+    exec_record = result.scalar_one_or_none()
+    if not exec_record:
+        return {"active": False}
+
+    # Try Redis stream state
+    try:
+        from openforge.db.redis_client import get_redis
+
+        redis = await get_redis()
+        state = await redis.hgetall(f"stream_state:{exec_record.id}")
+        if state:
+            return {
+                "active": True,
+                "execution_id": str(exec_record.id),
+                "status": exec_record.status,
+                "content": state.get("content", ""),
+                "thinking": state.get("thinking", ""),
+                "tool_calls": json.loads(state.get("tool_calls", "[]")),
+                "sources": json.loads(state.get("sources", "[]")),
+                "attachments_processed": json.loads(
+                    state.get("attachments_processed", "[]")
+                ),
+                "timeline": json.loads(state.get("timeline", "[]")),
+            }
+    except Exception:
+        pass
+
+    # Execution is active but no Redis state available
+    return {
+        "active": True,
+        "execution_id": str(exec_record.id),
+        "status": exec_record.status,
+    }

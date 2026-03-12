@@ -60,11 +60,22 @@ const WAVEFORM_BARS = [0.4, 0.7, 0.5, 0.9, 0.6, 0.8, 0.3, 0.7, 0.5, 0.4, 0.8, 0.
 function AudioWaveformPlayer({ fileUrl, duration, format }: { fileUrl: string; duration?: number; format?: string }) {
     const audioRef = useRef<HTMLAudioElement>(null)
     const scrubberRef = useRef<HTMLDivElement>(null)
+    const pendingSeekRef = useRef<number | null>(null)
     const [playing, setPlaying] = useState(false)
     const [progress, setProgress] = useState(0)
     const [currentTime, setCurrentTime] = useState(0)
     const [audioDuration, setAudioDuration] = useState(duration ?? 0)
     const [scrubbing, setScrubbing] = useState(false)
+
+    const applySeek = useCallback((audio: HTMLAudioElement, fraction: number) => {
+        if (audio.duration && isFinite(audio.duration)) {
+            audio.currentTime = fraction * audio.duration
+            setCurrentTime(fraction * audio.duration)
+            pendingSeekRef.current = null
+        } else {
+            pendingSeekRef.current = fraction
+        }
+    }, [])
 
     useEffect(() => {
         const audio = audioRef.current
@@ -79,6 +90,11 @@ function AudioWaveformPlayer({ fileUrl, duration, format }: { fileUrl: string; d
         const onLoadedMetadata = () => {
             if (audio.duration && isFinite(audio.duration)) {
                 setAudioDuration(audio.duration)
+                if (pendingSeekRef.current !== null) {
+                    audio.currentTime = pendingSeekRef.current * audio.duration
+                    setCurrentTime(pendingSeekRef.current * audio.duration)
+                    pendingSeekRef.current = null
+                }
             }
         }
         const onEnded = () => { setPlaying(false); setProgress(0); setCurrentTime(0) }
@@ -107,13 +123,15 @@ function AudioWaveformPlayer({ fileUrl, duration, format }: { fileUrl: string; d
     }, [playing])
 
     const seekToFraction = useCallback((fraction: number) => {
-        const audio = audioRef.current
-        if (!audio || !audio.duration || !isFinite(audio.duration)) return
         const clamped = Math.max(0, Math.min(1, fraction))
-        audio.currentTime = clamped * audio.duration
         setProgress(clamped)
-        setCurrentTime(clamped * audio.duration)
-    }, [])
+        const audio = audioRef.current
+        if (audio) {
+            applySeek(audio, clamped)
+        } else {
+            pendingSeekRef.current = clamped
+        }
+    }, [applySeek])
 
     const seek = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
         e.stopPropagation()
@@ -121,7 +139,7 @@ function AudioWaveformPlayer({ fileUrl, duration, format }: { fileUrl: string; d
         seekToFraction((e.clientX - rect.left) / rect.width)
     }, [seekToFraction])
 
-    const onScrubStart = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const onScrubStart = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
         e.stopPropagation()
         e.preventDefault()
         setScrubbing(true)
@@ -130,40 +148,40 @@ function AudioWaveformPlayer({ fileUrl, duration, format }: { fileUrl: string; d
         const rect = track.getBoundingClientRect()
         seekToFraction((e.clientX - rect.left) / rect.width)
 
-        const onMove = (ev: MouseEvent) => {
+        const onMove = (ev: PointerEvent) => {
             const r = track.getBoundingClientRect()
             seekToFraction((ev.clientX - r.left) / r.width)
         }
         const onUp = () => {
             setScrubbing(false)
-            window.removeEventListener('mousemove', onMove)
-            window.removeEventListener('mouseup', onUp)
+            window.removeEventListener('pointermove', onMove)
+            window.removeEventListener('pointerup', onUp)
         }
-        window.addEventListener('mousemove', onMove)
-        window.addEventListener('mouseup', onUp)
+        window.addEventListener('pointermove', onMove)
+        window.addEventListener('pointerup', onUp)
     }, [seekToFraction])
 
     const filledBars = Math.floor(progress * WAVEFORM_BARS.length)
     const displayTime = playing || currentTime > 0 ? currentTime : audioDuration
 
     return (
-        <div className="flex items-center gap-2.5 rounded-lg border border-violet-500/20 bg-violet-400/10 px-3 py-2.5">
+        <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-border/30 bg-violet-500/5 py-5 px-4" onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
             {/* Hidden audio element */}
             <audio ref={audioRef} preload="metadata" src={fileUrl} />
 
             {/* Play/Pause button */}
             <button
                 onClick={togglePlay}
-                className="w-8 h-8 rounded-full flex items-center justify-center bg-violet-500/20 hover:bg-violet-500/30 border border-violet-400/30 transition-colors shrink-0"
+                className="w-9 h-9 rounded-full flex items-center justify-center bg-violet-500/20 hover:bg-violet-500/30 border border-violet-400/30 transition-colors shrink-0"
             >
                 {playing
-                    ? <Pause className="w-3.5 h-3.5 text-violet-300 fill-violet-300" />
-                    : <Play className="w-3.5 h-3.5 text-violet-300 fill-violet-300 ml-0.5" />
+                    ? <Pause className="w-4 h-4 text-violet-300 fill-violet-300" />
+                    : <Play className="w-4 h-4 text-violet-300 fill-violet-300 ml-0.5" />
                 }
             </button>
 
-            {/* Waveform + scrubber + time */}
-            <div className="flex-1 min-w-0">
+            {/* Waveform + scrubber + time (full width) */}
+            <div className="w-full min-w-0">
                 {/* Clickable waveform bars */}
                 <div
                     className="flex items-end gap-[2px] h-5 cursor-pointer"
@@ -182,8 +200,8 @@ function AudioWaveformPlayer({ fileUrl, duration, format }: { fileUrl: string; d
                 {/* Scrubber track */}
                 <div
                     ref={scrubberRef}
-                    className="relative h-3 cursor-pointer group/scrub mt-1"
-                    onMouseDown={onScrubStart}
+                    className="relative h-3 cursor-pointer group/scrub mt-1 touch-none"
+                    onPointerDown={onScrubStart}
                 >
                     {/* Track background */}
                     <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-[3px] rounded-full bg-violet-400/20" />
@@ -199,7 +217,7 @@ function AudioWaveformPlayer({ fileUrl, duration, format }: { fileUrl: string; d
                     />
                 </div>
                 {/* Time + format */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-center gap-2 mt-0.5">
                     {displayTime > 0 && (
                         <span className="text-[10px] font-mono text-violet-300/80">
                             {formatDuration(displayTime)}

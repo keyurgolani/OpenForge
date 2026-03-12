@@ -127,7 +127,7 @@ export const visualSearch = (wid: string, file: File, limit?: number): Promise<a
 // ── Conversations ──
 export const listConversations = (
     wid: string,
-    params?: { include_archived?: boolean },
+    params?: { include_archived?: boolean; category?: 'chats' | 'subagent' | 'trash' },
 ): Promise<any> => api.get(`/workspaces/${wid}/conversations`, { params }).then(r => r.data)
 export const createConversation = (wid: string, data?: object): Promise<any> =>
     api.post(`/workspaces/${wid}/conversations`, data ?? {}).then(r => r.data)
@@ -139,6 +139,12 @@ export const deleteConversation = (wid: string, cid: string) =>
     api.delete(`/workspaces/${wid}/conversations/${cid}`)
 export const permanentlyDeleteConversation = (wid: string, cid: string) =>
     api.delete(`/workspaces/${wid}/conversations/${cid}/permanent`)
+export const bulkTrashConversations = (wid: string, category: 'chats' | 'subagent' = 'chats') =>
+    api.post(`/workspaces/${wid}/conversations/bulk/trash`, null, { params: { category } }).then(r => r.data)
+export const bulkRestoreConversations = (wid: string) =>
+    api.post(`/workspaces/${wid}/conversations/bulk/restore`).then(r => r.data)
+export const bulkPermanentlyDeleteConversations = (wid: string) =>
+    api.delete(`/workspaces/${wid}/conversations/bulk/permanent`).then(r => r.data)
 export const exportConversation = (
     wid: string,
     cid: string,
@@ -177,7 +183,7 @@ export const runTaskNow = (
     data?: { target_scope?: 'one' | 'remaining' | 'all'; workspace_id?: string; knowledge_id?: string },
 ): Promise<any> =>
     api.post(`/tasks/schedules/${id}/run`, data ?? {}).then(r => r.data)
-export const getTaskHistory = (params?: { task_type?: string; limit?: number }): Promise<any> =>
+export const getTaskHistory = (params?: { task_type?: string; workspace_id?: string; limit?: number }): Promise<any> =>
     api.get('/tasks/history', { params }).then(r => r.data)
 export const getToolCallLogs = (params?: { workspace_id?: string; tool_name?: string; limit?: number }): Promise<any> =>
     api.get('/tasks/tool-call-logs', { params }).then(r => r.data)
@@ -205,7 +211,8 @@ export const exportWorkspaceData = (workspaceId: string): Promise<Blob> =>
     api.get(`/export/workspace/${workspaceId}`, { responseType: 'blob' }).then(r => r.data)
 
 // ── HITL ─────────────────────────────────────────────────────────────────────
-export const listPendingHITL = (): Promise<any> => api.get('/hitl/pending').then(r => r.data)
+export const listPendingHITL = (params?: { workspace_id?: string }): Promise<any> =>
+    api.get('/hitl/pending', { params }).then(r => r.data)
 export const countPendingHITL = (): Promise<any> => api.get('/hitl/pending/count').then(r => r.data)
 export const getHITLHistory = (params?: { workspace_id?: string; limit?: number }): Promise<any> =>
     api.get('/hitl/history', { params }).then(r => r.data)
@@ -227,6 +234,8 @@ export const setWorkspaceAgent = (wid: string, agentId: string): Promise<any> =>
 // ── Agent Executions ─────────────────────────────────────────────────────────
 export const listExecutions = (wid: string, params?: object): Promise<any> =>
     api.get(`/agents/workspace/${wid}/executions`, { params }).then(r => r.data)
+export const getConversationStreamState = (wid: string, cid: string): Promise<any> =>
+    api.get(`/agents/workspace/${wid}/conversations/${cid}/stream-state`).then(r => r.data)
 export const getExecution = (wid: string, eid: string): Promise<any> =>
     api.get(`/agents/workspace/${wid}/executions/${eid}`).then(r => r.data)
 

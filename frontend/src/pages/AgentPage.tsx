@@ -18,15 +18,17 @@ import {
     exportConversation,
     approveHITL,
     denyHITL,
+    bulkTrashConversations,
+    bulkRestoreConversations,
+    bulkPermanentlyDeleteConversations,
 } from '@/lib/api'
 import { useStreamingChat, type Mention, type TimelineToolCall, type TimelineSubagentInvocation, type TimelineHITLRequest, type SubagentTimelineStep } from '@/hooks/useStreamingChat'
 import { useToast } from '@/components/shared/ToastProvider'
-import { ConfirmModal } from '@/components/ui/confirm-modal'
 import {
     Plus, Send, Square, Loader2, MessageSquare, Trash2, Bot, User,
     ChevronDown, ChevronRight, ChevronLeft, ChevronUp, ChevronsUp, ExternalLink, Check, Pencil,
     Paperclip, X, Copy, Search, Brain, Wrench, BookmarkPlus, Network, ShieldAlert, ShieldCheck, ShieldX, AtSign,
-    CheckCircle2, XCircle
+    CheckCircle2, XCircle, RotateCcw, Trash
 } from 'lucide-react'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem,
@@ -233,6 +235,7 @@ interface Conversation {
     title: string | null
     title_locked?: boolean
     is_archived?: boolean
+    is_subagent?: boolean
     archived_at?: string | null
     message_count: number
     last_message_at: string | null
@@ -282,7 +285,7 @@ export default function AgentPage() {
         const parsed = raw ? parseFloat(raw) : NaN
         return Number.isFinite(parsed) ? clampChatListPct(parsed) : DEFAULT_CHAT_LIST_PCT
     })
-    const [activeChatRailSection, setActiveChatRailSection] = useState<'conversations' | 'trash' | null>('conversations')
+    const [activeChatRailSection, setActiveChatRailSection] = useState<'conversations' | 'subagent' | 'trash' | null>('conversations')
     const [isChatListCollapsed, setIsChatListCollapsed] = useState(() => {
         if (typeof window === 'undefined') return false
         return window.localStorage.getItem(CHAT_LIST_COLLAPSED_STORAGE_KEY) === '1'
@@ -305,14 +308,6 @@ export default function AgentPage() {
     const [uploadingFiles, setUploadingFiles] = useState(false)
     const [streamResponseExpanded, setStreamResponseExpanded] = useState(false)
     const [streamResponseHasHiddenTop, setStreamResponseHasHiddenTop] = useState(false)
-    const [confirmModal, setConfirmModal] = useState<{
-        open: boolean
-        title: string
-        message: string
-        onConfirm: () => void
-        variant: 'danger' | 'warning' | 'info' | 'success'
-    }>({ open: false, title: '', message: '', onConfirm: () => {}, variant: 'warning' })
-
     const { data: workspace } = useQuery({
         queryKey: ['workspace', workspaceId],
         queryFn: () => getWorkspace(workspaceId),
@@ -327,14 +322,23 @@ export default function AgentPage() {
 
     const { data: conversations = [] } = useQuery({
         queryKey: ['conversations', workspaceId],
-        queryFn: () => listConversations(workspaceId),
+        queryFn: () => listConversations(workspaceId, { category: 'chats' }),
         enabled: !!workspaceId,
     })
-    const { data: conversationsWithArchived = [] } = useQuery({
-        queryKey: ['conversations', workspaceId, 'archived'],
-        queryFn: () => listConversations(workspaceId, { include_archived: true }),
+    const { data: subagentConversationsData = [] } = useQuery({
+        queryKey: ['conversations', workspaceId, 'subagent'],
+        queryFn: () => listConversations(workspaceId, { category: 'subagent' }),
         enabled: !!workspaceId,
     })
+    const { data: trashedConversationsData = [] } = useQuery({
+        queryKey: ['conversations', workspaceId, 'trash'],
+        queryFn: () => listConversations(workspaceId, { category: 'trash' }),
+        enabled: !!workspaceId,
+    })
+    const conversationsWithArchived = useMemo(
+        () => [...(conversations as Conversation[]), ...(subagentConversationsData as Conversation[]), ...(trashedConversationsData as Conversation[])],
+        [conversations, subagentConversationsData, trashedConversationsData]
+    )
 
     const { data: conversationData } = useQuery({
         queryKey: ['conversation', activeCid],
@@ -367,14 +371,9 @@ export default function AgentPage() {
     } = useStreamingChat(activeCid)
 
     const messages: Message[] = conversationData?.messages ?? []
-    const activeConversations = useMemo(
-        () => (conversations as Conversation[]).filter(conv => !conv.is_archived),
-        [conversations]
-    )
-    const trashedConversations = useMemo(
-        () => (conversationsWithArchived as Conversation[]).filter(conv => conv.is_archived),
-        [conversationsWithArchived]
-    )
+    const activeConversations = conversations as Conversation[]
+    const subagentConversations = subagentConversationsData as Conversation[]
+    const trashedConversations = trashedConversationsData as Conversation[]
     const [resolvedKnowledgeTitles, setResolvedKnowledgeTitles] = useState<Map<string, { title: string; knowledgeType: string; workspaceId?: string; workspaceName?: string }>>(new Map())
     const fetchingKnowledgeIds = useRef<Set<string>>(new Set())
 
@@ -939,7 +938,7 @@ export default function AgentPage() {
         suppressAutoSelectRef.current = false
         setActiveChatRailSection('conversations')
         qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
-        qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'archived'] })
+        qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'subagent'] }); qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'trash'] })
         scheduleComposerFocus(40)
         setActiveCid(conv.id)
         navigate(`/w/${workspaceId}/agent/${conv.id}`)
@@ -948,7 +947,7 @@ export default function AgentPage() {
     const handleDeleteConv = async (cid: string) => {
         await deleteConversation(workspaceId, cid)
         qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
-        qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'archived'] })
+        qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'subagent'] }); qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'trash'] })
         if (activeCid === cid) {
             suppressAutoSelectRef.current = true
             setActiveCid(null)
@@ -960,7 +959,7 @@ export default function AgentPage() {
         try {
             await updateConversation(workspaceId, cid, { is_archived: false })
             qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
-            qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'archived'] })
+            qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'subagent'] }); qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'trash'] })
             qc.invalidateQueries({ queryKey: ['conversation', cid] })
             if (activeCid === cid) {
                 setActiveChatRailSection('conversations')
@@ -971,30 +970,59 @@ export default function AgentPage() {
         }
     }
 
-    const handlePermanentlyDeleteConv = (cid: string) => {
-        setConfirmModal({
-            open: true,
-            title: 'Permanently Delete Chat?',
-            message: 'This action cannot be undone. The chat and all its messages will be permanently removed.',
-            variant: 'danger',
-            onConfirm: async () => {
-                setConfirmModal(prev => ({ ...prev, open: false }))
-                try {
-                    await permanentlyDeleteConversation(workspaceId, cid)
-                    qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
-                    qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'archived'] })
-                    qc.removeQueries({ queryKey: ['conversation', cid], exact: true })
-                    if (activeCid === cid) {
-                        suppressAutoSelectRef.current = true
-                        setActiveCid(null)
-                        navigate(`/w/${workspaceId}/agent`)
-                    }
-                } catch (err: any) {
-                    const detail = err?.response?.data?.detail || err?.message || 'Unable to permanently delete conversation.'
-                    showError('Permanent delete failed', detail)
-                }
-            },
-        })
+    const handlePermanentlyDeleteConv = async (cid: string) => {
+        try {
+            await permanentlyDeleteConversation(workspaceId, cid)
+            qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
+            qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'subagent'] }); qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'trash'] })
+            qc.removeQueries({ queryKey: ['conversation', cid], exact: true })
+            if (activeCid === cid) {
+                suppressAutoSelectRef.current = true
+                setActiveCid(null)
+                navigate(`/w/${workspaceId}/agent`)
+            }
+        } catch (err: any) {
+            const detail = err?.response?.data?.detail || err?.message || 'Unable to permanently delete conversation.'
+            showError('Permanent delete failed', detail)
+        }
+    }
+
+    const invalidateAllConvQueries = () => {
+        qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
+        qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'subagent'] })
+        qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'trash'] })
+    }
+
+    const handleBulkTrash = async (category: 'chats' | 'subagent') => {
+        await bulkTrashConversations(workspaceId, category)
+        invalidateAllConvQueries()
+        if (activeCid) {
+            const affected = category === 'subagent' ? subagentConversations : activeConversations
+            if (affected.some(c => c.id === activeCid)) {
+                suppressAutoSelectRef.current = true
+                setActiveCid(null)
+                navigate(`/w/${workspaceId}/agent`)
+            }
+        }
+    }
+
+    const handleBulkRestore = async () => {
+        await bulkRestoreConversations(workspaceId)
+        invalidateAllConvQueries()
+    }
+
+    const handleBulkPermanentDelete = async () => {
+        try {
+            await bulkPermanentlyDeleteConversations(workspaceId)
+            invalidateAllConvQueries()
+            if (activeCid && trashedConversations.some(c => c.id === activeCid)) {
+                suppressAutoSelectRef.current = true
+                setActiveCid(null)
+                navigate(`/w/${workspaceId}/agent`)
+            }
+        } catch (err: any) {
+            showError('Bulk delete failed', err?.response?.data?.detail || err?.message || 'Unable to delete.')
+        }
     }
 
     const handleDownloadConv = async (cid: string, format: 'json' | 'markdown' | 'txt' = 'json') => {
@@ -1078,7 +1106,7 @@ export default function AgentPage() {
             suppressAutoSelectRef.current = false
             setActiveChatRailSection('conversations')
             qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
-            qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'archived'] })
+            qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'subagent'] }); qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'trash'] })
             setActiveCid(conv.id)
             navigate(`/w/${workspaceId}/agent/${conv.id}`)
         }
@@ -1185,8 +1213,11 @@ export default function AgentPage() {
         return Math.max(180, Math.floor(messagesViewportHeight * 0.5))
     }, [messagesViewportHeight])
     const isConversationsSectionExpanded = activeChatRailSection === 'conversations'
+    const isSubagentSectionExpanded = activeChatRailSection === 'subagent'
     const isTrashSectionExpanded = activeChatRailSection === 'trash'
-    const toggleChatRailSection = (section: 'conversations' | 'trash') => {
+    const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+    const confirmBulkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const toggleChatRailSection = (section: 'conversations' | 'subagent' | 'trash') => {
         setActiveChatRailSection(prev => (prev === section ? null : section))
     }
     const handleStreamingBubbleScroll = (event: React.UIEvent<HTMLDivElement>) => {
@@ -1657,11 +1688,11 @@ export default function AgentPage() {
                                         <MessageSquare className="w-4 h-4 text-accent" />
                                         <h3 className="font-semibold text-sm tracking-tight">Chat Threads</h3>
                                     </div>
-                                    <p className="text-xs text-muted-foreground/90">Active and Trashed chat threads for this workspace.</p>
+                                    <p className="text-xs text-muted-foreground/90">Chats, subagent threads, and trash.</p>
                                 </div>
                                 <div className="flex items-center gap-1.5">
                                     <div className="flex-shrink-0 rounded-full border border-border/70 bg-muted/60 px-2.5 py-1 text-[11px] font-medium text-foreground/80">
-                                        {activeConversations.length + trashedConversations.length}
+                                        {activeConversations.length + subagentConversations.length + trashedConversations.length}
                                     </div>
                                     <button
                                         type="button"
@@ -1676,6 +1707,7 @@ export default function AgentPage() {
                             </div>
                         </div>
                         <div className="flex min-h-0 flex-1 flex-col gap-2 px-4 pb-2">
+                            {/* ── Conversations section ── */}
                             <section
                                 className={`rounded-xl border px-2.5 py-2 transition-colors ${isConversationsSectionExpanded ? 'flex min-h-0 flex-1 flex-col border-accent/35 bg-card/50' : 'flex-shrink-0 border-border/55 bg-card/22'}`}
                             >
@@ -1704,9 +1736,21 @@ export default function AgentPage() {
 
                                 {isConversationsSectionExpanded && (
                                     <div className="mt-2 min-h-0 flex-1 flex flex-col">
-                                        <button className="btn-primary w-full justify-center text-sm py-2" onClick={handleNewChat}>
-                                            <Plus className="w-4 h-4" /> New Chat
-                                        </button>
+                                        <div className="flex items-center gap-2">
+                                            <button className="btn-primary flex-1 justify-center text-sm py-2" onClick={handleNewChat}>
+                                                <Plus className="w-4 h-4" /> New Chat
+                                            </button>
+                                            {activeConversations.length > 0 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void handleBulkTrash('chats')}
+                                                    className="flex items-center gap-1 px-2 py-2 text-[11px] text-muted-foreground hover:text-red-400 rounded-lg border border-border/50 hover:border-red-500/30 transition-colors"
+                                                    title="Trash all conversations"
+                                                >
+                                                    <Trash className="w-3.5 h-3.5" />
+                                                </button>
+                                            )}
+                                        </div>
                                         <div className="mt-2 min-h-0 flex-1 overflow-y-auto space-y-1.5 pr-1">
                                             {activeConversations.length === 0 ? (
                                                 <p className="text-xs text-muted-foreground text-center py-8 px-4">No conversations yet. Start a new chat!</p>
@@ -1720,10 +1764,7 @@ export default function AgentPage() {
                                                         onSelect={() => handleSelectConversation(c.id)}
                                                         onDelete={() => handleDeleteConv(c.id)}
                                                         onDownload={(format) => handleDownloadConv(c.id, format)}
-                                                        onRename={(title) => updateConversation(workspaceId, c.id, { title, title_locked: true }).then(() => {
-                                                            qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
-                                                            qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'archived'] })
-                                                        })}
+                                                        onRename={(title) => updateConversation(workspaceId, c.id, { title, title_locked: true }).then(() => invalidateAllConvQueries())}
                                                     />
                                                 ))
                                             )}
@@ -1732,6 +1773,70 @@ export default function AgentPage() {
                                 )}
                             </section>
 
+                            {/* ── Subagent section ── */}
+                            <section
+                                className={`rounded-xl border px-2.5 py-2 transition-colors ${isSubagentSectionExpanded ? 'flex min-h-0 flex-1 flex-col border-accent/35 bg-card/50' : 'flex-shrink-0 border-border/55 bg-card/22'}`}
+                            >
+                                <button
+                                    type="button"
+                                    onClick={() => toggleChatRailSection('subagent')}
+                                    className="w-full flex items-center justify-between gap-3 py-0.5 text-left"
+                                    aria-label={`${isSubagentSectionExpanded ? 'Collapse' : 'Expand'} Subagent`}
+                                >
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                        <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isSubagentSectionExpanded ? 'rotate-90' : ''}`} />
+                                        <div className="w-6 h-6 rounded-md flex items-center justify-center text-violet-400 bg-violet-400/10 border border-violet-400/25">
+                                            <Bot className="w-3.5 h-3.5" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <div className="text-sm font-semibold text-foreground truncate">Subagent</div>
+                                            <div className="text-xs text-muted-foreground/90 leading-5">
+                                                {subagentConversations.length} thread{subagentConversations.length === 1 ? '' : 's'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <span className="text-[11px] font-semibold text-foreground/70 rounded-full border border-border/60 bg-muted/60 px-2 py-0.5">
+                                        {subagentConversations.length}
+                                    </span>
+                                </button>
+
+                                {isSubagentSectionExpanded && (
+                                    <div className="mt-2 min-h-0 flex-1 flex flex-col">
+                                        {subagentConversations.length > 0 && (
+                                            <div className="flex items-center justify-end mb-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void handleBulkTrash('subagent')}
+                                                    className="flex items-center gap-1 px-2 py-1 text-[11px] text-muted-foreground hover:text-red-400 rounded-md border border-border/50 hover:border-red-500/30 transition-colors"
+                                                    title="Trash all subagent threads"
+                                                >
+                                                    <Trash className="w-3 h-3" /> Trash All
+                                                </button>
+                                            </div>
+                                        )}
+                                        <div className="min-h-0 flex-1 overflow-y-auto space-y-1.5 pr-1">
+                                            {subagentConversations.length === 0 ? (
+                                                <p className="text-xs text-muted-foreground text-center py-8 px-4">No subagent threads.</p>
+                                            ) : (
+                                                subagentConversations.map(c => (
+                                                    <ConversationRow
+                                                        key={c.id}
+                                                        conv={{ ...c, title: (c.title ?? '').replace(/^\[subagent\]\s*/i, '') || 'Subagent Task' }}
+                                                        active={activeCid === c.id}
+                                                        workspaceId={workspaceId}
+                                                        onSelect={() => handleSelectConversation(c.id)}
+                                                        onDelete={() => handleDeleteConv(c.id)}
+                                                        onDownload={(format) => handleDownloadConv(c.id, format)}
+                                                        onRename={(title) => updateConversation(workspaceId, c.id, { title, title_locked: true }).then(() => invalidateAllConvQueries())}
+                                                    />
+                                                ))
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </section>
+
+                            {/* ── Trash section ── */}
                             <section
                                 className={`rounded-xl border px-2.5 py-2 transition-colors ${isTrashSectionExpanded ? 'flex min-h-0 flex-1 flex-col border-accent/35 bg-card/50' : 'flex-shrink-0 border-border/55 bg-card/22'}`}
                             >
@@ -1759,22 +1864,56 @@ export default function AgentPage() {
                                 </button>
 
                                 {isTrashSectionExpanded && (
-                                    <div className="mt-2 min-h-0 flex-1 overflow-y-auto space-y-1.5 pr-1">
-                                        {trashedConversations.length === 0 ? (
-                                            <p className="text-xs text-muted-foreground text-center py-8 px-4">Trash is empty.</p>
-                                        ) : (
-                                            trashedConversations.map(c => (
-                                                <TrashedConversationRow
-                                                    key={c.id}
-                                                    conv={c}
-                                                    active={activeCid === c.id}
-                                                    onSelect={() => handleSelectTrashedConversation(c.id)}
-                                                    onRestore={() => handleRestoreConv(c.id)}
-                                                    onPermanentDelete={() => handlePermanentlyDeleteConv(c.id)}
-                                                    onDownload={(format) => handleDownloadConv(c.id, format)}
-                                                />
-                                            ))
+                                    <div className="mt-2 min-h-0 flex-1 flex flex-col">
+                                        {trashedConversations.length > 0 && (
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void handleBulkRestore()}
+                                                    className="flex items-center gap-1 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground rounded-md border border-border/50 hover:border-accent/30 transition-colors"
+                                                    title="Restore all trashed conversations"
+                                                >
+                                                    <RotateCcw className="w-3 h-3" /> Restore All
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (confirmBulkDelete) {
+                                                            if (confirmBulkTimerRef.current) clearTimeout(confirmBulkTimerRef.current)
+                                                            setConfirmBulkDelete(false)
+                                                            void handleBulkPermanentDelete()
+                                                        } else {
+                                                            setConfirmBulkDelete(true)
+                                                            confirmBulkTimerRef.current = setTimeout(() => setConfirmBulkDelete(false), 3000)
+                                                        }
+                                                    }}
+                                                    className={`flex items-center gap-1 px-2 py-1 text-[11px] rounded-md border transition-all ${confirmBulkDelete
+                                                        ? 'bg-red-500/20 border-red-500/40 text-red-400 font-medium'
+                                                        : 'text-red-500/70 hover:text-red-400 border-border/50 hover:border-red-500/30'
+                                                    }`}
+                                                    title={confirmBulkDelete ? 'Click again to confirm' : 'Permanently delete all trashed conversations'}
+                                                >
+                                                    <Trash2 className="w-3 h-3" /> {confirmBulkDelete ? 'Sure?' : 'Delete All'}
+                                                </button>
+                                            </div>
                                         )}
+                                        <div className="min-h-0 flex-1 overflow-y-auto space-y-1.5 pr-1">
+                                            {trashedConversations.length === 0 ? (
+                                                <p className="text-xs text-muted-foreground text-center py-8 px-4">Trash is empty.</p>
+                                            ) : (
+                                                trashedConversations.map(c => (
+                                                    <TrashedConversationRow
+                                                        key={c.id}
+                                                        conv={c}
+                                                        active={activeCid === c.id}
+                                                        onSelect={() => handleSelectTrashedConversation(c.id)}
+                                                        onRestore={() => handleRestoreConv(c.id)}
+                                                        onPermanentDelete={() => handlePermanentlyDeleteConv(c.id)}
+                                                        onDownload={(format) => handleDownloadConv(c.id, format)}
+                                                    />
+                                                ))
+                                            )}
+                                        </div>
                                     </div>
                                 )}
                             </section>
@@ -1782,14 +1921,6 @@ export default function AgentPage() {
                     </>
                 )}
             </aside>
-            <ConfirmModal
-                open={confirmModal.open}
-                title={confirmModal.title}
-                message={confirmModal.message}
-                variant={confirmModal.variant}
-                onConfirm={confirmModal.onConfirm}
-                onCancel={() => setConfirmModal(prev => ({ ...prev, open: false }))}
-            />
         </div>
     )
 }
@@ -1922,6 +2053,22 @@ function TrashedConversationRow({
     onDownload: (format: 'json' | 'markdown' | 'txt') => void
 }) {
     const [showDownloadMenu, setShowDownloadMenu] = useState(false)
+    const [confirmingDelete, setConfirmingDelete] = useState(false)
+    const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+    const handleDeleteClick = (e: React.MouseEvent) => {
+        e.stopPropagation()
+        if (confirmingDelete) {
+            if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current)
+            setConfirmingDelete(false)
+            onPermanentDelete()
+        } else {
+            setConfirmingDelete(true)
+            confirmTimerRef.current = setTimeout(() => setConfirmingDelete(false), 3000)
+        }
+    }
+
+    useEffect(() => () => { if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current) }, [])
 
     return (
         <ContextMenu>
@@ -1974,12 +2121,15 @@ function TrashedConversationRow({
                         </button>
                         <button
                             type="button"
-                            onClick={(e) => { e.stopPropagation(); onPermanentDelete() }}
-                            className="btn-ghost h-6 w-6 p-0 justify-center text-red-400 hover:bg-red-500/10"
+                            onClick={handleDeleteClick}
+                            className={`h-6 p-0 justify-center rounded-md transition-all ${confirmingDelete
+                                ? 'w-auto px-2 bg-red-500/20 border border-red-500/40 text-red-400 text-[10px] font-medium'
+                                : 'btn-ghost w-6 text-red-400 hover:bg-red-500/10'
+                            }`}
                             aria-label="Delete permanently"
-                            title="Delete permanently"
+                            title={confirmingDelete ? 'Click again to confirm' : 'Delete permanently'}
                         >
-                            <Trash2 className="w-3 h-3" />
+                            {confirmingDelete ? 'Sure?' : <Trash2 className="w-3 h-3" />}
                         </button>
                     </div>
                 </div>
@@ -2678,21 +2828,29 @@ function HITLCard({
 }) {
     const [loading, setLoading] = useState(false)
     const [localStatus, setLocalStatus] = useState<'pending' | 'approved' | 'denied'>(entry.status)
+    const [collapsed, setCollapsed] = useState(false)
+    const [reason, setReason] = useState('')
     const { success: toastSuccess, error: toastError } = useToast()
 
     // Keep local status in sync when entry status changes (e.g. from WS event)
     useEffect(() => { setLocalStatus(entry.status) }, [entry.status])
 
-    const riskColors: Record<string, string> = {
-        high: 'text-amber-300 border-amber-400/40 bg-amber-500/10',
-        critical: 'text-red-300 border-red-400/40 bg-red-500/10',
-    }
-    const containerClass = riskColors[entry.risk_level] ?? 'text-foreground border-border/50 bg-muted/20'
+    // Auto-collapse 3 seconds after resolution
+    useEffect(() => {
+        if (localStatus === 'pending') return
+        const timer = setTimeout(() => setCollapsed(true), 3000)
+        return () => clearTimeout(timer)
+    }, [localStatus])
+
+    // Already-resolved entries from persisted messages start collapsed
+    useEffect(() => {
+        if (readonly && entry.status !== 'pending') setCollapsed(true)
+    }, [readonly, entry.status])
 
     const handleApprove = async () => {
         setLoading(true)
         try {
-            await approveHITL(entry.hitl_id)
+            await approveHITL(entry.hitl_id, reason || undefined)
             setLocalStatus('approved')
             toastSuccess('Tool approved')
         } catch {
@@ -2705,7 +2863,7 @@ function HITLCard({
     const handleDeny = async () => {
         setLoading(true)
         try {
-            await denyHITL(entry.hitl_id)
+            await denyHITL(entry.hitl_id, reason || undefined)
             setLocalStatus('denied')
             toastSuccess('Tool denied')
         } catch {
@@ -2715,48 +2873,119 @@ function HITLCard({
         }
     }
 
+    const [open, setOpen] = useState(localStatus === 'pending')
+
+    // Auto-close detail panel when collapsing into badge
+    useEffect(() => {
+        if (collapsed) setOpen(false)
+    }, [collapsed])
+
+    const toggle = () => {
+        setOpen(prev => !prev)
+        // If user opens a collapsed badge, un-collapse it
+        if (collapsed) setCollapsed(false)
+    }
+
+    const statusIcon = localStatus === 'pending'
+        ? <Loader2 className="h-3 w-3 animate-spin text-accent/70" />
+        : localStatus === 'approved'
+            ? <ShieldCheck className="h-3 w-3 text-emerald-400" />
+            : <ShieldX className="h-3 w-3 text-red-400" />
+
+    const category = entry.tool_id.split('.')[0] ?? entry.tool_id
+    const action = entry.tool_id.split('.').slice(1).join('.')
+
     return (
-        <div className={`chat-workflow-step chat-section-reveal rounded-xl border px-4 py-3 ${containerClass}`}>
-            <div className="flex items-center gap-2 mb-1.5">
-                <ShieldAlert className="h-3.5 w-3.5 flex-shrink-0" />
-                <span className="text-[11px] uppercase tracking-wide font-semibold">Approval Required</span>
-                <span className={`ml-auto rounded-full border px-2 py-0.5 text-[10px] font-medium capitalize ${localStatus === 'pending' ? 'border-amber-400/40 text-amber-300' : localStatus === 'approved' ? 'border-emerald-400/40 text-emerald-300' : 'border-red-400/40 text-red-300'}`}>
-                    {localStatus}
+        <div className="chat-workflow-step chat-section-reveal">
+            <button
+                type="button"
+                className={`chat-subsection-toggle ${open ? 'chat-subsection-toggle-open' : ''}`}
+                onClick={toggle}
+            >
+                {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                <ShieldAlert className="h-3 w-3" />
+                <span className="shrink-0">HITL</span>
+                <span className="text-muted-foreground/40">·</span>
+                <span className="flex gap-0.5 items-baseline min-w-0">
+                    <span className="text-muted-foreground/80 shrink-0">{category}</span>
+                    {action && (
+                        <>
+                            <span className="text-muted-foreground/40">.</span>
+                            <span className="text-foreground/70 shrink-0">{action}</span>
+                        </>
+                    )}
                 </span>
-            </div>
-            <div className="text-xs mb-1 font-medium">{entry.action_summary || entry.tool_id}</div>
-            <div className="text-[11px] text-muted-foreground mb-2">
-                Tool: <span className="font-mono">{entry.tool_id}</span>
-                {entry.risk_level && <> · Risk: <span className="capitalize">{entry.risk_level}</span></>}
-            </div>
-            {!readonly && localStatus === 'pending' && (
-                <div className="flex gap-2 mt-2">
-                    <button
-                        type="button"
-                        onClick={handleApprove}
-                        disabled={loading}
-                        className="flex items-center gap-1.5 rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-[11px] text-emerald-300 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
-                    >
-                        {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
-                        Approve
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleDeny}
-                        disabled={loading}
-                        className="flex items-center gap-1.5 rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-1 text-[11px] text-red-300 hover:bg-red-500/20 transition-colors disabled:opacity-50"
-                    >
-                        {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldX className="h-3 w-3" />}
-                        Deny
-                    </button>
+                {statusIcon}
+            </button>
+
+            <div className={`chat-collapse w-full ${open ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
+                <div className="chat-collapse-inner">
+                    <div className="chat-step-detail-card">
+                        {/* Action summary */}
+                        {entry.action_summary && (
+                            <div className="text-[11px] text-foreground/80">{entry.action_summary}</div>
+                        )}
+
+                        {/* Risk + status */}
+                        <div className="flex items-center gap-2 text-[11px]">
+                            <span className="text-[10px] uppercase tracking-wide text-accent/55 font-medium">Risk</span>
+                            <span className="capitalize text-foreground/75">{entry.risk_level || 'low'}</span>
+                            <span className="text-muted-foreground/30 mx-1">·</span>
+                            <span className="text-[10px] uppercase tracking-wide text-accent/55 font-medium">Status</span>
+                            <span className={`capitalize ${localStatus === 'approved' ? 'text-emerald-400' : localStatus === 'denied' ? 'text-red-400' : 'text-foreground/75'}`}>{localStatus}</span>
+                        </div>
+
+                        {/* Guidance textarea + action buttons for pending */}
+                        {!readonly && localStatus === 'pending' && (
+                            <div className="space-y-2">
+                                <textarea
+                                    value={reason}
+                                    onChange={e => setReason(e.target.value)}
+                                    placeholder="Optional: add guidance for the agent..."
+                                    rows={2}
+                                    className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-1.5 text-[11px] text-foreground placeholder:text-muted-foreground/50 resize-none focus:outline-none focus:ring-1 focus:ring-accent/40"
+                                />
+                                <div className="flex gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={handleApprove}
+                                        disabled={loading}
+                                        className="flex items-center gap-1.5 rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-[11px] text-emerald-300 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
+                                    >
+                                        {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
+                                        Approve
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleDeny}
+                                        disabled={loading}
+                                        className="flex items-center gap-1.5 rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-1 text-[11px] text-red-300 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                                    >
+                                        {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldX className="h-3 w-3" />}
+                                        Deny
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Resolution confirmation + steering hint for resolved entries */}
+                        {localStatus !== 'pending' && (
+                            <div className="space-y-1.5">
+                                <div className={`flex items-center gap-1.5 text-[11px] ${localStatus === 'approved' ? 'text-emerald-400' : 'text-red-400'}`}>
+                                    {localStatus === 'approved' ? <ShieldCheck className="h-3 w-3" /> : <ShieldX className="h-3 w-3" />}
+                                    {localStatus === 'approved' ? 'Tool execution approved' : 'Tool execution denied'}
+                                </div>
+                                {reason && (
+                                    <div className="text-[11px] text-muted-foreground/70 border-l-2 border-accent/30 pl-2">
+                                        <span className="text-[10px] uppercase tracking-wide text-accent/55 font-medium">Guidance: </span>
+                                        {reason}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 </div>
-            )}
-            {localStatus !== 'pending' && (
-                <div className={`flex items-center gap-1.5 text-[11px] ${localStatus === 'approved' ? 'text-emerald-300' : 'text-red-300'}`}>
-                    {localStatus === 'approved' ? <ShieldCheck className="h-3 w-3" /> : <ShieldX className="h-3 w-3" />}
-                    {localStatus === 'approved' ? 'Tool execution approved' : 'Tool execution denied'}
-                </div>
-            )}
+            </div>
         </div>
     )
 }

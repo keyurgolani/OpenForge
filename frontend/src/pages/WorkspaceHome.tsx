@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { listKnowledge, deleteKnowledge, togglePin, toggleArchive, extractBookmarkContent, reprocessKnowledge, getKnowledgeFileUrl } from '@/lib/api'
@@ -481,8 +482,8 @@ export default function WorkspaceHome() {
                     )}
                 </div>
 
-                {/* Bulk action floating toolbar */}
-                {hasSelection && (
+                {/* Bulk action floating toolbar — portaled to body for true viewport centering */}
+                {hasSelection && createPortal(
                     <div
                         className="fixed bottom-6 inset-x-0 z-50 flex justify-center pointer-events-none animate-slide-up"
                     >
@@ -505,7 +506,8 @@ export default function WorkspaceHome() {
                             Clear
                         </button>
                     </div>
-                    </div>
+                    </div>,
+                    document.body,
                 )}
 
                 {/* Knowledge preview panel */}
