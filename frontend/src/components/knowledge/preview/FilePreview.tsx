@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Download, RefreshCw, Loader2 } from 'lucide-react'
 import { getKnowledgeFileUrl, getKnowledgeThumbnailUrl, reprocessKnowledge } from '@/lib/api'
 import PreviewShell from '@/components/knowledge/shared/PreviewShell'
-import KnowledgeIntelligence, { GenerateIntelligenceButton } from '@/components/knowledge/shared/KnowledgeIntelligence'
+import KnowledgeIntelligence, { GenerateIntelligenceButton, getIntelligenceCount } from '@/components/knowledge/shared/KnowledgeIntelligence'
 import PreviewActions from './PreviewActions'
 import { CopyButton } from '@/components/shared/CopyButton'
 import KnowledgeMetadata from '@/components/knowledge/shared/KnowledgeMetadata'
@@ -92,6 +92,7 @@ export default function FilePreview({ knowledge, workspaceId, onClose }: FilePre
             }
             leftRail={<KnowledgeMetadata knowledge={knowledge} />}
             siderail={(onCollapse) => <KnowledgeIntelligence knowledge={knowledge} workspaceId={workspaceId} onCollapse={onCollapse} />}
+            railItemCount={getIntelligenceCount(knowledge)}
         >
             <div className="space-y-5">
                 {/* Thumbnail */}

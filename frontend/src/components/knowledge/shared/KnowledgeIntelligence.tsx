@@ -11,6 +11,16 @@ const md = new MarkdownIt({ html: false, linkify: true, typographer: true, break
 
 type SectionKey = 'summary' | 'tasks' | 'facts' | 'crucial_things' | 'timelines'
 
+/** Count total intelligence items extracted from a knowledge object */
+export function getIntelligenceCount(knowledge: any): number {
+    const summaryText = (knowledge?.ai_summary ?? '').trim()
+    const t = Array.isArray(knowledge?.insights?.tasks) ? knowledge.insights.tasks.length : 0
+    const f = Array.isArray(knowledge?.insights?.facts) ? knowledge.insights.facts.length : 0
+    const c = Array.isArray(knowledge?.insights?.crucial_things) ? knowledge.insights.crucial_things.length : 0
+    const tl = Array.isArray(knowledge?.insights?.timelines) ? knowledge.insights.timelines.length : 0
+    return (summaryText ? 1 : 0) + t + f + c + tl
+}
+
 interface KnowledgeIntelligenceProps {
     knowledge: any
     workspaceId: string
@@ -97,21 +107,21 @@ export default function KnowledgeIntelligence({ knowledge, workspaceId, headerEx
         <div className="flex flex-col h-full">
             {/* Header */}
             <div className="px-4 pb-3">
-                <div className="mb-3 flex items-start justify-between gap-3">
-                    <div className="space-y-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                            <Brain className="w-4 h-4 text-accent" />
-                            <h3 className="font-semibold text-sm tracking-tight">Knowledge Intelligence</h3>
-                        </div>
-                        <p className="text-xs text-muted-foreground/90">Summary and extracted insights.</p>
+                <div className="mb-1 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                        <Brain className="w-4 h-4 text-accent flex-shrink-0" />
+                        <h3 className="font-semibold text-sm tracking-tight truncate">Intelligence</h3>
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0">
                         {headerExtra}
+                        <span className="rounded-full border border-border/70 bg-muted/60 px-2 py-0.5 text-[11px] font-medium text-foreground/80 tabular-nums">
+                            {totalCount}
+                        </span>
                         {onCollapse && (
                             <button
                                 type="button"
                                 onClick={onCollapse}
-                                className="w-7 h-7 rounded-md border border-border/70 bg-card/60 flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-accent/50 transition-colors"
+                                className="w-5 h-8 rounded-full border border-border/70 bg-card/60 flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-accent/50 transition-colors"
                                 aria-label="Collapse intelligence sidebar"
                                 title="Collapse intelligence"
                             >
@@ -120,11 +130,7 @@ export default function KnowledgeIntelligence({ knowledge, workspaceId, headerEx
                         )}
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
-                    <div className="flex-shrink-0 rounded-full border border-border/70 bg-muted/60 px-2.5 py-1 text-[11px] font-medium text-foreground/80">
-                        {totalCount} item{totalCount === 1 ? '' : 's'}
-                    </div>
-                </div>
+                <p className="text-xs text-muted-foreground/90 pl-6">Summary and extracted insights.</p>
             </div>
 
             {/* Sections */}

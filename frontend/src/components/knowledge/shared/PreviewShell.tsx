@@ -10,6 +10,7 @@ interface PreviewShellProps {
     actions?: ReactNode
     children: ReactNode
     siderail?: ReactNode | ((onCollapse: () => void) => ReactNode)
+    railItemCount?: number
     leftRail?: ReactNode
 }
 
@@ -26,6 +27,7 @@ export default function PreviewShell({
     actions,
     children,
     siderail,
+    railItemCount,
     leftRail,
 }: PreviewShellProps) {
     const sheetRef = useRef<HTMLDivElement>(null)
@@ -221,6 +223,11 @@ export default function PreviewShell({
                                     </button>
                                     <div className="w-6 h-px bg-border/70" />
                                     <Brain className="w-4 h-4 text-accent mt-1" />
+                                    {railItemCount != null && railItemCount > 0 && (
+                                        <span className="text-[10px] font-bold text-accent tabular-nums">
+                                            {railItemCount}
+                                        </span>
+                                    )}
                                     <span className="text-[10px] font-semibold tracking-[0.16em] uppercase text-muted-foreground [writing-mode:vertical-rl] rotate-180">
                                         Insights
                                     </span>

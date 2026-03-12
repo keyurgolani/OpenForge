@@ -4,7 +4,7 @@ import { ExternalLink, RefreshCw, Globe, Loader2 } from 'lucide-react'
 import MarkdownIt from 'markdown-it'
 import { extractBookmarkContent } from '@/lib/api'
 import PreviewShell from '@/components/knowledge/shared/PreviewShell'
-import KnowledgeIntelligence, { GenerateIntelligenceButton } from '@/components/knowledge/shared/KnowledgeIntelligence'
+import KnowledgeIntelligence, { GenerateIntelligenceButton, getIntelligenceCount } from '@/components/knowledge/shared/KnowledgeIntelligence'
 import PreviewActions from './PreviewActions'
 import { CopyButton } from '@/components/shared/CopyButton'
 import KnowledgeMetadata from '@/components/knowledge/shared/KnowledgeMetadata'
@@ -83,6 +83,7 @@ export default function BookmarkPreview({ knowledge, workspaceId, onClose }: Boo
             }
             leftRail={<KnowledgeMetadata knowledge={knowledge} />}
             siderail={(onCollapse) => <KnowledgeIntelligence knowledge={knowledge} workspaceId={workspaceId} onCollapse={onCollapse} />}
+            railItemCount={getIntelligenceCount(knowledge)}
         >
             <div className="space-y-5">
                 {/* URL banner */}

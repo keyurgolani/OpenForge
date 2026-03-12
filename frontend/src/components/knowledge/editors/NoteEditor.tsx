@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import {
     Bold, Italic, Heading, Link, Code, List,
-    Columns2, Eye, Brain,
+    Columns2, Eye,
 } from 'lucide-react'
 import MarkdownIt from 'markdown-it'
 import { EditorView, keymap, lineNumbers } from '@codemirror/view'
@@ -14,7 +14,7 @@ import { updateKnowledge } from '@/lib/api'
 import { baseExtensions } from '@/components/knowledge/shared/CodeMirrorTheme'
 import EditorShell from '@/components/knowledge/shared/EditorShell'
 import EditorToolbar from '@/components/knowledge/shared/EditorToolbar'
-import KnowledgeIntelligence, { GenerateIntelligenceButton } from '@/components/knowledge/shared/KnowledgeIntelligence'
+import KnowledgeIntelligence, { GenerateIntelligenceButton, getIntelligenceCount } from '@/components/knowledge/shared/KnowledgeIntelligence'
 import { cn } from '@/lib/utils'
 
 const mdRenderer = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
@@ -34,19 +34,8 @@ export default function NoteEditor({ knowledge, workspaceId }: NoteEditorProps) 
 
     const [content, setContent] = useState(knowledge.content || '')
     const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
-    const [showPreview, setShowPreview] = useState(false)
-    const [showIntelligence, setShowIntelligence] = useState(() =>
-        localStorage.getItem('openforge.knowledge.intelligence.collapsed') !== 'true',
-    )
+    const [showPreview, setShowPreview] = useState(true)
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-    const toggleIntelligence = useCallback(() => {
-        setShowIntelligence(prev => {
-            const next = !prev
-            localStorage.setItem('openforge.knowledge.intelligence.collapsed', String(!next))
-            return next
-        })
-    }, [])
 
     // Word count
     const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0
@@ -192,35 +181,20 @@ export default function NoteEditor({ knowledge, workspaceId }: NoteEditorProps) 
                                 {wordCount.toLocaleString()} words
                             </span>
 
-                            {/* Intelligence toggle */}
-                            <button
-                                type="button"
-                                onClick={toggleIntelligence}
-                                className={cn(
-                                    'p-1.5 rounded-lg transition-colors',
-                                    showIntelligence
-                                        ? 'text-accent-foreground bg-accent/20'
-                                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
-                                )}
-                                title={showIntelligence ? 'Hide intelligence' : 'Show intelligence'}
-                                aria-label={showIntelligence ? 'Hide intelligence' : 'Show intelligence'}
-                            >
-                                <Brain className="w-4 h-4" />
-                            </button>
+                            {/* Generate intelligence */}
+                            <GenerateIntelligenceButton knowledge={knowledge} workspaceId={workspaceId} />
                         </>
                     }
                 />
             }
-            siderail={showIntelligence ? (
-                <div className="pt-4">
-                    <KnowledgeIntelligence
-                        knowledge={knowledge}
-                        workspaceId={workspaceId}
-                        headerExtra={<GenerateIntelligenceButton knowledge={knowledge} workspaceId={workspaceId} />}
-                        onCollapse={toggleIntelligence}
-                    />
-                </div>
-            ) : undefined}
+            siderail={(onCollapse) => (
+                <KnowledgeIntelligence
+                    knowledge={knowledge}
+                    workspaceId={workspaceId}
+                    onCollapse={onCollapse}
+                />
+            )}
+            railItemCount={getIntelligenceCount(knowledge)}
         >
             <div className={cn('flex-1 min-h-0', showPreview ? 'flex' : 'flex flex-col')}>
                 {/* Editor pane */}

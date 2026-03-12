@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { ArrowRightLeft } from 'lucide-react'
 import { updateKnowledge } from '@/lib/api'
 import PreviewShell from '@/components/knowledge/shared/PreviewShell'
-import KnowledgeIntelligence, { GenerateIntelligenceButton } from '@/components/knowledge/shared/KnowledgeIntelligence'
+import KnowledgeIntelligence, { GenerateIntelligenceButton, getIntelligenceCount } from '@/components/knowledge/shared/KnowledgeIntelligence'
 import PreviewActions from './PreviewActions'
 import KnowledgeMetadata from '@/components/knowledge/shared/KnowledgeMetadata'
 
@@ -74,6 +74,7 @@ export default function FleetingPreview({ knowledge, workspaceId, onClose }: Fle
             }
             leftRail={<KnowledgeMetadata knowledge={knowledge} />}
             siderail={(onCollapse) => <KnowledgeIntelligence knowledge={knowledge} workspaceId={workspaceId} onCollapse={onCollapse} />}
+            railItemCount={getIntelligenceCount(knowledge)}
         >
             <div className="space-y-4">
                 {/* Always-editable textarea */}

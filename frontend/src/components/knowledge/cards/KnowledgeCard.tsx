@@ -32,7 +32,7 @@ export function KnowledgeCard({ item, workspaceId, slim }: KnowledgeCardProps) {
         case 'image':
             return <ImageCard item={item} workspaceId={workspaceId} slim={slim} isProcessing={processing} />
         case 'audio':
-            return <AudioCard item={item} slim={slim} isProcessing={processing} />
+            return <AudioCard item={item} workspaceId={workspaceId} slim={slim} isProcessing={processing} />
         case 'pdf':
         case 'document':
         case 'sheet':

@@ -44,36 +44,39 @@ export function BookmarkCard({ item, slim, isProcessing }: { item: KnowledgeList
                 <PinIndicator isPinned={item.is_pinned} />
             </div>
 
-            {/* Thumbnail area — favicon hero or icon placeholder (matches image/pdf/doc layout) */}
-            <div className="flex items-center justify-center rounded-lg border border-border/30 bg-purple-500/5 py-5 relative">
-                {favicon ? (
-                    <>
-                        <img
-                            src={favicon}
-                            alt=""
-                            className="w-8 h-8 rounded-md"
-                            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden') }}
-                        />
-                        <Bookmark className="w-8 h-8 text-purple-400 opacity-40 hidden" />
-                    </>
-                ) : (
-                    <Bookmark className="w-8 h-8 text-purple-400 opacity-40" />
-                )}
-                {/* URL overlay */}
-                {item.url && (
-                    <a
-                        href={item.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={e => e.stopPropagation()}
-                        className="absolute bottom-1.5 right-1.5 flex items-center gap-1 text-[9px] text-purple-300/60 hover:text-purple-300 transition-colors bg-black/30 rounded-md px-1.5 py-0.5 backdrop-blur-sm"
-                    >
+            {/* Thumbnail area — entire area is a link to the bookmark URL */}
+            {item.url ? (
+                <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={e => e.stopPropagation()}
+                    className="flex items-center justify-center rounded-lg border border-border/30 bg-purple-500/5 py-5 relative group hover:bg-purple-500/10 hover:border-purple-400/30 transition-colors cursor-pointer"
+                >
+                    {favicon ? (
+                        <>
+                            <img
+                                src={favicon}
+                                alt=""
+                                className="w-8 h-8 rounded-md"
+                                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden') }}
+                            />
+                            <Bookmark className="w-8 h-8 text-purple-400 opacity-40 hidden" />
+                        </>
+                    ) : (
+                        <Bookmark className="w-8 h-8 text-purple-400 opacity-40" />
+                    )}
+                    <span className="absolute bottom-1.5 right-1.5 flex items-center gap-1 text-[9px] text-purple-300/60 group-hover:text-purple-300 transition-colors bg-black/30 rounded-md px-1.5 py-0.5 backdrop-blur-sm">
                         <Globe className="w-2.5 h-2.5 shrink-0" />
                         <span className="truncate max-w-[120px]">{domain}</span>
                         <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-60" />
-                    </a>
-                )}
-            </div>
+                    </span>
+                </a>
+            ) : (
+                <div className="flex items-center justify-center rounded-lg border border-border/30 bg-purple-500/5 py-5">
+                    <Bookmark className="w-8 h-8 text-purple-400 opacity-40" />
+                </div>
+            )}
 
             {/* Title */}
             <h3 className={`font-semibold text-[14px] leading-snug line-clamp-2 ${displayTitle ? 'text-foreground' : 'text-muted-foreground/60 italic'}`}>

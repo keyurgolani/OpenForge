@@ -1,4 +1,6 @@
-import { Music } from 'lucide-react'
+import { useState, useRef, useCallback, useEffect } from 'react'
+import { Music, Play, Pause } from 'lucide-react'
+import { getKnowledgeFileUrl } from '@/lib/api'
 import type { KnowledgeListItem } from './types'
 import { TagRow, PinIndicator, formatTimestamp } from './shared'
 
@@ -13,10 +15,65 @@ function formatDuration(seconds: number): string {
     return `${m}:${String(s).padStart(2, '0')}`
 }
 
-export function AudioCard({ item, slim, isProcessing }: { item: KnowledgeListItem; slim?: boolean; isProcessing?: boolean }) {
+export function AudioCard({ item, workspaceId, slim, isProcessing }: { item: KnowledgeListItem; workspaceId: string; slim?: boolean; isProcessing?: boolean }) {
     const displayTitle = item.title?.trim() || item.ai_title?.trim() || null
     const duration = item.file_metadata?.duration as number | undefined
     const contentSnippet = item.content_preview?.trim() || null
+
+    const audioRef = useRef<HTMLAudioElement>(null)
+    const progressRef = useRef<HTMLDivElement>(null)
+    const [playing, setPlaying] = useState(false)
+    const [currentTime, setCurrentTime] = useState(0)
+    const [audioDuration, setAudioDuration] = useState(duration ?? 0)
+
+    const fileUrl = getKnowledgeFileUrl(workspaceId, item.id)
+
+    const togglePlay = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation()
+        const audio = audioRef.current
+        if (!audio) return
+        if (playing) {
+            audio.pause()
+        } else {
+            audio.play()
+        }
+    }, [playing])
+
+    const handleSeek = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation()
+        const audio = audioRef.current
+        const bar = progressRef.current
+        if (!audio || !bar || !audioDuration) return
+        const rect = bar.getBoundingClientRect()
+        const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+        audio.currentTime = pct * audioDuration
+    }, [audioDuration])
+
+    useEffect(() => {
+        const audio = audioRef.current
+        if (!audio) return
+        const onPlay = () => setPlaying(true)
+        const onPause = () => setPlaying(false)
+        const onTime = () => setCurrentTime(audio.currentTime)
+        const onLoaded = () => {
+            if (audio.duration && isFinite(audio.duration)) setAudioDuration(audio.duration)
+        }
+        const onEnded = () => { setPlaying(false); setCurrentTime(0) }
+        audio.addEventListener('play', onPlay)
+        audio.addEventListener('pause', onPause)
+        audio.addEventListener('timeupdate', onTime)
+        audio.addEventListener('loadedmetadata', onLoaded)
+        audio.addEventListener('ended', onEnded)
+        return () => {
+            audio.removeEventListener('play', onPlay)
+            audio.removeEventListener('pause', onPause)
+            audio.removeEventListener('timeupdate', onTime)
+            audio.removeEventListener('loadedmetadata', onLoaded)
+            audio.removeEventListener('ended', onEnded)
+        }
+    }, [])
+
+    const progress = audioDuration > 0 ? (currentTime / audioDuration) * 100 : 0
 
     return (
         <div className="flex flex-col gap-2">
@@ -31,14 +88,43 @@ export function AudioCard({ item, slim, isProcessing }: { item: KnowledgeListIte
                 <PinIndicator isPinned={item.is_pinned} />
             </div>
 
-            {/* Music icon with duration badge */}
-            <div className="flex items-center justify-center rounded-lg border border-border/30 bg-violet-500/5 py-6 relative">
-                <Music className="w-10 h-10 text-violet-400 opacity-40" />
-                {duration != null && duration > 0 && (
-                    <span className="absolute bottom-2 right-2 rounded-md bg-violet-500/20 border border-violet-400/30 px-2 py-0.5 text-[11px] font-mono font-medium text-violet-300">
-                        {formatDuration(duration)}
-                    </span>
-                )}
+            {/* Inline audio player */}
+            <div className="rounded-lg border border-border/30 bg-violet-500/5 px-3 py-3 space-y-2">
+                <audio ref={audioRef} src={fileUrl} preload="metadata" />
+
+                <div className="flex items-center gap-2.5">
+                    {/* Play/Pause button */}
+                    <button
+                        type="button"
+                        onClick={togglePlay}
+                        className="w-8 h-8 rounded-full bg-violet-500/20 border border-violet-400/30 flex items-center justify-center text-violet-300 hover:bg-violet-500/30 hover:text-violet-200 transition-colors shrink-0"
+                        aria-label={playing ? 'Pause' : 'Play'}
+                    >
+                        {playing ? (
+                            <Pause className="w-3.5 h-3.5" />
+                        ) : (
+                            <Play className="w-3.5 h-3.5 ml-0.5" />
+                        )}
+                    </button>
+
+                    {/* Progress bar + times */}
+                    <div className="flex-1 min-w-0 space-y-1">
+                        <div
+                            ref={progressRef}
+                            onClick={handleSeek}
+                            className="h-1.5 rounded-full bg-violet-500/15 cursor-pointer relative overflow-hidden"
+                        >
+                            <div
+                                className="absolute inset-y-0 left-0 rounded-full bg-violet-400/60 transition-[width] duration-100"
+                                style={{ width: `${progress}%` }}
+                            />
+                        </div>
+                        <div className="flex items-center justify-between text-[9px] font-mono text-violet-300/70">
+                            <span>{formatDuration(currentTime)}</span>
+                            <span>{audioDuration > 0 ? formatDuration(audioDuration) : '--:--'}</span>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             {/* Title */}
