@@ -46,6 +46,23 @@ async def init_qdrant_collection() -> bool:
             client.delete_collection(collection_name)
             exists = False
             needs_reindex = True
+        elif is_named and "summary" not in vectors_cfg:
+            # Collection exists with named vectors but lacks the summary vector.
+            # Add it non-destructively and trigger re-index to backfill summary vectors.
+            logger.info(
+                "Adding 'summary' named vector to collection '%s'.",
+                collection_name,
+            )
+            client.update_collection(
+                collection_name=collection_name,
+                vectors_config={
+                    "summary": models.VectorParams(
+                        size=settings.embedding_dimension,
+                        distance=models.Distance.COSINE,
+                    ),
+                },
+            )
+            needs_reindex = True
 
     if not exists:
         logger.info("Creating Qdrant collection: %s", collection_name)
@@ -53,6 +70,10 @@ async def init_qdrant_collection() -> bool:
             collection_name=collection_name,
             vectors_config={
                 "dense": models.VectorParams(
+                    size=settings.embedding_dimension,
+                    distance=models.Distance.COSINE,
+                ),
+                "summary": models.VectorParams(
                     size=settings.embedding_dimension,
                     distance=models.Distance.COSINE,
                 ),

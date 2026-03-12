@@ -1336,6 +1336,12 @@ function EmbeddingTab() {
     const [deletingEmb, setDeletingEmb] = useState<string | null>(null)
     const [reindexingKnowledge, setReindexingKnowledge] = useState(false)
     const [reindexKnowledgeStarted, setReindexKnowledgeStarted] = useState(false)
+    const [togglingRerank, setTogglingRerank] = useState(false)
+
+    const rerankingEnabled = useMemo(() => {
+        const raw = (settings as { key: string; value: unknown }[]).find(s => s.key === 'search.reranking_enabled')?.value
+        return parseBoolSetting(raw, true)
+    }, [settings])
 
     // Query download status for all recommended embedding models
     const allEmbIds = useMemo(() => RECOMMENDED_EMBEDDING_MODELS.map(m => m.id).join(','), [])
@@ -1716,6 +1722,41 @@ function EmbeddingTab() {
                         <CheckCircle className="w-3.5 h-3.5" /> Re-indexing started in background
                     </span>
                 )}
+            </div>
+
+            {/* Cross-encoder reranking toggle */}
+            <div className="glass-card p-4">
+                <button
+                    type="button"
+                    className="w-full text-left"
+                    onClick={async () => {
+                        setTogglingRerank(true)
+                        try {
+                            await updateSetting('search.reranking_enabled', {
+                                value: !rerankingEnabled,
+                                category: 'search',
+                                sensitive: false,
+                            })
+                            qc.invalidateQueries({ queryKey: ['settings'] })
+                        } finally {
+                            setTogglingRerank(false)
+                        }
+                    }}
+                    disabled={togglingRerank}
+                >
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h4 className="text-sm font-medium">Cross-Encoder Reranking</h4>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">
+                                Rerank search results using a cross-encoder model for improved relevance. Adds slight latency per query.
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+                            {togglingRerank && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
+                            <TogglePill checked={rerankingEnabled} />
+                        </div>
+                    </div>
+                </button>
             </div>
 
             {/* Critical embedding model change confirmation */}

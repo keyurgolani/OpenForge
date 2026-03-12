@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = "redis://redis:6379/0"
 
+    # Search reranking via cross-encoder (adds latency but improves relevance)
+    search_reranking_enabled: bool = True
+
     # Celery agent execution (set to true when celery-worker service is running)
     use_celery_agents: bool = False
 

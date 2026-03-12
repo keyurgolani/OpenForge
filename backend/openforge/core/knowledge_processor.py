@@ -1,5 +1,5 @@
-from uuid import uuid4, UUID
-from openforge.core.embedding import embed_texts, sparse_encode
+from uuid import uuid4, uuid5, UUID, NAMESPACE_URL
+from openforge.core.embedding import embed_text, embed_texts, sparse_encode
 from openforge.core.embedding_document import build_knowledge_embedding_document
 from openforge.core.markdown_utils import chunk_markdown
 from openforge.db.qdrant_client import get_qdrant
@@ -29,7 +29,7 @@ class KnowledgeProcessor:
         client = get_qdrant()
         collection = settings.qdrant_collection
 
-        # Step 1: Delete old vectors
+        # Step 1: Delete old vectors (including any existing summary point)
         client.delete(
             collection_name=collection,
             points_selector=Filter(
@@ -55,7 +55,7 @@ class KnowledgeProcessor:
         texts = [c["text"] for c in chunks]
         embeddings = embed_texts(texts)
 
-        # Step 4: Upsert
+        # Step 4: Upsert chunk points
         now_str = datetime.now(timezone.utc).isoformat()
         normalized_title = normalize_knowledge_title(title) or ""
         points = []
@@ -84,8 +84,33 @@ class KnowledgeProcessor:
                 },
             ))
 
+        # Step 5: Upsert summary point (if AI summary is available)
+        summary_text = (ai_summary or "").strip()
+        if summary_text and len(summary_text) >= 20:
+            try:
+                summary_embedding = embed_text(summary_text)
+                summary_point_id = str(uuid5(NAMESPACE_URL, f"summary:{knowledge_id}"))
+                points.append(PointStruct(
+                    id=summary_point_id,
+                    vector={"summary": summary_embedding},
+                    payload={
+                        "knowledge_id": str(knowledge_id),
+                        "workspace_id": str(workspace_id),
+                        "knowledge_type": knowledge_type,
+                        "chunk_index": -1,
+                        "chunk_text": summary_text,
+                        "header_path": "",
+                        "tags": tags,
+                        "title": normalized_title,
+                        "created_at": now_str,
+                        "updated_at": now_str,
+                    },
+                ))
+            except Exception as e:
+                logger.warning(f"Failed to create summary vector for {knowledge_id}: {e}")
+
         client.upsert(collection_name=collection, points=points)
-        logger.info(f"Embedded knowledge {knowledge_id}: {len(points)} chunks")
+        logger.info(f"Embedded knowledge {knowledge_id}: {len(points)} points ({len(chunks)} chunks + {'1 summary' if summary_text and len(summary_text) >= 20 else 'no summary'})")
 
     async def delete_knowledge_vectors(self, knowledge_id: UUID):
         settings = get_settings()

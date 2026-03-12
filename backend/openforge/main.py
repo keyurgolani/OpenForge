@@ -51,6 +51,20 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Embedding model pre-load failed (will load on first use): {e}")
 
+    # Load search reranking config from DB into in-memory flag
+    try:
+        from openforge.core.search_engine import SEARCH_RERANKING_KEY, set_reranking_enabled
+        from openforge.services.config_service import config_service
+        from openforge.services.automation_config import coerce_bool_setting
+        from openforge.db.postgres import AsyncSessionLocal
+
+        async with AsyncSessionLocal() as db:
+            raw = await config_service.get_config_raw(db, SEARCH_RERANKING_KEY)
+            if raw is not None:
+                set_reranking_enabled(coerce_bool_setting(raw, True))
+    except Exception as e:
+        logger.debug(f"Search reranking config load skipped: {e}")
+
     # If the Qdrant collection was migrated, re-index all existing knowledge in background
     if needs_reindex:
 

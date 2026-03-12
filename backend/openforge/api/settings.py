@@ -33,6 +33,15 @@ async def update_setting(
         except Exception:
             pass
 
+    # Update in-memory search reranking flag when toggled
+    if key == "search.reranking_enabled":
+        try:
+            from openforge.core.search_engine import set_reranking_enabled
+            from openforge.services.automation_config import coerce_bool_setting
+            set_reranking_enabled(coerce_bool_setting(body.value, True))
+        except Exception:
+            pass
+
     return result
 
 
