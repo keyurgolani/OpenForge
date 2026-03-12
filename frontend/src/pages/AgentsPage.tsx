@@ -1,17 +1,19 @@
-import { useState, useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useState, useMemo, useEffect } from 'react'
+import { useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
     listAgents, updateAgent, triggerAgent,
     listAgentSchedules, createAgentSchedule, updateAgentSchedule, deleteAgentSchedule,
-    listAllExecutions, listTargets,
+    listAllExecutions, listTargets, listWorkspaces,
 } from '@/lib/api'
 import { formatDistanceToNow } from 'date-fns'
 import {
     Bot, Play, Clock, Settings2, Plus, Trash2, Edit, Target, Calendar,
-    Loader2, X, Check, ChevronDown, ChevronUp, ExternalLink, Wrench, Activity,
-    ToggleLeft, ToggleRight, Save,
+    Loader2, X, Check, ChevronDown, ChevronUp,
+    ExternalLink, Wrench, Activity,
+    ToggleLeft, ToggleRight, Save, Settings, PanelLeft, Home, FolderOpen,
 } from 'lucide-react'
+import { getWorkspaceIcon } from '@/pages/SettingsPage'
 
 /* ── Types ───────────────────────────────────────────────────────────────── */
 
@@ -134,13 +136,20 @@ const CRON_PRESETS = [
 
 /* ── Trigger Modal ───────────────────────────────────────────────────────── */
 
-function TriggerModal({ agent, workspaceId, onClose }: { agent: Agent; workspaceId: string; onClose: () => void }) {
+function TriggerModal({ agent, onClose }: { agent: Agent; onClose: () => void }) {
     const [instruction, setInstruction] = useState('')
     const [success, setSuccess] = useState<string | null>(null)
     const navigate = useNavigate()
+    const { data: workspaces = [] } = useQuery({ queryKey: ['workspaces'], queryFn: listWorkspaces })
+    const wsList = workspaces as { id: string; name: string }[]
+    const [selectedWs, setSelectedWs] = useState('')
+
+    useEffect(() => {
+        if (!selectedWs && wsList.length > 0) setSelectedWs(wsList[0].id)
+    }, [wsList, selectedWs])
 
     const mutation = useMutation({
-        mutationFn: () => triggerAgent(agent.id, { instruction, workspace_id: workspaceId }),
+        mutationFn: () => triggerAgent(agent.id, { instruction, workspace_id: selectedWs }),
         onSuccess: (data) => {
             setSuccess(data?.execution_id ?? 'started')
         },
@@ -167,7 +176,7 @@ function TriggerModal({ agent, workspaceId, onClose }: { agent: Agent; workspace
                             <button
                                 className="btn-primary text-xs py-1.5 px-3"
                                 onClick={() => {
-                                    navigate(`/w/${workspaceId}/executions/${success}`)
+                                    navigate(`/w/${selectedWs}/executions/${success}`)
                                     onClose()
                                 }}
                             >
@@ -178,6 +187,12 @@ function TriggerModal({ agent, workspaceId, onClose }: { agent: Agent; workspace
                     </div>
                 ) : (
                     <>
+                        <div>
+                            <label className="text-xs text-muted-foreground block mb-1.5">Workspace</label>
+                            <select className="input w-full text-sm" value={selectedWs} onChange={e => setSelectedWs(e.target.value)}>
+                                {wsList.map(ws => <option key={ws.id} value={ws.id}>{ws.name}</option>)}
+                            </select>
+                        </div>
                         <div>
                             <label className="text-xs text-muted-foreground block mb-1.5">Instruction</label>
                             <textarea
@@ -192,7 +207,7 @@ function TriggerModal({ agent, workspaceId, onClose }: { agent: Agent; workspace
                             <button
                                 className="btn-primary text-xs py-1.5 px-3"
                                 onClick={() => mutation.mutate()}
-                                disabled={!instruction.trim() || mutation.isPending}
+                                disabled={!instruction.trim() || !selectedWs || mutation.isPending}
                             >
                                 {mutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
                                 Run
@@ -207,21 +222,28 @@ function TriggerModal({ agent, workspaceId, onClose }: { agent: Agent; workspace
 
 /* ── Schedule Modal ──────────────────────────────────────────────────────── */
 
-function ScheduleModal({ agent, workspaceId, onClose }: { agent: Agent; workspaceId: string; onClose: () => void }) {
+function ScheduleModal({ agent, onClose }: { agent: Agent; onClose: () => void }) {
     const qc = useQueryClient()
     const [name, setName] = useState('')
     const [instruction, setInstruction] = useState('')
     const [cronPreset, setCronPreset] = useState<string>('0 9 * * *')
     const [customCron, setCustomCron] = useState('')
     const [editingId, setEditingId] = useState<string | null>(null)
+    const { data: workspaces = [] } = useQuery({ queryKey: ['workspaces'], queryFn: listWorkspaces })
+    const wsList = workspaces as { id: string; name: string }[]
+    const [selectedWs, setSelectedWs] = useState('')
+
+    useEffect(() => {
+        if (!selectedWs && wsList.length > 0) setSelectedWs(wsList[0].id)
+    }, [wsList, selectedWs])
 
     const cronValue = cronPreset === '' ? customCron : cronPreset
     const isCustom = cronPreset === ''
 
     const { data: schedules = [], isLoading } = useQuery<Schedule[]>({
-        queryKey: ['agent-schedules', workspaceId],
-        queryFn: () => listAgentSchedules(workspaceId),
-        enabled: !!workspaceId,
+        queryKey: ['agent-schedules', selectedWs],
+        queryFn: () => listAgentSchedules(selectedWs),
+        enabled: !!selectedWs,
     })
 
     const agentSchedules = useMemo(
@@ -230,7 +252,7 @@ function ScheduleModal({ agent, workspaceId, onClose }: { agent: Agent; workspac
     )
 
     const createMutation = useMutation({
-        mutationFn: () => createAgentSchedule(workspaceId, {
+        mutationFn: () => createAgentSchedule(selectedWs, {
             agent_id: agent.id,
             name,
             instruction,
@@ -238,7 +260,7 @@ function ScheduleModal({ agent, workspaceId, onClose }: { agent: Agent; workspac
             is_enabled: true,
         }),
         onSuccess: () => {
-            qc.invalidateQueries({ queryKey: ['agent-schedules', workspaceId] })
+            qc.invalidateQueries({ queryKey: ['agent-schedules', selectedWs] })
             setName('')
             setInstruction('')
             setEditingId(null)
@@ -246,13 +268,13 @@ function ScheduleModal({ agent, workspaceId, onClose }: { agent: Agent; workspac
     })
 
     const updateMutation = useMutation({
-        mutationFn: ({ id, data }: { id: string; data: object }) => updateAgentSchedule(workspaceId, id, data),
-        onSuccess: () => qc.invalidateQueries({ queryKey: ['agent-schedules', workspaceId] }),
+        mutationFn: ({ id, data }: { id: string; data: object }) => updateAgentSchedule(selectedWs, id, data),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['agent-schedules', selectedWs] }),
     })
 
     const deleteMutation = useMutation({
-        mutationFn: (id: string) => deleteAgentSchedule(workspaceId, id),
-        onSuccess: () => qc.invalidateQueries({ queryKey: ['agent-schedules', workspaceId] }),
+        mutationFn: (id: string) => deleteAgentSchedule(selectedWs, id),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['agent-schedules', selectedWs] }),
     })
 
     return (
@@ -264,6 +286,14 @@ function ScheduleModal({ agent, workspaceId, onClose }: { agent: Agent; workspac
                         Schedules for {agent.name}
                     </h2>
                     <button className="btn-ghost p-1.5" onClick={onClose}><X className="w-4 h-4" /></button>
+                </div>
+
+                {/* Workspace selector */}
+                <div>
+                    <label className="text-xs text-muted-foreground block mb-1.5">Workspace</label>
+                    <select className="input w-full text-sm" value={selectedWs} onChange={e => setSelectedWs(e.target.value)}>
+                        {wsList.map(ws => <option key={ws.id} value={ws.id}>{ws.name}</option>)}
+                    </select>
                 </div>
 
                 {/* Create form */}
@@ -556,15 +586,19 @@ function ConfigureModal({ agent, onClose }: { agent: Agent; onClose: () => void 
 /* ── Main Page ───────────────────────────────────────────────────────────── */
 
 export default function AgentsPage() {
-    const { workspaceId = '' } = useParams<{ workspaceId: string }>()
     const navigate = useNavigate()
+    const [sidebarOpen, setSidebarOpen] = useState(true)
 
     const [triggerAgent_, setTriggerAgent] = useState<Agent | null>(null)
     const [scheduleAgent, setScheduleAgent] = useState<Agent | null>(null)
     const [configureAgent, setConfigureAgent] = useState<Agent | null>(null)
     const [expandedSection, setExpandedSection] = useState<'executions' | 'targets' | null>('executions')
+    const [targetWsId, setTargetWsId] = useState('')
 
     /* ── Queries ─────────────────────────────────────────────────────────── */
+
+    const { data: workspaces = [] } = useQuery({ queryKey: ['workspaces'], queryFn: listWorkspaces })
+    const workspaceList = workspaces as { id: string; name: string; icon: string; color: string }[]
 
     const { data: agents = [], isLoading: agentsLoading } = useQuery<Agent[]>({
         queryKey: ['agents'],
@@ -580,10 +614,14 @@ export default function AgentsPage() {
         refetchInterval: 8000,
     })
 
+    useEffect(() => {
+        if (!targetWsId && workspaceList.length > 0) setTargetWsId(workspaceList[0].id)
+    }, [workspaceList, targetWsId])
+
     const { data: targets = [] } = useQuery<TargetItem[]>({
-        queryKey: ['targets', workspaceId],
-        queryFn: () => listTargets(workspaceId),
-        enabled: !!workspaceId,
+        queryKey: ['targets', targetWsId],
+        queryFn: () => listTargets(targetWsId),
+        enabled: !!targetWsId,
     })
 
     const agentMap = useMemo(() => {
@@ -600,257 +638,334 @@ export default function AgentsPage() {
     /* ── Render ──────────────────────────────────────────────────────────── */
 
     return (
-        <div className="flex-1 overflow-y-auto p-6 space-y-8 animate-fade-in">
-            {/* Header */}
-            <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center">
-                    <Bot className="w-5 h-5 text-accent" />
-                </div>
-                <div>
-                    <h1 className="text-lg font-semibold tracking-tight">Agents</h1>
-                    <p className="text-xs text-muted-foreground">
-                        {agents.length} agent{agents.length !== 1 ? 's' : ''} available
-                    </p>
-                </div>
-            </div>
-
-            {/* Loading state */}
-            {agentsLoading && (
-                <div className="flex items-center justify-center py-24">
-                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                </div>
-            )}
-
-            {/* Agent Cards Grid */}
-            {!agentsLoading && (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {(agents as Agent[]).map(agent => (
-                        <div
-                            key={agent.id}
-                            className="glass-card rounded-xl border border-border/60 p-5 space-y-3 hover:border-accent/30 transition-colors cursor-pointer group"
-                            onClick={() => setConfigureAgent(agent)}
-                        >
-                            {/* Header */}
-                            <div className="flex items-start justify-between gap-2">
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                    <div className="w-9 h-9 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0">
-                                        {agent.icon ? (
-                                            <span className="text-lg">{agent.icon}</span>
-                                        ) : (
-                                            <Bot className="w-4 h-4 text-accent" />
-                                        )}
+        <div className="relative flex h-screen gap-3 overflow-hidden p-3">
+            {/* Sidebar */}
+            <aside className={`${sidebarOpen ? 'w-72' : 'w-14'} flex-shrink-0 transition-[width] duration-300 overflow-hidden flex flex-col glass-card`}>
+                {sidebarOpen ? (
+                    <>
+                        <div className="flex-shrink-0">
+                            <div className="w-full border-b border-border/60 bg-card/45 px-4 py-3">
+                                <div className="flex items-center gap-2.5">
+                                    <div className="w-8 h-8 rounded-lg bg-accent/12 border border-accent/25 flex items-center justify-center flex-shrink-0">
+                                        <Bot className="w-4 h-4 text-accent" />
                                     </div>
-                                    <div className="min-w-0">
-                                        <h3 className="text-sm font-semibold truncate">{agent.name}</h3>
-                                        <span className={`text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded-full ${
-                                            agent.is_system
-                                                ? 'bg-blue-500/15 text-blue-400 ring-1 ring-blue-500/30'
-                                                : 'bg-violet-500/15 text-violet-400 ring-1 ring-violet-500/30'
-                                        }`}>
-                                            {agent.is_system ? 'System' : 'Custom'}
-                                        </span>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-sm font-semibold truncate">Agents</p>
+                                        <p className="text-[11px] text-muted-foreground truncate">Definitions, schedules & runs</p>
                                     </div>
                                 </div>
-                                <Settings2 className="w-3.5 h-3.5 text-muted-foreground/40 group-hover:text-accent transition-colors flex-shrink-0 mt-1" />
                             </div>
-
-                            {/* Description */}
-                            {agent.description && (
-                                <p className="text-xs text-muted-foreground line-clamp-2">{agent.description}</p>
-                            )}
-
-                            {/* Badges */}
-                            <div className="flex flex-wrap gap-1.5">
-                                {agent.rag_enabled && (
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400/80 border border-emerald-500/20">RAG</span>
-                                )}
-                                {(agent.tool_categories ?? []).slice(0, 3).map(cat => (
-                                    <span key={cat} className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/30 text-muted-foreground border border-border/40">
-                                        {cat}
-                                    </span>
-                                ))}
-                                {(agent.tool_categories ?? []).length > 3 && (
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/30 text-muted-foreground border border-border/40">
-                                        +{agent.tool_categories.length - 3}
-                                    </span>
-                                )}
-                            </div>
-
-                            {/* Action buttons */}
-                            <div className="flex gap-1.5 pt-1">
-                                <button
-                                    className="btn-ghost text-xs py-1 px-2.5 flex items-center gap-1.5 border border-border/40 hover:border-accent/40 hover:text-accent"
-                                    onClick={e => { e.stopPropagation(); setTriggerAgent(agent) }}
-                                >
-                                    <Play className="w-3 h-3" /> Trigger
-                                </button>
-                                <button
-                                    className="btn-ghost text-xs py-1 px-2.5 flex items-center gap-1.5 border border-border/40 hover:border-accent/40 hover:text-accent"
-                                    onClick={e => { e.stopPropagation(); setScheduleAgent(agent) }}
-                                >
-                                    <Clock className="w-3 h-3" /> Schedule
-                                </button>
-                                <button
-                                    className="btn-ghost text-xs py-1 px-2.5 flex items-center gap-1.5 border border-border/40 hover:border-accent/40 hover:text-accent"
-                                    onClick={e => { e.stopPropagation(); setConfigureAgent(agent) }}
-                                >
-                                    <Settings2 className="w-3 h-3" /> Configure
-                                </button>
+                            <div className="px-4 pt-3 pb-3">
+                                <div className="flex items-center gap-1 px-2 mb-1">
+                                    <Home className="w-3 h-3 text-muted-foreground" />
+                                    <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Workspaces</span>
+                                </div>
                             </div>
                         </div>
-                    ))}
-                </div>
-            )}
-
-            {/* Recent Executions Section */}
-            <div className="space-y-3">
-                <button
-                    className="flex items-center gap-2 text-sm font-medium text-foreground/90 hover:text-foreground transition-colors"
-                    onClick={() => setExpandedSection(expandedSection === 'executions' ? null : 'executions')}
-                >
-                    <Activity className="w-4 h-4 text-accent" />
-                    Recent Executions
-                    <span className="text-xs text-muted-foreground">({recentExecs.length})</span>
-                    {expandedSection === 'executions'
-                        ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
-                        : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
-                </button>
-
-                {expandedSection === 'executions' && (
-                    <>
-                        {recentExecs.length === 0 ? (
-                            <div className="text-center py-8 glass-card rounded-xl">
-                                <Activity className="w-8 h-8 mx-auto mb-2 opacity-25" />
-                                <p className="text-xs text-muted-foreground/60">No executions yet.</p>
-                            </div>
-                        ) : (
-                            <div className="glass-card rounded-xl overflow-hidden">
-                                <table className="w-full text-sm">
-                                    <thead>
-                                        <tr className="border-b border-border/60 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
-                                            <th className="px-4 py-2.5 font-medium">Status</th>
-                                            <th className="px-4 py-2.5 font-medium">Agent</th>
-                                            <th className="px-4 py-2.5 font-medium">Duration</th>
-                                            <th className="px-4 py-2.5 font-medium text-center">
-                                                <Wrench className="w-3 h-3 inline-block" />
-                                            </th>
-                                            <th className="px-4 py-2.5 font-medium">Started</th>
-                                            <th className="px-4 py-2.5 font-medium" />
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {recentExecs.map(exec => (
-                                            <tr
-                                                key={exec.id}
-                                                className="border-b border-border/30 last:border-b-0 hover:bg-white/[0.03] cursor-pointer transition-colors group"
-                                                onClick={() => navigate(`/w/${exec.workspace_id}/executions/${exec.id}`)}
-                                            >
-                                                <td className="px-4 py-2.5">
-                                                    <StatusBadge status={exec.status} />
-                                                </td>
-                                                <td className="px-4 py-2.5">
-                                                    <div className="text-sm text-foreground/90">
-                                                        {exec.agent_name ?? agentMap[exec.agent_id] ?? 'Unknown'}
-                                                    </div>
-                                                    {exec.workspace_name && (
-                                                        <div className="text-[10px] text-muted-foreground/60">{exec.workspace_name}</div>
-                                                    )}
-                                                </td>
-                                                <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                                                    {formatDuration(exec.started_at, exec.completed_at)}
-                                                </td>
-                                                <td className="px-4 py-2.5 text-center">
-                                                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                                                        <Wrench className="w-3 h-3" /> {exec.tool_calls_count}
-                                                    </span>
-                                                </td>
-                                                <td className="px-4 py-2.5">
-                                                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                                        <Clock className="w-3 h-3" />
-                                                        {formatDistanceToNow(new Date(exec.started_at), { addSuffix: true })}
-                                                    </span>
-                                                </td>
-                                                <td className="px-4 py-2.5 text-right">
-                                                    <ExternalLink className="w-3.5 h-3.5 text-muted-foreground/40 group-hover:text-accent transition-colors" />
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
+                        <div className="flex-1 overflow-y-auto px-3 pb-4">
+                            {workspaceList.map(ws => (
+                                <Link key={ws.id} to={`/w/${ws.id}`} className="sidebar-item text-xs">
+                                    {getWorkspaceIcon(ws.icon)}
+                                    <span className="truncate">{ws.name}</span>
+                                </Link>
+                            ))}
+                        </div>
+                        <div className="flex-shrink-0 border-t border-border/40 px-3 py-2">
+                            <Link to="/settings" className="sidebar-item text-xs">
+                                <Settings className="w-4 h-4" /> Settings
+                            </Link>
+                        </div>
                     </>
+                ) : (
+                    <div className="flex flex-col h-full items-center py-3 gap-1">
+                        <button
+                            type="button"
+                            onClick={() => setSidebarOpen(true)}
+                            title="Open sidebar"
+                            className="w-9 h-9 rounded-lg bg-accent/12 border border-accent/25 flex items-center justify-center mb-1 hover:bg-accent/20 transition-colors"
+                        >
+                            <Bot className="w-4 h-4 text-accent" />
+                        </button>
+                        <nav className="flex flex-col gap-1 w-full items-center mt-1">
+                            {workspaceList.map(ws => (
+                                <Link key={ws.id} to={`/w/${ws.id}`} title={ws.name} className="w-9 h-9 rounded-lg flex items-center justify-center transition-colors text-muted-foreground hover:bg-muted/40 hover:text-foreground">
+                                    {getWorkspaceIcon(ws.icon)}
+                                </Link>
+                            ))}
+                        </nav>
+                        <div className="mt-auto">
+                            <Link to="/settings" title="Settings" className="w-9 h-9 rounded-lg flex items-center justify-center transition-colors text-muted-foreground hover:bg-muted/40 hover:text-foreground">
+                                <Settings className="w-4 h-4" />
+                            </Link>
+                        </div>
+                    </div>
                 )}
-            </div>
+            </aside>
 
-            {/* Continuous Targets Section */}
-            <div className="space-y-3">
-                <button
-                    className="flex items-center gap-2 text-sm font-medium text-foreground/90 hover:text-foreground transition-colors"
-                    onClick={() => setExpandedSection(expandedSection === 'targets' ? null : 'targets')}
-                >
-                    <Target className="w-4 h-4 text-accent" />
-                    Continuous Targets
-                    <span className="text-xs text-muted-foreground">({(targets as TargetItem[]).length})</span>
-                    {expandedSection === 'targets'
-                        ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
-                        : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
-                </button>
+            {/* Main content */}
+            <div className="flex-1 flex flex-col min-w-0 glass-card overflow-hidden">
+                <header className="relative z-40 flex items-center gap-3 px-5 py-3 border-b border-border/60 bg-card/40 backdrop-blur-md flex-shrink-0">
+                    <button
+                        className="btn-ghost p-2 -ml-1 border border-border/60 bg-card/35"
+                        onClick={() => setSidebarOpen(p => !p)}
+                        title="Toggle sidebar"
+                        aria-label="Toggle sidebar"
+                    >
+                        <PanelLeft className="w-4 h-4" />
+                    </button>
+                    <div className="min-w-0 flex flex-col leading-tight">
+                        <p className="text-sm font-semibold truncate">Agents</p>
+                        <p className="hidden sm:block text-xs text-muted-foreground/90 truncate">{agents.length} agent{agents.length !== 1 ? 's' : ''} available</p>
+                    </div>
+                </header>
 
-                {expandedSection === 'targets' && (
-                    <>
-                        {(targets as TargetItem[]).length === 0 ? (
-                            <div className="text-center py-8 glass-card rounded-xl">
-                                <Target className="w-8 h-8 mx-auto mb-2 opacity-25" />
-                                <p className="text-xs text-muted-foreground/60">No continuous targets configured.</p>
-                            </div>
-                        ) : (
-                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                {(targets as TargetItem[]).map(target => (
-                                    <div
-                                        key={target.name}
-                                        className="glass-card rounded-xl border border-border/60 p-4 space-y-2 hover:border-accent/30 transition-colors cursor-pointer"
-                                        onClick={() => {
-                                            if (target.knowledge_id) {
-                                                navigate(`/w/${workspaceId}/knowledge/${target.knowledge_id}`)
-                                            }
-                                        }}
-                                    >
-                                        <div className="flex items-center gap-2">
-                                            <Target className="w-4 h-4 text-accent/70" />
-                                            <span className="text-sm font-medium truncate">{target.name}</span>
+                <div className="flex-1 min-h-0 overflow-y-auto p-6 lg:p-8 space-y-8">
+                    {/* Loading state */}
+                    {agentsLoading && (
+                        <div className="flex items-center justify-center py-24">
+                            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                        </div>
+                    )}
+
+                    {/* Agent Cards Grid */}
+                    {!agentsLoading && (
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                            {(agents as Agent[]).map(agent => (
+                                <div
+                                    key={agent.id}
+                                    className="glass-card rounded-xl border border-border/60 p-5 space-y-3 hover:border-accent/30 transition-colors cursor-pointer group"
+                                    onClick={() => setConfigureAgent(agent)}
+                                >
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="flex items-center gap-2.5 min-w-0">
+                                            <div className="w-9 h-9 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0">
+                                                {agent.icon ? (
+                                                    <span className="text-lg">{agent.icon}</span>
+                                                ) : (
+                                                    <Bot className="w-4 h-4 text-accent" />
+                                                )}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <h3 className="text-sm font-semibold truncate">{agent.name}</h3>
+                                                <span className={`text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded-full ${
+                                                    agent.is_system
+                                                        ? 'bg-blue-500/15 text-blue-400 ring-1 ring-blue-500/30'
+                                                        : 'bg-violet-500/15 text-violet-400 ring-1 ring-violet-500/30'
+                                                }`}>
+                                                    {agent.is_system ? 'System' : 'Custom'}
+                                                </span>
+                                            </div>
                                         </div>
-                                        {target.updated_at && (
-                                            <p className="text-[10px] text-muted-foreground/60 flex items-center gap-1">
-                                                <Clock className="w-3 h-3" />
-                                                Updated {formatDistanceToNow(new Date(target.updated_at), { addSuffix: true })}
-                                            </p>
+                                        <Settings2 className="w-3.5 h-3.5 text-muted-foreground/40 group-hover:text-accent transition-colors flex-shrink-0 mt-1" />
+                                    </div>
+
+                                    {agent.description && (
+                                        <p className="text-xs text-muted-foreground line-clamp-2">{agent.description}</p>
+                                    )}
+
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {agent.rag_enabled && (
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400/80 border border-emerald-500/20">RAG</span>
                                         )}
-                                        {target.knowledge_id && (
-                                            <span className="text-[10px] text-accent/60 flex items-center gap-1">
-                                                <ExternalLink className="w-3 h-3" /> View knowledge
+                                        {(agent.tool_categories ?? []).slice(0, 3).map(cat => (
+                                            <span key={cat} className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/30 text-muted-foreground border border-border/40">
+                                                {cat}
+                                            </span>
+                                        ))}
+                                        {(agent.tool_categories ?? []).length > 3 && (
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/30 text-muted-foreground border border-border/40">
+                                                +{agent.tool_categories.length - 3}
                                             </span>
                                         )}
                                     </div>
-                                ))}
-                            </div>
+
+                                    <div className="flex gap-1.5 pt-1">
+                                        <button
+                                            className="btn-ghost text-xs py-1 px-2.5 flex items-center gap-1.5 border border-border/40 hover:border-accent/40 hover:text-accent"
+                                            onClick={e => { e.stopPropagation(); setTriggerAgent(agent) }}
+                                        >
+                                            <Play className="w-3 h-3" /> Trigger
+                                        </button>
+                                        <button
+                                            className="btn-ghost text-xs py-1 px-2.5 flex items-center gap-1.5 border border-border/40 hover:border-accent/40 hover:text-accent"
+                                            onClick={e => { e.stopPropagation(); setScheduleAgent(agent) }}
+                                        >
+                                            <Clock className="w-3 h-3" /> Schedule
+                                        </button>
+                                        <button
+                                            className="btn-ghost text-xs py-1 px-2.5 flex items-center gap-1.5 border border-border/40 hover:border-accent/40 hover:text-accent"
+                                            onClick={e => { e.stopPropagation(); setConfigureAgent(agent) }}
+                                        >
+                                            <Settings2 className="w-3 h-3" /> Configure
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Recent Executions Section */}
+                    <div className="space-y-3">
+                        <button
+                            className="flex items-center gap-2 text-sm font-medium text-foreground/90 hover:text-foreground transition-colors"
+                            onClick={() => setExpandedSection(expandedSection === 'executions' ? null : 'executions')}
+                        >
+                            <Activity className="w-4 h-4 text-accent" />
+                            Recent Executions
+                            <span className="text-xs text-muted-foreground">({recentExecs.length})</span>
+                            {expandedSection === 'executions'
+                                ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
+                                : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+                        </button>
+
+                        {expandedSection === 'executions' && (
+                            <>
+                                {recentExecs.length === 0 ? (
+                                    <div className="text-center py-8 glass-card rounded-xl">
+                                        <Activity className="w-8 h-8 mx-auto mb-2 opacity-25" />
+                                        <p className="text-xs text-muted-foreground/60">No executions yet.</p>
+                                    </div>
+                                ) : (
+                                    <div className="glass-card rounded-xl overflow-hidden">
+                                        <table className="w-full text-sm">
+                                            <thead>
+                                                <tr className="border-b border-border/60 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+                                                    <th className="px-4 py-2.5 font-medium">Status</th>
+                                                    <th className="px-4 py-2.5 font-medium">Agent</th>
+                                                    <th className="px-4 py-2.5 font-medium">Duration</th>
+                                                    <th className="px-4 py-2.5 font-medium text-center">
+                                                        <Wrench className="w-3 h-3 inline-block" />
+                                                    </th>
+                                                    <th className="px-4 py-2.5 font-medium">Started</th>
+                                                    <th className="px-4 py-2.5 font-medium" />
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {recentExecs.map(exec => (
+                                                    <tr
+                                                        key={exec.id}
+                                                        className="border-b border-border/30 last:border-b-0 hover:bg-white/[0.03] cursor-pointer transition-colors group"
+                                                        onClick={() => navigate(`/w/${exec.workspace_id}/executions/${exec.id}`)}
+                                                    >
+                                                        <td className="px-4 py-2.5">
+                                                            <StatusBadge status={exec.status} />
+                                                        </td>
+                                                        <td className="px-4 py-2.5">
+                                                            <div className="text-sm text-foreground/90">
+                                                                {exec.agent_name ?? agentMap[exec.agent_id] ?? 'Unknown'}
+                                                            </div>
+                                                            {exec.workspace_name && (
+                                                                <div className="text-[10px] text-muted-foreground/60">{exec.workspace_name}</div>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-2.5 text-xs text-muted-foreground">
+                                                            {formatDuration(exec.started_at, exec.completed_at)}
+                                                        </td>
+                                                        <td className="px-4 py-2.5 text-center">
+                                                            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                                                <Wrench className="w-3 h-3" /> {exec.tool_calls_count}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-2.5">
+                                                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                                                <Clock className="w-3 h-3" />
+                                                                {formatDistanceToNow(new Date(exec.started_at), { addSuffix: true })}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-2.5 text-right">
+                                                            <ExternalLink className="w-3.5 h-3.5 text-muted-foreground/40 group-hover:text-accent transition-colors" />
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </>
                         )}
-                    </>
-                )}
+                    </div>
+
+                    {/* Continuous Targets Section */}
+                    <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                            <button
+                                className="flex items-center gap-2 text-sm font-medium text-foreground/90 hover:text-foreground transition-colors"
+                                onClick={() => setExpandedSection(expandedSection === 'targets' ? null : 'targets')}
+                            >
+                                <Target className="w-4 h-4 text-accent" />
+                                Continuous Targets
+                                <span className="text-xs text-muted-foreground">({(targets as TargetItem[]).length})</span>
+                                {expandedSection === 'targets'
+                                    ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
+                                    : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+                            </button>
+                            {expandedSection === 'targets' && workspaceList.length > 1 && (
+                                <select
+                                    className="input text-xs py-1 px-2 w-auto ml-auto"
+                                    value={targetWsId}
+                                    onChange={e => setTargetWsId(e.target.value)}
+                                >
+                                    {workspaceList.map(ws => (
+                                        <option key={ws.id} value={ws.id}>{ws.name}</option>
+                                    ))}
+                                </select>
+                            )}
+                        </div>
+
+                        {expandedSection === 'targets' && (
+                            <>
+                                {(targets as TargetItem[]).length === 0 ? (
+                                    <div className="text-center py-8 glass-card rounded-xl">
+                                        <Target className="w-8 h-8 mx-auto mb-2 opacity-25" />
+                                        <p className="text-xs text-muted-foreground/60">No continuous targets configured.</p>
+                                    </div>
+                                ) : (
+                                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                        {(targets as TargetItem[]).map(target => (
+                                            <div
+                                                key={target.name}
+                                                className="glass-card rounded-xl border border-border/60 p-4 space-y-2 hover:border-accent/30 transition-colors cursor-pointer"
+                                                onClick={() => {
+                                                    if (target.knowledge_id) {
+                                                        navigate(`/w/${targetWsId}/knowledge/${target.knowledge_id}`)
+                                                    }
+                                                }}
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    <Target className="w-4 h-4 text-accent/70" />
+                                                    <span className="text-sm font-medium truncate">{target.name}</span>
+                                                </div>
+                                                {target.updated_at && (
+                                                    <p className="text-[10px] text-muted-foreground/60 flex items-center gap-1">
+                                                        <Clock className="w-3 h-3" />
+                                                        Updated {formatDistanceToNow(new Date(target.updated_at), { addSuffix: true })}
+                                                    </p>
+                                                )}
+                                                {target.knowledge_id && (
+                                                    <span className="text-[10px] text-accent/60 flex items-center gap-1">
+                                                        <ExternalLink className="w-3 h-3" /> View knowledge
+                                                    </span>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                </div>
             </div>
 
             {/* Modals */}
             {triggerAgent_ && (
                 <TriggerModal
                     agent={triggerAgent_}
-                    workspaceId={workspaceId}
                     onClose={() => setTriggerAgent(null)}
                 />
             )}
             {scheduleAgent && (
                 <ScheduleModal
                     agent={scheduleAgent}
-                    workspaceId={workspaceId}
                     onClose={() => setScheduleAgent(null)}
                 />
             )}

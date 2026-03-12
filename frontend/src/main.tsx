@@ -134,11 +134,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                         <AgentPage />
                                     </ErrorBoundary>
                                 } />
-                                <Route path="agents" element={
-                                    <ErrorBoundary>
-                                        <AgentsPage />
-                                    </ErrorBoundary>
-                                } />
                                 <Route path="search" element={
                                     <ErrorBoundary>
                                         <SearchPage />
@@ -155,6 +150,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                     </ErrorBoundary>
                                 } />
                             </Route>
+                            <Route path="/agents" element={
+                                <ErrorBoundary>
+                                    <AgentsPage />
+                                </ErrorBoundary>
+                            } />
                             <Route path="/settings" element={
                                 <ErrorBoundary>
                                     <SettingsPage />

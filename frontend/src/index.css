@@ -836,66 +836,100 @@
 
   /* ── Type-specific timeline step colors ──────────────────────────────────── */
 
+  /* thinking  — zinc */
   .chat-workflow-step--thinking {
-    --toggle-border: hsla(240, 4%, 46%, 0.3);
-    --toggle-border-hover: hsla(240, 4%, 46%, 0.5);
+    --toggle-border: hsla(240, 6%, 50%, 0.35);
+    --toggle-border-hover: hsla(240, 6%, 50%, 0.55);
+    --toggle-bg: hsla(240, 6%, 50%, 0.12);
+    --toggle-bg-open: hsla(240, 6%, 50%, 0.16);
+    --card-border: hsla(240, 6%, 50%, 0.18);
+    --card-border-top: hsla(240, 6%, 50%, 0.10);
+    --card-bg: hsla(240, 6%, 50%, 0.06);
   }
 
+  /* tool  — cyan */
   .chat-workflow-step--tool {
-    --toggle-border: hsla(188, 78%, 41%, 0.3);
-    --toggle-border-hover: hsla(188, 78%, 41%, 0.5);
-    --toggle-bg: linear-gradient(140deg, hsla(188, 78%, 41%, 0.06), hsla(188, 78%, 41%, 0.03));
-    --toggle-bg-open: linear-gradient(140deg, hsla(188, 78%, 41%, 0.08), hsla(188, 78%, 41%, 0.04));
-    --card-border: hsla(188, 78%, 41%, 0.15);
-    --card-border-top: hsla(188, 78%, 41%, 0.08);
-    --card-bg: linear-gradient(160deg, hsla(188, 78%, 41%, 0.04), hsla(188, 78%, 41%, 0.02));
+    --toggle-border: hsla(197, 79%, 50%, 0.35);
+    --toggle-border-hover: hsla(197, 79%, 50%, 0.55);
+    --toggle-bg: hsla(197, 79%, 50%, 0.12);
+    --toggle-bg-open: hsla(197, 79%, 50%, 0.16);
+    --card-border: hsla(197, 79%, 50%, 0.18);
+    --card-border-top: hsla(197, 79%, 50%, 0.10);
+    --card-bg: hsla(197, 79%, 50%, 0.06);
   }
 
+  /* hitl  — amber */
   .chat-workflow-step--hitl {
-    --toggle-border: hsla(38, 92%, 50%, 0.3);
-    --toggle-border-hover: hsla(38, 92%, 50%, 0.5);
-    --toggle-bg: linear-gradient(140deg, hsla(38, 92%, 50%, 0.06), hsla(38, 92%, 50%, 0.03));
-    --toggle-bg-open: linear-gradient(140deg, hsla(38, 92%, 50%, 0.08), hsla(38, 92%, 50%, 0.04));
-    --card-border: hsla(38, 92%, 50%, 0.15);
-    --card-border-top: hsla(38, 92%, 50%, 0.08);
-    --card-bg: linear-gradient(160deg, hsla(38, 92%, 50%, 0.04), hsla(38, 92%, 50%, 0.02));
+    --toggle-border: hsla(38, 92%, 50%, 0.35);
+    --toggle-border-hover: hsla(38, 92%, 50%, 0.55);
+    --toggle-bg: hsla(38, 92%, 50%, 0.12);
+    --toggle-bg-open: hsla(38, 92%, 50%, 0.16);
+    --card-border: hsla(38, 92%, 50%, 0.18);
+    --card-border-top: hsla(38, 92%, 50%, 0.10);
+    --card-bg: hsla(38, 92%, 50%, 0.06);
   }
 
+  /* subagent  — purple */
   .chat-workflow-step--subagent {
-    --toggle-border: hsla(271, 91%, 65%, 0.3);
-    --toggle-border-hover: hsla(271, 91%, 65%, 0.5);
-    --toggle-bg: linear-gradient(140deg, hsla(271, 91%, 65%, 0.06), hsla(271, 91%, 65%, 0.03));
-    --toggle-bg-open: linear-gradient(140deg, hsla(271, 91%, 65%, 0.08), hsla(271, 91%, 65%, 0.04));
-    --card-border: hsla(271, 91%, 65%, 0.15);
-    --card-border-top: hsla(271, 91%, 65%, 0.08);
-    --card-bg: linear-gradient(160deg, hsla(271, 91%, 65%, 0.04), hsla(271, 91%, 65%, 0.02));
+    --toggle-border: hsla(271, 91%, 65%, 0.35);
+    --toggle-border-hover: hsla(271, 91%, 65%, 0.55);
+    --toggle-bg: hsla(271, 91%, 65%, 0.12);
+    --toggle-bg-open: hsla(271, 91%, 65%, 0.16);
+    --card-border: hsla(271, 91%, 65%, 0.18);
+    --card-border-top: hsla(271, 91%, 65%, 0.10);
+    --card-bg: hsla(271, 91%, 65%, 0.06);
   }
 
+  /* response  — emerald */
   .chat-workflow-step--response {
-    --toggle-border: hsla(160, 84%, 39%, 0.3);
-    --toggle-border-hover: hsla(160, 84%, 39%, 0.5);
-    --toggle-bg-open: linear-gradient(140deg, hsla(160, 84%, 39%, 0.08), hsla(160, 84%, 39%, 0.04));
+    --toggle-border: hsla(160, 84%, 39%, 0.35);
+    --toggle-border-hover: hsla(160, 84%, 39%, 0.55);
+    --toggle-bg: hsla(160, 84%, 39%, 0.12);
+    --toggle-bg-open: hsla(160, 84%, 39%, 0.16);
+    --card-border: hsla(160, 84%, 39%, 0.18);
+    --card-border-top: hsla(160, 84%, 39%, 0.10);
+    --card-bg: hsla(160, 84%, 39%, 0.06);
   }
 
+  /* prompt  — violet */
   .chat-workflow-step--prompt {
-    --toggle-border: hsla(258, 90%, 66%, 0.3);
-    --toggle-border-hover: hsla(258, 90%, 66%, 0.5);
-    --toggle-bg: linear-gradient(140deg, hsla(258, 90%, 66%, 0.06), hsla(258, 90%, 66%, 0.03));
-    --toggle-bg-open: linear-gradient(140deg, hsla(258, 90%, 66%, 0.08), hsla(258, 90%, 66%, 0.04));
+    --toggle-border: hsla(258, 90%, 66%, 0.35);
+    --toggle-border-hover: hsla(258, 90%, 66%, 0.55);
+    --toggle-bg: hsla(258, 90%, 66%, 0.12);
+    --toggle-bg-open: hsla(258, 90%, 66%, 0.16);
+    --card-border: hsla(258, 90%, 66%, 0.18);
+    --card-border-top: hsla(258, 90%, 66%, 0.10);
+    --card-bg: hsla(258, 90%, 66%, 0.06);
   }
 
+  /* source  — indigo */
   .chat-workflow-step--source {
-    --toggle-border: hsla(239, 84%, 67%, 0.3);
-    --toggle-border-hover: hsla(239, 84%, 67%, 0.5);
-    --toggle-bg: linear-gradient(140deg, hsla(239, 84%, 67%, 0.06), hsla(239, 84%, 67%, 0.03));
-    --toggle-bg-open: linear-gradient(140deg, hsla(239, 84%, 67%, 0.08), hsla(239, 84%, 67%, 0.04));
+    --toggle-border: hsla(239, 84%, 67%, 0.35);
+    --toggle-border-hover: hsla(239, 84%, 67%, 0.55);
+    --toggle-bg: hsla(239, 84%, 67%, 0.12);
+    --toggle-bg-open: hsla(239, 84%, 67%, 0.16);
+    --card-border: hsla(239, 84%, 67%, 0.18);
+    --card-border-top: hsla(239, 84%, 67%, 0.10);
+    --card-bg: hsla(239, 84%, 67%, 0.06);
   }
 
+  /* attachment  — sky */
   .chat-workflow-step--attachment {
-    --toggle-border: hsla(199, 89%, 48%, 0.3);
-    --toggle-border-hover: hsla(199, 89%, 48%, 0.5);
-    --toggle-bg: linear-gradient(140deg, hsla(199, 89%, 48%, 0.06), hsla(199, 89%, 48%, 0.03));
-    --toggle-bg-open: linear-gradient(140deg, hsla(199, 89%, 48%, 0.08), hsla(199, 89%, 48%, 0.04));
+    --toggle-border: hsla(199, 89%, 48%, 0.35);
+    --toggle-border-hover: hsla(199, 89%, 48%, 0.55);
+    --toggle-bg: hsla(199, 89%, 48%, 0.12);
+    --toggle-bg-open: hsla(199, 89%, 48%, 0.16);
+    --card-border: hsla(199, 89%, 48%, 0.18);
+    --card-border-top: hsla(199, 89%, 48%, 0.10);
+    --card-bg: hsla(199, 89%, 48%, 0.06);
+  }
+
+  /* llm  — dot: bg-card border-accent/30 */
+  .chat-workflow-step--llm {
+    --toggle-border: hsla(var(--accent) / 0.3);
+    --toggle-border-hover: hsla(var(--accent) / 0.5);
+    --toggle-bg: hsl(var(--card));
+    --toggle-bg-open: hsl(var(--card));
   }
 
   .chat-source-card {

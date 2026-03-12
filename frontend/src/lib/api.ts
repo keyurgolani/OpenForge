@@ -254,6 +254,8 @@ export const updateTarget = (wid: string, name: string, data: object): Promise<a
 // ── Agent Executions ─────────────────────────────────────────────────────────
 export const listAllExecutions = (params?: object): Promise<any> =>
     api.get('/agents/executions', { params }).then(r => r.data)
+export const listAllExecutionsPaginated = (params?: object): Promise<any> =>
+    api.get('/agents/executions/paginated', { params }).then(r => r.data)
 export const listExecutions = (wid: string, params?: object): Promise<any> =>
     api.get(`/agents/workspace/${wid}/executions`, { params }).then(r => r.data)
 export const getConversationStreamState = (wid: string, cid: string): Promise<any> =>

@@ -37,6 +37,7 @@ import {
 import MarkdownIt from 'markdown-it'
 import { sanitizeProviderDisplayName } from '@/lib/provider-display'
 import { ToolCallCard } from '@/components/shared/ToolCallCard'
+import { TimelineBadge } from '@/components/shared/TimelineBadge'
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
 
@@ -1318,10 +1319,10 @@ export default function AgentPage() {
                                                     />
                                                 )}
                                                 {streamingModelLabel && (
-                                                    <div className="chat-workflow-step chat-workflow-step--iconic chat-section-reveal w-fit">
+                                                    <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--llm chat-section-reveal w-fit">
                                                         <ChatTimelineDot type="llm" />
                                                         <span className="chat-subsection-toggle" style={{ cursor: 'default' }}>
-                                                            <Bot className="h-3 w-3" />
+                                                            <Bot className="h-3 w-3 text-accent/80" />
                                                             <span>LLM</span>
                                                             <span className="text-muted-foreground/40">·</span>
                                                             <span className="truncate">{streamingModelLabel}</span>
@@ -2650,11 +2651,15 @@ function ThinkingBlock({
     }
 
     return (
-        <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--thinking">
-            <ChatTimelineDot type="thinking" />
-            <button className={`chat-subsection-toggle ${open ? 'chat-subsection-toggle-open' : ''}`} onClick={toggle}>
-                {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                <Brain className="w-3 h-3" />
+        <TimelineBadge
+            type="thinking"
+            open={open}
+            onToggle={toggle}
+            timelineDot={<ChatTimelineDot type="thinking" />}
+            blockRef={blockRef}
+            detailCardClassName="relative w-full chat-section-reveal"
+            label={<>
+                <Brain className="w-3 h-3 text-zinc-400" />
                 {isActiveStream
                     ? <><span>Thinking</span><span className="animate-pulse text-accent/50">•••</span></>
                     : open
@@ -2663,39 +2668,33 @@ function ThinkingBlock({
                     ? `Thought for ${durationMs >= 60000 ? Math.round(durationMs / 60000) + 'm' : durationMs >= 1000 ? (durationMs / 1000).toFixed(durationMs < 10000 ? 1 : 0) + 's' : durationMs + 'ms'}`
                     : 'Thought'
                 }
-            </button>
-            <div ref={blockRef} className={`chat-collapse w-full ${open ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
-                <div className="chat-collapse-inner">
-                    <div className="relative w-full chat-step-detail-card chat-section-reveal">
-                        {isActiveStream && !fullyExpanded && hasHiddenTop && (
-                            <>
-                                <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-10 rounded-t-xl bg-gradient-to-b from-accent/6 via-accent/6/66 to-transparent" />
-                                <button
-                                    type="button"
-                                    className="absolute left-1/2 top-0 z-[3] -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 rounded-full border border-accent/30 bg-card/95 px-2.5 py-0.5 text-[11px] text-accent/80 hover:border-accent/55 hover:text-accent shadow-sm"
-                                    onClick={expandFully}
-                                    aria-label="Expand thinking"
-                                    title="Show full thinking while streaming"
-                                >
-                                    <ChevronsUp className="h-3 w-3" />
-                                    Expand
-                                </button>
-                            </>
-                        )}
-                        <div
-                            ref={scrollRef}
-                            onScroll={handleScroll}
-                            className="text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap break-words"
-                            style={isActiveStream && !fullyExpanded ? { maxHeight: `${THINKING_STREAM_MAX_HEIGHT}px`, overflowY: 'auto' } : undefined}
-                        >
-                            {content}
-                            {/* Spacer so the last line of text is never clipped by the max-height boundary */}
-                            {isActiveStream && !fullyExpanded && <div className="h-6" aria-hidden />}
-                        </div>
-                    </div>
-                </div>
+            </>}
+        >
+            {isActiveStream && !fullyExpanded && hasHiddenTop && (
+                <>
+                    <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-10 rounded-t-xl bg-gradient-to-b from-accent/6 via-accent/6/66 to-transparent" />
+                    <button
+                        type="button"
+                        className="absolute left-1/2 top-0 z-[3] -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 rounded-full border border-accent/30 bg-card/95 px-2.5 py-0.5 text-[11px] text-accent/80 hover:border-accent/55 hover:text-accent shadow-sm"
+                        onClick={expandFully}
+                        aria-label="Expand thinking"
+                        title="Show full thinking while streaming"
+                    >
+                        <ChevronsUp className="h-3 w-3" />
+                        Expand
+                    </button>
+                </>
+            )}
+            <div
+                ref={scrollRef}
+                onScroll={handleScroll}
+                className="text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap break-words"
+                style={isActiveStream && !fullyExpanded ? { maxHeight: `${THINKING_STREAM_MAX_HEIGHT}px`, overflowY: 'auto' } : undefined}
+            >
+                {content}
+                {isActiveStream && !fullyExpanded && <div className="h-6" aria-hidden />}
             </div>
-        </div>
+        </TimelineBadge>
     )
 }
 
@@ -2791,19 +2790,22 @@ function SubagentCard({
             : <XCircle className="w-3 h-3 text-red-400" />
 
     return (
-        <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--subagent chat-section-reveal">
-            <ChatTimelineDot type="subagent" />
-            <button className={`chat-subsection-toggle ${open ? 'chat-subsection-toggle-open' : ''}`} onClick={toggle}>
-                {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                <Network className="w-3 h-3" />
+        <TimelineBadge
+            type="subagent"
+            open={open}
+            onToggle={toggle}
+            timelineDot={<ChatTimelineDot type="subagent" />}
+            blockRef={blockRef}
+            className="chat-section-reveal"
+            detailCardClassName="chat-section-reveal overflow-hidden !p-0"
+            statusIcon={statusIcon}
+            label={<>
+                <Network className="w-3 h-3 text-purple-400" />
                 <span className="text-muted-foreground/70">Agent.Invoke</span>
                 <span className="text-muted-foreground/40 mx-0.5">·</span>
                 <span>Subagent: {agentDisplayName}</span>
-                {statusIcon}
-            </button>
-            <div ref={blockRef} className={`chat-collapse w-full ${open ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
-                <div className="chat-collapse-inner">
-                    <div className="chat-step-detail-card chat-section-reveal overflow-hidden !p-0">
+            </>}
+        >
 
                         {/* Request */}
                         <div className="px-4 pt-3 pb-2 border-b border-accent/10">
@@ -2875,10 +2877,7 @@ function SubagentCard({
                                 )}
                             </div>
                         )}
-                    </div>
-                </div>
-            </div>
-        </div>
+        </TimelineBadge>
     )
 }
 
@@ -2886,29 +2885,28 @@ function SubagentCard({
 function PromptOptimizedCard({ entry }: { entry: TimelinePromptOptimized }) {
     const [expanded, setExpanded] = useState(false)
     return (
-        <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--prompt chat-section-reveal">
-            <ChatTimelineDot type="prompt" />
-            <button
-                className="chat-subsection-toggle"
-                onClick={() => setExpanded(prev => !prev)}
-            >
-                <Sparkles className="h-3 w-3 text-accent" />
+        <TimelineBadge
+            type="prompt"
+            open={expanded}
+            onToggle={() => setExpanded(prev => !prev)}
+            timelineDot={<ChatTimelineDot type="prompt" />}
+            className="chat-section-reveal"
+            label={<>
+                <Sparkles className="h-3 w-3 text-violet-400" />
                 <span>Prompt Optimized</span>
-                {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-            </button>
-            {expanded && (
-                <div className="mt-2 space-y-2 text-xs">
-                    <div>
-                        <span className="text-muted-foreground font-medium block mb-0.5">Original:</span>
-                        <div className="bg-muted/20 rounded-lg px-3 py-2 text-foreground/80 whitespace-pre-wrap">{entry.original}</div>
-                    </div>
-                    <div>
-                        <span className="text-accent/80 font-medium block mb-0.5">Optimized:</span>
-                        <div className="bg-accent/5 border border-accent/15 rounded-lg px-3 py-2 text-foreground/90 whitespace-pre-wrap">{entry.optimized}</div>
-                    </div>
+            </>}
+        >
+            <div className="space-y-2 text-xs">
+                <div>
+                    <span className="text-muted-foreground font-medium block mb-0.5">Original:</span>
+                    <div className="bg-muted/20 rounded-lg px-3 py-2 text-foreground/80 whitespace-pre-wrap">{entry.original}</div>
                 </div>
-            )}
-        </div>
+                <div>
+                    <span className="text-accent/80 font-medium block mb-0.5">Optimized:</span>
+                    <div className="bg-accent/5 border border-accent/15 rounded-lg px-3 py-2 text-foreground/90 whitespace-pre-wrap">{entry.optimized}</div>
+                </div>
+            </div>
+        </TimelineBadge>
     )
 }
 
@@ -2993,15 +2991,15 @@ function HITLCard({
     const action = entry.tool_id.split('.').slice(1).join('.')
 
     return (
-        <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--hitl chat-section-reveal">
-            <ChatTimelineDot type="hitl" />
-            <button
-                type="button"
-                className={`chat-subsection-toggle ${open ? 'chat-subsection-toggle-open' : ''}`}
-                onClick={toggle}
-            >
-                {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                <ShieldAlert className="h-3 w-3" />
+        <TimelineBadge
+            type="hitl"
+            open={open}
+            onToggle={toggle}
+            timelineDot={<ChatTimelineDot type="hitl" />}
+            className="chat-section-reveal"
+            statusIcon={statusIcon}
+            label={<>
+                <ShieldAlert className="h-3 w-3 text-amber-400" />
                 <span className="shrink-0">HITL</span>
                 <span className="text-muted-foreground/40">·</span>
                 <span className="flex gap-0.5 items-baseline min-w-0">
@@ -3013,78 +3011,71 @@ function HITLCard({
                         </>
                     )}
                 </span>
-                {statusIcon}
-            </button>
+            </>}
+        >
+            {/* Action summary */}
+            {entry.action_summary && (
+                <div className="text-[11px] text-foreground/80">{entry.action_summary}</div>
+            )}
 
-            <div className={`chat-collapse w-full ${open ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
-                <div className="chat-collapse-inner">
-                    <div className="chat-step-detail-card">
-                        {/* Action summary */}
-                        {entry.action_summary && (
-                            <div className="text-[11px] text-foreground/80">{entry.action_summary}</div>
-                        )}
+            {/* Risk + status */}
+            <div className="flex items-center gap-2 text-[11px]">
+                <span className="text-[10px] uppercase tracking-wide text-accent/55 font-medium">Risk</span>
+                <span className="capitalize text-foreground/75">{entry.risk_level || 'low'}</span>
+                <span className="text-muted-foreground/30 mx-1">·</span>
+                <span className="text-[10px] uppercase tracking-wide text-accent/55 font-medium">Status</span>
+                <span className={`capitalize ${localStatus === 'approved' ? 'text-emerald-400' : localStatus === 'denied' ? 'text-red-400' : 'text-foreground/75'}`}>{localStatus}</span>
+            </div>
 
-                        {/* Risk + status */}
-                        <div className="flex items-center gap-2 text-[11px]">
-                            <span className="text-[10px] uppercase tracking-wide text-accent/55 font-medium">Risk</span>
-                            <span className="capitalize text-foreground/75">{entry.risk_level || 'low'}</span>
-                            <span className="text-muted-foreground/30 mx-1">·</span>
-                            <span className="text-[10px] uppercase tracking-wide text-accent/55 font-medium">Status</span>
-                            <span className={`capitalize ${localStatus === 'approved' ? 'text-emerald-400' : localStatus === 'denied' ? 'text-red-400' : 'text-foreground/75'}`}>{localStatus}</span>
-                        </div>
-
-                        {/* Guidance textarea + action buttons for pending */}
-                        {!readonly && localStatus === 'pending' && (
-                            <div className="space-y-2">
-                                <textarea
-                                    value={reason}
-                                    onChange={e => setReason(e.target.value)}
-                                    placeholder="Optional: add guidance for the agent..."
-                                    rows={2}
-                                    className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-1.5 text-[11px] text-foreground placeholder:text-muted-foreground/50 resize-none focus:outline-none focus:ring-1 focus:ring-accent/40"
-                                />
-                                <div className="flex gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={handleApprove}
-                                        disabled={loading}
-                                        className="flex items-center gap-1.5 rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-[11px] text-emerald-300 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
-                                    >
-                                        {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
-                                        Approve
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={handleDeny}
-                                        disabled={loading}
-                                        className="flex items-center gap-1.5 rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-1 text-[11px] text-red-300 hover:bg-red-500/20 transition-colors disabled:opacity-50"
-                                    >
-                                        {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldX className="h-3 w-3" />}
-                                        Deny
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Resolution confirmation + steering hint for resolved entries */}
-                        {localStatus !== 'pending' && (
-                            <div className="space-y-1.5">
-                                <div className={`flex items-center gap-1.5 text-[11px] ${localStatus === 'approved' ? 'text-emerald-400' : 'text-red-400'}`}>
-                                    {localStatus === 'approved' ? <ShieldCheck className="h-3 w-3" /> : <ShieldX className="h-3 w-3" />}
-                                    {localStatus === 'approved' ? 'Tool execution approved' : 'Tool execution denied'}
-                                </div>
-                                {reason && (
-                                    <div className="text-[11px] text-muted-foreground/70 border-l-2 border-accent/30 pl-2">
-                                        <span className="text-[10px] uppercase tracking-wide text-accent/55 font-medium">Guidance: </span>
-                                        {reason}
-                                    </div>
-                                )}
-                            </div>
-                        )}
+            {/* Guidance textarea + action buttons for pending */}
+            {!readonly && localStatus === 'pending' && (
+                <div className="space-y-2">
+                    <textarea
+                        value={reason}
+                        onChange={e => setReason(e.target.value)}
+                        placeholder="Optional: add guidance for the agent..."
+                        rows={2}
+                        className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-1.5 text-[11px] text-foreground placeholder:text-muted-foreground/50 resize-none focus:outline-none focus:ring-1 focus:ring-accent/40"
+                    />
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={handleApprove}
+                            disabled={loading}
+                            className="flex items-center gap-1.5 rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-[11px] text-emerald-300 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
+                        >
+                            {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
+                            Approve
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleDeny}
+                            disabled={loading}
+                            className="flex items-center gap-1.5 rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-1 text-[11px] text-red-300 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                        >
+                            {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldX className="h-3 w-3" />}
+                            Deny
+                        </button>
                     </div>
                 </div>
-            </div>
-        </div>
+            )}
+
+            {/* Resolution confirmation + steering hint for resolved entries */}
+            {localStatus !== 'pending' && (
+                <div className="space-y-1.5">
+                    <div className={`flex items-center gap-1.5 text-[11px] ${localStatus === 'approved' ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {localStatus === 'approved' ? <ShieldCheck className="h-3 w-3" /> : <ShieldX className="h-3 w-3" />}
+                        {localStatus === 'approved' ? 'Tool execution approved' : 'Tool execution denied'}
+                    </div>
+                    {reason && (
+                        <div className="text-[11px] text-muted-foreground/70 border-l-2 border-accent/30 pl-2">
+                            <span className="text-[10px] uppercase tracking-wide text-accent/55 font-medium">Guidance: </span>
+                            {reason}
+                        </div>
+                    )}
+                </div>
+            )}
+        </TimelineBadge>
     )
 }
 
@@ -3185,22 +3176,18 @@ function StreamingAttachmentsBadge({ atts, workspaceId }: { atts: AttachmentProc
         setOpen(prev => !prev)
     }
     return (
-        <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--attachment">
-            <ChatTimelineDot type="attachment" />
-            <button className={`chat-subsection-toggle ${open ? 'chat-subsection-toggle-open' : ''}`} onClick={toggle}>
-                {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                {`Processed ${atts.length} Attachment${atts.length === 1 ? '' : 's'}`}
-            </button>
-            <div className={`chat-collapse w-full ${open ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
-                <div className="chat-collapse-inner">
-                    <div className="chat-step-detail-card chat-section-reveal space-y-2 w-full">
-                        {atts.map(att => (
-                            <AttachmentCard key={att.id} att={att} workspaceId={workspaceId} />
-                        ))}
-                    </div>
-                </div>
-            </div>
-        </div>
+        <TimelineBadge
+            type="attachment"
+            open={open}
+            onToggle={toggle}
+            timelineDot={<ChatTimelineDot type="attachment" />}
+            detailCardClassName="chat-section-reveal space-y-2 w-full"
+            label={`Processed ${atts.length} Attachment${atts.length === 1 ? '' : 's'}`}
+        >
+            {atts.map(att => (
+                <AttachmentCard key={att.id} att={att} workspaceId={workspaceId} />
+            ))}
+        </TimelineBadge>
     )
 }
 
@@ -3222,41 +3209,37 @@ function StreamingSourcesBadge({ sources, workspaceId }: { sources: ContextSourc
         setOpen(prev => !prev)
     }
     return (
-        <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--source">
-            <ChatTimelineDot type="source" />
-            <button className={`chat-subsection-toggle ${open ? 'chat-subsection-toggle-open' : ''}`} onClick={toggle}>
-                {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                {`Used ${sources.length} Knowledge ${sources.length === 1 ? 'Record' : 'Records'}`}
-            </button>
-            <div className={`chat-collapse w-full ${open ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
-                <div className="chat-collapse-inner">
-                    <div className="chat-step-detail-card chat-section-reveal space-y-2 w-full">
-                        {sources.map(src => (
-                            <div key={src.knowledge_id} className="chat-source-card p-3 text-xs">
-                                <div className="flex items-center justify-between mb-1">
-                                    <span className="font-medium text-foreground">{src.title}</span>
-                                    {src.knowledge_id && (
-                                        <button className="text-accent/60 hover:text-accent transition-colors" onClick={() => navigate(`/w/${workspaceId}/knowledge/${src.knowledge_id}`)}>
-                                            <ExternalLink className="w-3 h-3" />
-                                        </button>
-                                    )}
-                                </div>
-                                <div
-                                    className="markdown-content max-h-20 overflow-hidden text-xs leading-relaxed text-muted-foreground [&_p]:mb-1 [&_ul]:mb-1 [&_ol]:mb-1 [&_h1]:text-xs [&_h2]:text-xs [&_h3]:text-xs [&_pre]:text-[11px] [&_code]:text-[11px]"
-                                    dangerouslySetInnerHTML={{ __html: md.render(src.snippet || '') }}
-                                />
-                                <div className="mt-1.5 flex items-center gap-1">
-                                    <div className="flex-1 h-1 rounded bg-border overflow-hidden">
-                                        <div className="h-full bg-accent rounded" style={{ width: `${Math.round(src.score * 100)}%` }} />
-                                    </div>
-                                    <span className="text-muted-foreground">{Math.round(src.score * 100)}%</span>
-                                </div>
-                            </div>
-                        ))}
+        <TimelineBadge
+            type="source"
+            open={open}
+            onToggle={toggle}
+            timelineDot={<ChatTimelineDot type="source" />}
+            detailCardClassName="chat-section-reveal space-y-2 w-full"
+            label={`Used ${sources.length} Knowledge ${sources.length === 1 ? 'Record' : 'Records'}`}
+        >
+            {sources.map(src => (
+                <div key={src.knowledge_id} className="chat-source-card p-3 text-xs">
+                    <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium text-foreground">{src.title}</span>
+                        {src.knowledge_id && (
+                            <button className="text-accent/60 hover:text-accent transition-colors" onClick={() => navigate(`/w/${workspaceId}/knowledge/${src.knowledge_id}`)}>
+                                <ExternalLink className="w-3 h-3" />
+                            </button>
+                        )}
+                    </div>
+                    <div
+                        className="markdown-content max-h-20 overflow-hidden text-xs leading-relaxed text-muted-foreground [&_p]:mb-1 [&_ul]:mb-1 [&_ol]:mb-1 [&_h1]:text-xs [&_h2]:text-xs [&_h3]:text-xs [&_pre]:text-[11px] [&_code]:text-[11px]"
+                        dangerouslySetInnerHTML={{ __html: md.render(src.snippet || '') }}
+                    />
+                    <div className="mt-1.5 flex items-center gap-1">
+                        <div className="flex-1 h-1 rounded bg-border overflow-hidden">
+                            <div className="h-full bg-accent rounded" style={{ width: `${Math.round(src.score * 100)}%` }} />
+                        </div>
+                        <span className="text-muted-foreground">{Math.round(src.score * 100)}%</span>
                     </div>
                 </div>
-            </div>
-        </div>
+            ))}
+        </TimelineBadge>
     )
 }
 
@@ -3414,113 +3397,101 @@ function ChatMessageCard({
                         {hasWorkflowSteps && (
                             <div className="chat-workflow-stack w-full">
                                 {attachmentsProcessed.length > 0 && (
-                                    <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--attachment">
-                                        <ChatTimelineDot type="attachment" />
-                                        <button
-                                            className={`chat-subsection-toggle ${attachmentsOpen ? 'chat-subsection-toggle-open' : ''}`}
-                                            onClick={() => {
-                                                if (attachmentsCollapseTimer.current) {
-                                                    clearTimeout(attachmentsCollapseTimer.current)
-                                                    attachmentsCollapseTimer.current = null
-                                                }
-                                                attachmentsUserInteracted.current = true
-                                                setAttachmentsOpen(prev => {
-                                                    const next = !prev
-                                                    if (next) {
+                                    <TimelineBadge
+                                        type="attachment"
+                                        open={attachmentsOpen}
+                                        onToggle={() => {
+                                            if (attachmentsCollapseTimer.current) {
+                                                clearTimeout(attachmentsCollapseTimer.current)
+                                                attachmentsCollapseTimer.current = null
+                                            }
+                                            attachmentsUserInteracted.current = true
+                                            setAttachmentsOpen(prev => {
+                                                const next = !prev
+                                                if (next) {
+                                                    window.requestAnimationFrame(() => {
                                                         window.requestAnimationFrame(() => {
-                                                            window.requestAnimationFrame(() => {
-                                                                requestVisibility?.(attachmentsBlockRef.current)
-                                                            })
-                                                        })
-                                                        window.setTimeout(() => {
                                                             requestVisibility?.(attachmentsBlockRef.current)
-                                                        }, 220)
-                                                    }
-                                                    return next
-                                                })
-                                            }}
-                                        >
-                                            {attachmentsOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                                            {`Processed ${attachmentsProcessed.length} Attachment${attachmentsProcessed.length === 1 ? '' : 's'}`}
-                                        </button>
-                                        <div ref={attachmentsBlockRef} className={`chat-collapse w-full ${attachmentsOpen ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
-                                            <div className="chat-collapse-inner">
-                                                <div className="chat-step-detail-card chat-section-reveal space-y-2 w-full">
-                                                    {attachmentsProcessed.map(att => (
-                                                        <AttachmentCard
-                                                            key={att.id}
-                                                            att={att}
-                                                            workspaceId={workspaceId}
-                                                        />
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
+                                                        })
+                                                    })
+                                                    window.setTimeout(() => {
+                                                        requestVisibility?.(attachmentsBlockRef.current)
+                                                    }, 220)
+                                                }
+                                                return next
+                                            })
+                                        }}
+                                        timelineDot={<ChatTimelineDot type="attachment" />}
+                                        blockRef={attachmentsBlockRef}
+                                        detailCardClassName="chat-section-reveal space-y-2 w-full"
+                                        label={`Processed ${attachmentsProcessed.length} Attachment${attachmentsProcessed.length === 1 ? '' : 's'}`}
+                                    >
+                                        {attachmentsProcessed.map(att => (
+                                            <AttachmentCard
+                                                key={att.id}
+                                                att={att}
+                                                workspaceId={workspaceId}
+                                            />
+                                        ))}
+                                    </TimelineBadge>
                                 )}
                                 {msg.context_sources && msg.context_sources.length > 0 && (
-                                    <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--source">
-                                        <ChatTimelineDot type="source" />
-                                        <button
-                                            className={`chat-subsection-toggle ${sourcesOpen ? 'chat-subsection-toggle-open' : ''}`}
-                                            onClick={() => {
-                                                if (sourcesCollapseTimer.current) {
-                                                    clearTimeout(sourcesCollapseTimer.current)
-                                                    sourcesCollapseTimer.current = null
-                                                }
-                                                sourcesUserInteracted.current = true
-                                                setSourcesOpen(prev => {
-                                                    const next = !prev
-                                                    if (next) {
+                                    <TimelineBadge
+                                        type="source"
+                                        open={sourcesOpen}
+                                        onToggle={() => {
+                                            if (sourcesCollapseTimer.current) {
+                                                clearTimeout(sourcesCollapseTimer.current)
+                                                sourcesCollapseTimer.current = null
+                                            }
+                                            sourcesUserInteracted.current = true
+                                            setSourcesOpen(prev => {
+                                                const next = !prev
+                                                if (next) {
+                                                    window.requestAnimationFrame(() => {
                                                         window.requestAnimationFrame(() => {
-                                                            window.requestAnimationFrame(() => {
-                                                                requestVisibility?.(sourcesBlockRef.current)
-                                                            })
-                                                        })
-                                                        window.setTimeout(() => {
                                                             requestVisibility?.(sourcesBlockRef.current)
-                                                        }, 220)
-                                                    }
-                                                    return next
-                                                })
-                                            }}
-                                        >
-                                            {sourcesOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                                            {`Used ${msg.context_sources.length} Knowledge ${msg.context_sources.length === 1 ? 'Record' : 'Records'}`}
-                                        </button>
-                                        <div ref={sourcesBlockRef} className={`chat-collapse w-full ${sourcesOpen ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
-                                            <div className="chat-collapse-inner">
-                                                <div className="chat-step-detail-card chat-section-reveal space-y-2 w-full">
-                                                    {msg.context_sources.map(src => (
-                                                        <div key={src.knowledge_id} className="chat-source-card p-3 text-xs">
-                                                            <div className="flex items-center justify-between mb-1">
-                                                                <span className="font-medium text-foreground">{src.title}</span>
-                                                                <button className="text-accent/60 hover:text-accent transition-colors" onClick={() => navigate(`/w/${workspaceId}/knowledge/${src.knowledge_id}`)}>
-                                                                    <ExternalLink className="w-3 h-3" />
-                                                                </button>
-                                                            </div>
-                                                            <div
-                                                                className="markdown-content max-h-20 overflow-hidden text-xs leading-relaxed text-muted-foreground [&_p]:mb-1 [&_ul]:mb-1 [&_ol]:mb-1 [&_h1]:text-xs [&_h2]:text-xs [&_h3]:text-xs [&_pre]:text-[11px] [&_code]:text-[11px]"
-                                                                dangerouslySetInnerHTML={{ __html: md.render(src.snippet || '') }}
-                                                            />
-                                                            <div className="mt-1.5 flex items-center gap-1">
-                                                                <div className="flex-1 h-1 rounded bg-border overflow-hidden">
-                                                                    <div className="h-full bg-accent rounded" style={{ width: `${Math.round(src.score * 100)}%` }} />
-                                                                </div>
-                                                                <span className="text-muted-foreground">{Math.round(src.score * 100)}%</span>
-                                                            </div>
-                                                        </div>
-                                                    ))}
+                                                        })
+                                                    })
+                                                    window.setTimeout(() => {
+                                                        requestVisibility?.(sourcesBlockRef.current)
+                                                    }, 220)
+                                                }
+                                                return next
+                                            })
+                                        }}
+                                        timelineDot={<ChatTimelineDot type="source" />}
+                                        blockRef={sourcesBlockRef}
+                                        detailCardClassName="chat-section-reveal space-y-2 w-full"
+                                        label={`Used ${msg.context_sources.length} Knowledge ${msg.context_sources.length === 1 ? 'Record' : 'Records'}`}
+                                    >
+                                        {msg.context_sources.map(src => (
+                                            <div key={src.knowledge_id} className="chat-source-card p-3 text-xs">
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <span className="font-medium text-foreground">{src.title}</span>
+                                                    <button className="text-accent/60 hover:text-accent transition-colors" onClick={() => navigate(`/w/${workspaceId}/knowledge/${src.knowledge_id}`)}>
+                                                        <ExternalLink className="w-3 h-3" />
+                                                    </button>
+                                                </div>
+                                                <div
+                                                    className="markdown-content max-h-20 overflow-hidden text-xs leading-relaxed text-muted-foreground [&_p]:mb-1 [&_ul]:mb-1 [&_ol]:mb-1 [&_h1]:text-xs [&_h2]:text-xs [&_h3]:text-xs [&_pre]:text-[11px] [&_code]:text-[11px]"
+                                                    dangerouslySetInnerHTML={{ __html: md.render(src.snippet || '') }}
+                                                />
+                                                <div className="mt-1.5 flex items-center gap-1">
+                                                    <div className="flex-1 h-1 rounded bg-border overflow-hidden">
+                                                        <div className="h-full bg-accent rounded" style={{ width: `${Math.round(src.score * 100)}%` }} />
+                                                    </div>
+                                                    <span className="text-muted-foreground">{Math.round(src.score * 100)}%</span>
                                                 </div>
                                             </div>
-                                        </div>
-                                    </div>
+                                        ))}
+                                    </TimelineBadge>
                                 )}
                                 {modelLabel && (
-                                    <div className="chat-workflow-step chat-workflow-step--iconic chat-section-reveal w-fit">
+                                    <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--llm chat-section-reveal w-fit">
                                         <ChatTimelineDot type="llm" />
                                         <span className="chat-subsection-toggle" style={{ cursor: 'default' }}>
-                                            <Bot className="h-3 w-3" />
+                                            <Bot className="h-3 w-3 text-accent/80" />
                                             <span>LLM</span>
                                             <span className="text-muted-foreground/40">·</span>
                                             <span className="truncate">{modelLabel}</span>

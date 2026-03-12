@@ -6,7 +6,7 @@ import uuid as _uuid_mod
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from openforge.db.postgres import get_db
 from openforge.db.models import AgentDefinitionModel, AgentExecution, Conversation, Workspace
@@ -14,6 +14,7 @@ from openforge.schemas.agent import (
     AgentDefinitionResponse,
     AgentDefinitionUpdate,
     AgentExecutionResponse,
+    AgentExecutionListResponse,
     AgentTriggerRequest,
     AgentMemoryStoreRequest,
     AgentMemoryRecallRequest,
@@ -85,6 +86,37 @@ async def list_all_executions(
     agent_names = await _build_agent_name_map(db)
     ws_names = await _build_workspace_name_map(db)
     return _enrich_executions(executions, agent_names, ws_names)
+
+
+@router.get("/executions/paginated", response_model=AgentExecutionListResponse)
+async def list_all_executions_paginated(
+    status: str | None = None,
+    agent_id: str | None = None,
+    limit: int = 25,
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db),
+):
+    """List all agent executions with pagination metadata."""
+    base = select(AgentExecution)
+    if status:
+        base = base.where(AgentExecution.status == status)
+    if agent_id:
+        base = base.where(AgentExecution.agent_id == agent_id)
+
+    count_q = select(func.count()).select_from(base.subquery())
+    total = (await db.execute(count_q)).scalar() or 0
+
+    q = base.order_by(AgentExecution.started_at.desc()).limit(limit).offset(offset)
+    result = await db.execute(q)
+    executions = list(result.scalars().all())
+    agent_names = await _build_agent_name_map(db)
+    ws_names = await _build_workspace_name_map(db)
+    return AgentExecutionListResponse(
+        items=_enrich_executions(executions, agent_names, ws_names),
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/{agent_id}", response_model=AgentDefinitionResponse)

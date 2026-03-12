@@ -56,6 +56,13 @@ class AgentExecutionResponse(BaseModel):
         from_attributes = True
 
 
+class AgentExecutionListResponse(BaseModel):
+    items: list[AgentExecutionResponse]
+    total: int
+    limit: int
+    offset: int
+
+
 class AgentTriggerRequest(BaseModel):
     instruction: str
     workspace_id: UUID

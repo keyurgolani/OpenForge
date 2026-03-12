@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import {
-    ChevronDown, ChevronRight, Wrench, CheckCircle2, XCircle, Loader2,
+    Wrench, CheckCircle2, XCircle, Loader2,
     File, Folder, Terminal, Globe, BookOpen, MessageSquare, Circle,
     Code2, GitBranch, ListChecks, User, Bot, Package, Cpu,
     Database, MemoryStick
 } from 'lucide-react'
+import { TimelineBadge } from './TimelineBadge'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -673,16 +674,14 @@ export function ToolCallCard({ callId: _callId, toolName, arguments: args, resul
     const hasDetails = hasArgs || result !== undefined
 
     return (
-        <div>
-            <button
-                type="button"
-                className={`chat-subsection-toggle ${isExpanded ? 'chat-subsection-toggle-open' : ''}`}
-                onClick={() => hasDetails && toggle()}
-                style={!hasDetails ? { cursor: 'default' } : undefined}
-            >
-                {hasDetails
-                    ? (isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />)
-                    : <span className="w-3 h-3 inline-block" />}
+        <TimelineBadge
+            type="tool"
+            bare
+            open={isExpanded}
+            onToggle={toggle}
+            hasDetails={hasDetails}
+            statusIcon={statusIcon}
+            label={<>
                 <CategoryIcon category={category} />
                 <span className={`flex gap-0.5 min-w-0${toolName.startsWith('agent.') ? ' flex-wrap items-start' : ' items-baseline'}`}>
                     <span className="text-muted-foreground/80 shrink-0">{category}</span>
@@ -696,28 +695,21 @@ export function ToolCallCard({ callId: _callId, toolName, arguments: args, resul
                         <span className={`text-muted-foreground/45 ml-1 font-mono text-[10px]${toolName.startsWith('agent.') ? ' whitespace-pre-wrap break-words' : ' truncate max-w-[200px]'}`}>{hint}</span>
                     )}
                 </span>
-                {statusIcon}
-            </button>
+            </>}
+        >
+            {hasArgs && <InputSection toolName={toolName} args={args} />}
 
-            <div className={`chat-collapse w-full ${isExpanded ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
-                <div className="chat-collapse-inner">
-                    <div className="chat-step-detail-card">
-                        {hasArgs && <InputSection toolName={toolName} args={args} />}
-
-                        {result !== undefined && (
-                            <div className="space-y-1.5">
-                                <div className={`text-[10px] uppercase tracking-wide font-medium ${result.success ? 'text-muted-foreground/50' : 'text-red-400/70'}`}>
-                                    {result.success ? 'Output' : 'Error'}
-                                </div>
-                                {result.success
-                                    ? <SmartOutput toolName={toolName} output={result.output} />
-                                    : <span className="break-words text-[11px] text-red-400">{result.error ?? 'Unknown error'}</span>
-                                }
-                            </div>
-                        )}
+            {result !== undefined && (
+                <div className="space-y-1.5">
+                    <div className={`text-[10px] uppercase tracking-wide font-medium ${result.success ? 'text-muted-foreground/50' : 'text-red-400/70'}`}>
+                        {result.success ? 'Output' : 'Error'}
                     </div>
+                    {result.success
+                        ? <SmartOutput toolName={toolName} output={result.output} />
+                        : <span className="break-words text-[11px] text-red-400">{result.error ?? 'Unknown error'}</span>
+                    }
                 </div>
-            </div>
-        </div>
+            )}
+        </TimelineBadge>
     )
 }
