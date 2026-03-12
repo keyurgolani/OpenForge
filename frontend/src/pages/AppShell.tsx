@@ -199,6 +199,8 @@ export default function AppShell() {
     const recentConversations = conversations as SidebarConversation[]
     const workspaceMenuRef = useRef<HTMLDivElement | null>(null)
     const conversationRenameInputRef = useRef<HTMLInputElement | null>(null)
+    const recentChatsGutterRef = useRef<HTMLSpanElement | null>(null)
+    const [recentChatsMaxCount, setRecentChatsMaxCount] = useState(3)
     const knowledgeItems = knowledgeData?.knowledge ?? []
     const pinnedKnowledgeItems = knowledgeItems.filter((n: { is_pinned: boolean }) => n.is_pinned)
     const isWorkspaceHome = location.pathname === `/w/${workspaceId}`
@@ -342,6 +344,17 @@ export default function AppShell() {
         })
         return () => window.cancelAnimationFrame(rafId)
     }, [renamingConversationId])
+
+    // Measure the vertical "Recent Chats" gutter text height and compute how many items fit
+    useEffect(() => {
+        const el = recentChatsGutterRef.current
+        if (!el) return
+        const gutterHeight = el.offsetHeight
+        // Each sidebar-item with text-xs has ~32px height (py-2 + text + border), plus 2px gap (space-y-0.5)
+        const itemHeight = 34
+        const count = Math.max(1, Math.floor(gutterHeight / itemHeight))
+        setRecentChatsMaxCount(count)
+    }, [agentSublistOpen, recentConversations.length])
 
     const toggleInsightSection = useCallback((section: InsightSectionKey) => {
         setActiveInsightSection(prev => (prev === section ? null : section))
@@ -579,8 +592,16 @@ export default function AppShell() {
                                             )}
                                         </div>
                                         {agentSublistOpen && recentConversations.length > 0 && (
-                                            <div className="ml-3 mt-0.5 border-l border-border/30 pl-2 space-y-0.5">
-                                                {recentConversations.slice(0, 5).map(c => {
+                                            <div className="ml-1 mt-1 flex items-stretch">
+                                                <span
+                                                    ref={recentChatsGutterRef}
+                                                    className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/40 select-none flex-shrink-0 pt-0.5"
+                                                    style={{ writingMode: 'vertical-lr' }}
+                                                >
+                                                    Recent Chats
+                                                </span>
+                                                <div className="pl-1.5 space-y-0.5 flex-1 min-w-0">
+                                                {recentConversations.slice(0, recentChatsMaxCount).map(c => {
                                                     const isRenaming = renamingConversationId === c.id
                                                     return (
                                                     <ContextMenu key={c.id}>
@@ -649,6 +670,7 @@ export default function AppShell() {
                                                     </ContextMenu>
                                                     )
                                                 })}
+                                                </div>
                                             </div>
                                         )}
                                     </div>
