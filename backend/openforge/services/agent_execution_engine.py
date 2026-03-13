@@ -1560,7 +1560,7 @@ class AgentExecutionEngine:
                 token_count=llm_gateway.count_tokens(full_response),
                 generation_ms=generation_ms,
                 context_sources=context_sources,
-                trigger_auto_title=not has_runtime_override,
+                trigger_auto_title=False,
                 tool_calls=all_tool_calls_made if all_tool_calls_made else None,
                 timeline=timeline if timeline else None,
                 is_interrupted=was_cancelled,
@@ -1597,26 +1597,25 @@ class AgentExecutionEngine:
                 duration_ms=generation_ms,
             )
 
-            if has_runtime_override:
-                async def _refresh_title() -> None:
-                    from openforge.db.postgres import AsyncSessionLocal
-                    try:
-                        async with AsyncSessionLocal() as title_db:
-                            await conversation_service.refresh_conversation_title(
-                                title_db,
-                                workspace_id=workspace_id,
-                                conversation_id=conversation_id,
-                                provider_name=provider_name,
-                                api_key=api_key,
-                                model=model,
-                                base_url=base_url,
-                            )
-                    except Exception as e:
-                        logger.warning(
-                            "Chat title refresh failed for conversation %s: %s",
-                            conversation_id, e,
-                        )
-                asyncio.create_task(_refresh_title())
+            # Refresh conversation title directly (not as background task) so it
+            # completes before the Celery worker closes the event loop.
+            try:
+                from openforge.db.postgres import AsyncSessionLocal
+                async with AsyncSessionLocal() as title_db:
+                    await conversation_service.refresh_conversation_title(
+                        title_db,
+                        workspace_id=workspace_id,
+                        conversation_id=conversation_id,
+                        provider_name=provider_name if has_runtime_override else None,
+                        api_key=api_key if has_runtime_override else None,
+                        model=model if has_runtime_override else None,
+                        base_url=base_url if has_runtime_override else None,
+                    )
+            except Exception as e:
+                logger.warning(
+                    "Chat title refresh failed for conversation %s: %s",
+                    conversation_id, e,
+                )
 
             # Embed the chat exchange for searchability
             if not was_cancelled and full_response and isinstance(user_content, str):
@@ -1625,22 +1624,20 @@ class AgentExecutionEngine:
                 _conv_title = conversation.title or ""
                 _msg_id = msg.id
 
-                async def _embed_chat() -> None:
-                    try:
-                        await chat_embedding_service.embed_exchange(
-                            conversation_id=conversation_id,
-                            workspace_id=workspace_id,
-                            user_message=user_content,
-                            assistant_response=full_response,
-                            conversation_title=_conv_title,
-                            message_id=_msg_id,
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            "Chat embedding failed for conversation %s: %s",
-                            conversation_id, e,
-                        )
-                asyncio.create_task(_embed_chat())
+                try:
+                    await chat_embedding_service.embed_exchange(
+                        conversation_id=conversation_id,
+                        workspace_id=workspace_id,
+                        user_message=user_content,
+                        assistant_response=full_response,
+                        conversation_title=_conv_title,
+                        message_id=_msg_id,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Chat embedding failed for conversation %s: %s",
+                        conversation_id, e,
+                    )
 
         except Exception as e:
             logger.error(
