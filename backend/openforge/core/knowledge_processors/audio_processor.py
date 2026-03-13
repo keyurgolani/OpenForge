@@ -353,22 +353,22 @@ class AudioProcessor:
     ) -> Optional[str]:
         """Generate AI title from transcript text."""
         from openforge.core.llm_gateway import llm_gateway
+        from openforge.core.prompt_catalogue import resolve_prompt_text
         from openforge.services.llm_service import llm_service
 
         provider_name, api_key, model, base_url = (
             await llm_service.get_provider_for_workspace(db_session, workspace_id)
         )
 
-        prompt = (
-            "Generate a concise, descriptive title (max 10 words) for this audio recording "
-            "based on its transcript. Return only the title text, nothing else.\n\n"
-            f"Transcript (first 2000 chars):\n{transcript[:2000]}"
+        prompt = await resolve_prompt_text(
+            db_session,
+            "audio_title_generation",
+            transcript=transcript[:2000],
         )
 
         title = await llm_gateway.chat(
             messages=[
-                {"role": "system", "content": "Generate concise titles. Return only the title text."},
-                {"role": "user", "content": prompt},
+                {"role": "system", "content": prompt},
             ],
             provider_name=provider_name,
             api_key=api_key,

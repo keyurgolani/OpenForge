@@ -18,6 +18,7 @@ from openforge.core.llm_gateway import llm_gateway
 from openforge.core.search_engine import search_engine
 from openforge.core.context_assembler import ContextAssembler
 from openforge.core.agent_definition import AgentDefinition
+from openforge.core.prompt_catalogue import resolve_agent_system_prompt, resolve_prompt_text
 from openforge.services.conversation_service import conversation_service
 from openforge.services.llm_service import llm_service
 from openforge.services.chat_retrieval import (
@@ -33,7 +34,7 @@ from openforge.services.tool_dispatcher import tool_dispatcher
 from openforge.services.policy_engine import policy_engine
 from openforge.services.hitl_service import hitl_service
 from openforge.db.models import (
-    AgentExecution, Config, Conversation, Knowledge,
+    AgentExecution, Conversation, Knowledge,
     Message, MessageAttachment, TaskLog, ToolCallLog, Workspace,
 )
 
@@ -661,19 +662,16 @@ class AgentExecutionEngine:
                             for m in messages
                         ]
                         history_text = "\n".join(history_lines)
+                        summary_instruction = await resolve_prompt_text(
+                            db,
+                            "mention_conversation_summary",
+                            chat_name=mname,
+                            conversation_history=history_text[:12000],
+                        )
 
                         summary_result = await self.execute_subagent(
                             workspace_id=workspace_id,
-                            instruction=(
-                                f"You are given the complete history of a chat conversation called '{mname}'.\n\n"
-                                f"Conversation History:\n{history_text[:12000]}\n\n"
-                                f"Provide a comprehensive summary of this conversation including:\n"
-                                f"- Main topics discussed\n"
-                                f"- Key decisions or conclusions reached\n"
-                                f"- Important information, data, or facts mentioned\n"
-                                f"- Any action items or next steps if mentioned\n\n"
-                                f"Be thorough but concise. This summary will be used as context for another agent."
-                            ),
+                            instruction=summary_instruction,
                             db=db,
                         )
                         parts.append(
@@ -880,24 +878,7 @@ class AgentExecutionEngine:
                 db, conversation_id, limit=agent.history_limit
             )
 
-            # Load agent system prompt — use DB override if set, otherwise catalogue default
-            from openforge.api.prompts import PROMPT_CATALOGUE
-            _agent_prompt_entry = next((p for p in PROMPT_CATALOGUE if p["id"] == "agent_system"), None)
-            _agent_prompt_default = _agent_prompt_entry["default"] if _agent_prompt_entry else ""
-            _prompt_cfg = await db.execute(
-                select(Config).where(Config.key == "prompt.agent_system")
-            )
-            _prompt_row = _prompt_cfg.scalar_one_or_none()
-
-            # Use agent's system_prompt if set, otherwise fall back to catalogue
-            if agent.system_prompt:
-                system_prompt = agent.system_prompt
-            else:
-                system_prompt = (
-                    _prompt_row.value.get("text")
-                    if _prompt_row and _prompt_row.value and "text" in _prompt_row.value
-                    else _agent_prompt_default
-                )
+            system_prompt = await resolve_agent_system_prompt(db, agent)
 
             # 5a-ii. Augment router/council prompts with available agent list
             if agent.id in ("router_agent", "council_agent"):
@@ -1896,39 +1877,13 @@ class AgentExecutionEngine:
                 except Exception:
                     pass
 
-            # Use the target agent's system prompt if available,
-            # otherwise use the default subagent prompt
-            if target_agent and target_agent.system_prompt:
-                system_prompt = target_agent.system_prompt
+            if target_agent:
+                system_prompt = await resolve_agent_system_prompt(db, target_agent)
             else:
-                system_prompt = (
-                    "You are an autonomous AI subagent operating inside OpenForge. "
-                    "You have been delegated a specific task by another agent. "
-                    "You MUST complete the task fully and autonomously — there is NO user present "
-                    "and you CANNOT ask for clarification or more details.\n\n"
-                    f"**You are already running inside workspace `{workspace_id}`.** "
-                    "All `workspace.*` and `filesystem.*` tools targeted at this workspace operate on it directly. "
-                    "Do NOT call `agent.invoke` to access this workspace — use your tools directly. "
-                    "Only use `agent.invoke` if you need to reach a DIFFERENT workspace.\n\n"
-                    "## Tool categories\n"
-                    "- `workspace.*` — the user's persistent content: knowledge records and chat conversations\n"
-                    "  - `workspace.search` — semantically search knowledge and past chats by topic\n"
-                    "  - `workspace.list_chats` — list all conversations to find one by title\n"
-                    "  - `workspace.read_chat` — read the full messages of a conversation by ID\n"
-                    "  - `workspace.list_knowledge` — browse knowledge records\n"
-                    "  - `workspace.save_knowledge` — create a new knowledge record\n"
-                    "  - `workspace.delete_knowledge` — delete a knowledge record\n"
-                    "- `memory.*` — your private execution scratchpad (ephemeral, invisible to user)\n"
-                    "  - `memory.store` / `memory.recall` / `memory.forget`\n"
-                    "- `filesystem.*` — files on the workspace disk\n"
-                    "- `agent.invoke` — delegate a task to a DIFFERENT workspace's agent (not needed for this workspace)\n\n"
-                    "## Rules\n"
-                    "1. NEVER say 'I need more details' or ask any questions — search and find the answer yourself.\n"
-                    "2. Try at least 2–3 different searches before concluding something cannot be found.\n"
-                    "3. When you find a `conversation_id` in search results, immediately call `workspace.read_chat` to read the full content.\n"
-                    "4. When asked to summarize a chat: use `workspace.list_chats` to find it by title, then `workspace.read_chat` to read its messages.\n"
-                    "5. Return a complete, useful response — not a description of what you attempted.\n"
-                    "6. Only call tools listed in your tool schema — never invent tool names.\n"
+                system_prompt = await resolve_prompt_text(
+                    db,
+                    "subagent_system",
+                    workspace_id=workspace_id,
                 )
 
             rag_results: list = []

@@ -19,6 +19,7 @@ from openforge.utils.task_audit import (
     start_task_log,
 )
 from openforge.utils.title import normalize_knowledge_title
+from openforge.core.prompt_catalogue import resolve_prompt_text
 
 router = APIRouter()
 
@@ -82,21 +83,14 @@ async def resolve_knowledge_ids(body: KnowledgeResolveRequest, db: AsyncSession 
     ]
 
 
-async def _get_prompt(db: AsyncSession, prompt_id: str, **kwargs) -> str:
-    from openforge.db.models import Config
-    from openforge.api.prompts import PROMPT_CATALOGUE
-    from sqlalchemy import select
+async def _workspace_prompt_vars(db: AsyncSession, workspace_id: UUID) -> dict[str, str]:
+    from openforge.db.models import Workspace
 
-    entry = next((p for p in PROMPT_CATALOGUE if p["id"] == prompt_id), None)
-    default_text = entry["default"] if entry else ""
-
-    result = await db.execute(select(Config).where(Config.key == f"prompt.{prompt_id}"))
-    row = result.scalar_one_or_none()
-    text = row.value.get("text") if row and row.value and "text" in row.value else default_text
-
-    for k, v in kwargs.items():
-        text = text.replace(f"{{{k}}}", str(v))
-    return text
+    workspace = await db.get(Workspace, workspace_id)
+    return {
+        "workspace_name": workspace.name if workspace else "",
+        "workspace_description": workspace.description if workspace else "",
+    }
 
 
 @router.get("/{workspace_id}/knowledge", response_model=dict)
@@ -218,12 +212,14 @@ async def summarize_knowledge(
     try:
         provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
         tags_str = ", ".join([t.tag for t in knowledge_record.tags])
-        prompt = await _get_prompt(
-            db, "summarize_knowledge",
+        prompt = await resolve_prompt_text(
+            db,
+            "summarize_knowledge",
             knowledge_content=knowledge_record.content[:8000],
             knowledge_title=normalize_knowledge_title(knowledge_record.title) or "Untitled",
             knowledge_type=knowledge_record.type,
-            tags=tags_str
+            tags=tags_str,
+            **(await _workspace_prompt_vars(db, workspace_id)),
         )
         summary = await llm_gateway.chat(
             messages=[
@@ -285,11 +281,13 @@ async def extract_insights(
     try:
         provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
         tags_str = ", ".join([t.tag for t in knowledge_record.tags])
-        prompt = await _get_prompt(
-            db, "extract_insights",
+        prompt = await resolve_prompt_text(
+            db,
+            "extract_insights",
             knowledge_content=knowledge_record.content[:8000],
             knowledge_title=normalize_knowledge_title(knowledge_record.title) or "Untitled",
-            tags=tags_str
+            tags=tags_str,
+            **(await _workspace_prompt_vars(db, workspace_id)),
         )
 
         response = await llm_gateway.chat(
@@ -364,11 +362,17 @@ async def generate_title(
 
     try:
         provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
-        prompt = await _get_prompt(db, "generate_title", knowledge_content=knowledge_record.content[:2000])
+        prompt = await resolve_prompt_text(
+            db,
+            "generate_title",
+            knowledge_content=knowledge_record.content[:2000],
+            **(await _workspace_prompt_vars(db, workspace_id)),
+        )
+        system_prompt = await resolve_prompt_text(db, "knowledge_title_system")
 
         title_response = await llm_gateway.chat(
             messages=[
-                {"role": "system", "content": "Generate concise knowledge titles. Return only the title text."},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt},
             ],
             provider_name=provider_name, api_key=api_key, model=model, base_url=base_url, max_tokens=30,

@@ -10,7 +10,7 @@ class AgentDefinition:
     id: str
     name: str
     description: str
-    version: str = "1.0.0"
+    version: str = "0.1.0"
 
     # Behavior
     system_prompt: str = ""

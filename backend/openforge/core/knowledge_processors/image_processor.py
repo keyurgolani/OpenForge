@@ -293,6 +293,7 @@ class ImageProcessor:
 
         try:
             from openforge.core.llm_gateway import llm_gateway
+            from openforge.core.prompt_catalogue import resolve_prompt_text
             from openforge.services.llm_service import llm_service
 
             provider_name, api_key, model, base_url = (
@@ -312,14 +313,7 @@ class ImageProcessor:
         mime_map = {"jpg": "jpeg", "jpeg": "jpeg", "png": "png", "gif": "gif", "webp": "webp"}
         mime_subtype = mime_map.get(ext, "jpeg")
 
-        prompt = (
-            "Analyze this image and provide:\n"
-            "1. A detailed description of what the image shows\n"
-            "2. A concise title (max 10 words)\n"
-            "3. Relevant tags (5-10 keywords)\n\n"
-            "Respond in JSON format:\n"
-            '{"description": "...", "title": "...", "tags": ["tag1", "tag2", ...]}'
-        )
+        prompt = await resolve_prompt_text(db_session, "image_vision_analysis")
 
         try:
             response = await llm_gateway.chat(

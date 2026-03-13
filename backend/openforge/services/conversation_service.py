@@ -523,6 +523,7 @@ class ConversationService:
         base_url: str | None = None,
     ) -> str | None:
         from openforge.core.llm_gateway import llm_gateway
+        from openforge.core.prompt_catalogue import resolve_prompt_text
         from openforge.services.llm_service import llm_service
         from openforge.api.websocket import ws_manager
 
@@ -620,41 +621,20 @@ class ConversationService:
                     continue
                 attempted_models.append(model_name)
                 try:
+                    title_prompt = await resolve_prompt_text(
+                        db,
+                        "conversation_title",
+                        current_title=(conv.title or "").strip() or "(none)",
+                        topic_shift_signal="yes" if topic_shift_detected else "no",
+                        first_user_intent=(first_user_text or latest_user_context)[:600],
+                        running_summary=(running_summary or weighted_seed or first_user_text)[:1400],
+                        latest_user_turn=latest_user_context[:700],
+                        latest_assistant_turn=latest_assistant_context[:900],
+                        recent_transcript=recent_transcript[:3200],
+                    )
                     raw_title = await llm_gateway.chat(
                         messages=[
-                            {
-                                "role": "system",
-                                "content": (
-                                    "You are a conversation title engine for chat threads. "
-                                    "Generate concise, topic-first titles that capture what is being discussed, "
-                                    "not how the user asked. "
-                                    "Avoid request framing like 'Tell me', 'Can you', or 'Please'. "
-                                    "Output only the final title text (or __KEEP__) with no quotes."
-                                ),
-                            },
-                            {
-                                "role": "user",
-                                "content": (
-                                    "Generate an updated conversation title.\n"
-                                    "Title philosophy:\n"
-                                    "- Capture the high-level crux and information content of the conversation.\n"
-                                    "- Use both user and assistant turns.\n"
-                                    "- Weight recent turns more, but keep continuity with the ongoing topic.\n"
-                                    "- Convert request phrasing into subject phrasing.\n"
-                                    "  Example: 'Tell me a long story about X' -> 'Long Story About X'.\n"
-                                    "- Ignore acknowledgements like thanks/ok/continue.\n"
-                                    "- Keep it 3-8 words, specific, and useful in a conversation list.\n"
-                                    "- If current title still fits and topic did not materially shift, output __KEEP__ exactly.\n"
-                                    "- Output only title text (or __KEEP__).\n\n"
-                                    f"Current title: {(conv.title or '').strip() or '(none)'}\n"
-                                    f"Topic shift signal: {'yes' if topic_shift_detected else 'no'}\n"
-                                    f"First user intent: {(first_user_text or latest_user_context)[:600]}\n"
-                                    f"Running summary: {(running_summary or weighted_seed or first_user_text)[:1400]}\n"
-                                    f"Latest user turn: {latest_user_context[:700]}\n"
-                                    f"Latest assistant turn: {latest_assistant_context[:900]}\n"
-                                    f"Recent transcript:\n{recent_transcript[:3200]}"
-                                ),
-                            },
+                            {"role": "system", "content": title_prompt},
                         ],
                         provider_name=selected_provider_name,
                         api_key=selected_api_key or "",

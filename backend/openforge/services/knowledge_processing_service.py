@@ -121,19 +121,9 @@ class KnowledgeProcessingService:
         }
 
     async def _get_prompt_text(self, db: AsyncSession, prompt_id: str, **kwargs) -> str:
-        from openforge.db.models import Config
-        from openforge.api.prompts import PROMPT_CATALOGUE
+        from openforge.core.prompt_catalogue import resolve_prompt_text
 
-        entry = next((p for p in PROMPT_CATALOGUE if p["id"] == prompt_id), None)
-        default_text = entry["default"] if entry else ""
-
-        result = await db.execute(select(Config).where(Config.key == f"prompt.{prompt_id}"))
-        row = result.scalar_one_or_none()
-        text = row.value.get("text") if row and row.value and "text" in row.value else default_text
-
-        for k, v in kwargs.items():
-            text = text.replace(f"{{{k}}}", str(v))
-        return text
+        return await resolve_prompt_text(db, prompt_id, **kwargs)
 
     async def _finalize_task_log(
         self,
@@ -311,7 +301,10 @@ class KnowledgeProcessingService:
                 )
                 title_response = await llm_gateway.chat(
                     messages=[
-                        {"role": "system", "content": "Generate concise knowledge titles. Return only the title text."},
+                        {
+                            "role": "system",
+                            "content": await self._get_prompt_text(db, "knowledge_title_system"),
+                        },
                         {"role": "user", "content": title_prompt},
                     ],
                     provider_name=provider_name,
@@ -765,10 +758,21 @@ class KnowledgeProcessingService:
                 from openforge.services.llm_service import llm_service
                 async with AsyncSessionLocal() as db:
                     provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
+                    workspace = await db.get(Workspace, workspace_id)
+                    workspace_name = workspace.name if workspace else ""
+                    workspace_description = workspace.description if workspace else ""
+                    title_system_prompt = await self._get_prompt_text(db, "knowledge_title_system")
+                    title_prompt = await self._get_prompt_text(
+                        db,
+                        "generate_title",
+                        knowledge_content=content[:2000],
+                        workspace_name=workspace_name,
+                        workspace_description=workspace_description,
+                    )
                     generated = await llm_gateway.chat(
                         messages=[
-                            {"role": "system", "content": "Generate a concise, descriptive title (max 60 chars). Return ONLY the title, no quotes or extra text."},
-                            {"role": "user", "content": content[:2000]},
+                            {"role": "system", "content": title_system_prompt},
+                            {"role": "user", "content": title_prompt},
                         ],
                         provider_name=provider_name, api_key=api_key, model=model, base_url=base_url, max_tokens=30,
                     )
