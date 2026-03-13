@@ -1,9 +1,9 @@
 import { useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { listExecutions, listAgents } from '@/lib/api'
+import { listAllExecutions, listAgents } from '@/lib/api'
 import { formatDistanceToNow } from 'date-fns'
-import { Activity, Clock, Wrench, MessageCircle, ArrowRight, Loader2 } from 'lucide-react'
+import { Activity, Clock, Wrench, MessageCircle, ArrowRight, Loader2, Play, Pause, CheckCircle2, XCircle, AlertTriangle, Timer } from 'lucide-react'
 
 interface Execution {
     id: string
@@ -58,14 +58,130 @@ function truncateId(id: string): string {
     return id.length > 8 ? id.slice(0, 8) : id
 }
 
-export default function ExecutionListPage() {
-    const { workspaceId = '' } = useParams<{ workspaceId: string }>()
+/* ── Execution Row ────────────────────────────────────────────────────────── */
+
+function ExecutionRow({ exec, agentMap, onClick }: {
+    exec: Execution
+    agentMap: Record<string, string>
+    onClick: () => void
+}) {
+    const navigate = useNavigate()
+    return (
+        <tr
+            className="border-b border-border/30 last:border-b-0 hover:bg-white/[0.03] cursor-pointer transition-colors group"
+            onClick={onClick}
+        >
+            <td className="px-4 py-2.5">
+                <span className="font-mono text-xs text-foreground/70" title={exec.id}>
+                    {truncateId(exec.id)}
+                </span>
+            </td>
+            <td className="px-4 py-2.5">
+                <span className="text-sm text-foreground/90">
+                    {agentMap[exec.agent_id] ?? 'Unknown Agent'}
+                </span>
+            </td>
+            <td className="px-4 py-2.5">
+                <StatusBadge status={exec.status} />
+            </td>
+            <td className="px-4 py-2.5">
+                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Clock className="w-3 h-3 flex-shrink-0" />
+                    {formatDistanceToNow(new Date(exec.started_at), { addSuffix: true })}
+                </span>
+            </td>
+            <td className="px-4 py-2.5">
+                <span className="text-xs text-muted-foreground">
+                    {formatDuration(exec.started_at, exec.completed_at)}
+                </span>
+            </td>
+            <td className="px-4 py-2.5 text-center">
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                    <Wrench className="w-3 h-3" />
+                    {exec.tool_calls_count}
+                </span>
+            </td>
+            <td className="px-4 py-2.5 text-center">
+                <button
+                    className="inline-flex items-center gap-1 text-xs text-accent/60 hover:text-accent transition-colors"
+                    title="Open conversation"
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        navigate(`/w/${exec.workspace_id}/agent/${exec.conversation_id}`)
+                    }}
+                >
+                    <MessageCircle className="w-3.5 h-3.5" />
+                </button>
+            </td>
+            <td className="px-4 py-2.5 text-right">
+                <ArrowRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-accent transition-colors" />
+            </td>
+        </tr>
+    )
+}
+
+/* ── Widget ───────────────────────────────────────────────────────────────── */
+
+function ExecutionWidget({ title, icon, iconColor, executions, agentMap, emptyText }: {
+    title: string
+    icon: React.ReactNode
+    iconColor: string
+    executions: Execution[]
+    agentMap: Record<string, string>
+    emptyText: string
+}) {
     const navigate = useNavigate()
 
+    return (
+        <div className="glass-card rounded-xl border border-border/60 overflow-hidden">
+            <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border/40 bg-card/30">
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${iconColor}`}>
+                    {icon}
+                </div>
+                <h3 className="text-sm font-semibold">{title}</h3>
+                <span className="text-[10px] text-muted-foreground ml-auto">{executions.length}</span>
+            </div>
+
+            {executions.length === 0 ? (
+                <div className="px-4 py-8 text-center">
+                    <p className="text-xs text-muted-foreground/60">{emptyText}</p>
+                </div>
+            ) : (
+                <table className="w-full text-sm">
+                    <thead>
+                        <tr className="border-b border-border/40 text-left text-[10px] uppercase tracking-wider text-muted-foreground/70">
+                            <th className="px-4 py-2 font-medium">ID</th>
+                            <th className="px-4 py-2 font-medium">Agent</th>
+                            <th className="px-4 py-2 font-medium">Status</th>
+                            <th className="px-4 py-2 font-medium">Started</th>
+                            <th className="px-4 py-2 font-medium">Duration</th>
+                            <th className="px-4 py-2 font-medium text-center"><Wrench className="w-3 h-3 inline-block" /></th>
+                            <th className="px-4 py-2 font-medium text-center">Chat</th>
+                            <th className="px-4 py-2 font-medium" />
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {executions.map(exec => (
+                            <ExecutionRow
+                                key={exec.id}
+                                exec={exec}
+                                agentMap={agentMap}
+                                onClick={() => navigate(`/executions/${exec.id}`)}
+                            />
+                        ))}
+                    </tbody>
+                </table>
+            )}
+        </div>
+    )
+}
+
+/* ── Main Page ────────────────────────────────────────────────────────────── */
+
+export default function ExecutionListPage() {
     const { data: executions = [], isLoading } = useQuery<Execution[]>({
-        queryKey: ['executions', workspaceId],
-        queryFn: () => listExecutions(workspaceId),
-        enabled: !!workspaceId,
+        queryKey: ['executions'],
+        queryFn: () => listAllExecutions(),
         refetchInterval: 5000,
     })
 
@@ -80,125 +196,81 @@ export default function ExecutionListPage() {
         return map
     }, [agents])
 
-    const runningCount = useMemo(
-        () => executions.filter(e => e.status === 'running').length,
+    const running = useMemo(() => executions.filter(e => e.status === 'running'), [executions])
+    const queued = useMemo(() => executions.filter(e => e.status === 'queued'), [executions])
+    const awaitingApproval = useMemo(() => executions.filter(e => e.status === 'paused_hitl'), [executions])
+    const recent = useMemo(
+        () => executions.filter(e => e.status === 'completed' || e.status === 'failed' || e.status === 'cancelled').slice(0, 20),
         [executions],
     )
 
-    return (
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 animate-fade-in">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center">
-                        <Activity className="w-5 h-5 text-accent" />
-                    </div>
-                    <div>
-                        <h1 className="text-lg font-semibold tracking-tight">Agent Executions</h1>
-                        <p className="text-xs text-muted-foreground">
-                            {executions.length} execution{executions.length !== 1 ? 's' : ''}
-                            {runningCount > 0 && (
-                                <span className="text-emerald-400 ml-1.5">
-                                    ({runningCount} running)
-                                </span>
-                            )}
-                        </p>
-                    </div>
-                </div>
+    if (isLoading) {
+        return (
+            <div className="flex-1 flex items-center justify-center">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
+        )
+    }
 
-            {/* Loading */}
-            {isLoading && (
-                <div className="flex items-center justify-center py-24">
-                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                </div>
-            )}
-
-            {/* Empty */}
-            {!isLoading && executions.length === 0 && (
-                <div className="text-center py-24 glass-card rounded-xl">
+    if (executions.length === 0) {
+        return (
+            <div className="flex-1 flex items-center justify-center">
+                <div className="text-center">
                     <Activity className="w-10 h-10 mx-auto mb-3 opacity-30" />
                     <p className="text-sm text-muted-foreground">No agent executions yet.</p>
                     <p className="text-xs text-muted-foreground/60 mt-1">Start an agent conversation to see executions here.</p>
                 </div>
+            </div>
+        )
+    }
+
+    return (
+        <div className="flex-1 overflow-y-auto p-6 space-y-5 animate-fade-in">
+            {/* Active: Running */}
+            {running.length > 0 && (
+                <ExecutionWidget
+                    title="Running"
+                    icon={<Play className="w-3.5 h-3.5 text-emerald-400" />}
+                    iconColor="bg-emerald-500/10"
+                    executions={running}
+                    agentMap={agentMap}
+                    emptyText=""
+                />
             )}
 
-            {/* Table */}
-            {!isLoading && executions.length > 0 && (
-                <div className="glass-card rounded-xl overflow-hidden">
-                    <table className="w-full text-sm">
-                        <thead>
-                            <tr className="border-b border-border/60 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
-                                <th className="px-4 py-3 font-medium">Execution</th>
-                                <th className="px-4 py-3 font-medium">Agent</th>
-                                <th className="px-4 py-3 font-medium">Status</th>
-                                <th className="px-4 py-3 font-medium">Started</th>
-                                <th className="px-4 py-3 font-medium">Duration</th>
-                                <th className="px-4 py-3 font-medium text-center">
-                                    <Wrench className="w-3.5 h-3.5 inline-block" />
-                                </th>
-                                <th className="px-4 py-3 font-medium text-center">Chat</th>
-                                <th className="px-4 py-3 font-medium" />
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {executions.map((exec) => (
-                                <tr
-                                    key={exec.id}
-                                    className="border-b border-border/30 last:border-b-0 hover:bg-white/[0.03] cursor-pointer transition-colors group"
-                                    onClick={() => navigate(`/w/${workspaceId}/executions/${exec.id}`)}
-                                >
-                                    <td className="px-4 py-3">
-                                        <span className="font-mono text-xs text-foreground/70" title={exec.id}>
-                                            {truncateId(exec.id)}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <span className="text-sm text-foreground/90">
-                                            {agentMap[exec.agent_id] ?? 'Unknown Agent'}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <StatusBadge status={exec.status} />
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                            <Clock className="w-3 h-3 flex-shrink-0" />
-                                            {formatDistanceToNow(new Date(exec.started_at), { addSuffix: true })}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <span className="text-xs text-muted-foreground">
-                                            {formatDuration(exec.started_at, exec.completed_at)}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3 text-center">
-                                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                                            <Wrench className="w-3 h-3" />
-                                            {exec.tool_calls_count}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3 text-center">
-                                        <button
-                                            className="inline-flex items-center gap-1 text-xs text-accent/60 hover:text-accent transition-colors"
-                                            title="Open conversation"
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                                navigate(`/w/${workspaceId}/agent/${exec.conversation_id}`)
-                                            }}
-                                        >
-                                            <MessageCircle className="w-3.5 h-3.5" />
-                                        </button>
-                                    </td>
-                                    <td className="px-4 py-3 text-right">
-                                        <ArrowRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-accent transition-colors" />
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+            {/* Awaiting Approval */}
+            {awaitingApproval.length > 0 && (
+                <ExecutionWidget
+                    title="Awaiting Approval"
+                    icon={<Pause className="w-3.5 h-3.5 text-amber-400" />}
+                    iconColor="bg-amber-500/10"
+                    executions={awaitingApproval}
+                    agentMap={agentMap}
+                    emptyText=""
+                />
             )}
+
+            {/* Queued */}
+            {queued.length > 0 && (
+                <ExecutionWidget
+                    title="Queued"
+                    icon={<Timer className="w-3.5 h-3.5 text-gray-400" />}
+                    iconColor="bg-gray-500/10"
+                    executions={queued}
+                    agentMap={agentMap}
+                    emptyText=""
+                />
+            )}
+
+            {/* Recent (completed / failed / cancelled) */}
+            <ExecutionWidget
+                title="Recent Executions"
+                icon={<Clock className="w-3.5 h-3.5 text-blue-400" />}
+                iconColor="bg-blue-500/10"
+                executions={recent}
+                agentMap={agentMap}
+                emptyText="No completed executions yet."
+            />
         </div>
     )
 }

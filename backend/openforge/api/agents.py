@@ -80,7 +80,8 @@ async def list_all_executions(
         .offset(offset)
     )
     if status:
-        q = q.where(AgentExecution.status == status)
+        statuses = [s.strip() for s in status.split(",")]
+        q = q.where(AgentExecution.status.in_(statuses)) if len(statuses) > 1 else q.where(AgentExecution.status == statuses[0])
     result = await db.execute(q)
     executions = list(result.scalars().all())
     agent_names = await _build_agent_name_map(db)
@@ -117,6 +118,24 @@ async def list_all_executions_paginated(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get("/executions/{execution_id}", response_model=AgentExecutionResponse)
+async def get_execution_by_id(
+    execution_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a single execution by ID (no workspace filter)."""
+    result = await db.execute(
+        select(AgentExecution).where(AgentExecution.id == execution_id)
+    )
+    execution = result.scalar_one_or_none()
+    if not execution:
+        raise HTTPException(404, "Execution not found")
+    agent_names = await _build_agent_name_map(db)
+    ws_names = await _build_workspace_name_map(db)
+    enriched = _enrich_executions([execution], agent_names, ws_names)
+    return enriched[0]
 
 
 @router.get("/{agent_id}", response_model=AgentDefinitionResponse)

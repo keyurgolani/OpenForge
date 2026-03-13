@@ -1,19 +1,18 @@
 import { useState, useMemo, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
     listAgents, updateAgent, triggerAgent,
     listAgentSchedules, createAgentSchedule, updateAgentSchedule, deleteAgentSchedule,
-    listAllExecutions, listTargets, listWorkspaces,
+    listTargets, listWorkspaces,
 } from '@/lib/api'
 import { formatDistanceToNow } from 'date-fns'
 import {
     Bot, Play, Clock, Settings2, Plus, Trash2, Edit, Target, Calendar,
     Loader2, X, Check, ChevronDown, ChevronUp,
-    ExternalLink, Wrench, Activity,
-    ToggleLeft, ToggleRight, Save, Settings, PanelLeft, Home, FolderOpen,
+    ExternalLink,
+    ToggleLeft, ToggleRight, Save,
 } from 'lucide-react'
-import { getWorkspaceIcon } from '@/pages/SettingsPage'
 
 /* ── Types ───────────────────────────────────────────────────────────────── */
 
@@ -68,20 +67,6 @@ interface Schedule {
     created_at: string
 }
 
-interface Execution {
-    id: string
-    workspace_id: string
-    conversation_id: string
-    agent_id: string
-    agent_name: string | null
-    workspace_name: string | null
-    status: 'queued' | 'running' | 'paused_hitl' | 'completed' | 'failed' | 'cancelled'
-    iteration_count: number
-    tool_calls_count: number
-    started_at: string
-    completed_at: string | null
-}
-
 interface TargetItem {
     id: string
     name: string
@@ -91,41 +76,6 @@ interface TargetItem {
 }
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
-
-const STATUS_CONFIG: Record<string, { label: string; classes: string; pulse?: boolean }> = {
-    running:     { label: 'Running',   classes: 'bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30', pulse: true },
-    completed:   { label: 'Done',      classes: 'bg-blue-500/15 text-blue-400 ring-1 ring-blue-500/30' },
-    failed:      { label: 'Failed',    classes: 'bg-red-500/15 text-red-400 ring-1 ring-red-500/30' },
-    cancelled:   { label: 'Cancelled', classes: 'bg-yellow-500/15 text-yellow-400 ring-1 ring-yellow-500/30' },
-    queued:      { label: 'Queued',    classes: 'bg-gray-500/15 text-gray-400 ring-1 ring-gray-500/30' },
-    paused_hitl: { label: 'Awaiting',  classes: 'bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30' },
-}
-
-function StatusBadge({ status }: { status: string }) {
-    const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.queued
-    return (
-        <span className={`inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full ${cfg.classes}`}>
-            {cfg.pulse && (
-                <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
-                </span>
-            )}
-            {cfg.label}
-        </span>
-    )
-}
-
-function formatDuration(startedAt: string, completedAt: string | null): string {
-    const start = new Date(startedAt).getTime()
-    const end = completedAt ? new Date(completedAt).getTime() : Date.now()
-    const diffMs = end - start
-    if (diffMs < 1000) return `${diffMs}ms`
-    if (diffMs < 60_000) return `${(diffMs / 1000).toFixed(1)}s`
-    const mins = Math.floor(diffMs / 60_000)
-    const secs = Math.round((diffMs % 60_000) / 1000)
-    return `${mins}m ${secs}s`
-}
 
 const CRON_PRESETS = [
     { label: 'Every Hour', value: '0 * * * *' },
@@ -176,7 +126,7 @@ function TriggerModal({ agent, onClose }: { agent: Agent; onClose: () => void })
                             <button
                                 className="btn-primary text-xs py-1.5 px-3"
                                 onClick={() => {
-                                    navigate(`/w/${selectedWs}/executions/${success}`)
+                                    navigate(`/executions/${success}`)
                                     onClose()
                                 }}
                             >
@@ -587,12 +537,11 @@ function ConfigureModal({ agent, onClose }: { agent: Agent; onClose: () => void 
 
 export default function AgentsPage() {
     const navigate = useNavigate()
-    const [sidebarOpen, setSidebarOpen] = useState(true)
 
     const [triggerAgent_, setTriggerAgent] = useState<Agent | null>(null)
     const [scheduleAgent, setScheduleAgent] = useState<Agent | null>(null)
     const [configureAgent, setConfigureAgent] = useState<Agent | null>(null)
-    const [expandedSection, setExpandedSection] = useState<'executions' | 'targets' | null>('executions')
+    const [expandedSection, setExpandedSection] = useState<'targets' | null>(null)
     const [targetWsId, setTargetWsId] = useState('')
 
     /* ── Queries ─────────────────────────────────────────────────────────── */
@@ -608,12 +557,6 @@ export default function AgentsPage() {
         },
     })
 
-    const { data: executions = [] } = useQuery<Execution[]>({
-        queryKey: ['executions-global'],
-        queryFn: () => listAllExecutions(),
-        refetchInterval: 8000,
-    })
-
     useEffect(() => {
         if (!targetWsId && workspaceList.length > 0) setTargetWsId(workspaceList[0].id)
     }, [workspaceList, targetWsId])
@@ -624,102 +567,11 @@ export default function AgentsPage() {
         enabled: !!targetWsId,
     })
 
-    const agentMap = useMemo(() => {
-        const map: Record<string, string> = {}
-        for (const a of agents) map[a.id] = a.name
-        return map
-    }, [agents])
-
-    const recentExecs = useMemo(
-        () => (executions as Execution[]).slice(0, 20),
-        [executions],
-    )
-
     /* ── Render ──────────────────────────────────────────────────────────── */
 
     return (
-        <div className="relative flex h-screen gap-3 overflow-hidden p-3">
-            {/* Sidebar */}
-            <aside className={`${sidebarOpen ? 'w-72' : 'w-14'} flex-shrink-0 transition-[width] duration-300 overflow-hidden flex flex-col glass-card`}>
-                {sidebarOpen ? (
-                    <>
-                        <div className="flex-shrink-0">
-                            <div className="w-full border-b border-border/60 bg-card/45 px-4 py-3">
-                                <div className="flex items-center gap-2.5">
-                                    <div className="w-8 h-8 rounded-lg bg-accent/12 border border-accent/25 flex items-center justify-center flex-shrink-0">
-                                        <Bot className="w-4 h-4 text-accent" />
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <p className="text-sm font-semibold truncate">Agents</p>
-                                        <p className="text-[11px] text-muted-foreground truncate">Definitions, schedules & runs</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="px-4 pt-3 pb-3">
-                                <div className="flex items-center gap-1 px-2 mb-1">
-                                    <Home className="w-3 h-3 text-muted-foreground" />
-                                    <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Workspaces</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="flex-1 overflow-y-auto px-3 pb-4">
-                            {workspaceList.map(ws => (
-                                <Link key={ws.id} to={`/w/${ws.id}`} className="sidebar-item text-xs">
-                                    {getWorkspaceIcon(ws.icon)}
-                                    <span className="truncate">{ws.name}</span>
-                                </Link>
-                            ))}
-                        </div>
-                        <div className="flex-shrink-0 border-t border-border/40 px-3 py-2">
-                            <Link to="/settings" className="sidebar-item text-xs">
-                                <Settings className="w-4 h-4" /> Settings
-                            </Link>
-                        </div>
-                    </>
-                ) : (
-                    <div className="flex flex-col h-full items-center py-3 gap-1">
-                        <button
-                            type="button"
-                            onClick={() => setSidebarOpen(true)}
-                            title="Open sidebar"
-                            className="w-9 h-9 rounded-lg bg-accent/12 border border-accent/25 flex items-center justify-center mb-1 hover:bg-accent/20 transition-colors"
-                        >
-                            <Bot className="w-4 h-4 text-accent" />
-                        </button>
-                        <nav className="flex flex-col gap-1 w-full items-center mt-1">
-                            {workspaceList.map(ws => (
-                                <Link key={ws.id} to={`/w/${ws.id}`} title={ws.name} className="w-9 h-9 rounded-lg flex items-center justify-center transition-colors text-muted-foreground hover:bg-muted/40 hover:text-foreground">
-                                    {getWorkspaceIcon(ws.icon)}
-                                </Link>
-                            ))}
-                        </nav>
-                        <div className="mt-auto">
-                            <Link to="/settings" title="Settings" className="w-9 h-9 rounded-lg flex items-center justify-center transition-colors text-muted-foreground hover:bg-muted/40 hover:text-foreground">
-                                <Settings className="w-4 h-4" />
-                            </Link>
-                        </div>
-                    </div>
-                )}
-            </aside>
-
-            {/* Main content */}
-            <div className="flex-1 flex flex-col min-w-0 glass-card overflow-hidden">
-                <header className="relative z-40 flex items-center gap-3 px-5 py-3 border-b border-border/60 bg-card/40 backdrop-blur-md flex-shrink-0">
-                    <button
-                        className="btn-ghost p-2 -ml-1 border border-border/60 bg-card/35"
-                        onClick={() => setSidebarOpen(p => !p)}
-                        title="Toggle sidebar"
-                        aria-label="Toggle sidebar"
-                    >
-                        <PanelLeft className="w-4 h-4" />
-                    </button>
-                    <div className="min-w-0 flex flex-col leading-tight">
-                        <p className="text-sm font-semibold truncate">Agents</p>
-                        <p className="hidden sm:block text-xs text-muted-foreground/90 truncate">{agents.length} agent{agents.length !== 1 ? 's' : ''} available</p>
-                    </div>
-                </header>
-
-                <div className="flex-1 min-h-0 overflow-y-auto p-6 lg:p-8 space-y-8">
+        <>
+            <div className="flex-1 min-h-0 overflow-y-auto p-6 lg:p-8 space-y-8">
                     {/* Loading state */}
                     {agentsLoading && (
                         <div className="flex items-center justify-center py-24">
@@ -804,87 +656,6 @@ export default function AgentsPage() {
                         </div>
                     )}
 
-                    {/* Recent Executions Section */}
-                    <div className="space-y-3">
-                        <button
-                            className="flex items-center gap-2 text-sm font-medium text-foreground/90 hover:text-foreground transition-colors"
-                            onClick={() => setExpandedSection(expandedSection === 'executions' ? null : 'executions')}
-                        >
-                            <Activity className="w-4 h-4 text-accent" />
-                            Recent Executions
-                            <span className="text-xs text-muted-foreground">({recentExecs.length})</span>
-                            {expandedSection === 'executions'
-                                ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
-                                : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
-                        </button>
-
-                        {expandedSection === 'executions' && (
-                            <>
-                                {recentExecs.length === 0 ? (
-                                    <div className="text-center py-8 glass-card rounded-xl">
-                                        <Activity className="w-8 h-8 mx-auto mb-2 opacity-25" />
-                                        <p className="text-xs text-muted-foreground/60">No executions yet.</p>
-                                    </div>
-                                ) : (
-                                    <div className="glass-card rounded-xl overflow-hidden">
-                                        <table className="w-full text-sm">
-                                            <thead>
-                                                <tr className="border-b border-border/60 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
-                                                    <th className="px-4 py-2.5 font-medium">Status</th>
-                                                    <th className="px-4 py-2.5 font-medium">Agent</th>
-                                                    <th className="px-4 py-2.5 font-medium">Duration</th>
-                                                    <th className="px-4 py-2.5 font-medium text-center">
-                                                        <Wrench className="w-3 h-3 inline-block" />
-                                                    </th>
-                                                    <th className="px-4 py-2.5 font-medium">Started</th>
-                                                    <th className="px-4 py-2.5 font-medium" />
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {recentExecs.map(exec => (
-                                                    <tr
-                                                        key={exec.id}
-                                                        className="border-b border-border/30 last:border-b-0 hover:bg-white/[0.03] cursor-pointer transition-colors group"
-                                                        onClick={() => navigate(`/w/${exec.workspace_id}/executions/${exec.id}`)}
-                                                    >
-                                                        <td className="px-4 py-2.5">
-                                                            <StatusBadge status={exec.status} />
-                                                        </td>
-                                                        <td className="px-4 py-2.5">
-                                                            <div className="text-sm text-foreground/90">
-                                                                {exec.agent_name ?? agentMap[exec.agent_id] ?? 'Unknown'}
-                                                            </div>
-                                                            {exec.workspace_name && (
-                                                                <div className="text-[10px] text-muted-foreground/60">{exec.workspace_name}</div>
-                                                            )}
-                                                        </td>
-                                                        <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                                                            {formatDuration(exec.started_at, exec.completed_at)}
-                                                        </td>
-                                                        <td className="px-4 py-2.5 text-center">
-                                                            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                                                                <Wrench className="w-3 h-3" /> {exec.tool_calls_count}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-4 py-2.5">
-                                                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                                                <Clock className="w-3 h-3" />
-                                                                {formatDistanceToNow(new Date(exec.started_at), { addSuffix: true })}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-4 py-2.5 text-right">
-                                                            <ExternalLink className="w-3.5 h-3.5 text-muted-foreground/40 group-hover:text-accent transition-colors" />
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                )}
-                            </>
-                        )}
-                    </div>
-
                     {/* Continuous Targets Section */}
                     <div className="space-y-3">
                         <div className="flex items-center gap-2">
@@ -954,7 +725,6 @@ export default function AgentsPage() {
                         )}
                     </div>
                 </div>
-            </div>
 
             {/* Modals */}
             {triggerAgent_ && (
@@ -975,6 +745,6 @@ export default function AgentsPage() {
                     onClose={() => setConfigureAgent(null)}
                 />
             )}
-        </div>
+        </>
     )
 }

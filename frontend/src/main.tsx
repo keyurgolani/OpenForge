@@ -139,27 +139,33 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                         <SearchPage />
                                     </ErrorBoundary>
                                 } />
-                                <Route path="executions" element={
+                            </Route>
+                            <Route element={
+                                <ErrorBoundary>
+                                    <AppShell />
+                                </ErrorBoundary>
+                            }>
+                                <Route path="/executions" element={
                                     <ErrorBoundary>
                                         <ExecutionListPage />
                                     </ErrorBoundary>
                                 } />
-                                <Route path="executions/:executionId" element={
+                                <Route path="/executions/:executionId" element={
                                     <ErrorBoundary>
                                         <ExecutionMonitorPage />
                                     </ErrorBoundary>
                                 } />
+                                <Route path="/agents" element={
+                                    <ErrorBoundary>
+                                        <AgentsPage />
+                                    </ErrorBoundary>
+                                } />
+                                <Route path="/settings" element={
+                                    <ErrorBoundary>
+                                        <SettingsPage />
+                                    </ErrorBoundary>
+                                } />
                             </Route>
-                            <Route path="/agents" element={
-                                <ErrorBoundary>
-                                    <AgentsPage />
-                                </ErrorBoundary>
-                            } />
-                            <Route path="/settings" element={
-                                <ErrorBoundary>
-                                    <SettingsPage />
-                                </ErrorBoundary>
-                            } />
                             <Route path="/" element={<Navigate to="/onboarding" replace />} />
                         </Routes>
                     </Suspense>

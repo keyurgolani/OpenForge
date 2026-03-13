@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { getExecution, getAgent, getConversation } from '@/lib/api'
+import { getExecutionById, getAgent, getConversation } from '@/lib/api'
 import { formatDistanceToNow } from 'date-fns'
 import {
     Brain, Wrench, Shield, Bot, Clock, ArrowLeft, MessageCircle, User,
@@ -305,13 +305,13 @@ function TimelineDot({ type }: { type: string }) {
 // ── Main page component ──────────────────────────────────────────────────────
 
 export default function ExecutionMonitorPage() {
-    const { workspaceId, executionId } = useParams<{ workspaceId: string; executionId: string }>()
+    const { executionId } = useParams<{ executionId: string }>()
     const navigate = useNavigate()
 
     const { data: execution, isLoading, error } = useQuery<Execution>({
-        queryKey: ['execution', workspaceId, executionId],
-        queryFn: () => getExecution(workspaceId!, executionId!),
-        enabled: !!workspaceId && !!executionId,
+        queryKey: ['execution', executionId],
+        queryFn: () => getExecutionById(executionId!),
+        enabled: !!executionId,
         refetchInterval: (query) => {
             const status = query.state.data?.status
             return status === 'running' || status === 'queued' ? 3000 : false
@@ -325,9 +325,9 @@ export default function ExecutionMonitorPage() {
     })
 
     const { data: conversation } = useQuery({
-        queryKey: ['conversation', workspaceId, execution?.conversation_id],
-        queryFn: () => getConversation(workspaceId!, execution!.conversation_id),
-        enabled: !!workspaceId && !!execution?.conversation_id,
+        queryKey: ['conversation', execution?.workspace_id, execution?.conversation_id],
+        queryFn: () => getConversation(execution!.workspace_id, execution!.conversation_id),
+        enabled: !!execution?.workspace_id && !!execution?.conversation_id,
     })
 
     const userMessage = conversation?.messages?.find((m: any) => m.role === 'user')
@@ -376,7 +376,7 @@ export default function ExecutionMonitorPage() {
                 {/* ── Navigation ─────────────────────────────────────────────── */}
                 <div className="flex items-center gap-3">
                     <button
-                        onClick={() => navigate(`/settings`)}
+                        onClick={() => navigate(`/executions`)}
                         className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-foreground/70 transition-colors"
                     >
                         <ArrowLeft className="h-3.5 w-3.5" />
@@ -384,7 +384,7 @@ export default function ExecutionMonitorPage() {
                     </button>
                     {execution.conversation_id && (
                         <button
-                            onClick={() => navigate(`/w/${workspaceId}/agent/${execution.conversation_id}`)}
+                            onClick={() => navigate(`/w/${execution.workspace_id}/agent/${execution.conversation_id}`)}
                             className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-foreground/70 transition-colors ml-auto"
                         >
                             <MessageCircle className="h-3.5 w-3.5" />

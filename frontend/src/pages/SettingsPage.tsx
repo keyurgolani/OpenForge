@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
-import { useSearchParams, useNavigate, Link } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
     listProviders, createProvider, updateProvider, deleteProvider,
@@ -27,7 +27,7 @@ import {
     FileText, Timer, History, Play, Clock, CheckCircle, AlertCircle, Circle, Terminal,
     Brain, Folder, Briefcase, Microscope, BookOpen, Target, Globe, Lightbulb, Wrench,
     Palette, BarChart3, Rocket, Shield, FlaskConical, Leaf, Key, Settings2, PenLine,
-    Database, Sprout, Download, Archive, FileArchive, Mic, ShieldAlert, LogOut, ScanEye, Home, Settings, PanelLeft,
+    Database, Sprout, Download, Archive, FileArchive, Mic, ShieldAlert, LogOut, ScanEye,
     ChevronLeft, ExternalLink,
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
@@ -99,17 +99,12 @@ const toSettingsTab = (value: string | null): SettingsTab => {
 
 // ── Root component ────────────────────────────────────────────────────────────
 export default function SettingsPage() {
-    const navigate = useNavigate()
     const [searchParams, setSearchParams] = useSearchParams()
     const queryTab = searchParams.get('tab')
     const newWorkspaceRequested = searchParams.get('newWorkspace') === '1'
     const [activeTab, setActiveTab] = useState<SettingsTab>(() => toSettingsTab(queryTab))
     const [authEnabled, setAuthEnabled] = useState(false)
     const [loggingOut, setLoggingOut] = useState(false)
-    const [sidebarOpen, setSidebarOpen] = useState(true)
-
-    const { data: workspaces = [] } = useQuery({ queryKey: ['workspaces'], queryFn: listWorkspaces })
-    const workspaceList = workspaces as { id: string; name: string; icon: string; color: string }[]
 
     useEffect(() => {
         const nextTab = toSettingsTab(queryTab)
@@ -150,104 +145,7 @@ export default function SettingsPage() {
     ]
 
     return (
-        <div className="relative flex h-screen gap-3 overflow-hidden p-3">
-            {/* Workspace sidebar */}
-            <aside className={`${sidebarOpen ? 'w-72' : 'w-14'} flex-shrink-0 transition-[width] duration-300 overflow-hidden flex flex-col glass-card`}>
-                {sidebarOpen ? (
-                    <>
-                        <div className="flex-shrink-0">
-                            {/* Header — same structure as AppShell workspace selector */}
-                            <div className="w-full border-b border-border/60 bg-card/45 px-4 py-3">
-                                <div className="flex items-center gap-2.5">
-                                    <div className="w-8 h-8 rounded-lg bg-accent/12 border border-accent/25 flex items-center justify-center flex-shrink-0">
-                                        <Settings className="w-4 h-4 text-accent" />
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <p className="text-sm font-semibold truncate">Settings</p>
-                                        <p className="text-[11px] text-muted-foreground truncate">Providers, prompts & more</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Nav section — same as AppShell nav */}
-                            <div className="px-4 pt-3 pb-3">
-                                <div className="flex items-center gap-1 px-2 mb-1">
-                                    <Home className="w-3 h-3 text-muted-foreground" />
-                                    <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Workspaces</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto px-3 pb-4">
-                            {workspaceList.map(ws => (
-                                <Link
-                                    key={ws.id}
-                                    to={`/w/${ws.id}`}
-                                    className="sidebar-item text-xs"
-                                >
-                                    {getWorkspaceIcon(ws.icon)}
-                                    <span className="truncate">{ws.name}</span>
-                                </Link>
-                            ))}
-                        </div>
-                        <div className="flex-shrink-0 border-t border-border/40 px-3 py-2">
-                            <Link to="/agents" className="sidebar-item text-xs">
-                                <Bot className="w-4 h-4" /> Agents
-                            </Link>
-                        </div>
-                    </>
-                ) : (
-                    /* Collapsed siderail — icon-only navigation */
-                    <div className="flex flex-col h-full items-center py-3 gap-1">
-                        <button
-                            type="button"
-                            onClick={() => setSidebarOpen(true)}
-                            title="Open sidebar"
-                            className="w-9 h-9 rounded-lg bg-accent/12 border border-accent/25 flex items-center justify-center mb-1 hover:bg-accent/20 transition-colors"
-                        >
-                            <Settings className="w-4 h-4 text-accent" />
-                        </button>
-
-                        <nav className="flex flex-col gap-1 w-full items-center mt-1">
-                            {workspaceList.map(ws => (
-                                <Link
-                                    key={ws.id}
-                                    to={`/w/${ws.id}`}
-                                    title={ws.name}
-                                    className="w-9 h-9 rounded-lg flex items-center justify-center transition-colors text-muted-foreground hover:bg-muted/40 hover:text-foreground"
-                                >
-                                    {getWorkspaceIcon(ws.icon)}
-                                </Link>
-                            ))}
-                        </nav>
-                        <div className="mt-auto">
-                            <Link to="/agents" title="Agents" className="w-9 h-9 rounded-lg flex items-center justify-center transition-colors text-muted-foreground hover:bg-muted/40 hover:text-foreground">
-                                <Bot className="w-4 h-4" />
-                            </Link>
-                        </div>
-                    </div>
-                )}
-            </aside>
-
-            {/* Main settings content */}
-            <div className="flex-1 flex flex-col min-w-0 glass-card overflow-hidden">
-                {/* Top bar with sidebar toggle */}
-                <header className="relative z-40 flex items-center gap-3 px-5 py-3 border-b border-border/60 bg-card/40 backdrop-blur-md flex-shrink-0">
-                    <button
-                        className="btn-ghost p-2 -ml-1 border border-border/60 bg-card/35"
-                        onClick={() => setSidebarOpen(p => !p)}
-                        title="Toggle sidebar"
-                        aria-label="Toggle sidebar"
-                    >
-                        <PanelLeft className="w-4 h-4" />
-                    </button>
-                    <div className="min-w-0 flex flex-col leading-tight">
-                        <p className="text-sm font-semibold truncate">Settings</p>
-                        <p className="hidden sm:block text-xs text-muted-foreground/90 truncate">Configure providers, models & more</p>
-                    </div>
-                </header>
-
-                <div className="flex-1 min-h-0 overflow-y-auto p-6 lg:p-8 flex flex-col">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 lg:p-8 flex flex-col">
                     {/* Tabs + logout */}
                     <div className="flex shrink-0 items-start gap-3 mb-8">
                     <div className="flex shrink-0 gap-2 p-1.5 glass-card w-full sm:w-fit rounded-2xl overflow-x-auto min-h-[52px]">
@@ -311,8 +209,6 @@ export default function SettingsPage() {
                         </div>
                     )}
                     {activeTab === 'export' && <ExportTab />}
-                </div>
-            </div>
         </div>
     )
 }
@@ -4867,7 +4763,7 @@ function AgentExecutionsSubTab() {
                             {items.map((exec: any) => {
                                 const cfg = statusCfg[exec.status] ?? statusCfg.queued
                                 return (
-                                    <tr key={exec.id} className="border-b border-border/30 last:border-b-0 hover:bg-white/[0.03] cursor-pointer transition-colors group" onClick={() => navigate(`/w/${exec.workspace_id}/executions/${exec.id}`)}>
+                                    <tr key={exec.id} className="border-b border-border/30 last:border-b-0 hover:bg-white/[0.03] cursor-pointer transition-colors group" onClick={() => navigate(`/executions/${exec.id}`)}>
                                         <td className="px-4 py-2.5">
                                             <span className={`inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full ${cfg.classes}`}>
                                                 {cfg.pulse && (

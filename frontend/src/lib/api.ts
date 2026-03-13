@@ -262,6 +262,8 @@ export const getConversationStreamState = (wid: string, cid: string): Promise<an
     api.get(`/agents/workspace/${wid}/conversations/${cid}/stream-state`).then(r => r.data)
 export const getExecution = (wid: string, eid: string): Promise<any> =>
     api.get(`/agents/workspace/${wid}/executions/${eid}`).then(r => r.data)
+export const getExecutionById = (eid: string): Promise<any> =>
+    api.get(`/agents/executions/${eid}`).then(r => r.data)
 
 // ── Tool Permissions ─────────────────────────────────────────────────────────
 export const listToolPermissions = (): Promise<any> => api.get('/tools/permissions').then(r => r.data)
