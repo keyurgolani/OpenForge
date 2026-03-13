@@ -38,6 +38,7 @@ import MarkdownIt from 'markdown-it'
 import { sanitizeProviderDisplayName } from '@/lib/provider-display'
 import { ToolCallCard } from '@/components/shared/ToolCallCard'
 import { TimelineBadge } from '@/components/shared/TimelineBadge'
+import Siderail from '@/components/shared/Siderail'
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
 
@@ -189,16 +190,7 @@ function renderMessageContent(
     return html.replace(ENTITY_CARD_RE, (_, href, label) => entityCardHtml(href, label))
 }
 
-const MIN_CHAT_LIST_PCT = 15
-const MAX_CHAT_LIST_PCT = 40
-const DEFAULT_CHAT_LIST_PCT = 25
-const CHAT_LIST_COLLAPSED_WIDTH = 56
-const CHAT_LIST_WIDTH_STORAGE_KEY = 'openforge.shell.chat.list.pct'
-const CHAT_LIST_COLLAPSED_STORAGE_KEY = 'openforge.shell.chat.list.collapsed'
 const CHAT_STREAMING_SAFE_GAP = 4
-
-const clampChatListPct = (value: number) =>
-    Math.max(MIN_CHAT_LIST_PCT, Math.min(MAX_CHAT_LIST_PCT, value))
 
 interface Message {
     id: string
@@ -281,17 +273,7 @@ export default function AgentPage() {
     const composerShellRef = useRef<HTMLDivElement>(null)
     const [composerHeight, setComposerHeight] = useState(188)
     const [messagesViewportHeight, setMessagesViewportHeight] = useState(0)
-    const [chatListPct, setChatListPct] = useState<number>(() => {
-        if (typeof window === 'undefined') return DEFAULT_CHAT_LIST_PCT
-        const raw = window.localStorage.getItem(CHAT_LIST_WIDTH_STORAGE_KEY)
-        const parsed = raw ? parseFloat(raw) : NaN
-        return Number.isFinite(parsed) ? clampChatListPct(parsed) : DEFAULT_CHAT_LIST_PCT
-    })
     const [activeChatRailSection, setActiveChatRailSection] = useState<'conversations' | 'subagent' | 'trash' | null>('conversations')
-    const [isChatListCollapsed, setIsChatListCollapsed] = useState(() => {
-        if (typeof window === 'undefined') return false
-        return window.localStorage.getItem(CHAT_LIST_COLLAPSED_STORAGE_KEY) === '1'
-    })
     const shouldRestoreTextareaFocusRef = useRef(false)
     const suppressAutoSelectRef = useRef(false)
     const [stickToBottom, setStickToBottom] = useState(true)
@@ -1186,40 +1168,6 @@ export default function AgentPage() {
         setStickToBottom(atBottom)
     }
 
-    const handleChatListResizeStart = (e: React.MouseEvent<HTMLButtonElement>) => {
-        e.preventDefault()
-        const startX = e.clientX
-        const startPct = chatListPct
-        const containerWidth = e.currentTarget.parentElement?.parentElement?.offsetWidth || window.innerWidth
-        let currentPct = startPct
-
-        const onMouseMove = (moveEvent: MouseEvent) => {
-            const deltaPx = startX - moveEvent.clientX
-            const deltaPct = (deltaPx / containerWidth) * 100
-            currentPct = clampChatListPct(startPct + deltaPct)
-            setChatListPct(currentPct)
-        }
-
-        const onMouseUp = () => {
-            window.removeEventListener('mousemove', onMouseMove)
-            window.removeEventListener('mouseup', onMouseUp)
-            window.localStorage.setItem(CHAT_LIST_WIDTH_STORAGE_KEY, String(currentPct))
-        }
-
-        window.addEventListener('mousemove', onMouseMove)
-        window.addEventListener('mouseup', onMouseUp)
-    }
-
-    const toggleChatListSidebar = () => {
-        setIsChatListCollapsed(prev => {
-            const next = !prev
-            if (typeof window !== 'undefined') {
-                window.localStorage.setItem(CHAT_LIST_COLLAPSED_STORAGE_KEY, next ? '1' : '0')
-            }
-            return next
-        })
-    }
-
     const activeConversationIsArchived = Boolean(conversationData?.is_archived || activeConversationRecord?.is_archived)
     // Input box stays editable while streaming so the user can compose their next message
     const inputDisabled = uploadingFiles || activeConversationIsArchived
@@ -1674,51 +1622,30 @@ export default function AgentPage() {
                 )}
             </div>
 
-            {/* Conversation list rail (right edge, similar to workspace insights position) */}
-            <aside
-                className="relative z-10 flex-shrink-0 overflow-hidden rounded-2xl border border-border/60 bg-card/28 py-4 flex flex-col transition-[width] duration-200 ease-out"
-                style={{ width: isChatListCollapsed ? `${CHAT_LIST_COLLAPSED_WIDTH}px` : `${chatListPct}%` }}
-            >
-                {!isChatListCollapsed && (
+            {/* Conversation list rail */}
+            <Siderail
+                storageKey="openforge.shell.chat.list.pct"
+                collapsedStorageKey="openforge.shell.chat.list.collapsed"
+                icon={MessageSquare}
+                label="Chats"
+                itemCount={activeConversations.length}
+                minPct={15}
+                maxPct={40}
+                defaultPct={25}
+                breakpoint="always"
+                collapsedExtra={
                     <button
                         type="button"
-                        onMouseDown={handleChatListResizeStart}
-                        className="absolute -left-1 top-0 h-full w-2 cursor-col-resize bg-transparent hover:bg-accent/25 active:bg-accent/35 transition-colors hidden md:block"
-                        aria-label="Resize chat list sidebar"
-                        title="Drag to resize"
-                    />
-                )}
-
-                {isChatListCollapsed ? (
-                    <div className="h-full flex flex-col items-center gap-3 px-2 py-2">
-                        <button
-                            type="button"
-                            onClick={toggleChatListSidebar}
-                            className="w-8 h-8 rounded-lg border border-border/70 bg-card/60 flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-accent/50 transition-colors"
-                            aria-label="Expand conversations sidebar"
-                            title="Expand conversations"
-                        >
-                            <ChevronLeft className="w-4 h-4" />
-                        </button>
-                        <button
-                            type="button"
-                            onClick={handleNewChat}
-                            className="w-8 h-8 rounded-lg border border-border/70 bg-card/60 flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-accent/50 transition-colors"
-                            aria-label="Create new chat"
-                            title="New chat"
-                        >
-                            <Plus className="w-4 h-4" />
-                        </button>
-                        <div className="w-6 h-px bg-border/70" />
-                        <MessageSquare className="w-4 h-4 text-accent mt-1" />
-                        <span className="text-[10px] font-semibold tracking-[0.16em] uppercase text-muted-foreground [writing-mode:vertical-rl] rotate-180">
-                            Chats
-                        </span>
-                        <span className="rounded-full border border-border/70 bg-muted/50 px-2 py-1 text-[10px] font-semibold text-foreground/90">
-                            {activeConversations.length}
-                        </span>
-                    </div>
-                ) : (
+                        onClick={handleNewChat}
+                        className="w-8 h-8 rounded-lg border border-border/70 bg-card/60 flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-accent/50 transition-colors"
+                        aria-label="Create new chat"
+                        title="New chat"
+                    >
+                        <Plus className="w-4 h-4" />
+                    </button>
+                }
+            >
+                {(onCollapse) => (
                     <>
                         <div className="px-4">
                             <div className="flex items-start justify-between gap-3 mb-4">
@@ -1735,7 +1662,7 @@ export default function AgentPage() {
                                     </div>
                                     <button
                                         type="button"
-                                        onClick={toggleChatListSidebar}
+                                        onClick={onCollapse}
                                         className="w-7 h-7 rounded-md border border-border/70 bg-card/60 flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-accent/50 transition-colors"
                                         aria-label="Collapse conversations sidebar"
                                         title="Collapse conversations"
@@ -1959,7 +1886,7 @@ export default function AgentPage() {
                         </div>
                     </>
                 )}
-            </aside>
+            </Siderail>
         </div>
     )
 }

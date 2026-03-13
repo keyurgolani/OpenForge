@@ -12,6 +12,7 @@ import CreateDispatcher from '@/components/knowledge/create/CreateDispatcher'
 import KnowledgeTypeGrid from '@/components/knowledge/KnowledgeTypeGrid'
 import { ModeToggle } from '@/components/mode-toggle'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
+import Siderail from '@/components/shared/Siderail'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator,
 } from '@/components/ui/context-menu'
@@ -26,11 +27,6 @@ import {
 } from 'lucide-react'
 import { getWorkspaceIcon } from '@/pages/SettingsPage'
 
-const MIN_INSIGHTS_WIDTH = 280
-const MAX_INSIGHTS_WIDTH = 560
-const DEFAULT_INSIGHTS_WIDTH = 320
-const INSIGHTS_WIDTH_STORAGE_KEY = 'openforge.shell.insights.width'
-const INSIGHTS_COLLAPSED_STORAGE_KEY = 'openforge.shell.insights.collapsed'
 type InsightSectionKey = 'tasks' | 'timelines' | 'facts' | 'crucial_things'
 type InsightItem = { knowledgeId: string, text: string }
 type InsightSections = Record<InsightSectionKey, InsightItem[]>
@@ -78,9 +74,6 @@ const INSIGHT_SECTION_META: Record<InsightSectionKey, {
     },
 }
 
-const clampInsightsWidth = (value: number) =>
-    Math.max(MIN_INSIGHTS_WIDTH, Math.min(MAX_INSIGHTS_WIDTH, value))
-
 const insightsMd = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
 insightsMd.renderer.rules.link_open = () => ''
 insightsMd.renderer.rules.link_close = () => ''
@@ -102,16 +95,6 @@ export default function AppShell() {
     const [deleteModalOpen, setDeleteModalOpen] = useState(false)
     const [conversationToDelete, setConversationToDelete] = useState<{ id: string; title: string | null } | null>(null)
     const [deleteLoading, setDeleteLoading] = useState(false)
-    const [isInsightsCollapsed, setIsInsightsCollapsed] = useState<boolean>(() => {
-        if (typeof window === 'undefined') return false
-        return window.localStorage.getItem(INSIGHTS_COLLAPSED_STORAGE_KEY) === '1'
-    })
-    const [insightsWidth, setInsightsWidth] = useState<number>(() => {
-        if (typeof window === 'undefined') return DEFAULT_INSIGHTS_WIDTH
-        const raw = window.localStorage.getItem(INSIGHTS_WIDTH_STORAGE_KEY)
-        const parsed = raw ? parseInt(raw, 10) : NaN
-        return Number.isFinite(parsed) ? clampInsightsWidth(parsed) : DEFAULT_INSIGHTS_WIDTH
-    })
     const { isConnected, on } = useWorkspaceWebSocket(workspaceId)
     const { setCommandPaletteOpen } = useUIStore()
     const qc = useQueryClient()
@@ -420,38 +403,6 @@ export default function AppShell() {
             setConversationToDelete(null)
         }
     }, [conversationToDelete, location.pathname, navigate, qc, workspaceId])
-
-    const toggleInsightsSidebar = useCallback(() => {
-        setIsInsightsCollapsed(prev => {
-            const next = !prev
-            if (typeof window !== 'undefined') {
-                window.localStorage.setItem(INSIGHTS_COLLAPSED_STORAGE_KEY, next ? '1' : '0')
-            }
-            return next
-        })
-    }, [])
-
-    const handleInsightsResizeStart = (e: React.MouseEvent<HTMLButtonElement>) => {
-        e.preventDefault()
-        const startX = e.clientX
-        const startWidth = insightsWidth
-        let currentWidth = startWidth
-
-        const onMouseMove = (moveEvent: MouseEvent) => {
-            const delta = startX - moveEvent.clientX
-            currentWidth = clampInsightsWidth(startWidth + delta)
-            setInsightsWidth(currentWidth)
-        }
-
-        const onMouseUp = () => {
-            window.removeEventListener('mousemove', onMouseMove)
-            window.removeEventListener('mouseup', onMouseUp)
-            window.localStorage.setItem(INSIGHTS_WIDTH_STORAGE_KEY, String(currentWidth))
-        }
-
-        window.addEventListener('mousemove', onMouseMove)
-        window.addEventListener('mouseup', onMouseUp)
-    }
 
     return (
         <div className="relative flex h-screen gap-3 overflow-hidden p-3">
@@ -984,41 +935,15 @@ export default function AppShell() {
                     </main>
 
                     {isWorkspaceHome && (
-                        <aside
-                            className="hidden xl:block flex-shrink-0 rounded-2xl border border-border/60 py-4 overflow-hidden relative z-10 bg-card/28 transition-[width] duration-200 ease-out"
-                            style={{ width: isInsightsCollapsed ? '56px' : `${insightsWidth}px` }}
+                        <Siderail
+                            storageKey="openforge.shell.insights.pct"
+                            collapsedStorageKey="openforge.shell.insights.collapsed"
+                            icon={Brain}
+                            label="Insights"
+                            itemCount={totalInsightsCount}
+                            breakpoint="xl"
                         >
-                            {!isInsightsCollapsed && (
-                                <button
-                                    type="button"
-                                    onMouseDown={handleInsightsResizeStart}
-                                    className="absolute -left-1 top-0 h-full w-2 cursor-col-resize bg-transparent hover:bg-accent/25 active:bg-accent/35 transition-colors"
-                                    aria-label="Resize insights sidebar"
-                                    title="Drag to resize"
-                                />
-                            )}
-
-                            {isInsightsCollapsed ? (
-                                <div className="h-full flex flex-col items-center gap-3 px-2 py-2">
-                                    <button
-                                        type="button"
-                                        onClick={toggleInsightsSidebar}
-                                        className="w-8 h-8 rounded-lg border border-border/70 bg-card/60 flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-accent/50 transition-colors"
-                                        aria-label="Expand workspace insights"
-                                        title="Expand insights"
-                                    >
-                                        <ChevronLeft className="w-4 h-4" />
-                                    </button>
-                                    <div className="w-6 h-px bg-border/70" />
-                                    <Brain className="w-4 h-4 text-accent mt-1" />
-                                    <span className="text-[10px] font-semibold tracking-[0.16em] uppercase text-muted-foreground [writing-mode:vertical-rl] rotate-180">
-                                        Insights
-                                    </span>
-                                    <span className="rounded-full border border-border/70 bg-muted/50 px-2 py-1 text-[10px] font-semibold text-foreground/90">
-                                        {totalInsightsCount}
-                                    </span>
-                                </div>
-                            ) : (
+                            {(onCollapse) => (
                                 <div className="flex h-full min-h-0 flex-col px-4">
                                     <div className="mb-4 flex items-start justify-between gap-3">
                                         <div className="space-y-1">
@@ -1034,7 +959,7 @@ export default function AppShell() {
                                             </div>
                                             <button
                                                 type="button"
-                                                onClick={toggleInsightsSidebar}
+                                                onClick={onCollapse}
                                                 className="w-7 h-7 rounded-md border border-border/70 bg-card/60 flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-accent/50 transition-colors"
                                                 aria-label="Collapse workspace insights"
                                                 title="Collapse insights"
@@ -1112,7 +1037,7 @@ export default function AppShell() {
                                     </div>
                                 </div>
                             )}
-                        </aside>
+                        </Siderail>
                     )}
                 </div>
             </div>

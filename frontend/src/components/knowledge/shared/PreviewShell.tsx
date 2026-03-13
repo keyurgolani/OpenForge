@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, useCallback, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence, useMotionValue, useTransform, useDragControls, type PanInfo } from 'framer-motion'
-import { X, ChevronLeft, Brain } from 'lucide-react'
+import { X } from 'lucide-react'
+import Siderail from '@/components/shared/Siderail'
 
 interface PreviewShellProps {
     isOpen: boolean
@@ -15,10 +16,6 @@ interface PreviewShellProps {
 }
 
 const DISMISS_THRESHOLD = 120
-const MIN_RAIL_PCT = 10
-const MAX_RAIL_PCT = 40
-const DEFAULT_RAIL_PCT = 25
-const RAIL_WIDTH_KEY = 'openforge.preview.rail.pct'
 
 export default function PreviewShell({
     isOpen,
@@ -35,24 +32,9 @@ export default function PreviewShell({
     const backdropOpacity = useTransform(y, [0, 300], [1, 0])
     const dragControls = useDragControls()
 
-    // Siderail open by default on desktop when siderail content is provided
-    const [railOpen, setRailOpen] = useState(!!siderail)
-    const [railPct, setRailPct] = useState<number>(() => {
-        if (typeof window === 'undefined') return DEFAULT_RAIL_PCT
-        const stored = window.localStorage.getItem(RAIL_WIDTH_KEY)
-        if (stored) {
-            const n = parseFloat(stored)
-            if (n >= MIN_RAIL_PCT && n <= MAX_RAIL_PCT) return n
-        }
-        return DEFAULT_RAIL_PCT
-    })
+    // Siderail open state — reset when sheet opens/closes
+    const [railOpen, setRailOpen] = useState(false)
 
-    // Resize state
-    const resizingRef = useRef(false)
-    const startXRef = useRef(0)
-    const startWidthRef = useRef(0)
-
-    // Open rail by default when sheet opens with siderail content
     useEffect(() => {
         if (isOpen && siderail) setRailOpen(true)
         if (!isOpen) setRailOpen(false)
@@ -89,40 +71,6 @@ export default function PreviewShell({
             onClose()
         }
     }
-
-    // --- Resize handlers ---
-    const handleResizeStart = useCallback((e: React.PointerEvent) => {
-        e.preventDefault()
-        resizingRef.current = true
-        startXRef.current = e.clientX
-        startWidthRef.current = railPct
-        document.body.style.cursor = 'col-resize'
-        document.body.style.userSelect = 'none'
-    }, [railPct])
-
-    useEffect(() => {
-        const handleMove = (e: PointerEvent) => {
-            if (!resizingRef.current) return
-            const sheetWidth = sheetRef.current?.offsetWidth || window.innerWidth
-            const deltaPx = startXRef.current - e.clientX
-            const deltaPct = (deltaPx / sheetWidth) * 100
-            const newPct = Math.min(MAX_RAIL_PCT, Math.max(MIN_RAIL_PCT, startWidthRef.current + deltaPct))
-            setRailPct(newPct)
-        }
-        const handleUp = () => {
-            if (!resizingRef.current) return
-            resizingRef.current = false
-            document.body.style.cursor = ''
-            document.body.style.userSelect = ''
-            window.localStorage.setItem(RAIL_WIDTH_KEY, String(railPct))
-        }
-        window.addEventListener('pointermove', handleMove)
-        window.addEventListener('pointerup', handleUp)
-        return () => {
-            window.removeEventListener('pointermove', handleMove)
-            window.removeEventListener('pointerup', handleUp)
-        }
-    }, [railPct])
 
     return createPortal(
         <AnimatePresence>
@@ -198,40 +146,17 @@ export default function PreviewShell({
                             </div>
 
                             {/* Right siderail — desktop only */}
-                            {siderail && railOpen && (
-                                <div className="hidden md:flex flex-col flex-shrink-0 relative overflow-hidden rounded-2xl border border-border/60 bg-card/28 py-4 transition-[width] duration-200 ease-out select-text" style={{ width: `${railPct}%` }}>
-                                    {/* Resize handle */}
-                                    <div
-                                        className="absolute -left-1 top-0 bottom-0 w-2 cursor-col-resize bg-transparent hover:bg-accent/25 active:bg-accent/35 transition-colors z-10"
-                                        onPointerDown={handleResizeStart}
-                                    />
-                                    {typeof siderail === 'function' ? siderail(() => setRailOpen(false)) : siderail}
-                                </div>
-                            )}
-
-                            {/* Collapsed siderail strip — desktop only */}
-                            {siderail && !railOpen && (
-                                <div className="hidden md:flex flex-col flex-shrink-0 items-center gap-3 rounded-2xl border border-border/60 bg-card/28 px-2 py-4 w-14">
-                                    <button
-                                        type="button"
-                                        onClick={() => setRailOpen(true)}
-                                        className="w-8 h-8 rounded-lg border border-border/70 bg-card/60 flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-accent/50 transition-colors"
-                                        aria-label="Expand intelligence sidebar"
-                                        title="Expand intelligence"
-                                    >
-                                        <ChevronLeft className="w-4 h-4" />
-                                    </button>
-                                    <div className="w-6 h-px bg-border/70" />
-                                    <Brain className="w-4 h-4 text-accent mt-1" />
-                                    {railItemCount != null && railItemCount > 0 && (
-                                        <span className="text-[10px] font-bold text-accent tabular-nums">
-                                            {railItemCount}
-                                        </span>
-                                    )}
-                                    <span className="text-[10px] font-semibold tracking-[0.16em] uppercase text-muted-foreground [writing-mode:vertical-rl] rotate-180">
-                                        Insights
-                                    </span>
-                                </div>
+                            {siderail && (
+                                <Siderail
+                                    storageKey="openforge.preview.rail.pct"
+                                    itemCount={railItemCount}
+                                    breakpoint="md"
+                                    open={railOpen}
+                                    onOpenChange={setRailOpen}
+                                    containerRef={sheetRef}
+                                >
+                                    {siderail}
+                                </Siderail>
                             )}
                         </div>
 
