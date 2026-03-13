@@ -161,7 +161,7 @@ async def _build_zip(db: AsyncSession, workspaces: list[Workspace]) -> BytesIO:
 
         manifest = {
             "exported_at": datetime.utcnow().isoformat(),
-            "version": "1.0.0",
+            "version": "0.1.0",
             "workspaces": ws_summaries,
         }
         zf.writestr("manifest.json", json.dumps(manifest, indent=2))

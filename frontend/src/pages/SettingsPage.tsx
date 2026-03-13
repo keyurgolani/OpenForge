@@ -33,6 +33,7 @@ import {
 import { formatDistanceToNow } from 'date-fns'
 import { ProviderIcon } from '@/components/shared/ProviderIcon'
 import { ModelOverrideSelect } from '@/components/shared/ModelOverrideSelect'
+import CodeMirrorPromptEditor from '@/components/shared/CodeMirrorPromptEditor'
 import { ConfirmModal } from '@/components/ui/confirm-modal'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import { isLocalProvider, sanitizeProviderDisplayName } from '@/lib/provider-display'
@@ -3271,12 +3272,10 @@ function PromptsSubTabContent({
                             <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1.5">
                                 Custom override {!hasOverride && '(leave blank to use default)'}
                             </p>
-                            <textarea
-                                className="input w-full text-xs font-mono resize-none leading-relaxed"
-                                rows={5}
-                                placeholder={p.default}
+                            <CodeMirrorPromptEditor
                                 value={draft}
-                                onChange={e => setDrafts(d => ({ ...d, [p.id]: e.target.value }))}
+                                placeholder={p.default}
+                                onChange={(value) => setDrafts(d => ({ ...d, [p.id]: value }))}
                             />
                         </div>
 

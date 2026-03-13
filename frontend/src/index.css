@@ -1021,67 +1021,6 @@
       color: hsl(var(--accent));
     }
 
-    a.entity-link {
-      @apply no-underline inline-flex flex-col gap-1.5 rounded-xl px-3 py-2.5 transition-all cursor-pointer;
-      vertical-align: middle;
-      text-decoration: none !important;
-      min-width: 140px;
-      max-width: 280px;
-      margin: 2px 1px;
-
-      .entity-link-meta {
-        @apply flex items-center gap-1.5;
-      }
-
-      .entity-link-badge {
-        @apply inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest leading-none;
-      }
-
-      .entity-link-subtype {
-        @apply inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider leading-none;
-        background: rgba(255 255 255 / 0.07);
-        color: hsl(var(--muted-foreground));
-      }
-
-      .entity-link-workspace-chip {
-        @apply normal-case tracking-normal;
-        background: hsla(var(--accent) / 0.15);
-        color: hsl(var(--accent));
-      }
-
-      .entity-link-name {
-        @apply text-[13px] font-semibold leading-snug;
-        color: hsl(var(--foreground));
-      }
-    }
-
-    /* Workspace — app accent (cyan/teal) */
-    a.entity-link--workspace {
-      background: hsla(var(--accent) / 0.08);
-      border: 1px solid hsla(var(--accent) / 0.32);
-      box-shadow: 0 1px 6px hsla(var(--accent) / 0.07);
-      .entity-link-badge { background: hsla(var(--accent) / 0.16); color: hsl(var(--accent)); }
-      &:hover { background: hsla(var(--accent) / 0.14); border-color: hsla(var(--accent) / 0.52); box-shadow: 0 2px 10px hsla(var(--accent) / 0.14); }
-    }
-
-    /* Chat — indigo/violet */
-    a.entity-link--chat {
-      background: hsla(250 55% 60% / 0.08);
-      border: 1px solid hsla(250 55% 60% / 0.32);
-      box-shadow: 0 1px 6px hsla(250 55% 60% / 0.07);
-      .entity-link-badge { background: hsla(250 55% 60% / 0.18); color: hsl(250 70% 78%); }
-      &:hover { background: hsla(250 55% 60% / 0.14); border-color: hsla(250 55% 60% / 0.52); box-shadow: 0 2px 10px hsla(250 55% 60% / 0.14); }
-    }
-
-    /* Knowledge — warm amber */
-    a.entity-link--knowledge {
-      background: hsla(38 80% 55% / 0.08);
-      border: 1px solid hsla(38 80% 55% / 0.32);
-      box-shadow: 0 1px 6px hsla(38 80% 55% / 0.07);
-      .entity-link-badge { background: hsla(38 80% 55% / 0.18); color: hsl(38 90% 66%); }
-      &:hover { background: hsla(38 80% 55% / 0.14); border-color: hsla(38 80% 55% / 0.52); box-shadow: 0 2px 10px hsla(38 80% 55% / 0.14); }
-    }
-
     strong {
       @apply font-semibold text-foreground;
     }

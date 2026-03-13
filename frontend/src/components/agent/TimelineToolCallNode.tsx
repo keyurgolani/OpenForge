@@ -336,7 +336,6 @@ function RegularToolCallCard({
                 {entry.hitl && (
                     <HITLInlineSection
                         hitl={entry.hitl}
-                        toolId={entry.tool_name}
                         readonly={readonly}
                     />
                 )}

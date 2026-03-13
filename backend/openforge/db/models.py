@@ -383,7 +383,7 @@ class AgentDefinitionModel(Base):
     id: Mapped[str] = mapped_column(String(100), primary_key=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    version: Mapped[str] = mapped_column(String(20), nullable=False, default="1.0.0")
+    version: Mapped[str] = mapped_column(String(20), nullable=False, default="0.1.0")
     config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

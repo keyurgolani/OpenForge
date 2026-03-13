@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+import types
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -42,6 +44,16 @@ class _FakeDB:
         self.commit_count += 1
 
 
+def _stub_runtime_modules(monkeypatch, *, chat_impl, send_impl):
+    fake_llm_module = types.ModuleType("openforge.core.llm_gateway")
+    fake_llm_module.llm_gateway = SimpleNamespace(chat=chat_impl)
+    monkeypatch.setitem(sys.modules, "openforge.core.llm_gateway", fake_llm_module)
+
+    fake_ws_module = types.ModuleType("openforge.api.websocket")
+    fake_ws_module.ws_manager = SimpleNamespace(send_to_workspace=send_impl)
+    monkeypatch.setitem(sys.modules, "openforge.api.websocket", fake_ws_module)
+
+
 @pytest.mark.asyncio
 async def test_refresh_conversation_title_falls_back_when_llm_errors(monkeypatch):
     workspace_id = uuid4()
@@ -59,6 +71,7 @@ async def test_refresh_conversation_title_falls_back_when_llm_errors(monkeypatch
         [
             _FakeResult(scalar=conversation),  # initial conversation lookup
             _FakeResult(scalars=[user_message, assistant_message]),  # message window
+            _FakeResult(scalar=None),  # prompt override lookup
             _FakeResult(scalar=conversation),  # lock/title re-check before write
         ]
     )
@@ -71,8 +84,11 @@ async def test_refresh_conversation_title_falls_back_when_llm_errors(monkeypatch
     async def _fake_send_to_workspace(workspace: str, payload: dict):
         sent_events.append((workspace, payload))
 
-    monkeypatch.setattr("openforge.core.llm_gateway.llm_gateway.chat", _raise_llm_error)
-    monkeypatch.setattr("openforge.api.websocket.ws_manager.send_to_workspace", _fake_send_to_workspace)
+    _stub_runtime_modules(
+        monkeypatch,
+        chat_impl=_raise_llm_error,
+        send_impl=_fake_send_to_workspace,
+    )
 
     title = await conversation_service.refresh_conversation_title(
         fake_db,
@@ -120,6 +136,7 @@ async def test_refresh_conversation_title_ignores_low_signal_generated_title(mon
         [
             _FakeResult(scalar=conversation),  # initial conversation lookup
             _FakeResult(scalars=messages),  # message window
+            _FakeResult(scalar=None),  # prompt override lookup
             _FakeResult(scalar=conversation),  # lock/title re-check before write
         ]
     )
@@ -132,8 +149,11 @@ async def test_refresh_conversation_title_ignores_low_signal_generated_title(mon
     async def _fake_send_to_workspace(workspace: str, payload: dict):
         sent_events.append((workspace, payload))
 
-    monkeypatch.setattr("openforge.core.llm_gateway.llm_gateway.chat", _fake_chat)
-    monkeypatch.setattr("openforge.api.websocket.ws_manager.send_to_workspace", _fake_send_to_workspace)
+    _stub_runtime_modules(
+        monkeypatch,
+        chat_impl=_fake_chat,
+        send_impl=_fake_send_to_workspace,
+    )
 
     title = await conversation_service.refresh_conversation_title(
         fake_db,
@@ -181,6 +201,7 @@ async def test_refresh_conversation_title_keeps_existing_title_when_model_return
         [
             _FakeResult(scalar=conversation),  # initial conversation lookup
             _FakeResult(scalars=messages),  # message window
+            _FakeResult(scalar=None),  # prompt override lookup
         ]
     )
 
@@ -192,8 +213,11 @@ async def test_refresh_conversation_title_keeps_existing_title_when_model_return
     async def _fake_send_to_workspace(workspace: str, payload: dict):
         sent_events.append((workspace, payload))
 
-    monkeypatch.setattr("openforge.core.llm_gateway.llm_gateway.chat", _fake_chat)
-    monkeypatch.setattr("openforge.api.websocket.ws_manager.send_to_workspace", _fake_send_to_workspace)
+    _stub_runtime_modules(
+        monkeypatch,
+        chat_impl=_fake_chat,
+        send_impl=_fake_send_to_workspace,
+    )
 
     title = await conversation_service.refresh_conversation_title(
         fake_db,
@@ -230,6 +254,7 @@ async def test_refresh_conversation_title_rewrites_request_style_generated_title
         [
             _FakeResult(scalar=conversation),  # initial conversation lookup
             _FakeResult(scalars=messages),  # message window
+            _FakeResult(scalar=None),  # prompt override lookup
             _FakeResult(scalar=conversation),  # lock/title re-check before write
         ]
     )
@@ -242,8 +267,11 @@ async def test_refresh_conversation_title_rewrites_request_style_generated_title
     async def _fake_send_to_workspace(workspace: str, payload: dict):
         sent_events.append((workspace, payload))
 
-    monkeypatch.setattr("openforge.core.llm_gateway.llm_gateway.chat", _fake_chat)
-    monkeypatch.setattr("openforge.api.websocket.ws_manager.send_to_workspace", _fake_send_to_workspace)
+    _stub_runtime_modules(
+        monkeypatch,
+        chat_impl=_fake_chat,
+        send_impl=_fake_send_to_workspace,
+    )
 
     title = await conversation_service.refresh_conversation_title(
         fake_db,
