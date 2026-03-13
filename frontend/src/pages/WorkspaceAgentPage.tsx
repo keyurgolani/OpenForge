@@ -258,7 +258,7 @@ interface ConversationWithMessages extends Conversation {
     messages: Message[]
 }
 
-export default function AgentPage() {
+export default function WorkspaceAgentPage() {
     const { workspaceId = '', conversationId } = useParams<{ workspaceId: string; conversationId?: string }>()
     const navigate = useNavigate()
     const qc = useQueryClient()

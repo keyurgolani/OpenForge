@@ -189,7 +189,7 @@ export default function AppShell() {
     const isWorkspaceHome = location.pathname === `/w/${workspaceId}`
     const isSearchPage = location.pathname.includes('/search')
     const isSettingsPage = location.pathname.includes('/settings')
-    const isAgentPage = location.pathname.includes('/agent')
+    const isWorkspaceAgentPage = location.pathname.includes('/agent')
     const isKnowledgePage = location.pathname.includes('/knowledge/') || location.pathname.includes('/knowledge/')
     const currentSectionMeta = useMemo(() => {
         if (location.pathname.includes('/agent')) {
@@ -927,7 +927,7 @@ export default function AppShell() {
                 <div className="relative z-0 flex-1 min-h-0 flex gap-3 p-3">
                     <main
                         data-openforge-main-content="1"
-                        className={`relative z-20 flex-1 min-h-0 overflow-auto ${(isWorkspaceHome || isSearchPage || isSettingsPage || isAgentPage || isKnowledgePage)
+                        className={`relative z-20 flex-1 min-h-0 overflow-auto ${(isWorkspaceHome || isSearchPage || isSettingsPage || isWorkspaceAgentPage || isKnowledgePage)
                             ? ''
                             : 'rounded-2xl border border-border/60 bg-card/25'}`}
                     >

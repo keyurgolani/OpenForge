@@ -15,7 +15,7 @@ const OnboardingPage = lazy(() => import('./pages/OnboardingPage'))
 const AppShell = lazy(() => import('./pages/AppShell'))
 const WorkspaceHome = lazy(() => import('./pages/WorkspaceHome'))
 const EditorDispatcher = lazy(() => import('./components/knowledge/editors/EditorDispatcher'))
-const AgentPage = lazy(() => import('./pages/AgentPage'))
+const WorkspaceAgentPage = lazy(() => import('./pages/WorkspaceAgentPage'))
 const SearchPage = lazy(() => import('./pages/SearchPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const AgentsPage = lazy(() => import('./pages/AgentsPage'))
@@ -126,12 +126,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                 } />
                                 <Route path="agent" element={
                                     <ErrorBoundary>
-                                        <AgentPage />
+                                        <WorkspaceAgentPage />
                                     </ErrorBoundary>
                                 } />
                                 <Route path="agent/:conversationId" element={
                                     <ErrorBoundary>
-                                        <AgentPage />
+                                        <WorkspaceAgentPage />
                                     </ErrorBoundary>
                                 } />
                                 <Route path="search" element={
