@@ -65,6 +65,7 @@ export interface TimelineHITLRequest {
     type: 'hitl_request'
     hitl_id: string
     tool_id: string
+    tool_input?: Record<string, unknown>
     action_summary: string
     risk_level: string
     status: 'pending' | 'approved' | 'denied'
@@ -350,12 +351,13 @@ export function useStreamingChat(conversationId: string | null) {
                 })
             }),
             on('chat_hitl_request', (msg) => {
-                const m = msg as { conversation_id: string; data: { hitl_id: string; tool_id: string; action_summary: string; risk_level: string } }
+                const m = msg as { conversation_id: string; data: { hitl_id: string; tool_id: string; tool_input?: Record<string, unknown>; action_summary: string; risk_level: string } }
                 if (m.conversation_id !== conversationId) return
                 const entry: TimelineHITLRequest = {
                     type: 'hitl_request',
                     hitl_id: m.data.hitl_id,
                     tool_id: m.data.tool_id,
+                    tool_input: m.data.tool_input,
                     action_summary: m.data.action_summary,
                     risk_level: m.data.risk_level,
                     status: 'pending',

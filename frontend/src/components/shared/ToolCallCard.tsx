@@ -126,7 +126,7 @@ function InputField({ argKey, value }: { argKey: string; value: unknown }) {
     )
 }
 
-function InputSection({ toolName: _toolName, args }: { toolName: string; args: Record<string, unknown> }) {
+export function InputSection({ toolName: _toolName, args }: { toolName: string; args: Record<string, unknown> }) {
     const entries = Object.entries(args).filter(([k]) => !SKIP_KEYS.has(k))
     if (entries.length === 0) return null
     return (

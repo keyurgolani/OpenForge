@@ -1211,6 +1211,7 @@ class AgentExecutionEngine:
                             "type": "hitl_request",
                             "hitl_id": hitl_id,
                             "tool_id": tool_id,
+                            "tool_input": arguments,
                             "action_summary": action_summary,
                             "risk_level": risk_level,
                             "status": "pending",

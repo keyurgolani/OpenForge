@@ -36,7 +36,7 @@ import {
 } from '@/components/ui/context-menu'
 import MarkdownIt from 'markdown-it'
 import { sanitizeProviderDisplayName } from '@/lib/provider-display'
-import { ToolCallCard } from '@/components/shared/ToolCallCard'
+import { ToolCallCard, InputSection } from '@/components/shared/ToolCallCard'
 import { TimelineBadge } from '@/components/shared/TimelineBadge'
 import Siderail from '@/components/shared/Siderail'
 
@@ -2943,18 +2943,19 @@ function HITLCard({
                 </span>
             </>}
         >
-            {/* Action summary */}
-            {entry.action_summary && (
-                <div className="text-[11px] text-foreground/80">{entry.action_summary}</div>
+            {/* Tool inputs (reuse ToolCallCard input rendering) */}
+            {entry.tool_input && Object.keys(entry.tool_input).length > 0 && (
+                <InputSection toolName={entry.tool_id} args={entry.tool_input} />
             )}
 
             {/* Risk + status */}
             <div className="flex items-center gap-2 text-[11px]">
-                <span className="text-[10px] uppercase tracking-wide text-accent/55 font-medium">Risk</span>
-                <span className="capitalize text-foreground/75">{entry.risk_level || 'low'}</span>
-                <span className="text-muted-foreground/30 mx-1">·</span>
-                <span className="text-[10px] uppercase tracking-wide text-accent/55 font-medium">Status</span>
-                <span className={`capitalize ${localStatus === 'approved' ? 'text-emerald-400' : localStatus === 'denied' ? 'text-red-400' : 'text-foreground/75'}`}>{localStatus}</span>
+                <span className={`rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide font-medium ${
+                    entry.risk_level === 'high' ? 'bg-red-500/15 text-red-400'
+                    : entry.risk_level === 'medium' ? 'bg-amber-500/15 text-amber-400'
+                    : 'bg-emerald-500/15 text-emerald-400'
+                }`}>{entry.risk_level || 'low'}</span>
+                <span className={`capitalize text-[11px] ${localStatus === 'approved' ? 'text-emerald-400' : localStatus === 'denied' ? 'text-red-400' : 'text-foreground/55'}`}>{localStatus}</span>
             </div>
 
             {/* Guidance textarea + action buttons for pending */}

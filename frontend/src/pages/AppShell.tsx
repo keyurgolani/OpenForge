@@ -11,6 +11,7 @@ import CommandPalette from '@/components/shared/CommandPalette'
 import CreateDispatcher from '@/components/knowledge/create/CreateDispatcher'
 import KnowledgeTypeGrid from '@/components/knowledge/KnowledgeTypeGrid'
 import { ModeToggle } from '@/components/mode-toggle'
+import { InputSection } from '@/components/shared/ToolCallCard'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import Siderail from '@/components/shared/Siderail'
 import {
@@ -995,10 +996,7 @@ export default function AppShell() {
                                         return (
                                             <div key={req.id} className={`rounded-xl border border-border/40 bg-muted/50 p-3 space-y-2 transition-opacity ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
                                                 <div className="flex items-start justify-between gap-2">
-                                                    <div className="min-w-0 flex-1">
-                                                        <p className="text-xs font-mono font-semibold text-foreground truncate">{req.tool_id}</p>
-                                                        <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">{req.action_summary}</p>
-                                                    </div>
+                                                    <p className="text-xs font-mono font-semibold text-foreground truncate min-w-0 flex-1">{req.tool_id}</p>
                                                     <span className={`flex-shrink-0 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded-md border ${
                                                         req.risk_level === 'critical' || req.risk_level === 'high' ? 'bg-red-500/15 text-red-400 border-red-500/25' :
                                                         req.risk_level === 'medium' ? 'bg-yellow-500/15 text-yellow-400 border-yellow-500/25' :
@@ -1007,9 +1005,7 @@ export default function AppShell() {
                                                 </div>
 
                                                 {req.tool_input && Object.keys(req.tool_input).length > 0 && (
-                                                    <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[10px] text-muted-foreground bg-muted/20 rounded-lg p-2 border border-border/30 max-h-24 overflow-y-auto">
-                                                        {JSON.stringify(req.tool_input, null, 2)}
-                                                    </pre>
+                                                    <InputSection toolName={req.tool_id} args={req.tool_input} />
                                                 )}
 
                                                 <textarea
