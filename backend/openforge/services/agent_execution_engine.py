@@ -34,7 +34,7 @@ from openforge.services.policy_engine import policy_engine
 from openforge.services.hitl_service import hitl_service
 from openforge.db.models import (
     AgentExecution, Config, Conversation, Knowledge,
-    MessageAttachment, TaskLog, ToolCallLog, Workspace,
+    Message, MessageAttachment, TaskLog, ToolCallLog, Workspace,
 )
 
 _MAX_OUTPUT_LOG_CHARS = 50_000
@@ -262,6 +262,39 @@ class AgentExecutionEngine:
         if event:
             event.set()
 
+    async def _subscribe_redis_cancel(
+        self, conversation_id: str, cancel_event: asyncio.Event
+    ) -> tuple:
+        """Subscribe to the Redis cancel channel for cross-process cancellation.
+
+        Returns (redis_conn, pubsub, listener_task).  The listener sets the
+        local asyncio.Event when a cancel message arrives on the channel
+        ``agent_cancel:{conversation_id}``.
+        """
+        import redis.asyncio as aioredis
+        from openforge.config import get_settings
+
+        settings = get_settings()
+        redis_conn = aioredis.from_url(settings.redis_url, decode_responses=True)
+        pubsub = redis_conn.pubsub()
+        channel = f"agent_cancel:{conversation_id}"
+        await pubsub.subscribe(channel)
+
+        async def _listener():
+            try:
+                async for message in pubsub.listen():
+                    if message["type"] == "message":
+                        logger.info("Received Redis cancel for conversation %s", conversation_id)
+                        cancel_event.set()
+                        return
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:
+                logger.debug("Redis cancel listener error: %s", exc)
+
+        task = asyncio.create_task(_listener())
+        return redis_conn, pubsub, task
+
     async def send_stream_snapshot(
         self,
         websocket: WebSocket,
@@ -296,7 +329,7 @@ class AgentExecutionEngine:
                         state = await redis.hgetall(f"stream_state:{exec_record.id}")
                         if state:
                             await ws_manager.send_to_connection(websocket, {
-                                "type": "chat_stream_snapshot",
+                                "type": "agent_stream_snapshot",
                                 "conversation_id": str(conversation_id),
                                 "data": {
                                     "content": state.get("content", ""),
@@ -715,6 +748,17 @@ class AgentExecutionEngine:
         cancel_event = asyncio.Event()
         self._cancel_events[str(conversation_id)] = cancel_event
 
+        # Subscribe to Redis cancel channel so cross-process cancel works (Celery)
+        _cancel_redis_conn = None
+        _cancel_redis_sub = None
+        _cancel_listener_task = None
+        try:
+            _cancel_redis_conn, _cancel_redis_sub, _cancel_listener_task = (
+                await self._subscribe_redis_cancel(str(conversation_id), cancel_event)
+            )
+        except Exception as exc:
+            logger.debug("Redis cancel subscription unavailable: %s", exc)
+
         # If no agent provided, build one from workspace settings (backward compat)
         if agent is None:
             from openforge.core.agent_registry import agent_registry
@@ -727,7 +771,7 @@ class AgentExecutionEngine:
         conversation = conv_result.scalar_one_or_none()
         if not conversation or conversation.workspace_id != workspace_id or conversation.is_archived:
             await self._publish(
-                execution_id, workspace_id, "chat_error",
+                execution_id, workspace_id, "agent_error",
                 conversation_id=conversation_id,
                 detail="Conversation not found",
             )
@@ -748,12 +792,27 @@ class AgentExecutionEngine:
             # Update execution record to running
             await self._update_execution_record(db, execution_id, status="running")
 
-        # 1. Save user message
+        # 1. Save user message (skip if already persisted at dispatch time)
         _user_metadata = {"optimize": True} if optimize else None
-        user_message = await conversation_service.add_message(
-            db, conversation_id, role="user", content=user_content,
-            provider_metadata=_user_metadata,
-        )
+        if existing:
+            # Celery path: user message was already persisted during dispatch
+            _last_msg = await db.execute(
+                select(Message)
+                .where(Message.conversation_id == conversation_id, Message.role == "user")
+                .order_by(Message.created_at.desc())
+                .limit(1)
+            )
+            user_message = _last_msg.scalar_one_or_none()
+            if not user_message:
+                user_message = await conversation_service.add_message(
+                    db, conversation_id, role="user", content=user_content,
+                    provider_metadata=_user_metadata,
+                )
+        else:
+            user_message = await conversation_service.add_message(
+                db, conversation_id, role="user", content=user_content,
+                provider_metadata=_user_metadata,
+            )
 
         try:
             # 2. Process attachments (if agent supports them)
@@ -788,7 +847,7 @@ class AgentExecutionEngine:
             all_attachments_processed = attachments_processed + url_attachments_processed
             if all_attachments_processed:
                 await self._publish(
-                    execution_id, workspace_id, "chat_attachments_processed",
+                    execution_id, workspace_id, "agent_attachments_processed",
                     conversation_id=conversation_id,
                     data=all_attachments_processed,
                 )
@@ -815,14 +874,6 @@ class AgentExecutionEngine:
                 )
                 rag_results = select_relevant_rag_results(raw_rag_results, limit=agent.rag_limit)
                 context_sources = build_context_sources(rag_results)
-
-            if context_sources:
-                await self._publish(
-                    execution_id, workspace_id, "chat_sources",
-                    conversation_id=conversation_id,
-                    data=context_sources,
-                )
-                await self._update_stream_state(execution_id, sources=context_sources)
 
             # 5. Assemble initial prompt
             history = await conversation_service.get_recent_messages(
@@ -909,7 +960,7 @@ class AgentExecutionEngine:
                 )
             except Exception as e:
                 await self._publish(
-                    execution_id, workspace_id, "chat_error",
+                    execution_id, workspace_id, "agent_error",
                     conversation_id=conversation_id,
                     detail=str(e),
                 )
@@ -1006,6 +1057,33 @@ class AgentExecutionEngine:
             iteration_count = 0
             tool_calls_count = 0
 
+            # Emit model_selection as the first timeline entry
+            from openforge.db.models import LLMProvider
+            _provider_display_name = provider_name
+            try:
+                _prov_result = await db.execute(
+                    select(LLMProvider).where(LLMProvider.name == provider_name).limit(1)
+                )
+                _prov_row = _prov_result.scalar_one_or_none()
+                if _prov_row and _prov_row.display_name:
+                    _provider_display_name = _prov_row.display_name
+            except Exception:
+                pass
+
+            model_selection_entry = {
+                "type": "model_selection",
+                "provider_name": provider_name,
+                "provider_display_name": _provider_display_name,
+                "model": model,
+                "is_override": bool(provider_id or model_id),
+            }
+            timeline.append(model_selection_entry)
+            await self._publish(
+                execution_id, workspace_id, "agent_model_selection",
+                conversation_id=conversation_id,
+                data=model_selection_entry,
+            )
+
             loop_messages = list(assembled)
 
             for loop_iteration in range(agent.max_iterations):
@@ -1040,7 +1118,7 @@ class AgentExecutionEngine:
                                 full_thinking += chunk
                                 thinking_this_turn += chunk
                                 await self._publish(
-                                    execution_id, workspace_id, "chat_thinking",
+                                    execution_id, workspace_id, "agent_thinking",
                                     conversation_id=conversation_id,
                                     data=chunk,
                                 )
@@ -1056,7 +1134,7 @@ class AgentExecutionEngine:
                                 full_response += token
                                 response_this_turn += token
                                 await self._publish(
-                                    execution_id, workspace_id, "chat_token",
+                                    execution_id, workspace_id, "agent_token",
                                     conversation_id=conversation_id,
                                     data=token,
                                 )
@@ -1075,7 +1153,7 @@ class AgentExecutionEngine:
                 except Exception as e:
                     logger.error("LLM streaming error: %s", e)
                     await self._publish(
-                        execution_id, workspace_id, "chat_error",
+                        execution_id, workspace_id, "agent_error",
                         conversation_id=conversation_id,
                         detail=str(e),
                     )
@@ -1084,6 +1162,12 @@ class AgentExecutionEngine:
                         completed_at=datetime.now(timezone.utc),
                     )
                     return
+
+                # If cancelled during streaming, break immediately
+                if was_cancelled:
+                    if thinking_this_turn.strip():
+                        timeline.append({"type": "thinking", "content": thinking_this_turn.strip()})
+                    break
 
                 # No tool calls — we have the final response
                 if not tool_calls_this_turn or finish_reason == "stop":
@@ -1099,6 +1183,10 @@ class AgentExecutionEngine:
                 tool_results_for_messages: list[dict] = []
 
                 for call in tool_calls_this_turn:
+                    if cancel_event.is_set():
+                        was_cancelled = True
+                        break
+
                     call_id = call.get("id") or str(uuid.uuid4())
                     fn_name = call.get("name", "")
                     arguments = call.get("arguments", {})
@@ -1121,8 +1209,30 @@ class AgentExecutionEngine:
                     all_tool_calls_made.append(call_record)
                     tool_calls_count += 1
 
-                    # Update execution tracking (defer chat_tool_call publish
-                    # until after HITL check so HITL card appears first)
+                    # Append tool_call to timeline BEFORE HITL check
+                    tool_entry = {
+                        "type": "tool_call",
+                        "call_id": call_id,
+                        "tool_name": tool_id,
+                        "arguments": arguments,
+                        "hitl": None,
+                        "success": None,
+                        "output": None,
+                        "error": None,
+                        "duration_ms": None,
+                        "nested_timeline": None,
+                        "subagent_conversation_id": None,
+                    }
+                    timeline.append(tool_entry)
+                    tool_entry_idx = len(timeline) - 1
+
+                    # Publish tool_call_start event (before HITL so frontend
+                    # renders the tool card first, then HITL inline inside it)
+                    await self._publish(
+                        execution_id, workspace_id, "agent_tool_call_start",
+                        conversation_id=conversation_id,
+                        data=call_record,
+                    )
                     await self._update_stream_state(
                         execution_id,
                         content=full_response,
@@ -1143,6 +1253,7 @@ class AgentExecutionEngine:
                         else "medium"
                     )
                     hitl_approved = True
+                    hitl_steering = ""
 
                     # Check async policy (includes ToolPermission table)
                     from openforge.db.postgres import AsyncSessionLocal
@@ -1152,47 +1263,30 @@ class AgentExecutionEngine:
                         )
 
                     if policy_decision == "blocked":
-                        # Tool is blocked — publish tool_call then result
+                        block_error = f"Tool '{tool_id}' is blocked by administrator policy."
+                        timeline[tool_entry_idx]["success"] = False
+                        timeline[tool_entry_idx]["error"] = block_error
                         await self._publish(
-                            execution_id, workspace_id, "chat_tool_call",
-                            conversation_id=conversation_id,
-                            data=call_record,
-                        )
-                        result = {
-                            "success": False,
-                            "error": f"Tool '{tool_id}' is blocked by administrator policy.",
-                        }
-                        tool_results_for_messages.append({
-                            "tool_call_id": call_id,
-                            "content": f"Tool error: {result['error']}",
-                        })
-                        timeline.append({
-                            "type": "tool_call",
-                            "call_id": call_id,
-                            "tool_name": tool_id,
-                            "arguments": arguments,
-                            "success": False,
-                            "error": result["error"],
-                        })
-                        await self._publish(
-                            execution_id, workspace_id, "chat_tool_result",
+                            execution_id, workspace_id, "agent_tool_call_result",
                             conversation_id=conversation_id,
                             data={
                                 "call_id": call_id,
                                 "tool_name": tool_id,
                                 "success": False,
-                                "error": result["error"],
+                                "error": block_error,
                             },
                         )
+                        tool_results_for_messages.append({
+                            "tool_call_id": call_id,
+                            "content": f"Tool error: {block_error}",
+                        })
                         continue
 
-                    hitl_steering = ""
-                    if tool_info and policy_decision == "hitl_required":
+                    if policy_decision == "hitl_required":
                         action_summary = (
                             f"Agent wants to execute '{tool_id}' with: "
                             f"{json.dumps(arguments, default=str)[:300]}"
                         )
-                        from openforge.db.postgres import AsyncSessionLocal
                         async with AsyncSessionLocal() as hitl_db:
                             hitl_req = await hitl_service.create_request(
                                 hitl_db,
@@ -1202,35 +1296,34 @@ class AgentExecutionEngine:
                                 tool_input=arguments,
                                 action_summary=action_summary,
                                 risk_level=risk_level,
+                                agent_id=agent.id,
                             )
                         hitl_id = str(hitl_req.id)
+                        hitl_service.register_event(hitl_id)
 
-                        hitl_event_obj = hitl_service.register_event(hitl_id)
-
-                        hitl_entry = {
-                            "type": "hitl_request",
+                        # Embed HITL as sub-object of the tool_call entry
+                        timeline[tool_entry_idx]["hitl"] = {
                             "hitl_id": hitl_id,
-                            "tool_id": tool_id,
-                            "tool_input": arguments,
                             "action_summary": action_summary,
                             "risk_level": risk_level,
+                            "agent_id": agent.id,
                             "status": "pending",
+                            "resolution_note": None,
                         }
-                        timeline.append(hitl_entry)
 
                         await self._publish(
-                            execution_id, workspace_id, "chat_hitl_request",
+                            execution_id, workspace_id, "agent_tool_hitl",
                             conversation_id=conversation_id,
                             data={
+                                "call_id": call_id,
                                 "hitl_id": hitl_id,
-                                "tool_id": tool_id,
-                                "tool_input": arguments,
                                 "action_summary": action_summary,
                                 "risk_level": risk_level,
+                                "agent_id": agent.id,
+                                "status": "pending",
                             },
                         )
 
-                        # Persist timeline with HITL entry so reconnecting clients see it
                         await self._update_stream_state(
                             execution_id,
                             content=full_response,
@@ -1238,15 +1331,44 @@ class AgentExecutionEngine:
                             tool_calls=all_tool_calls_made,
                             timeline=timeline,
                         )
-
-                        # Update execution status to paused
                         await self._update_execution_record(
                             db, execution_id, status="paused_hitl"
                         )
 
-                        hitl_approved = await hitl_service.wait_for_decision(hitl_id, timeout=300.0)
+                        # Wait for HITL decision, but also respect cancellation
+                        async def _wait_cancel():
+                            while not cancel_event.is_set():
+                                await asyncio.sleep(0.25)
 
-                        # Update execution status back to running
+                        hitl_task = asyncio.create_task(
+                            hitl_service.wait_for_decision(hitl_id, timeout=300.0)
+                        )
+                        cancel_task = asyncio.create_task(_wait_cancel())
+                        done, pending = await asyncio.wait(
+                            {hitl_task, cancel_task},
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                        for t in pending:
+                            t.cancel()
+                            try:
+                                await t
+                            except (asyncio.CancelledError, Exception):
+                                pass
+
+                        if cancel_event.is_set():
+                            was_cancelled = True
+                            try:
+                                async with AsyncSessionLocal() as _cancel_hitl_db:
+                                    await hitl_service.deny(
+                                        _cancel_hitl_db, uuid.UUID(hitl_id),
+                                        note="Auto-denied: agent execution was cancelled",
+                                    )
+                            except Exception:
+                                pass
+                            break
+
+                        hitl_approved = hitl_task.result() if hitl_task in done else False
+
                         await self._update_execution_record(
                             db, execution_id, status="running"
                         )
@@ -1258,25 +1380,21 @@ class AgentExecutionEngine:
                             if _hitl_row and _hitl_row.resolution_note:
                                 hitl_steering = _hitl_row.resolution_note
 
-                        # Update timeline entry with resolution
-                        for i, entry in enumerate(timeline):
-                            if entry.get("type") == "hitl_request" and entry.get("hitl_id") == hitl_id:
-                                timeline[i] = {
-                                    **entry,
-                                    "status": "approved" if hitl_approved else "denied",
-                                }
-                                break
+                        # Update tool_call entry's HITL sub-object
+                        timeline[tool_entry_idx]["hitl"]["status"] = "approved" if hitl_approved else "denied"
+                        timeline[tool_entry_idx]["hitl"]["resolution_note"] = hitl_steering or None
 
                         await self._publish(
-                            execution_id, workspace_id, "chat_hitl_resolved",
+                            execution_id, workspace_id, "agent_tool_hitl_resolved",
                             conversation_id=conversation_id,
                             data={
+                                "call_id": call_id,
                                 "hitl_id": hitl_id,
                                 "status": "approved" if hitl_approved else "denied",
+                                "resolution_note": hitl_steering or None,
                             },
                         )
 
-                        # Persist resolved timeline for reconnecting clients
                         await self._update_stream_state(
                             execution_id,
                             content=full_response,
@@ -1289,48 +1407,38 @@ class AgentExecutionEngine:
                             deny_msg = f"Tool '{tool_id}' was denied by user approval check."
                             if hitl_steering:
                                 deny_msg += f"\n\nUser feedback: {hitl_steering}"
-                            result = {
-                                "success": False,
-                                "error": deny_msg,
-                            }
+                            timeline[tool_entry_idx]["success"] = False
+                            timeline[tool_entry_idx]["error"] = deny_msg
+                            await self._publish(
+                                execution_id, workspace_id, "agent_tool_call_result",
+                                conversation_id=conversation_id,
+                                data={
+                                    "call_id": call_id,
+                                    "tool_name": tool_id,
+                                    "success": False,
+                                    "error": deny_msg,
+                                },
+                            )
                             tool_results_for_messages.append({
                                 "tool_call_id": call_id,
-                                "content": f"Tool error: {result['error']}",
+                                "content": f"Tool error: {deny_msg}",
                             })
                             continue
-
-                    # Publish tool call to frontend (after HITL gate so
-                    # the HITL card appears before the tool call badge)
-                    # Add pending tool_call to timeline for reconnecting clients
-                    timeline.append({
-                        "type": "tool_call",
-                        "call_id": call_id,
-                        "tool_name": tool_id,
-                        "arguments": arguments,
-                    })
-                    await self._publish(
-                        execution_id, workspace_id, "chat_tool_call",
-                        conversation_id=conversation_id,
-                        data=call_record,
-                    )
-                    await self._update_stream_state(
-                        execution_id,
-                        content=full_response,
-                        thinking=full_thinking,
-                        tool_calls=all_tool_calls_made,
-                        timeline=timeline,
-                    )
 
                     # Execute via the appropriate backend (timed)
                     tool_started_at = datetime.now(timezone.utc)
                     call_start_perf = time.perf_counter()
 
+                    # Inject scope_path for agent.invoke so subagent can
+                    # emit nested events targeting the correct timeline slot
+                    _exec_arguments = arguments
+                    if tool_id == "agent.invoke":
+                        _exec_arguments = {**arguments, "_scope_path": [tool_entry_idx]}
+
                     if not tool_info:
-                        # Unrecognised function name — forward to tool server
-                        # which can resolve aliases before failing.
                         result = await tool_dispatcher.execute(
                             tool_id=tool_id,
-                            params=arguments,
+                            params=_exec_arguments,
                             workspace_id=str(workspace_id),
                             execution_id=execution_id,
                             conversation_id=str(conversation_id) if conversation_id else "",
@@ -1353,12 +1461,12 @@ class AgentExecutionEngine:
                         result = await execute_mcp_tool(
                             server=tool_info["server"],
                             tool_name=tool_info["tool_name"],
-                            arguments=arguments,
+                            arguments=_exec_arguments,
                         )
                     else:
                         result = await tool_dispatcher.execute(
                             tool_id=tool_id,
-                            params=arguments,
+                            params=_exec_arguments,
                             workspace_id=str(workspace_id),
                             execution_id=execution_id,
                             conversation_id=str(conversation_id) if conversation_id else "",
@@ -1367,37 +1475,31 @@ class AgentExecutionEngine:
                     call_duration_ms = int((time.perf_counter() - call_start_perf) * 1000)
                     tool_finished_at = datetime.now(timezone.utc)
 
-                    # Helper: find and update pending tool_call entry or append
-                    def _update_or_append_tool_timeline(entry: dict) -> None:
-                        for idx, t in enumerate(timeline):
-                            if t.get("type") == "tool_call" and t.get("call_id") == call_id:
-                                timeline[idx] = entry
-                                return
-                        timeline.append(entry)
-
-                    # Special handling: agent.invoke → subagent_invocation
+                    # Update timeline entry with result
                     if tool_id == "agent.invoke" and result.get("success"):
                         subagent_out = result.get("output") or {}
                         subagent_response = subagent_out.get("response", "")
                         subagent_timeline = subagent_out.get("timeline", [])
                         subagent_conv_id = subagent_out.get("conversation_id")
 
-                        invocation_entry = {
-                            "type": "subagent_invocation",
-                            "call_id": call_id,
-                            "tool_name": tool_id,
-                            "arguments": arguments,
-                            "success": True,
-                            "subagent_response": subagent_response,
-                            "subagent_timeline": subagent_timeline,
-                            "subagent_conversation_id": subagent_conv_id,
-                        }
-                        _update_or_append_tool_timeline(invocation_entry)
+                        timeline[tool_entry_idx]["success"] = True
+                        timeline[tool_entry_idx]["output"] = subagent_response
+                        timeline[tool_entry_idx]["duration_ms"] = call_duration_ms
+                        timeline[tool_entry_idx]["nested_timeline"] = subagent_timeline
+                        timeline[tool_entry_idx]["subagent_conversation_id"] = subagent_conv_id
 
                         await self._publish(
-                            execution_id, workspace_id, "chat_subagent_invocation",
+                            execution_id, workspace_id, "agent_tool_call_result",
                             conversation_id=conversation_id,
-                            data=invocation_entry,
+                            data={
+                                "call_id": call_id,
+                                "tool_name": tool_id,
+                                "success": True,
+                                "output": subagent_response,
+                                "duration_ms": call_duration_ms,
+                                "nested_timeline": subagent_timeline,
+                                "subagent_conversation_id": subagent_conv_id,
+                            },
                         )
 
                         result_content = (
@@ -1424,80 +1526,80 @@ class AgentExecutionEngine:
                                 finished_at=tool_finished_at,
                             )
                         )
-                        continue
-
-                    _output = result.get("output")
-                    if isinstance(_output, str) and len(_output) > 2000:
-                        _output = _output[:2000] + "…"
-                    _update_or_append_tool_timeline({
-                        "type": "tool_call",
-                        "call_id": call_id,
-                        "tool_name": tool_id,
-                        "arguments": arguments,
-                        "success": result.get("success", False),
-                        "output": _output,
-                        "error": result.get("error"),
-                    })
-
-                    result_record = {
-                        "call_id": call_id,
-                        "tool_name": tool_id,
-                        "success": result.get("success", False),
-                        "output": result.get("output"),
-                        "error": result.get("error"),
-                    }
-
-                    await self._publish(
-                        execution_id, workspace_id, "chat_tool_result",
-                        conversation_id=conversation_id,
-                        data=result_record,
-                    )
-                    await self._update_stream_state(
-                        execution_id,
-                        content=full_response,
-                        thinking=full_thinking,
-                        tool_calls=all_tool_calls_made,
-                        timeline=timeline,
-                    )
-
-                    asyncio.create_task(
-                        _persist_tool_call_log(
-                            workspace_id=workspace_id,
-                            conversation_id=conversation_id,
-                            call_id=call_id,
-                            tool_name=tool_id,
-                            arguments=arguments,
-                            success=result.get("success", False),
-                            output=result.get("output"),
-                            error=result.get("error"),
-                            duration_ms=call_duration_ms,
-                            started_at=tool_started_at,
-                            finished_at=tool_finished_at,
-                        )
-                    )
-
-                    # Format result content for message injection
-                    if result.get("success"):
-                        output = result.get("output")
-                        if output is None:
-                            result_content = "Tool executed successfully with no output."
-                        elif isinstance(output, (dict, list)):
-                            result_content = json.dumps(output, indent=2, default=str)
-                        else:
-                            result_content = str(output)
-                        if result.get("truncated"):
-                            result_content += f"\n[Output truncated at {result.get('original_length')} chars]"
                     else:
-                        result_content = f"Tool error: {result.get('error', 'Unknown error')}"
+                        _output = result.get("output")
+                        if isinstance(_output, str) and len(_output) > 2000:
+                            _output = _output[:2000] + "…"
+                        timeline[tool_entry_idx]["success"] = result.get("success", False)
+                        timeline[tool_entry_idx]["output"] = _output
+                        timeline[tool_entry_idx]["error"] = result.get("error")
+                        timeline[tool_entry_idx]["duration_ms"] = call_duration_ms
 
-                    # Inject HITL steering after tool result for approved requests
-                    if hitl_steering:
-                        result_content += f"\n\n[User guidance at approval time]: {hitl_steering}"
+                        await self._publish(
+                            execution_id, workspace_id, "agent_tool_call_result",
+                            conversation_id=conversation_id,
+                            data={
+                                "call_id": call_id,
+                                "tool_name": tool_id,
+                                "success": result.get("success", False),
+                                "output": result.get("output"),
+                                "error": result.get("error"),
+                                "duration_ms": call_duration_ms,
+                            },
+                        )
+                        await self._update_stream_state(
+                            execution_id,
+                            content=full_response,
+                            thinking=full_thinking,
+                            tool_calls=all_tool_calls_made,
+                            timeline=timeline,
+                        )
 
-                    tool_results_for_messages.append({
-                        "tool_call_id": call_id,
-                        "content": result_content,
-                    })
+                        asyncio.create_task(
+                            _persist_tool_call_log(
+                                workspace_id=workspace_id,
+                                conversation_id=conversation_id,
+                                call_id=call_id,
+                                tool_name=tool_id,
+                                arguments=arguments,
+                                success=result.get("success", False),
+                                output=result.get("output"),
+                                error=result.get("error"),
+                                duration_ms=call_duration_ms,
+                                started_at=tool_started_at,
+                                finished_at=tool_finished_at,
+                            )
+                        )
+
+                        # Format result content for message injection
+                        if result.get("success"):
+                            output = result.get("output")
+                            if output is None:
+                                result_content = "Tool executed successfully with no output."
+                            elif isinstance(output, (dict, list)):
+                                result_content = json.dumps(output, indent=2, default=str)
+                            else:
+                                result_content = str(output)
+                            if result.get("truncated"):
+                                result_content += f"\n[Output truncated at {result.get('original_length')} chars]"
+                        else:
+                            result_content = f"Tool error: {result.get('error', 'Unknown error')}"
+
+                        if hitl_steering:
+                            result_content += f"\n\n[User guidance at approval time]: {hitl_steering}"
+
+                        tool_results_for_messages.append({
+                            "tool_call_id": call_id,
+                            "content": result_content,
+                        })
+
+                    # Check cancellation between tool calls
+                    if cancel_event.is_set():
+                        was_cancelled = True
+                        break
+
+                if was_cancelled:
+                    break
 
                 # Inject assistant message with tool_calls into the loop messages
                 assistant_tool_message: dict = {"role": "assistant", "content": response_this_turn or ""}
@@ -1538,7 +1640,7 @@ class AgentExecutionEngine:
                             if token:
                                 full_response += token
                                 await self._publish(
-                                    execution_id, workspace_id, "chat_token",
+                                    execution_id, workspace_id, "agent_token",
                                     conversation_id=conversation_id,
                                     data=token,
                                 )
@@ -1547,7 +1649,6 @@ class AgentExecutionEngine:
 
             # 9. Save assistant message
             generation_ms = int((time.perf_counter() - generation_started) * 1000)
-            has_runtime_override = bool(provider_id or model_id)
 
             msg = await conversation_service.add_message(
                 db,
@@ -1579,7 +1680,7 @@ class AgentExecutionEngine:
 
             # 11. Notify completion
             await self._publish(
-                execution_id, workspace_id, "chat_done",
+                execution_id, workspace_id, "agent_done",
                 conversation_id=conversation_id,
                 message_id=str(msg.id),
                 generation_ms=generation_ms,
@@ -1597,8 +1698,8 @@ class AgentExecutionEngine:
                 duration_ms=generation_ms,
             )
 
-            # Refresh conversation title directly (not as background task) so it
-            # completes before the Celery worker closes the event loop.
+            # Refresh conversation title using workspace default LLM (not the
+            # runtime override) so it always works regardless of chat provider.
             try:
                 from openforge.db.postgres import AsyncSessionLocal
                 async with AsyncSessionLocal() as title_db:
@@ -1606,10 +1707,6 @@ class AgentExecutionEngine:
                         title_db,
                         workspace_id=workspace_id,
                         conversation_id=conversation_id,
-                        provider_name=provider_name if has_runtime_override else None,
-                        api_key=api_key if has_runtime_override else None,
-                        model=model if has_runtime_override else None,
-                        base_url=base_url if has_runtime_override else None,
                     )
             except Exception as e:
                 logger.warning(
@@ -1644,7 +1741,7 @@ class AgentExecutionEngine:
                 "Agent pipeline error for conversation %s: %s", conversation_id, e
             )
             await self._publish(
-                execution_id, workspace_id, "chat_error",
+                execution_id, workspace_id, "agent_error",
                 conversation_id=conversation_id,
                 detail=str(e),
             )
@@ -1653,6 +1750,24 @@ class AgentExecutionEngine:
                 completed_at=datetime.now(timezone.utc),
             )
         finally:
+            # Clean up Redis cancel subscription
+            if _cancel_listener_task and not _cancel_listener_task.done():
+                _cancel_listener_task.cancel()
+                try:
+                    await _cancel_listener_task
+                except (asyncio.CancelledError, Exception):
+                    pass
+            if _cancel_redis_sub:
+                try:
+                    await _cancel_redis_sub.unsubscribe(f"agent_cancel:{conversation_id}")
+                    await _cancel_redis_sub.aclose()
+                except Exception:
+                    pass
+            if _cancel_redis_conn:
+                try:
+                    await _cancel_redis_conn.aclose()
+                except Exception:
+                    pass
             # Clean up Redis stream state
             if await self._should_use_redis():
                 try:
@@ -1673,31 +1788,62 @@ class AgentExecutionEngine:
         parent_execution_id: Optional[str] = None,
         parent_conversation_id: Optional[UUID] = None,
         parent_workspace_id: Optional[UUID] = None,
+        cancel_event: Optional[asyncio.Event] = None,
+        scope_path: Optional[list[int]] = None,
+        execution_chain_id: Optional[str] = None,
     ) -> dict:
         """Run a subagent in collect mode — no streaming.
 
         If parent_conversation_id and parent_workspace_id are provided,
-        progress events are streamed to the parent conversation so the UI
-        can show real-time subagent activity.
+        progress events are wrapped as ``agent_nested_event`` with
+        ``scope_path`` so the UI can render them at the correct nesting
+        depth inside the parent timeline.
+
+        ``execution_chain_id`` is the root execution ID shared by all
+        agents in the chain; used for cascading cancel via Redis.
         """
+        # Inherit parent's cancel event so subagent stops when parent is cancelled
+        if cancel_event is None and parent_conversation_id:
+            cancel_event = self._cancel_events.get(str(parent_conversation_id))
+
         execution_id = parent_execution_id or str(uuid.uuid4())
+
+        # Subscribe to cascading cancel via execution_chain_id
+        _chain_cancel_conn = None
+        _chain_cancel_sub = None
+        _chain_cancel_task = None
+        if execution_chain_id and cancel_event:
+            try:
+                _chain_cancel_conn, _chain_cancel_sub, _chain_cancel_task = (
+                    await self._subscribe_redis_cancel(execution_chain_id, cancel_event)
+                )
+            except Exception:
+                pass
+
+        # Validate agent_id against registry; fall back to workspace_agent if unknown
+        target_agent: AgentDefinition | None = None
+        if agent_id:
+            from openforge.core.agent_registry import agent_registry as _sub_reg
+            target_agent = _sub_reg.get(agent_id)
+            if not target_agent:
+                logger.warning(
+                    "Unknown agent_id '%s' requested for subagent, falling back to workspace_agent",
+                    agent_id,
+                )
+                agent_id = "workspace_agent"
+
+        resolved_agent_id = agent_id or "workspace_agent"
 
         temp_conv = Conversation(
             workspace_id=workspace_id,
             title=f"[subagent] {instruction[:80]}",
             is_subagent=True,
-            subagent_agent_id=agent_id or "workspace_agent",
+            subagent_agent_id=resolved_agent_id,
         )
         db.add(temp_conv)
         await db.commit()
         await db.refresh(temp_conv)
         conv_id = temp_conv.id
-
-        # Resolve specific agent if agent_id is provided
-        target_agent: AgentDefinition | None = None
-        if agent_id:
-            from openforge.core.agent_registry import agent_registry as _sub_reg
-            target_agent = _sub_reg.get(agent_id)
 
         # Create AgentExecution record for subagent invocations so they appear in Recent Executions
         sub_exec_id = uuid.uuid4()
@@ -1705,7 +1851,7 @@ class AgentExecutionEngine:
             id=sub_exec_id,
             workspace_id=workspace_id,
             conversation_id=conv_id,
-            agent_id=agent_id or "workspace_agent",
+            agent_id=resolved_agent_id,
             status="running",
         )
         db.add(sub_exec)
@@ -1805,10 +1951,49 @@ class AgentExecutionEngine:
             full_response = ""
             timeline: list[dict] = []
             max_loops = 10
+            _depth = len(scope_path) if scope_path else 0
             _last_progress_publish = 0.0
-            _PROGRESS_INTERVAL = 0.1  # throttle: max one publish per 100ms
+            _PROGRESS_INTERVAL = 0.1 * (_depth + 1)  # throttle scales with depth
+
+            _sub_cancelled = False
+
+            # Helper: publish a nested event to the parent timeline
+            async def _emit_nested(inner_event: dict) -> None:
+                nonlocal _last_progress_publish
+                if not (parent_conversation_id and parent_workspace_id and scope_path is not None):
+                    return
+                now = time.monotonic()
+                if now - _last_progress_publish < _PROGRESS_INTERVAL:
+                    return
+                _last_progress_publish = now
+                await self._publish(
+                    execution_id, parent_workspace_id, "agent_nested_event",
+                    conversation_id=parent_conversation_id,
+                    data={
+                        "scope_path": scope_path,
+                        "event": inner_event,
+                    },
+                )
+
+            # Emit model_selection as the first nested event
+            _sub_model_entry = {
+                "type": "model_selection",
+                "provider_name": provider_name,
+                "provider_display_name": provider_name,
+                "model": model,
+                "is_override": False,
+            }
+            timeline.append(_sub_model_entry)
+            if parent_conversation_id and parent_workspace_id and scope_path is not None:
+                # Force publish model_selection (bypass throttle)
+                _last_progress_publish = 0.0
+                await _emit_nested({"type": "agent_model_selection", "data": _sub_model_entry})
 
             for _ in range(max_loops):
+                if cancel_event and cancel_event.is_set():
+                    _sub_cancelled = True
+                    break
+
                 tool_calls_this_turn: list[dict] = []
                 response_this_turn = ""
                 thinking_this_turn = ""
@@ -1824,45 +2009,28 @@ class AgentExecutionEngine:
                         base_url=base_url,
                         include_thinking=True,
                     ):
+                        if cancel_event and cancel_event.is_set():
+                            _sub_cancelled = True
+                            break
                         etype = event.get("type")
                         if etype == "thinking":
                             chunk = event.get("content", "")
                             if chunk:
                                 thinking_this_turn += chunk
-                                # Add/update thinking entry in timeline
                                 if timeline and timeline[-1].get("type") == "thinking" and not timeline[-1].get("done"):
                                     timeline[-1]["content"] = timeline[-1].get("content", "") + chunk
                                 else:
                                     timeline.append({"type": "thinking", "content": chunk})
-                                if parent_conversation_id and parent_workspace_id:
-                                    now = time.monotonic()
-                                    if now - _last_progress_publish >= _PROGRESS_INTERVAL:
-                                        _last_progress_publish = now
-                                        await self._publish(
-                                            execution_id, parent_workspace_id, "chat_subagent_progress",
-                                            conversation_id=parent_conversation_id,
-                                            data={"timeline": timeline},
-                                        )
+                                await _emit_nested({"type": "agent_thinking", "data": chunk})
                         elif etype == "token":
                             tok = event.get("content", "")
                             full_response += tok
                             response_this_turn += tok
-                            # Mark any open thinking block as done
                             if timeline and timeline[-1].get("type") == "thinking" and not timeline[-1].get("done"):
                                 timeline[-1]["done"] = True
-                            # Stream response text to parent conversation (throttled)
-                            if parent_conversation_id and parent_workspace_id:
-                                now = time.monotonic()
-                                if now - _last_progress_publish >= _PROGRESS_INTERVAL:
-                                    _last_progress_publish = now
-                                    await self._publish(
-                                        execution_id, parent_workspace_id, "chat_subagent_progress",
-                                        conversation_id=parent_conversation_id,
-                                        data={"response_text": full_response, "timeline": timeline},
-                                    )
+                            await _emit_nested({"type": "agent_token", "data": tok})
                         elif etype == "tool_calls":
                             tool_calls_this_turn = event.get("calls", [])
-                            # Mark any open thinking block as done
                             if timeline and timeline[-1].get("type") == "thinking" and not timeline[-1].get("done"):
                                 timeline[-1]["done"] = True
                         elif etype == "done":
@@ -1871,22 +2039,18 @@ class AgentExecutionEngine:
                     logger.warning("Subagent LLM error: %s", exc)
                     break
 
-                # Flush final progress (catches anything skipped by throttle)
-                if parent_conversation_id and parent_workspace_id:
-                    data: dict = {"timeline": timeline}
-                    if full_response:
-                        data["response_text"] = full_response
-                    await self._publish(
-                        execution_id, parent_workspace_id, "chat_subagent_progress",
-                        conversation_id=parent_conversation_id,
-                        data=data,
-                    )
+                if _sub_cancelled:
+                    break
 
                 if not tool_calls_this_turn or finish_reason == "stop":
                     break
 
                 tool_results_msgs: list[dict] = []
                 for call in tool_calls_this_turn:
+                    if cancel_event and cancel_event.is_set():
+                        _sub_cancelled = True
+                        break
+
                     call_id = call.get("id") or str(uuid.uuid4())
                     fn_name = call.get("name", "")
                     args = call.get("arguments", {})
@@ -1894,54 +2058,225 @@ class AgentExecutionEngine:
                     sub_tool_info = fn_name_to_tool_info_sub.get(fn_name)
                     sub_tool_id = sub_tool_info["tool_id"] if sub_tool_info else _fn_name_to_tool_id(fn_name)
 
+                    # Append tool_call entry BEFORE policy check (same pattern as run())
                     tool_call_entry = {
                         "type": "tool_call",
                         "call_id": call_id,
                         "tool_name": sub_tool_id,
                         "arguments": args,
+                        "hitl": None,
+                        "success": None,
+                        "output": None,
+                        "error": None,
+                        "duration_ms": None,
+                        "nested_timeline": None,
+                        "subagent_conversation_id": None,
                     }
                     timeline.append(tool_call_entry)
+                    _tc_idx = len(timeline) - 1
 
-                    # Stream tool-call start to parent conversation
-                    if parent_conversation_id and parent_workspace_id:
-                        await self._publish(
-                            execution_id, parent_workspace_id, "chat_subagent_progress",
-                            conversation_id=parent_conversation_id,
-                            data={"step": tool_call_entry, "timeline": timeline},
+                    # Emit tool_call_start via nested event
+                    _last_progress_publish = 0.0  # force publish
+                    await _emit_nested({
+                        "type": "agent_tool_call_start",
+                        "data": {"call_id": call_id, "tool_name": sub_tool_id, "arguments": args},
+                    })
+
+                    # HITL policy check (mirrors run() logic)
+                    sub_risk_level = (
+                        sub_tool_info.get("risk_level", "low")
+                        if sub_tool_info and sub_tool_info.get("type") == "builtin"
+                        else "medium"
+                    )
+                    _sub_hitl_approved = True
+                    _sub_hitl_steering = ""
+
+                    from openforge.db.postgres import AsyncSessionLocal
+                    async with AsyncSessionLocal() as _sub_policy_db:
+                        _sub_policy_decision = await policy_engine.evaluate_async(
+                            sub_tool_id, sub_risk_level, _sub_policy_db
                         )
+
+                    if _sub_policy_decision == "blocked":
+                        block_err = f"Tool '{sub_tool_id}' is blocked by administrator policy."
+                        timeline[_tc_idx]["success"] = False
+                        timeline[_tc_idx]["error"] = block_err
+                        _last_progress_publish = 0.0
+                        await _emit_nested({
+                            "type": "agent_tool_call_result",
+                            "data": {"call_id": call_id, "tool_name": sub_tool_id, "success": False, "error": block_err},
+                        })
+                        tool_results_msgs.append({"tool_call_id": call_id, "content": f"Tool error: {block_err}"})
+                        continue
+
+                    if _sub_policy_decision == "hitl_required" and parent_conversation_id and parent_workspace_id:
+                        _sub_action_summary = (
+                            f"Subagent wants to execute '{sub_tool_id}' with: "
+                            f"{json.dumps(args, default=str)[:300]}"
+                        )
+                        async with AsyncSessionLocal() as _sub_hitl_db:
+                            _sub_hitl_req = await hitl_service.create_request(
+                                _sub_hitl_db,
+                                workspace_id=parent_workspace_id,
+                                conversation_id=parent_conversation_id,
+                                tool_id=sub_tool_id,
+                                tool_input=args,
+                                action_summary=_sub_action_summary,
+                                risk_level=sub_risk_level,
+                                agent_id=resolved_agent_id,
+                            )
+                        _sub_hitl_id = str(_sub_hitl_req.id)
+                        hitl_service.register_event(_sub_hitl_id)
+
+                        # Embed HITL as sub-object of the tool_call entry
+                        timeline[_tc_idx]["hitl"] = {
+                            "hitl_id": _sub_hitl_id,
+                            "action_summary": _sub_action_summary,
+                            "risk_level": sub_risk_level,
+                            "agent_id": resolved_agent_id,
+                            "status": "pending",
+                            "resolution_note": None,
+                        }
+
+                        _last_progress_publish = 0.0
+                        await _emit_nested({
+                            "type": "agent_tool_hitl",
+                            "data": {
+                                "call_id": call_id,
+                                "hitl_id": _sub_hitl_id,
+                                "action_summary": _sub_action_summary,
+                                "risk_level": sub_risk_level,
+                                "agent_id": resolved_agent_id,
+                                "status": "pending",
+                            },
+                        })
+
+                        # Wait for HITL decision, respecting cancellation
+                        async def _sub_wait_cancel():
+                            while not (cancel_event and cancel_event.is_set()):
+                                await asyncio.sleep(0.25)
+
+                        _sub_hitl_task = asyncio.create_task(
+                            hitl_service.wait_for_decision(_sub_hitl_id, timeout=300.0)
+                        )
+                        _sub_cancel_task = asyncio.create_task(_sub_wait_cancel())
+                        _sub_done, _sub_pending = await asyncio.wait(
+                            {_sub_hitl_task, _sub_cancel_task},
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                        for _t in _sub_pending:
+                            _t.cancel()
+                            try:
+                                await _t
+                            except (asyncio.CancelledError, Exception):
+                                pass
+
+                        if cancel_event and cancel_event.is_set():
+                            _sub_cancelled = True
+                            try:
+                                async with AsyncSessionLocal() as _sub_cancel_db:
+                                    await hitl_service.deny(
+                                        _sub_cancel_db, uuid.UUID(_sub_hitl_id),
+                                        note="Auto-denied: agent execution was cancelled",
+                                    )
+                            except Exception:
+                                pass
+                            break
+
+                        _sub_hitl_approved = _sub_hitl_task.result() if _sub_hitl_task in _sub_done else False
+
+                        # Read resolution note
+                        async with AsyncSessionLocal() as _sub_hitl_db:
+                            from openforge.db.models import HITLRequest as HITLModel
+                            _sub_hitl_row = await _sub_hitl_db.get(HITLModel, uuid.UUID(_sub_hitl_id))
+                            if _sub_hitl_row and _sub_hitl_row.resolution_note:
+                                _sub_hitl_steering = _sub_hitl_row.resolution_note
+
+                        # Update tool_call entry's HITL sub-object
+                        timeline[_tc_idx]["hitl"]["status"] = "approved" if _sub_hitl_approved else "denied"
+                        timeline[_tc_idx]["hitl"]["resolution_note"] = _sub_hitl_steering or None
+
+                        _last_progress_publish = 0.0
+                        await _emit_nested({
+                            "type": "agent_tool_hitl_resolved",
+                            "data": {
+                                "call_id": call_id,
+                                "hitl_id": _sub_hitl_id,
+                                "status": "approved" if _sub_hitl_approved else "denied",
+                                "resolution_note": _sub_hitl_steering or None,
+                            },
+                        })
+
+                        if not _sub_hitl_approved:
+                            _deny_msg = f"Tool '{sub_tool_id}' was denied by user approval check."
+                            if _sub_hitl_steering:
+                                _deny_msg += f"\n\nUser feedback: {_sub_hitl_steering}"
+                            timeline[_tc_idx]["success"] = False
+                            timeline[_tc_idx]["error"] = _deny_msg
+                            _last_progress_publish = 0.0
+                            await _emit_nested({
+                                "type": "agent_tool_call_result",
+                                "data": {"call_id": call_id, "tool_name": sub_tool_id, "success": False, "error": _deny_msg},
+                            })
+                            tool_results_msgs.append({"tool_call_id": call_id, "content": f"Tool error: {_deny_msg}"})
+                            continue
+
+                    # Inject scope_path for nested agent.invoke calls
+                    _sub_exec_args = args
+                    if sub_tool_id == "agent.invoke" and scope_path is not None:
+                        _sub_exec_args = {**args, "_scope_path": list(scope_path) + [_tc_idx]}
 
                     if not sub_tool_info:
                         sub_result = {"success": False, "error": f"Tool '{sub_tool_id}' not available"}
                     else:
                         sub_result = await tool_dispatcher.execute(
                             tool_id=sub_tool_id,
-                            params=args,
+                            params=_sub_exec_args,
                             workspace_id=str(workspace_id),
                             execution_id=execution_id,
                         )
 
-                    for i, entry in enumerate(timeline):
-                        if entry.get("call_id") == call_id:
-                            _out = sub_result.get("output")
-                            if isinstance(_out, str) and len(_out) > 2000:
-                                _out = _out[:2000] + "…"
-                            timeline[i] = {
-                                **entry,
-                                "success": sub_result.get("success", False),
-                                "output": _out,
-                                "error": sub_result.get("error"),
-                            }
-                            break
+                    # Update the tool_call entry with result
+                    if sub_tool_id == "agent.invoke" and sub_result.get("success"):
+                        subagent_out = sub_result.get("output") or {}
+                        subagent_response = subagent_out.get("response", "")
+                        subagent_timeline = subagent_out.get("timeline", [])
+                        subagent_conv_id = subagent_out.get("conversation_id")
 
-                    # Stream tool-call result to parent conversation
-                    if parent_conversation_id and parent_workspace_id:
-                        await self._publish(
-                            execution_id, parent_workspace_id, "chat_subagent_progress",
-                            conversation_id=parent_conversation_id,
-                            data={"step": timeline[-1] if timeline else tool_call_entry, "timeline": timeline},
+                        timeline[_tc_idx]["success"] = True
+                        timeline[_tc_idx]["output"] = subagent_response
+                        timeline[_tc_idx]["nested_timeline"] = subagent_timeline
+                        timeline[_tc_idx]["subagent_conversation_id"] = subagent_conv_id
+                    else:
+                        _out = sub_result.get("output")
+                        if isinstance(_out, str) and len(_out) > 2000:
+                            _out = _out[:2000] + "…"
+                        timeline[_tc_idx]["success"] = sub_result.get("success", False)
+                        timeline[_tc_idx]["output"] = _out
+                        timeline[_tc_idx]["error"] = sub_result.get("error")
+
+                    _last_progress_publish = 0.0
+                    await _emit_nested({
+                        "type": "agent_tool_call_result",
+                        "data": {
+                            "call_id": call_id,
+                            "tool_name": sub_tool_id,
+                            "success": timeline[_tc_idx].get("success", False),
+                            "output": timeline[_tc_idx].get("output"),
+                            "error": timeline[_tc_idx].get("error"),
+                            "nested_timeline": timeline[_tc_idx].get("nested_timeline"),
+                            "subagent_conversation_id": timeline[_tc_idx].get("subagent_conversation_id"),
+                        },
+                    })
+
+                    if sub_tool_id == "agent.invoke" and sub_result.get("success"):
+                        subagent_resp = (sub_result.get("output") or {}).get("response", "")
+                        rc = (
+                            f"Subagent completed. Response:\n\n{subagent_resp}"
+                            if subagent_resp
+                            else "Subagent completed with no text response."
                         )
-
-                    if sub_result.get("success"):
+                    elif sub_result.get("success"):
                         out = sub_result.get("output")
                         if out is None:
                             rc = "Tool executed successfully with no output."
@@ -1952,7 +2287,13 @@ class AgentExecutionEngine:
                     else:
                         rc = f"Tool error: {sub_result.get('error', 'Unknown error')}"
 
+                    if _sub_hitl_steering:
+                        rc += f"\n\n[User guidance at approval time]: {_sub_hitl_steering}"
+
                     tool_results_msgs.append({"tool_call_id": call_id, "content": rc})
+
+                if _sub_cancelled:
+                    break
 
                 asst_msg: dict = {"role": "assistant", "content": response_this_turn or ""}
                 asst_msg["tool_calls"] = [
@@ -2016,7 +2357,6 @@ class AgentExecutionEngine:
             }
         except Exception as exc:
             logger.error("Subagent execution error: %s", exc)
-            # Update execution record on failure
             try:
                 await db.refresh(sub_exec)
                 sub_exec.status = "failed"
@@ -2030,6 +2370,25 @@ class AgentExecutionEngine:
                 "timeline": [],
                 "conversation_id": str(conv_id),
             }
+        finally:
+            # Clean up chain cancel subscription
+            if _chain_cancel_task and not _chain_cancel_task.done():
+                _chain_cancel_task.cancel()
+                try:
+                    await _chain_cancel_task
+                except (asyncio.CancelledError, Exception):
+                    pass
+            if _chain_cancel_sub:
+                try:
+                    await _chain_cancel_sub.unsubscribe(f"agent_cancel:{execution_chain_id}")
+                    await _chain_cancel_sub.aclose()
+                except Exception:
+                    pass
+            if _chain_cancel_conn:
+                try:
+                    await _chain_cancel_conn.aclose()
+                except Exception:
+                    pass
 
 
 agent_engine = AgentExecutionEngine()

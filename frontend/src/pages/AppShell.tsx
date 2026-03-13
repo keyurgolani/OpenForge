@@ -129,7 +129,7 @@ export default function AppShell() {
         refetchInterval: 5000,
     })
     const hitlPendingCount = hitlCountData?.pending ?? 0
-    const { data: hitlPendingRequests = [] } = useQuery<{ id: string; workspace_id: string; conversation_id: string; tool_id: string; tool_input: any; action_summary: string; risk_level: string; status: string; created_at: string }[]>({
+    const { data: hitlPendingRequests = [] } = useQuery<{ id: string; workspace_id: string; conversation_id: string; tool_id: string; tool_input: any; action_summary: string; risk_level: string; agent_id?: string | null; status: string; created_at: string }[]>({
         queryKey: ['hitl-pending-list'],
         queryFn: () => listPendingHITL(),
         enabled: hitlShadeOpen,
@@ -996,7 +996,14 @@ export default function AppShell() {
                                         return (
                                             <div key={req.id} className={`rounded-xl border border-border/40 bg-muted/50 p-3 space-y-2 transition-opacity ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
                                                 <div className="flex items-start justify-between gap-2">
-                                                    <p className="text-xs font-mono font-semibold text-foreground truncate min-w-0 flex-1">{req.tool_id}</p>
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="text-xs font-mono font-semibold text-foreground truncate">{req.tool_id}</p>
+                                                        {req.agent_id && (
+                                                            <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
+                                                                {req.agent_id.replace(/_agent$/, '').split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')} Agent
+                                                            </p>
+                                                        )}
+                                                    </div>
                                                     <span className={`flex-shrink-0 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider rounded-md border ${
                                                         req.risk_level === 'critical' || req.risk_level === 'high' ? 'bg-red-500/15 text-red-400 border-red-500/25' :
                                                         req.risk_level === 'medium' ? 'bg-yellow-500/15 text-yellow-400 border-yellow-500/25' :

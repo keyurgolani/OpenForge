@@ -49,36 +49,46 @@ def _format_timeline_entry_txt(entry: dict, indent: str = "  ") -> list[str]:
                 out_str = out_str[:1000] + "..."
             lines.append(f"{indent}  Output: {out_str}")
 
-    elif t == "hitl_request":
-        tool_id = entry.get("tool_id", "unknown")
-        status = entry.get("status", "pending")
-        risk = entry.get("risk_level", "")
-        lines.append(f"{indent}[HITL] {tool_id}  (risk: {risk}, {status})")
-        tool_input = entry.get("tool_input") or {}
-        if tool_input:
-            for k, v in tool_input.items():
-                val = str(v)
-                if len(val) > 500:
-                    val = val[:500] + "..."
-                lines.append(f"{indent}  {k}: {val}")
+    elif t == "model_selection":
+        provider = entry.get("provider_display_name") or entry.get("provider_name", "")
+        model = entry.get("model", "")
+        override = " (override)" if entry.get("is_override") else ""
+        lines.append(f"{indent}[MODEL] {provider} · {model}{override}")
 
-    elif t == "subagent_invocation":
-        tool = entry.get("tool_name", "subagent")
-        success = entry.get("success")
-        status = "OK" if success else ("FAILED" if success is False else "running")
-        lines.append(f"{indent}[SUBAGENT] {tool}  ({status})")
-        args = entry.get("arguments") or {}
-        if args:
-            instruction = args.get("instruction", "")
-            if instruction:
-                lines.append(f"{indent}  Instruction: {instruction}")
-        response = (entry.get("subagent_response") or "").strip()
-        if response:
-            if len(response) > 1000:
-                response = response[:1000] + "..."
-            lines.append(f"{indent}  Response: {response}")
-        sub_timeline = entry.get("subagent_timeline") or []
-        for sub_entry in sub_timeline:
+    elif t == "prompt_optimized":
+        original = (entry.get("original") or "").strip()
+        optimized = (entry.get("optimized") or "").strip()
+        lines.append(f"{indent}[PROMPT OPTIMIZED]")
+        if original:
+            lines.append(f"{indent}  Original: {original[:500]}")
+        if optimized:
+            lines.append(f"{indent}  Optimized: {optimized[:500]}")
+
+    elif t == "attachments_processed":
+        attachments = entry.get("attachments") or []
+        lines.append(f"{indent}[ATTACHMENTS] {len(attachments)} processed")
+        for att in attachments:
+            status = att.get("status", "unknown")
+            filename = att.get("filename", "unnamed")
+            lines.append(f"{indent}  {filename} ({status})")
+
+    # Handle inline HITL on tool_call entries
+    if t == "tool_call":
+        hitl = entry.get("hitl")
+        if hitl:
+            hitl_status = hitl.get("status", "pending")
+            risk = hitl.get("risk_level", "")
+            summary = hitl.get("action_summary", "")
+            lines.append(f"{indent}  [HITL] risk: {risk}, {hitl_status}")
+            if summary:
+                lines.append(f"{indent}    {summary}")
+            note = hitl.get("resolution_note")
+            if note:
+                lines.append(f"{indent}    Guidance: {note}")
+
+        # Nested subagent timeline
+        nested = entry.get("nested_timeline") or []
+        for sub_entry in nested:
             lines.extend(_format_timeline_entry_txt(sub_entry, indent + "    "))
 
     return lines
@@ -137,45 +147,58 @@ def _format_timeline_entry_md(entry: dict, depth: int = 0) -> list[str]:
             lines.append(f"{prefix}> ```")
         lines.append("")
 
-    elif t == "hitl_request":
-        tool_id = entry.get("tool_id", "unknown")
-        status = entry.get("status", "pending")
-        risk = entry.get("risk_level", "")
-        icon = "✅" if status == "approved" else ("🚫" if status == "denied" else "⏳")
-        lines.append(f"{prefix}> **{icon} HITL Approval: `{tool_id}`** — risk: {risk}, {status}")
-        tool_input = entry.get("tool_input") or {}
-        if tool_input:
-            lines.append(f"{prefix}>")
-            for k, v in tool_input.items():
-                val = str(v)
-                if len(val) > 500:
-                    val = val[:500] + "..."
-                lines.append(f"{prefix}> `{k}`: {val}")
+    elif t == "model_selection":
+        provider = entry.get("provider_display_name") or entry.get("provider_name", "")
+        model = entry.get("model", "")
+        override = " *(override)*" if entry.get("is_override") else ""
+        lines.append(f"{prefix}> 🤖 **Model:** `{provider} · {model}`{override}")
         lines.append("")
 
-    elif t == "subagent_invocation":
-        tool = entry.get("tool_name", "subagent")
-        success = entry.get("success")
-        icon = "✅" if success else ("❌" if success is False else "⏳")
-        lines.append(f"{prefix}> **{icon} Subagent: `{tool}`**")
-        args = entry.get("arguments") or {}
-        instruction = args.get("instruction", "")
-        if instruction:
+    elif t == "prompt_optimized":
+        original = (entry.get("original") or "").strip()
+        optimized = (entry.get("optimized") or "").strip()
+        lines.append(f"{prefix}> ✨ **Prompt Optimized**")
+        if original:
             lines.append(f"{prefix}>")
-            lines.append(f"{prefix}> *Instruction:* {instruction}")
-        response = (entry.get("subagent_response") or "").strip()
-        if response:
-            if len(response) > 1000:
-                response = response[:1000] + "..."
+            lines.append(f"{prefix}> *Original:* {original[:500]}")
+        if optimized:
             lines.append(f"{prefix}>")
-            lines.append(f"{prefix}> **Response:** {response}")
-        sub_timeline = entry.get("subagent_timeline") or []
-        if sub_timeline:
-            lines.append(f"{prefix}>")
-            lines.append(f"{prefix}> *Subagent timeline:*")
-            for sub_entry in sub_timeline:
-                lines.extend(_format_timeline_entry_md(sub_entry, depth + 1))
+            lines.append(f"{prefix}> *Optimized:* {optimized[:500]}")
         lines.append("")
+
+    elif t == "attachments_processed":
+        attachments = entry.get("attachments") or []
+        lines.append(f"{prefix}> 📎 **Attachments:** {len(attachments)} processed")
+        for att in attachments:
+            status_str = att.get("status", "unknown")
+            filename = att.get("filename", "unnamed")
+            att_icon = "✅" if status_str == "processed" else "❌"
+            lines.append(f"{prefix}> {att_icon} `{filename}`")
+        lines.append("")
+
+    # Handle inline HITL on tool_call entries
+    if t == "tool_call":
+        hitl = entry.get("hitl")
+        if hitl:
+            hitl_status = hitl.get("status", "pending")
+            risk = hitl.get("risk_level", "")
+            summary = hitl.get("action_summary", "")
+            hitl_icon = "✅" if hitl_status == "approved" else ("🚫" if hitl_status == "denied" else "⏳")
+            lines.append(f"{prefix}> {hitl_icon} **HITL:** risk: {risk}, {hitl_status}")
+            if summary:
+                lines.append(f"{prefix}> {summary}")
+            note = hitl.get("resolution_note")
+            if note:
+                lines.append(f"{prefix}> *Guidance:* {note}")
+            lines.append("")
+
+        # Nested subagent timeline
+        nested = entry.get("nested_timeline") or []
+        if nested:
+            lines.append(f"{prefix}> *Subagent timeline:*")
+            lines.append("")
+            for sub_entry in nested:
+                lines.extend(_format_timeline_entry_md(sub_entry, depth + 1))
 
     return lines
 

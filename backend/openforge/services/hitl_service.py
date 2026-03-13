@@ -41,6 +41,7 @@ class HITLService:
         tool_input: dict,
         action_summary: str,
         risk_level: str,
+        agent_id: str | None = None,
     ) -> HITLRequest:
         req = HITLRequest(
             workspace_id=workspace_id,
@@ -49,6 +50,7 @@ class HITLService:
             tool_input=tool_input,
             action_summary=action_summary,
             risk_level=risk_level,
+            agent_id=agent_id,
         )
         db.add(req)
         await db.commit()

@@ -14,21 +14,19 @@ import {
     listWorkspaces,
     getKnowledge,
     resolveKnowledgeIds,
-    saveAttachmentToKnowledge,
     exportConversation,
-    approveHITL,
-    denyHITL,
     bulkTrashConversations,
     bulkRestoreConversations,
     bulkPermanentlyDeleteConversations,
 } from '@/lib/api'
-import { useStreamingChat, type Mention, type TimelineToolCall, type TimelineSubagentInvocation, type TimelineHITLRequest, type TimelinePromptOptimized, type SubagentTimelineStep } from '@/hooks/useStreamingChat'
+import { useStreamingChat, type Mention, type TimelineEntry } from '@/hooks/useStreamingChat'
+import { AgentTimeline, AgentTimelineDot } from '@/components/agent'
 import { useToast } from '@/components/shared/ToastProvider'
 import {
     Plus, Send, Square, Loader2, MessageSquare, Trash2, Bot, User, Sparkles,
-    ChevronDown, ChevronRight, ChevronLeft, ChevronUp, ChevronsUp, ExternalLink, Check, Pencil,
-    Paperclip, X, Copy, Search, Brain, Wrench, BookmarkPlus, Network, ShieldAlert, ShieldCheck, ShieldX, AtSign,
-    CheckCircle2, XCircle, RotateCcw, Trash, BookOpen, Clock, Activity
+    ChevronDown, ChevronRight, ChevronLeft, ChevronUp, ChevronsUp, Check, Pencil,
+    Paperclip, X, Copy, Search, Network, AtSign,
+    RotateCcw, Trash,
 } from 'lucide-react'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem,
@@ -36,8 +34,6 @@ import {
 } from '@/components/ui/context-menu'
 import MarkdownIt from 'markdown-it'
 import { sanitizeProviderDisplayName } from '@/lib/provider-display'
-import { ToolCallCard, InputSection } from '@/components/shared/ToolCallCard'
-import { TimelineBadge } from '@/components/shared/TimelineBadge'
 import Siderail from '@/components/shared/Siderail'
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
@@ -203,12 +199,7 @@ interface Message {
     context_sources?: { knowledge_id: string; title: string; snippet: string; score: number }[]
     attachments_processed?: AttachmentProcessed[]
     tool_calls?: { call_id: string; tool_name: string; arguments: Record<string, unknown> }[] | null
-    timeline?: Array<
-        | { type: 'thinking'; content: string }
-        | { type: 'tool_call'; call_id: string; tool_name: string; arguments: Record<string, unknown>; success?: boolean; output?: unknown; error?: string }
-        | TimelineSubagentInvocation
-        | TimelineHITLRequest
-    > | null
+    timeline?: TimelineEntry[] | null
     is_interrupted?: boolean
     provider_metadata?: { optimize?: boolean; [key: string]: unknown } | null
     created_at: string
@@ -345,15 +336,12 @@ export default function WorkspaceAgentPage() {
         streamingContent,
         isStreaming,
         isInterrupted,
-        attachmentsProcessed,
-        sources,
         timeline: streamingTimeline,
         sendMessage,
         cancelStream,
         isConnected,
         lastError,
         clearLastError,
-        thinkingByMessageId,
     } = useStreamingChat(activeCid)
 
     const messages: Message[] = conversationData?.messages ?? []
@@ -541,15 +529,6 @@ export default function WorkspaceAgentPage() {
         return modelOptions.filter(opt => opt.searchText.includes(q))
     }, [modelOptions, modelPickerQuery])
 
-    const providerDisplayByName = useMemo(() => {
-        const map: Record<string, string> = {}
-        for (const provider of providers as ProviderRecord[]) {
-            const key = (provider.provider_name || '').trim()
-            if (key) map[key] = sanitizeProviderDisplayName(provider.display_name) || key
-        }
-        return map
-    }, [providers])
-
     // Determine the default model label
     const defaultLabel = useMemo(() => {
         if (!workspace) return 'Default model'
@@ -635,13 +614,13 @@ export default function WorkspaceAgentPage() {
             .reduce((sum, entry) => sum + (entry.content?.length ?? 0), 0)
     }, [streamingTimeline])
 
-    // Track subagent live content length for scroll updates during subagent execution
+    // Track nested timeline content length for scroll updates during subagent execution
     const subagentLiveContentLength = useMemo(() => {
         return streamingTimeline.reduce((sum, entry) => {
-            const e = entry as unknown as Record<string, unknown>
-            const tl = e._liveTimeline as unknown[] | undefined
-            const resp = e._liveResponse as string | undefined
-            return sum + (tl?.length ?? 0) + (resp?.length ?? 0)
+            if (entry.type === 'tool_call' && entry.nested_timeline) {
+                return sum + entry.nested_timeline.length
+            }
+            return sum
         }, 0)
     }, [streamingTimeline])
 
@@ -650,7 +629,7 @@ export default function WorkspaceAgentPage() {
         const container = messagesContainerRef.current
         if (!container) return
         container.scrollTo({ top: container.scrollHeight, behavior: isStreaming ? 'auto' : 'smooth' })
-    }, [messages.length, streamingContent, streamingTimeline.length, subagentLiveContentLength, sources.length, isStreaming, stickToBottom])
+    }, [messages.length, streamingContent, streamingTimeline.length, subagentLiveContentLength, isStreaming, stickToBottom])
 
     useEffect(() => {
         if (!stickToBottomRef.current) return
@@ -843,8 +822,6 @@ export default function WorkspaceAgentPage() {
     }, [
         isStreaming,
         stickToBottom,
-        attachmentsProcessed.length,
-        sources.length,
         streamingTimeline.length,
         streamingThinkingContentLength,
         subagentLiveContentLength,
@@ -1072,7 +1049,7 @@ export default function WorkspaceAgentPage() {
 
     const handleSend = async () => {
         const rawText = mentionEditorRef.current?.getText() ?? inputText
-        if (!rawText.trim() || isStreaming || uploadingFiles) return
+        if (!rawText.trim() || (isStreaming && !isInterrupted) || uploadingFiles) return
         if (conversationData?.is_archived || activeConversationRecord?.is_archived) {
             showError('Chat is archived', 'Restore this chat from Trash to continue messaging.')
             return
@@ -1183,7 +1160,7 @@ export default function WorkspaceAgentPage() {
     const activeConversationIsArchived = Boolean(conversationData?.is_archived || activeConversationRecord?.is_archived)
     // Input box stays editable while streaming so the user can compose their next message
     const inputDisabled = uploadingFiles || activeConversationIsArchived
-    const composerDisabled = isStreaming || uploadingFiles || activeConversationIsArchived
+    const composerDisabled = (isStreaming && !isInterrupted) || uploadingFiles || activeConversationIsArchived
     const canSend = !composerDisabled && inputText.trim().length > 0
     const streamingModelLabel = selectedOption?.label ?? defaultLabel
     const streamingBubbleMaxHeight = useMemo(() => {
@@ -1232,29 +1209,15 @@ export default function WorkspaceAgentPage() {
                                 style={{ bottom: `${composerHeight + CHAT_STREAMING_SAFE_GAP}px` }}
                                 onScroll={handleMessagesScroll}
                             >
-                                {messages.map((msg, index) => {
-                                    const previousMessage = index > 0 ? messages[index - 1] : undefined
-                                    const previousUserAttachments = (
-                                        msg.role === 'assistant' &&
-                                        previousMessage?.role === 'user' &&
-                                        Array.isArray(previousMessage.attachments_processed)
-                                    )
-                                        ? previousMessage.attachments_processed
-                                        : []
-
-                                    return (
+                                {messages.map((msg) => (
                                         <ChatMessageCard
                                             key={msg.id}
                                             message={msg}
                                             workspaceId={workspaceId}
-                                            thinking={thinkingByMessageId[msg.id] ?? msg.thinking ?? undefined}
-                                            providerDisplayByName={providerDisplayByName}
                                             requestVisibility={ensureExpandedBlockVisible}
-                                            attachmentsProcessed={previousUserAttachments}
                                             mentionMaps={mentionMaps}
                                         />
-                                    )
-                                })}
+                                ))}
                                 {isStreaming && (
                                     <div className="flex gap-3">
                                         <div className="w-7 h-7 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0 mt-1">
@@ -1266,98 +1229,18 @@ export default function WorkspaceAgentPage() {
                                                 Agent Generating Response
                                             </div>
                                             <div className="chat-workflow-stack w-full">
-                                                {attachmentsProcessed.length > 0 && (
-                                                    <StreamingAttachmentsBadge
-                                                        atts={attachmentsProcessed}
-                                                        workspaceId={workspaceId}
-                                                    />
-                                                )}
-                                                {sources.length > 0 && (
-                                                    <StreamingSourcesBadge
-                                                        sources={sources}
-                                                        workspaceId={workspaceId}
-                                                    />
-                                                )}
-                                                {streamingModelLabel && (
-                                                    <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--llm chat-section-reveal w-fit">
-                                                        <ChatTimelineDot type="llm" />
-                                                        <span className="chat-subsection-toggle" style={{ cursor: 'default' }}>
-                                                            <Bot className="h-3 w-3 text-accent/80" />
-                                                            <span>LLM</span>
-                                                            <span className="text-muted-foreground/40">·</span>
-                                                            <span className="truncate">{streamingModelLabel}</span>
-                                                        </span>
-                                                    </div>
-                                                )}
-                                                {streamingTimeline.map((entry, i) =>
-                                                    entry.type === 'thinking' ? (
-                                                        <ThinkingBlock
-                                                            key={i}
-                                                            content={entry.content}
-                                                            requestVisibility={() => ensureExpandedBlockVisible(streamingMessageRef.current)}
-                                                            isActiveStream={isStreaming && i === streamingTimeline.length - 1 && !entry.done}
-                                                            durationMs={entry.durationMs}
-                                                        />
-                                                    ) : entry.type === 'subagent_invocation' ? (
-                                                        <SubagentCard
-                                                            key={entry.call_id}
-                                                            callId={entry.call_id}
-                                                            toolName={entry.tool_name}
-                                                            arguments={entry.arguments}
-                                                            entry={entry}
-                                                            requestVisibility={() => ensureExpandedBlockVisible(streamingMessageRef.current)}
-                                                            workspaceId={workspaceId}
-                                                            mentionMaps={mentionMaps}
-                                                        />
-                                                    ) : entry.type === 'tool_call' && (entry as TimelineToolCall).tool_name.startsWith('agent.') ? (
-                                                        <SubagentCard
-                                                            key={(entry as TimelineToolCall).call_id}
-                                                            callId={(entry as TimelineToolCall).call_id}
-                                                            toolName={(entry as TimelineToolCall).tool_name}
-                                                            arguments={(entry as TimelineToolCall).arguments}
-                                                            entry={(entry as TimelineToolCall).success !== undefined ? {
-                                                                type: 'subagent_invocation',
-                                                                call_id: (entry as TimelineToolCall).call_id,
-                                                                tool_name: (entry as TimelineToolCall).tool_name,
-                                                                arguments: (entry as TimelineToolCall).arguments,
-                                                                success: (entry as TimelineToolCall).success!,
-                                                                subagent_response: (entry as TimelineToolCall).error || '',
-                                                                subagent_timeline: [],
-                                                            } : undefined}
-                                                            liveTimeline={((entry as any)._liveTimeline as SubagentTimelineStep[] | undefined)}
-                                                            liveResponse={((entry as any)._liveResponse as string | undefined)}
-                                                            requestVisibility={() => ensureExpandedBlockVisible(streamingMessageRef.current)}
-                                                            workspaceId={workspaceId}
-                                                            mentionMaps={mentionMaps}
-                                                        />
-                                                    ) : entry.type === 'hitl_request' ? (
-                                                        <HITLCard
-                                                            key={entry.hitl_id}
-                                                            entry={entry}
-                                                            workspaceId={workspaceId}
-                                                            conversationId={activeCid ?? ''}
-                                                        />
-                                                    ) : entry.type === 'prompt_optimized' ? (
-                                                        <PromptOptimizedCard
-                                                            key={`optimized-${i}`}
-                                                            entry={entry as TimelinePromptOptimized}
-                                                        />
-                                                    ) : (
-                                                        <div key={entry.call_id} className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--tool chat-section-reveal">
-                                                            <ChatTimelineDot type="tool" />
-                                                            <ToolCallCard
-                                                                callId={entry.call_id}
-                                                                toolName={entry.tool_name}
-                                                                arguments={entry.arguments}
-                                                                result={entry.success !== undefined ? { success: entry.success, output: entry.output, error: entry.error } : undefined}
-                                                                isRunning={entry.success === undefined}
-                                                            />
-                                                        </div>
-                                                    )
-                                                )}
+                                                <AgentTimeline
+                                                    timeline={streamingTimeline}
+                                                    isStreaming={isStreaming}
+                                                    workspaceId={workspaceId}
+                                                    conversationId={activeCid ?? undefined}
+                                                    requestVisibility={() => ensureExpandedBlockVisible(streamingMessageRef.current)}
+                                                    mentionMaps={mentionMaps}
+                                                    renderContent={(content) => renderMessageContent(content, workspaceId, mentionMaps)}
+                                                />
                                                 {(streamingContent || isInterrupted) && (
                                                 <div className={`chat-workflow-step chat-workflow-step--iconic chat-workflow-step--response chat-section-reveal ${streamingContent ? 'chat-workflow-step-live' : ''}`}>
-                                                    <ChatTimelineDot type="response" />
+                                                    <AgentTimelineDot type="response" />
                                                     <div className="chat-workflow-header">
                                                         <MessageSquare className="h-3.5 w-3.5" />
                                                         <span>Response</span>
@@ -2493,556 +2376,6 @@ const MentionEditor = React.forwardRef<MentionEditorHandle, {
     )
 })
 
-// ── Timeline icon dot ────────────────────────────────────────────────────────
-
-function ChatTimelineDot({ type }: { type: string }) {
-    const configs: Record<string, { icon: React.ReactNode; className: string }> = {
-        thinking: { icon: <Brain className="h-3 w-3" />, className: 'bg-zinc-900 border-zinc-500/30 text-zinc-400' },
-        tool: { icon: <Wrench className="h-3 w-3" />, className: 'bg-cyan-950 border-cyan-500/30 text-cyan-400' },
-        hitl: { icon: <ShieldAlert className="h-3 w-3" />, className: 'bg-amber-950 border-amber-500/30 text-amber-400' },
-        subagent: { icon: <Network className="h-3 w-3" />, className: 'bg-purple-950 border-purple-500/30 text-purple-400' },
-        response: { icon: <MessageSquare className="h-3 w-3" />, className: 'bg-emerald-950 border-emerald-500/30 text-emerald-400' },
-        prompt: { icon: <Sparkles className="h-3 w-3" />, className: 'bg-violet-950 border-violet-500/30 text-violet-400' },
-        attachment: { icon: <Paperclip className="h-3 w-3" />, className: 'bg-sky-950 border-sky-500/30 text-sky-400' },
-        source: { icon: <BookOpen className="h-3 w-3" />, className: 'bg-indigo-950 border-indigo-500/30 text-indigo-400' },
-        llm: { icon: <Bot className="h-3 w-3" />, className: 'bg-card border-accent/30 text-accent/80' },
-        meta: { icon: <Clock className="h-3 w-3" />, className: 'bg-zinc-900 border-zinc-600/30 text-zinc-500' },
-    }
-    const cfg = configs[type] ?? { icon: <Activity className="h-3 w-3" />, className: 'bg-card border-border text-muted-foreground' }
-    return (
-        <div className={`chat-timeline-dot ${cfg.className}`}>
-            {cfg.icon}
-        </div>
-    )
-}
-
-// ── Reusable thinking block ──────────────────────────────────────────────────
-const THINKING_STREAM_MAX_HEIGHT = 160
-
-function ThinkingBlock({
-    content,
-    requestVisibility,
-    isActiveStream = false,
-    durationMs,
-}: {
-    content: string
-    requestVisibility?: (el: HTMLElement | null) => void
-    isActiveStream?: boolean
-    durationMs?: number
-}) {
-    // Start open when streaming, closed when static (persisted)
-    const [open, setOpen] = useState(isActiveStream)
-    // True once user explicitly clicks the expand-height button
-    const [fullyExpanded, setFullyExpanded] = useState(false)
-    // True if the user interacted with this block — prevents auto-collapse
-    const [userInteracted, setUserInteracted] = useState(false)
-    // True if the scrollable content has hidden content at the top
-    const [hasHiddenTop, setHasHiddenTop] = useState(false)
-
-    const blockRef = useRef<HTMLDivElement>(null)
-    const scrollRef = useRef<HTMLDivElement>(null)
-    // Tracks whether this block has ever been in streaming mode
-    const wasStreaming = useRef(isActiveStream)
-    const thinkingCollapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-    // Auto-scroll to show the latest thinking text while streaming
-    useEffect(() => {
-        if (!isActiveStream || fullyExpanded) return
-        const el = scrollRef.current
-        if (el) el.scrollTop = el.scrollHeight
-    }, [content, isActiveStream, fullyExpanded])
-
-    // When streaming ends: auto-collapse after 3s if user never interacted
-    useEffect(() => {
-        if (isActiveStream) {
-            wasStreaming.current = true
-            if (thinkingCollapseTimer.current) {
-                clearTimeout(thinkingCollapseTimer.current)
-                thinkingCollapseTimer.current = null
-            }
-            return
-        }
-        if (wasStreaming.current && !userInteracted) {
-            thinkingCollapseTimer.current = setTimeout(() => {
-                setOpen(false)
-                thinkingCollapseTimer.current = null
-            }, 3000)
-        }
-    }, [isActiveStream]) // eslint-disable-line react-hooks/exhaustive-deps
-
-    useEffect(() => {
-        return () => { if (thinkingCollapseTimer.current) clearTimeout(thinkingCollapseTimer.current) }
-    }, [])
-
-    // Reset hasHiddenTop when not streaming or when fully expanded
-    useEffect(() => {
-        if (!isActiveStream || fullyExpanded) {
-            setHasHiddenTop(false)
-        }
-    }, [isActiveStream, fullyExpanded])
-
-    const toggle = () => {
-        if (thinkingCollapseTimer.current) {
-            clearTimeout(thinkingCollapseTimer.current)
-            thinkingCollapseTimer.current = null
-        }
-        setUserInteracted(true)
-        setOpen(prev => {
-            const next = !prev
-            if (next) {
-                window.requestAnimationFrame(() => {
-                    window.requestAnimationFrame(() => requestVisibility?.(blockRef.current))
-                })
-                window.setTimeout(() => requestVisibility?.(blockRef.current), 220)
-            }
-            return next
-        })
-    }
-
-    const expandFully = () => {
-        setFullyExpanded(true)
-        setUserInteracted(true)
-        window.requestAnimationFrame(() => requestVisibility?.(blockRef.current))
-    }
-
-    const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
-        if (fullyExpanded) return
-        const viewport = event.currentTarget
-        const hasOverflow = viewport.scrollHeight - viewport.clientHeight > 2
-        const hiddenTop = hasOverflow && viewport.scrollTop > 2
-        setHasHiddenTop(prev => (prev === hiddenTop ? prev : hiddenTop))
-    }
-
-    return (
-        <TimelineBadge
-            type="thinking"
-            open={open}
-            onToggle={toggle}
-            timelineDot={<ChatTimelineDot type="thinking" />}
-            blockRef={blockRef}
-            detailCardClassName="relative w-full chat-section-reveal"
-            label={<>
-                <Brain className="w-3 h-3 text-zinc-400" />
-                {isActiveStream
-                    ? <><span>Thinking</span><span className="animate-pulse text-accent/50">•••</span></>
-                    : open
-                    ? 'Thinking'
-                    : durationMs != null
-                    ? `Thought for ${durationMs >= 60000 ? Math.round(durationMs / 60000) + 'm' : durationMs >= 1000 ? (durationMs / 1000).toFixed(durationMs < 10000 ? 1 : 0) + 's' : durationMs + 'ms'}`
-                    : 'Thought'
-                }
-            </>}
-        >
-            {isActiveStream && !fullyExpanded && hasHiddenTop && (
-                <>
-                    <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-10 rounded-t-xl bg-gradient-to-b from-accent/6 via-accent/6/66 to-transparent" />
-                    <button
-                        type="button"
-                        className="absolute left-1/2 top-0 z-[3] -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 rounded-full border border-accent/30 bg-card/95 px-2.5 py-0.5 text-[11px] text-accent/80 hover:border-accent/55 hover:text-accent shadow-sm"
-                        onClick={expandFully}
-                        aria-label="Expand thinking"
-                        title="Show full thinking while streaming"
-                    >
-                        <ChevronsUp className="h-3 w-3" />
-                        Expand
-                    </button>
-                </>
-            )}
-            <div
-                ref={scrollRef}
-                onScroll={handleScroll}
-                className="text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap break-words"
-                style={isActiveStream && !fullyExpanded ? { maxHeight: `${THINKING_STREAM_MAX_HEIGHT}px`, overflowY: 'auto' } : undefined}
-            >
-                {content}
-                {isActiveStream && !fullyExpanded && <div className="h-6" aria-hidden />}
-            </div>
-        </TimelineBadge>
-    )
-}
-
-// ── Subagent invocation card ─────────────────────────────────────────────────
-// Unified subagent node — handles both the "pending" phase (tool_call while running)
-// and the "completed" phase (subagent_invocation with full details). React reuses the
-// same component instance (same key) when the timeline entry is promoted in-place.
-function SubagentCard({
-    callId: _callId,
-    toolName,
-    arguments: agentArgs,
-    entry,
-    liveTimeline,
-    liveResponse,
-    requestVisibility,
-    workspaceId,
-    mentionMaps,
-}: {
-    callId: string
-    toolName: string
-    arguments: Record<string, unknown>
-    entry?: TimelineSubagentInvocation   // undefined = still running
-    liveTimeline?: SubagentTimelineStep[]   // streamed steps while running
-    liveResponse?: string                  // streaming response text while running
-    requestVisibility?: (el: HTMLElement | null) => void
-    workspaceId: string
-    mentionMaps?: MentionResolutionMaps
-}) {
-    const isRunning = entry === undefined
-    // Start open while running; start closed for already-completed (history) entries
-    const [open, setOpen] = useState(isRunning)
-    const [userInteracted, setUserInteracted] = useState(false)
-    const autoCollapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-    const blockRef = useRef<HTMLDivElement>(null)
-    // Track whether the entry was defined on last render to detect transition
-    const prevEntryRef = useRef<TimelineSubagentInvocation | undefined>(entry)
-
-    const instruction = (agentArgs?.instruction as string) || 'Subagent task'
-    const targetWorkspaceId = agentArgs?.workspace_id as string | undefined
-    const agentId = agentArgs?.agent_id as string | undefined
-    const agentDisplayName = agentId
-        ? agentId.replace(/_agent$/, '').split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
-        : 'Workspace'
-
-    const timelineSource = entry?.subagent_timeline ?? liveTimeline ?? []
-    const toolSteps = timelineSource.filter(
-        (s): s is SubagentTimelineStep & { type: 'tool_call' } => s.type === 'tool_call'
-    )
-    const thinkingSteps = timelineSource.filter(s => s.type === 'thinking')
-    const hasSteps = toolSteps.length > 0 || thinkingSteps.length > 0
-
-    // When entry transitions from undefined → defined (subagent just finished):
-    // re-open the card so the result is visible, then auto-collapse after 2s
-    useEffect(() => {
-        if (entry && !prevEntryRef.current) {
-            setOpen(true)
-            if (!userInteracted && !autoCollapseTimer.current) {
-                autoCollapseTimer.current = setTimeout(() => {
-                    setOpen(false)
-                    autoCollapseTimer.current = null
-                }, 3000)
-            }
-        }
-        prevEntryRef.current = entry
-    }, [entry]) // eslint-disable-line react-hooks/exhaustive-deps
-
-    useEffect(() => {
-        return () => { if (autoCollapseTimer.current) clearTimeout(autoCollapseTimer.current) }
-    }, [])
-
-    const toggle = () => {
-        if (autoCollapseTimer.current) {
-            clearTimeout(autoCollapseTimer.current)
-            autoCollapseTimer.current = null
-        }
-        setUserInteracted(true)
-        setOpen(prev => {
-            const next = !prev
-            if (next) {
-                window.requestAnimationFrame(() => {
-                    window.requestAnimationFrame(() => requestVisibility?.(blockRef.current))
-                })
-                window.setTimeout(() => requestVisibility?.(blockRef.current), 220)
-            }
-            return next
-        })
-    }
-
-    const statusIcon = isRunning
-        ? <Loader2 className="w-3 h-3 animate-spin text-accent/70" />
-        : entry?.success
-            ? <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-            : <XCircle className="w-3 h-3 text-red-400" />
-
-    return (
-        <TimelineBadge
-            type="subagent"
-            open={open}
-            onToggle={toggle}
-            timelineDot={<ChatTimelineDot type="subagent" />}
-            blockRef={blockRef}
-            className="chat-section-reveal"
-            detailCardClassName="chat-section-reveal overflow-hidden !p-0"
-            statusIcon={statusIcon}
-            label={<>
-                <Network className="w-3 h-3 text-purple-400" />
-                <span className="text-muted-foreground/70">Agent.Invoke</span>
-                <span className="text-muted-foreground/40 mx-0.5">·</span>
-                <span>Subagent: {agentDisplayName}</span>
-            </>}
-        >
-
-                        {/* Request */}
-                        <div className="px-4 pt-3 pb-2 border-b border-accent/10">
-                            <div className="mb-1.5 text-[10px] uppercase tracking-wide text-muted-foreground/60">Request</div>
-                            <pre className="text-[11px] leading-relaxed text-foreground/80 whitespace-pre-wrap break-words font-sans">
-                                {instruction}
-                            </pre>
-                            {targetWorkspaceId && (
-                                <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-muted-foreground/50">
-                                    <span className="uppercase tracking-wide">workspace</span>
-                                    <span className="font-mono text-accent/60">{targetWorkspaceId}</span>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Running placeholder */}
-                        {isRunning && !hasSteps && !liveResponse && (
-                            <div className="px-4 py-3">
-                                <div className="flex items-center gap-2 text-[11px] text-muted-foreground/50">
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                    <span>{agentDisplayName} agent running…</span>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Subagent timeline steps (thinking + tool calls) */}
-                        {hasSteps && (
-                            <div className="px-4 py-2 border-b border-accent/10">
-                                <div className="mb-2 text-[10px] uppercase tracking-wide text-muted-foreground/60">Steps</div>
-                                <div className="chat-workflow-stack">
-                                    {timelineSource.map((step, idx) =>
-                                        step.type === 'thinking' ? (
-                                            <ThinkingBlock
-                                                key={`thinking-${idx}`}
-                                                content={step.content || ''}
-                                                isActiveStream={isRunning && !step.done && idx === timelineSource.length - 1}
-                                            />
-                                        ) : step.type === 'tool_call' ? (
-                                            <div key={step.call_id ?? idx} className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--tool">
-                                                <ChatTimelineDot type="tool" />
-                                                <ToolCallCard
-                                                    callId={step.call_id ?? String(idx)}
-                                                    toolName={step.tool_name ?? ''}
-                                                    arguments={step.arguments ?? {}}
-                                                    result={step.success !== undefined
-                                                        ? { success: step.success, output: step.output, error: step.error }
-                                                        : undefined
-                                                    }
-                                                    isRunning={isRunning && step.success === undefined}
-                                                />
-                                            </div>
-                                        ) : null
-                                    )}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Response — live streaming or completed */}
-                        {(entry || (isRunning && liveResponse)) && (
-                            <div className="px-4 pt-2 pb-3">
-                                <div className="mb-1.5 text-[10px] uppercase tracking-wide text-muted-foreground/60">Response</div>
-                                {(entry?.subagent_response || liveResponse) ? (
-                                    <div
-                                        className="text-xs leading-relaxed text-foreground/85 markdown-content"
-                                        dangerouslySetInnerHTML={{ __html: renderMessageContent(entry?.subagent_response || liveResponse || '', targetWorkspaceId || workspaceId, mentionMaps) }}
-                                    />
-                                ) : (
-                                    <span className="text-[11px] text-muted-foreground/40 italic">No response</span>
-                                )}
-                            </div>
-                        )}
-        </TimelineBadge>
-    )
-}
-
-// ── HITL approval card ────────────────────────────────────────────────────────
-function PromptOptimizedCard({ entry }: { entry: TimelinePromptOptimized }) {
-    const [expanded, setExpanded] = useState(false)
-    return (
-        <TimelineBadge
-            type="prompt"
-            open={expanded}
-            onToggle={() => setExpanded(prev => !prev)}
-            timelineDot={<ChatTimelineDot type="prompt" />}
-            className="chat-section-reveal"
-            label={<>
-                <Sparkles className="h-3 w-3 text-violet-400" />
-                <span>Prompt Optimized</span>
-            </>}
-        >
-            <div className="space-y-2 text-xs">
-                <div>
-                    <span className="text-muted-foreground font-medium block mb-0.5">Original:</span>
-                    <div className="bg-muted/20 rounded-lg px-3 py-2 text-foreground/80 whitespace-pre-wrap">{entry.original}</div>
-                </div>
-                <div>
-                    <span className="text-accent/80 font-medium block mb-0.5">Optimized:</span>
-                    <div className="bg-accent/5 border border-accent/15 rounded-lg px-3 py-2 text-foreground/90 whitespace-pre-wrap">{entry.optimized}</div>
-                </div>
-            </div>
-        </TimelineBadge>
-    )
-}
-
-function HITLCard({
-    entry,
-    workspaceId: _workspaceId,
-    conversationId: _conversationId,
-    readonly = false,
-}: {
-    entry: TimelineHITLRequest
-    workspaceId: string
-    conversationId: string
-    readonly?: boolean
-}) {
-    const [loading, setLoading] = useState(false)
-    const [localStatus, setLocalStatus] = useState<'pending' | 'approved' | 'denied'>(entry.status)
-    const [collapsed, setCollapsed] = useState(false)
-    const [reason, setReason] = useState('')
-    const { success: toastSuccess, error: toastError } = useToast()
-
-    // Keep local status in sync when entry status changes (e.g. from WS event)
-    useEffect(() => { setLocalStatus(entry.status) }, [entry.status])
-
-    // Auto-collapse 3 seconds after resolution
-    useEffect(() => {
-        if (localStatus === 'pending') return
-        const timer = setTimeout(() => setCollapsed(true), 3000)
-        return () => clearTimeout(timer)
-    }, [localStatus])
-
-    // Already-resolved entries from persisted messages start collapsed
-    useEffect(() => {
-        if (readonly && entry.status !== 'pending') setCollapsed(true)
-    }, [readonly, entry.status])
-
-    const handleApprove = async () => {
-        setLoading(true)
-        try {
-            await approveHITL(entry.hitl_id, reason || undefined)
-            setLocalStatus('approved')
-            toastSuccess('Tool approved')
-        } catch {
-            toastError('Failed to approve')
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    const handleDeny = async () => {
-        setLoading(true)
-        try {
-            await denyHITL(entry.hitl_id, reason || undefined)
-            setLocalStatus('denied')
-            toastSuccess('Tool denied')
-        } catch {
-            toastError('Failed to deny')
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    const [open, setOpen] = useState(localStatus === 'pending')
-
-    // Auto-close detail panel when collapsing into badge
-    useEffect(() => {
-        if (collapsed) setOpen(false)
-    }, [collapsed])
-
-    const toggle = () => {
-        setOpen(prev => !prev)
-        // If user opens a collapsed badge, un-collapse it
-        if (collapsed) setCollapsed(false)
-    }
-
-    const statusIcon = localStatus === 'pending'
-        ? <Loader2 className="h-3 w-3 animate-spin text-accent/70" />
-        : localStatus === 'approved'
-            ? <ShieldCheck className="h-3 w-3 text-emerald-400" />
-            : <ShieldX className="h-3 w-3 text-red-400" />
-
-    const category = entry.tool_id.split('.')[0] ?? entry.tool_id
-    const action = entry.tool_id.split('.').slice(1).join('.')
-
-    return (
-        <TimelineBadge
-            type="hitl"
-            open={open}
-            onToggle={toggle}
-            timelineDot={<ChatTimelineDot type="hitl" />}
-            className="chat-section-reveal"
-            statusIcon={statusIcon}
-            label={<>
-                <ShieldAlert className="h-3 w-3 text-amber-400" />
-                <span className="shrink-0">HITL</span>
-                <span className="text-muted-foreground/40">·</span>
-                <span className="flex gap-0.5 items-baseline min-w-0">
-                    <span className="text-muted-foreground/80 shrink-0">{category}</span>
-                    {action && (
-                        <>
-                            <span className="text-muted-foreground/40">.</span>
-                            <span className="text-foreground/70 shrink-0">{action}</span>
-                        </>
-                    )}
-                </span>
-            </>}
-        >
-            {/* Tool inputs (reuse ToolCallCard input rendering) */}
-            {entry.tool_input && Object.keys(entry.tool_input).length > 0 && (
-                <InputSection toolName={entry.tool_id} args={entry.tool_input} />
-            )}
-
-            {/* Risk + status */}
-            <div className="flex items-center gap-2 text-[11px]">
-                <span className={`rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide font-medium ${
-                    entry.risk_level === 'high' ? 'bg-red-500/15 text-red-400'
-                    : entry.risk_level === 'medium' ? 'bg-amber-500/15 text-amber-400'
-                    : 'bg-emerald-500/15 text-emerald-400'
-                }`}>{entry.risk_level || 'low'}</span>
-                <span className={`capitalize text-[11px] ${localStatus === 'approved' ? 'text-emerald-400' : localStatus === 'denied' ? 'text-red-400' : 'text-foreground/55'}`}>{localStatus}</span>
-            </div>
-
-            {/* Guidance textarea + action buttons for pending */}
-            {!readonly && localStatus === 'pending' && (
-                <div className="space-y-2">
-                    <textarea
-                        value={reason}
-                        onChange={e => setReason(e.target.value)}
-                        placeholder="Optional: add guidance for the agent..."
-                        rows={2}
-                        className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-1.5 text-[11px] text-foreground placeholder:text-muted-foreground/50 resize-none focus:outline-none focus:ring-1 focus:ring-accent/40"
-                    />
-                    <div className="flex gap-2">
-                        <button
-                            type="button"
-                            onClick={handleApprove}
-                            disabled={loading}
-                            className="flex items-center gap-1.5 rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-[11px] text-emerald-300 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
-                        >
-                            {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
-                            Approve
-                        </button>
-                        <button
-                            type="button"
-                            onClick={handleDeny}
-                            disabled={loading}
-                            className="flex items-center gap-1.5 rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-1 text-[11px] text-red-300 hover:bg-red-500/20 transition-colors disabled:opacity-50"
-                        >
-                            {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldX className="h-3 w-3" />}
-                            Deny
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* Resolution confirmation + steering hint for resolved entries */}
-            {localStatus !== 'pending' && (
-                <div className="space-y-1.5">
-                    <div className={`flex items-center gap-1.5 text-[11px] ${localStatus === 'approved' ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {localStatus === 'approved' ? <ShieldCheck className="h-3 w-3" /> : <ShieldX className="h-3 w-3" />}
-                        {localStatus === 'approved' ? 'Tool execution approved' : 'Tool execution denied'}
-                    </div>
-                    {reason && (
-                        <div className="text-[11px] text-muted-foreground/70 border-l-2 border-accent/30 pl-2">
-                            <span className="text-[10px] uppercase tracking-wide text-accent/55 font-medium">Guidance: </span>
-                            {reason}
-                        </div>
-                    )}
-                </div>
-            )}
-        </TimelineBadge>
-    )
-}
-
 // ── @mention dropdown ─────────────────────────────────────────────────────────
 const MentionDropdown = React.forwardRef<HTMLDivElement, {
     query: string
@@ -3120,213 +2453,30 @@ const MentionDropdown = React.forwardRef<HTMLDivElement, {
     )
 })
 
-// ── Streaming badges (auto-collapse 3 s after first appearance) ───────────────
-type ContextSource = { knowledge_id: string; title: string; snippet: string; score: number }
-
-function StreamingAttachmentsBadge({ atts, workspaceId }: { atts: AttachmentProcessed[]; workspaceId: string }) {
-    const [open, setOpen] = useState(true)
-    const userInteracted = useRef(false)
-    const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-    useEffect(() => {
-        timer.current = setTimeout(() => {
-            if (!userInteracted.current) setOpen(false)
-            timer.current = null
-        }, 3000)
-        return () => { if (timer.current) clearTimeout(timer.current) }
-    }, [])
-    const toggle = () => {
-        if (timer.current) { clearTimeout(timer.current); timer.current = null }
-        userInteracted.current = true
-        setOpen(prev => !prev)
-    }
-    return (
-        <TimelineBadge
-            type="attachment"
-            open={open}
-            onToggle={toggle}
-            timelineDot={<ChatTimelineDot type="attachment" />}
-            detailCardClassName="chat-section-reveal space-y-2 w-full"
-            label={`Processed ${atts.length} Attachment${atts.length === 1 ? '' : 's'}`}
-        >
-            {atts.map(att => (
-                <AttachmentCard key={att.id} att={att} workspaceId={workspaceId} />
-            ))}
-        </TimelineBadge>
-    )
-}
-
-function StreamingSourcesBadge({ sources, workspaceId }: { sources: ContextSource[]; workspaceId: string }) {
-    const [open, setOpen] = useState(true)
-    const userInteracted = useRef(false)
-    const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-    const navigate = useNavigate()
-    useEffect(() => {
-        timer.current = setTimeout(() => {
-            if (!userInteracted.current) setOpen(false)
-            timer.current = null
-        }, 3000)
-        return () => { if (timer.current) clearTimeout(timer.current) }
-    }, [])
-    const toggle = () => {
-        if (timer.current) { clearTimeout(timer.current); timer.current = null }
-        userInteracted.current = true
-        setOpen(prev => !prev)
-    }
-    return (
-        <TimelineBadge
-            type="source"
-            open={open}
-            onToggle={toggle}
-            timelineDot={<ChatTimelineDot type="source" />}
-            detailCardClassName="chat-section-reveal space-y-2 w-full"
-            label={`Used ${sources.length} Knowledge ${sources.length === 1 ? 'Record' : 'Records'}`}
-        >
-            {sources.map(src => (
-                <div key={src.knowledge_id} className="chat-source-card p-3 text-xs">
-                    <div className="flex items-center justify-between mb-1">
-                        <span className="font-medium text-foreground">{src.title}</span>
-                        {src.knowledge_id && (
-                            <button className="text-accent/60 hover:text-accent transition-colors" onClick={() => navigate(`/w/${workspaceId}/knowledge/${src.knowledge_id}`)}>
-                                <ExternalLink className="w-3 h-3" />
-                            </button>
-                        )}
-                    </div>
-                    <div
-                        className="markdown-content max-h-20 overflow-hidden text-xs leading-relaxed text-muted-foreground [&_p]:mb-1 [&_ul]:mb-1 [&_ol]:mb-1 [&_h1]:text-xs [&_h2]:text-xs [&_h3]:text-xs [&_pre]:text-[11px] [&_code]:text-[11px]"
-                        dangerouslySetInnerHTML={{ __html: md.render(src.snippet || '') }}
-                    />
-                    <div className="mt-1.5 flex items-center gap-1">
-                        <div className="flex-1 h-1 rounded bg-border overflow-hidden">
-                            <div className="h-full bg-accent rounded" style={{ width: `${Math.round(src.score * 100)}%` }} />
-                        </div>
-                        <span className="text-muted-foreground">{Math.round(src.score * 100)}%</span>
-                    </div>
-                </div>
-            ))}
-        </TimelineBadge>
-    )
-}
-
-// ── Attachment card ──────────────────────────────────────────────────────────
-function AttachmentCard({ att, workspaceId }: { att: AttachmentProcessed; workspaceId: string }) {
-    const [saved, setSaved] = useState(false)
-    const [saving, setSaving] = useState(false)
-    const [expanded, setExpanded] = useState(false)
-    const { success: toastSuccess, error: toastError } = useToast()
-
-    const canSave = att.status === 'processed' && !saved
-    const hasContent = !!att.extracted_text?.trim()
-
-    async function handleSave() {
-        if (saving || saved) return
-        setSaving(true)
-        try {
-            await saveAttachmentToKnowledge(att.id, workspaceId)
-            setSaved(true)
-            toastSuccess('Saved to workspace knowledge')
-        } catch {
-            toastError('Failed to save to knowledge')
-        } finally {
-            setSaving(false)
-        }
-    }
-
-    return (
-        <div className="rounded-lg border border-border/60 bg-muted/25 px-3 py-2 text-xs">
-            <div className="mb-1 flex items-center justify-between gap-2">
-                <span className="truncate font-medium text-foreground/90">{att.filename}</span>
-                <div className="flex items-center gap-2 shrink-0">
-                    <span className={`text-[10px] ${att.status === 'processed' ? 'text-emerald-300' : att.status === 'deferred' ? 'text-amber-300' : 'text-muted-foreground'}`}>
-                        {att.pipeline === 'url_extract' ? 'URL Extract' : att.pipeline}
-                    </span>
-                    {hasContent && (
-                        <button
-                            onClick={() => setExpanded(p => !p)}
-                            title={expanded ? 'Hide content' : 'View extracted content'}
-                            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-                        >
-                            {expanded ? <ChevronDown className="h-2.5 w-2.5" /> : <ChevronRight className="h-2.5 w-2.5" />}
-                            {expanded ? 'Hide' : 'View'}
-                        </button>
-                    )}
-                    {canSave && (
-                        <button
-                            onClick={handleSave}
-                            disabled={saving}
-                            title="Save to workspace knowledge"
-                            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-accent/70 hover:text-accent hover:bg-accent/10 transition-colors disabled:opacity-50"
-                        >
-                            {saving ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <BookmarkPlus className="h-2.5 w-2.5" />}
-                            Save
-                        </button>
-                    )}
-                    {saved && (
-                        <span className="flex items-center gap-1 text-[10px] text-emerald-400">
-                            <Check className="h-2.5 w-2.5" />
-                            Saved
-                        </span>
-                    )}
-                </div>
-            </div>
-            {att.details && (
-                <p className="text-[11px] text-muted-foreground">{att.details}</p>
-            )}
-            {expanded && att.extracted_text && (
-                <pre className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap break-words rounded border border-border/50 bg-background/60 p-2 text-[11px] text-foreground/80 leading-relaxed">
-                    {att.extracted_text}
-                </pre>
-            )}
-        </div>
-    )
-}
-
 // ── Chat message card ───────────────────────────────────────────────────────
 function ChatMessageCard({
     message: msg,
     workspaceId,
-    thinking,
-    providerDisplayByName,
     requestVisibility,
-    attachmentsProcessed = [],
     mentionMaps,
 }: {
     message: Message
     workspaceId: string
-    thinking?: string
-    providerDisplayByName?: Record<string, string>
     requestVisibility?: (element: HTMLElement | null) => void
-    attachmentsProcessed?: AttachmentProcessed[]
     mentionMaps?: MentionResolutionMaps
 }) {
-    const [attachmentsOpen, setAttachmentsOpen] = useState(false)
-    const [sourcesOpen, setSourcesOpen] = useState(false)
     const [contextMenuOpen, setContextMenuOpen] = useState(false)
     const [copied, setCopied] = useState(false)
-
-    const attachmentsUserInteracted = useRef(false)
-    const sourcesUserInteracted = useRef(false)
-    const attachmentsCollapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-    const sourcesCollapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const handleCopy = async () => {
         await navigator.clipboard.writeText(msg.content)
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
     }
-    const attachmentsBlockRef = useRef<HTMLDivElement>(null)
-    const sourcesBlockRef = useRef<HTMLDivElement>(null)
     const navigate = useNavigate()
-    const hasThinking = !!thinking?.trim()
     const generationSeconds = msg.generation_ms && msg.generation_ms > 0
         ? (msg.generation_ms / 1000).toFixed(msg.generation_ms < 10000 ? 1 : 0)
         : null
-    const providerText = msg.provider_used
-        ? sanitizeProviderDisplayName(providerDisplayByName?.[msg.provider_used] || msg.provider_used)
-        : null
-    const modelText = msg.model_used?.trim() || null
-    const modelLabel = providerText && modelText
-        ? `${providerText} · ${modelText}`
-        : (modelText || providerText)
     const hasWorkflowSteps = msg.role === 'assistant'
 
     return (
@@ -3360,181 +2510,19 @@ function ChatMessageCard({
                         )}
                         {hasWorkflowSteps && (
                             <div className="chat-workflow-stack w-full">
-                                {attachmentsProcessed.length > 0 && (
-                                    <TimelineBadge
-                                        type="attachment"
-                                        open={attachmentsOpen}
-                                        onToggle={() => {
-                                            if (attachmentsCollapseTimer.current) {
-                                                clearTimeout(attachmentsCollapseTimer.current)
-                                                attachmentsCollapseTimer.current = null
-                                            }
-                                            attachmentsUserInteracted.current = true
-                                            setAttachmentsOpen(prev => {
-                                                const next = !prev
-                                                if (next) {
-                                                    window.requestAnimationFrame(() => {
-                                                        window.requestAnimationFrame(() => {
-                                                            requestVisibility?.(attachmentsBlockRef.current)
-                                                        })
-                                                    })
-                                                    window.setTimeout(() => {
-                                                        requestVisibility?.(attachmentsBlockRef.current)
-                                                    }, 220)
-                                                }
-                                                return next
-                                            })
-                                        }}
-                                        timelineDot={<ChatTimelineDot type="attachment" />}
-                                        blockRef={attachmentsBlockRef}
-                                        detailCardClassName="chat-section-reveal space-y-2 w-full"
-                                        label={`Processed ${attachmentsProcessed.length} Attachment${attachmentsProcessed.length === 1 ? '' : 's'}`}
-                                    >
-                                        {attachmentsProcessed.map(att => (
-                                            <AttachmentCard
-                                                key={att.id}
-                                                att={att}
-                                                workspaceId={workspaceId}
-                                            />
-                                        ))}
-                                    </TimelineBadge>
+                                {(msg.timeline?.length ?? 0) > 0 && (
+                                    <AgentTimeline
+                                        timeline={msg.timeline as TimelineEntry[]}
+                                        workspaceId={workspaceId}
+                                        conversationId={msg.id}
+                                        readonly
+                                        requestVisibility={requestVisibility}
+                                        mentionMaps={mentionMaps}
+                                        renderContent={(content) => renderMessageContent(content, workspaceId, mentionMaps)}
+                                    />
                                 )}
-                                {msg.context_sources && msg.context_sources.length > 0 && (
-                                    <TimelineBadge
-                                        type="source"
-                                        open={sourcesOpen}
-                                        onToggle={() => {
-                                            if (sourcesCollapseTimer.current) {
-                                                clearTimeout(sourcesCollapseTimer.current)
-                                                sourcesCollapseTimer.current = null
-                                            }
-                                            sourcesUserInteracted.current = true
-                                            setSourcesOpen(prev => {
-                                                const next = !prev
-                                                if (next) {
-                                                    window.requestAnimationFrame(() => {
-                                                        window.requestAnimationFrame(() => {
-                                                            requestVisibility?.(sourcesBlockRef.current)
-                                                        })
-                                                    })
-                                                    window.setTimeout(() => {
-                                                        requestVisibility?.(sourcesBlockRef.current)
-                                                    }, 220)
-                                                }
-                                                return next
-                                            })
-                                        }}
-                                        timelineDot={<ChatTimelineDot type="source" />}
-                                        blockRef={sourcesBlockRef}
-                                        detailCardClassName="chat-section-reveal space-y-2 w-full"
-                                        label={`Used ${msg.context_sources.length} Knowledge ${msg.context_sources.length === 1 ? 'Record' : 'Records'}`}
-                                    >
-                                        {msg.context_sources.map(src => (
-                                            <div key={src.knowledge_id} className="chat-source-card p-3 text-xs">
-                                                <div className="flex items-center justify-between mb-1">
-                                                    <span className="font-medium text-foreground">{src.title}</span>
-                                                    <button className="text-accent/60 hover:text-accent transition-colors" onClick={() => navigate(`/w/${workspaceId}/knowledge/${src.knowledge_id}`)}>
-                                                        <ExternalLink className="w-3 h-3" />
-                                                    </button>
-                                                </div>
-                                                <div
-                                                    className="markdown-content max-h-20 overflow-hidden text-xs leading-relaxed text-muted-foreground [&_p]:mb-1 [&_ul]:mb-1 [&_ol]:mb-1 [&_h1]:text-xs [&_h2]:text-xs [&_h3]:text-xs [&_pre]:text-[11px] [&_code]:text-[11px]"
-                                                    dangerouslySetInnerHTML={{ __html: md.render(src.snippet || '') }}
-                                                />
-                                                <div className="mt-1.5 flex items-center gap-1">
-                                                    <div className="flex-1 h-1 rounded bg-border overflow-hidden">
-                                                        <div className="h-full bg-accent rounded" style={{ width: `${Math.round(src.score * 100)}%` }} />
-                                                    </div>
-                                                    <span className="text-muted-foreground">{Math.round(src.score * 100)}%</span>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </TimelineBadge>
-                                )}
-                                {modelLabel && (
-                                    <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--llm chat-section-reveal w-fit">
-                                        <ChatTimelineDot type="llm" />
-                                        <span className="chat-subsection-toggle" style={{ cursor: 'default' }}>
-                                            <Bot className="h-3 w-3 text-accent/80" />
-                                            <span>LLM</span>
-                                            <span className="text-muted-foreground/40">·</span>
-                                            <span className="truncate">{modelLabel}</span>
-                                        </span>
-                                    </div>
-                                )}
-                                {(msg.timeline?.length ?? 0) > 0
-                                    ? msg.timeline!.map((entry, i) =>
-                                        entry.type === 'thinking' ? (
-                                            <ThinkingBlock
-                                                key={i}
-                                                content={entry.content}
-                                                requestVisibility={requestVisibility}
-                                            />
-                                        ) : entry.type === 'subagent_invocation' ? (
-                                            <SubagentCard
-                                                key={entry.call_id}
-                                                callId={entry.call_id}
-                                                toolName={entry.tool_name}
-                                                arguments={entry.arguments}
-                                                entry={entry}
-                                                requestVisibility={requestVisibility}
-                                                workspaceId={workspaceId}
-                                                mentionMaps={mentionMaps}
-                                            />
-                                        ) : entry.type === 'hitl_request' ? (
-                                            <HITLCard
-                                                key={entry.hitl_id}
-                                                entry={entry}
-                                                workspaceId={workspaceId}
-                                                conversationId={msg.id}
-                                                readonly
-                                            />
-                                        ) : (
-                                            <div key={entry.call_id} className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--tool chat-section-reveal">
-                                                <ChatTimelineDot type="tool" />
-                                                <ToolCallCard
-                                                    callId={entry.call_id}
-                                                    toolName={entry.tool_name}
-                                                    arguments={entry.arguments}
-                                                    result={entry.success !== undefined ? { success: entry.success, output: entry.output, error: entry.error } : undefined}
-                                                    isRunning={false}
-                                                />
-                                            </div>
-                                        )
-                                    )
-                                    : <>
-                                        {(msg.tool_calls?.length ?? 0) > 0 && (
-                                            <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--tool">
-                                                <ChatTimelineDot type="tool" />
-                                                <div className="glass-card chat-section-reveal px-4 py-3">
-                                                    <div className="mb-2 flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
-                                                        <Wrench className="h-3 w-3" />
-                                                        Tool Calls
-                                                    </div>
-                                                    <div className="space-y-1.5">
-                                                        {msg.tool_calls!.map(call => (
-                                                            <ToolCallCard
-                                                                key={call.call_id}
-                                                                callId={call.call_id}
-                                                                toolName={call.tool_name}
-                                                                arguments={call.arguments}
-                                                                isRunning={false}
-                                                            />
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
-                                        {hasThinking && (
-                                            <ThinkingBlock
-                                                content={thinking!}
-                                                requestVisibility={requestVisibility}
-                                            />
-                                        )}
-                                    </>
-                                }
                                 <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--response chat-section-reveal">
-                                    <ChatTimelineDot type="response" />
+                                    <AgentTimelineDot type="response" />
                                     <div className="chat-workflow-header">
                                         <MessageSquare className="h-3.5 w-3.5" />
                                         <span>Response</span>
@@ -3561,7 +2549,7 @@ function ChatMessageCard({
                                     </div>
                                 </div>
                                 <div className="chat-workflow-step chat-workflow-step--iconic chat-section-reveal">
-                                    <ChatTimelineDot type="meta" />
+                                    <AgentTimelineDot type="meta" />
                                     <span className="chat-message-meta flex items-center gap-1.5 pl-1 pt-0.5">
                                         {new Date(msg.created_at).toLocaleTimeString()}
                                         {generationSeconds && ` · Took ${generationSeconds}s`}

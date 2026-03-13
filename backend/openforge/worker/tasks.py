@@ -122,7 +122,7 @@ async def _mark_execution_failed(execution_id: str, error_message: str):
         settings = get_settings()
         r = aioredis.from_url(settings.redis_url, decode_responses=True)
         await r.publish(f"agent:{execution_id}", json.dumps({
-            "type": "chat_error",
+            "type": "agent_error",
             "execution_id": execution_id,
             "workspace_id": "",
             "detail": f"Agent execution failed: {error_message[:500]}",

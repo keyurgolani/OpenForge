@@ -183,18 +183,42 @@ async def workspace_websocket(websocket: WebSocket, workspace_id: str):
                     except Exception:
                         pass
 
-                    # Also publish cancel via Redis for Celery workers
-                    if settings.use_celery_agents:
-                        try:
-                            from openforge.db.redis_client import get_redis
-                            import json as _json
-                            redis = await get_redis()
-                            await redis.publish(
-                                f"agent_cancel:{conversation_id}",
-                                _json.dumps({"conversation_id": conversation_id}),
+                    # Publish cancel via Redis so both inline and Celery workers receive it
+                    try:
+                        from openforge.db.redis_client import get_redis
+                        import json as _json
+                        redis = await get_redis()
+                        await redis.publish(
+                            f"agent_cancel:{conversation_id}",
+                            _json.dumps({"conversation_id": conversation_id}),
+                        )
+                    except Exception:
+                        pass
+
+                    # Also publish cancel to the execution_chain_id channel
+                    # so nested subagents across HTTP boundaries get cancelled
+                    try:
+                        from openforge.db.postgres import AsyncSessionLocal
+                        from openforge.db.models import AgentExecution
+                        from sqlalchemy import select as _select
+                        async with AsyncSessionLocal() as _cancel_db:
+                            _cancel_result = await _cancel_db.execute(
+                                _select(AgentExecution)
+                                .where(
+                                    AgentExecution.conversation_id == UUID(conversation_id),
+                                    AgentExecution.status.in_(["running", "paused_hitl"]),
+                                )
+                                .order_by(AgentExecution.started_at.desc())
+                                .limit(1)
                             )
-                        except Exception:
-                            pass
+                            _active_exec = _cancel_result.scalar_one_or_none()
+                            if _active_exec:
+                                await redis.publish(
+                                    f"agent_cancel:{_active_exec.id}",
+                                    _json.dumps({"execution_chain_id": str(_active_exec.id)}),
+                                )
+                    except Exception:
+                        pass
 
             elif msg_type == "ping":
                 await ws_manager.send_to_connection(websocket, {"type": "pong"})
@@ -256,6 +280,14 @@ async def _dispatch_celery_agent(
     async with AsyncSessionLocal() as db:
         # Get agent for workspace
         agent = await agent_registry.get_for_workspace(db, UUID(workspace_id))
+
+        # Persist user message before queuing so it's visible on page refresh
+        from openforge.services.conversation_service import conversation_service
+        _user_metadata = {"optimize": True} if optimize else None
+        await conversation_service.add_message(
+            db, UUID(conversation_id), role="user", content=content,
+            provider_metadata=_user_metadata,
+        )
 
         # Create execution record
         db.add(AgentExecution(

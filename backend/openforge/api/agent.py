@@ -27,6 +27,8 @@ class SubagentRequest(BaseModel):
     parent_execution_id: Optional[str] = None
     parent_conversation_id: Optional[str] = None
     parent_workspace_id: Optional[str] = None
+    execution_chain_id: Optional[str] = None
+    scope_path: Optional[list[int]] = None
 
 
 class SubagentResponse(BaseModel):
@@ -81,6 +83,8 @@ async def invoke_subagent(
             parent_execution_id=req.parent_execution_id,
             parent_conversation_id=parent_conv_id,
             parent_workspace_id=parent_ws_id,
+            scope_path=req.scope_path,
+            execution_chain_id=req.execution_chain_id,
         )
         return SubagentResponse(**result)
     except Exception as e:

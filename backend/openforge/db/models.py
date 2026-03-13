@@ -363,6 +363,7 @@ class HITLRequest(Base):
     tool_input: Mapped[dict] = mapped_column(JSONB, nullable=False)
     action_summary: Mapped[str] = mapped_column(Text, nullable=False)
     risk_level: Mapped[str] = mapped_column(String(20), nullable=False, default="high")
+    agent_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     resolution_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)

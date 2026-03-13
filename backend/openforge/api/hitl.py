@@ -32,6 +32,7 @@ class HITLRequestOut(BaseModel):
     tool_input: dict
     action_summary: str
     risk_level: str
+    agent_id: Optional[str] = None
     status: str
     resolution_note: Optional[str] = None
     created_at: str
@@ -47,6 +48,7 @@ class HITLRequestOut(BaseModel):
             tool_input=req.tool_input or {},
             action_summary=req.action_summary,
             risk_level=req.risk_level,
+            agent_id=req.agent_id,
             status=req.status,
             resolution_note=req.resolution_note,
             created_at=req.created_at.isoformat(),

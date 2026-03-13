@@ -73,10 +73,15 @@ class InvokeAgentTool(BaseTool):
             "parent_execution_id": context.execution_id,
             "parent_conversation_id": context.conversation_id or None,
             "parent_workspace_id": context.workspace_id or None,
+            "execution_chain_id": context.execution_id or None,
         }
         agent_id = params.get("agent_id")
         if agent_id:
             payload["agent_id"] = agent_id
+        # scope_path is injected by the parent engine when available
+        scope_path = params.get("_scope_path")
+        if scope_path is not None:
+            payload["scope_path"] = scope_path
 
         try:
             async with httpx.AsyncClient(timeout=300.0) as client:
