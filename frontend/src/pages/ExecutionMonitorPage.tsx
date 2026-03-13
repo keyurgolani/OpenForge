@@ -7,6 +7,9 @@ import {
     Brain, Wrench, Shield, Bot, Clock, ArrowLeft, MessageCircle, User,
     Activity, CheckCircle2, XCircle, AlertTriangle, ChevronDown, ChevronRight,
 } from 'lucide-react'
+import MarkdownIt from 'markdown-it'
+
+const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -302,6 +305,20 @@ function TimelineDot({ type }: { type: string }) {
     }
 }
 
+// ── Stat card ────────────────────────────────────────────────────────────────
+
+function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+    return (
+        <div className="glass-card rounded-xl border border-border/60 px-4 py-3 flex items-center gap-3">
+            <span className="text-muted-foreground/50">{icon}</span>
+            <div>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground/50">{label}</p>
+                <p className="text-sm font-semibold text-foreground/80">{value}</p>
+            </div>
+        </div>
+    )
+}
+
 // ── Main page component ──────────────────────────────────────────────────────
 
 export default function ExecutionMonitorPage() {
@@ -371,7 +388,7 @@ export default function ExecutionMonitorPage() {
 
     return (
         <div className="h-full overflow-y-auto">
-            <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+            <div className="px-4 sm:px-6 py-5 space-y-5">
 
                 {/* ── Navigation ─────────────────────────────────────────────── */}
                 <div className="flex items-center gap-3">
@@ -393,145 +410,141 @@ export default function ExecutionMonitorPage() {
                     )}
                 </div>
 
-                {/* ── Header ─────────────────────────────────────────────────── */}
-                <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-md px-6 py-5">
-                    <div className="flex items-start justify-between gap-4 flex-wrap">
-                        <div className="space-y-1.5">
-                            <div className="flex items-center gap-3">
-                                <Bot className="h-5 w-5 text-accent/60" />
-                                <h1 className="text-lg font-semibold text-foreground/90">{agentName}</h1>
-                                <StatusBadge status={execution.status} />
-                                {isLive && (
-                                    <span className="flex items-center gap-1 text-[10px] text-sky-400/60">
-                                        <span className="relative flex h-2 w-2">
-                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75" />
-                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-400" />
-                                        </span>
-                                        LIVE
-                                    </span>
-                                )}
-                            </div>
-                            <p className="text-xs text-muted-foreground/40 font-mono">
-                                {execution.id}
-                            </p>
-                        </div>
-                    </div>
-
-                    {/* ── Metadata stats ──────────────────────────────────────── */}
-                    <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
-                        <MetaStat
-                            icon={<Clock className="h-3.5 w-3.5" />}
-                            label="Started"
-                            value={formatDistanceToNow(new Date(execution.started_at), { addSuffix: true })}
-                        />
-                        <MetaStat
-                            icon={<Activity className="h-3.5 w-3.5" />}
-                            label="Duration"
-                            value={formatDuration(execution.started_at, execution.completed_at)}
-                        />
-                        <MetaStat
-                            icon={<Brain className="h-3.5 w-3.5" />}
-                            label="Iterations"
-                            value={String(execution.iteration_count)}
-                        />
-                        <MetaStat
-                            icon={<Wrench className="h-3.5 w-3.5" />}
-                            label="Tool calls"
-                            value={String(execution.tool_calls_count)}
-                        />
-                    </div>
-
-                    {/* ── Error message ───────────────────────────────────────── */}
-                    {execution.error_message && (
-                        <div className="mt-4 rounded-lg border border-red-500/20 bg-red-500/[0.05] px-4 py-2.5">
-                            <div className="flex items-center gap-2 mb-1">
-                                <AlertTriangle className="h-3.5 w-3.5 text-red-400/80" />
-                                <span className="text-[11px] font-medium text-red-400/80 uppercase tracking-wide">Error</span>
-                            </div>
-                            <p className="text-xs text-red-400/70 break-words">{execution.error_message}</p>
-                        </div>
-                    )}
-                </div>
-
-                {/* ── User Request ────────────────────────────────────────────── */}
-                {userMessage && (
-                    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-md px-6 py-4">
-                        <div className="flex items-center gap-2 mb-2">
-                            <User className="h-4 w-4 text-blue-400/70" />
-                            <span className="text-xs font-medium text-blue-400/80">User Request</span>
-                        </div>
-                        <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">
-                            {userMessage.content}
-                        </p>
-                    </div>
-                )}
-
-                {/* ── Timeline ───────────────────────────────────────────────── */}
-                <div>
-                    <h2 className="text-sm font-medium text-foreground/70 mb-4 flex items-center gap-2">
-                        <Activity className="h-4 w-4 text-accent/50" />
-                        Timeline
-                        <span className="text-muted-foreground/40 font-normal">
-                            ({execution.timeline?.length ?? 0} entries)
+                {/* ── Header: agent + status + live ──────────────────────────── */}
+                <div className="flex flex-wrap items-center gap-3">
+                    <Bot className="h-5 w-5 text-accent/60 shrink-0" />
+                    <h1 className="text-lg font-semibold text-foreground/90">{agentName}</h1>
+                    <StatusBadge status={execution.status} />
+                    {isLive && (
+                        <span className="flex items-center gap-1.5 text-[10px] text-sky-400/60">
+                            <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75" />
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-400" />
+                            </span>
+                            LIVE
                         </span>
-                    </h2>
-
-                    {(!execution.timeline || execution.timeline.length === 0) ? (
-                        <div className="rounded-2xl border border-white/[0.04] bg-white/[0.01] px-6 py-12 text-center">
-                            <Activity className="h-5 w-5 text-muted-foreground/30 mx-auto mb-2" />
-                            <p className="text-xs text-muted-foreground/40">
-                                {isLive ? 'Waiting for timeline events...' : 'No timeline entries recorded.'}
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="relative">
-                            {/* Vertical connecting line */}
-                            <div className="absolute left-[13px] top-4 bottom-4 w-px bg-white/[0.06]" />
-
-                            <div className="space-y-3">
-                                {execution.timeline.map((entry, idx) => (
-                                    <div key={idx} className="relative flex gap-4">
-                                        {/* Dot on the line */}
-                                        <div className="relative z-10 mt-3.5 flex items-center justify-center h-[26px] w-[26px] rounded-full bg-background border border-white/[0.08] shrink-0">
-                                            <TimelineDot type={entry.type} />
-                                        </div>
-                                        {/* Card */}
-                                        <div className="flex-1 min-w-0">
-                                            <TimelineEntryCard entry={entry} />
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
                     )}
+                    <p className="basis-full text-xs text-muted-foreground/40 font-mono">{execution.id}</p>
                 </div>
 
-                {/* ── Agent Response ──────────────────────────────────────────── */}
-                {lastAssistantMessage && (
-                    <div className="rounded-2xl border border-emerald-500/10 bg-emerald-500/[0.02] backdrop-blur-md px-6 py-4">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Bot className="h-4 w-4 text-emerald-400/70" />
-                            <span className="text-xs font-medium text-emerald-400/80">Agent Response</span>
+                {/* ── Stat cards ─────────────────────────────────────────────── */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <StatCard
+                        icon={<Clock className="h-4 w-4" />}
+                        label="Started"
+                        value={formatDistanceToNow(new Date(execution.started_at), { addSuffix: true })}
+                    />
+                    <StatCard
+                        icon={<Activity className="h-4 w-4" />}
+                        label="Duration"
+                        value={formatDuration(execution.started_at, execution.completed_at)}
+                    />
+                    <StatCard
+                        icon={<Brain className="h-4 w-4" />}
+                        label="Iterations"
+                        value={String(execution.iteration_count)}
+                    />
+                    <StatCard
+                        icon={<Wrench className="h-4 w-4" />}
+                        label="Tool Calls"
+                        value={String(execution.tool_calls_count)}
+                    />
+                </div>
+
+                {/* ── Error message ──────────────────────────────────────────── */}
+                {execution.error_message && (
+                    <div className="rounded-xl border border-red-500/20 bg-red-500/[0.05] px-5 py-3">
+                        <div className="flex items-center gap-2 mb-1">
+                            <AlertTriangle className="h-3.5 w-3.5 text-red-400/80" />
+                            <span className="text-[11px] font-medium text-red-400/80 uppercase tracking-wide">Error</span>
                         </div>
-                        <div className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">
-                            {lastAssistantMessage.content}
-                        </div>
+                        <p className="text-xs text-red-400/70 break-words">{execution.error_message}</p>
                     </div>
                 )}
+
+                {/* ── Two-column layout: Timeline + Context ─────────────────── */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+                    {/* ── Timeline (wide column) ────────────────────────────── */}
+                    <div className="lg:col-span-2 space-y-4">
+                        <h2 className="text-sm font-medium text-foreground/70 flex items-center gap-2">
+                            <Activity className="h-4 w-4 text-accent/50" />
+                            Timeline
+                            <span className="text-muted-foreground/40 font-normal">
+                                ({execution.timeline?.length ?? 0} entries)
+                            </span>
+                        </h2>
+
+                        {(!execution.timeline || execution.timeline.length === 0) ? (
+                            <div className="glass-card rounded-xl border border-border/60 px-6 py-12 text-center">
+                                <Activity className="h-5 w-5 text-muted-foreground/30 mx-auto mb-2" />
+                                <p className="text-xs text-muted-foreground/40">
+                                    {isLive ? 'Waiting for timeline events...' : 'No timeline entries recorded.'}
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="relative">
+                                {/* Vertical connecting line */}
+                                <div className="absolute left-[13px] top-4 bottom-4 w-px bg-white/[0.06]" />
+
+                                <div className="space-y-3">
+                                    {execution.timeline.map((entry, idx) => (
+                                        <div key={idx} className="relative flex gap-4">
+                                            {/* Dot on the line */}
+                                            <div className="relative z-10 mt-3.5 flex items-center justify-center h-[26px] w-[26px] rounded-full bg-background border border-white/[0.08] shrink-0">
+                                                <TimelineDot type={entry.type} />
+                                            </div>
+                                            {/* Card */}
+                                            <div className="flex-1 min-w-0">
+                                                <TimelineEntryCard entry={entry} />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* ── Context sidebar (narrow column) ───────────────────── */}
+                    <div className="space-y-4">
+                        {/* User Request */}
+                        {userMessage && (
+                            <div className="glass-card rounded-xl border border-border/60 px-5 py-4">
+                                <div className="flex items-center gap-2 mb-2.5">
+                                    <User className="h-4 w-4 text-blue-400/70" />
+                                    <span className="text-xs font-medium text-blue-400/80">User Request</span>
+                                </div>
+                                <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">
+                                    {userMessage.content}
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Agent Response */}
+                        {lastAssistantMessage && (
+                            <div className="glass-card rounded-xl border border-emerald-500/15 px-5 py-4">
+                                <div className="flex items-center gap-2 mb-2.5">
+                                    <Bot className="h-4 w-4 text-emerald-400/70" />
+                                    <span className="text-xs font-medium text-emerald-400/80">Agent Response</span>
+                                </div>
+                                <div
+                                    className="markdown-content text-sm text-foreground/80 leading-relaxed"
+                                    dangerouslySetInnerHTML={{ __html: md.render(lastAssistantMessage.content ?? '') }}
+                                />
+                            </div>
+                        )}
+
+                        {/* No context available */}
+                        {!userMessage && !lastAssistantMessage && (
+                            <div className="glass-card rounded-xl border border-border/60 px-5 py-8 text-center">
+                                <MessageCircle className="h-5 w-5 text-muted-foreground/30 mx-auto mb-2" />
+                                <p className="text-xs text-muted-foreground/40">No conversation context available.</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
 
             </div>
-        </div>
-    )
-}
-
-// ── Small stat display ───────────────────────────────────────────────────────
-
-function MetaStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
-    return (
-        <div className="flex items-center gap-2 text-xs">
-            <span className="text-muted-foreground/40">{icon}</span>
-            <span className="text-muted-foreground/50">{label}</span>
-            <span className="text-foreground/70 font-medium">{value}</span>
         </div>
     )
 }
