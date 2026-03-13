@@ -77,7 +77,7 @@ const INSIGHT_SECTION_META: Record<InsightSectionKey, {
 const insightsMd = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
 insightsMd.renderer.rules.link_open = () => ''
 insightsMd.renderer.rules.link_close = () => ''
-type SidebarConversation = { id: string; title: string | null; message_count?: number }
+type SidebarConversation = { id: string; title: string | null; message_count?: number; updated_at?: string; last_message_at?: string | null }
 
 export default function AppShell() {
     const { workspaceId = '' } = useParams<{ workspaceId: string }>()
@@ -188,13 +188,15 @@ export default function AppShell() {
             navigate(`/settings`, { replace: true })
         }
     }, [isAgnosticPage, workspacesFetched, ws, workspaceList, navigate])
-    const recentConversations = conversations as SidebarConversation[]
+    const recentConversations = useMemo(() => {
+        const cutoff = Date.now() - 24 * 60 * 60 * 1000
+        return (conversations as SidebarConversation[]).filter(c => {
+            const ts = c.last_message_at ?? c.updated_at
+            return ts ? new Date(ts).getTime() >= cutoff : false
+        })
+    }, [conversations])
     const workspaceMenuRef = useRef<HTMLDivElement | null>(null)
     const conversationRenameInputRef = useRef<HTMLInputElement | null>(null)
-    const recentChatsGutterRef = useRef<HTMLSpanElement | null>(null)
-    const [gutterHeight, setGutterHeight] = useState(0)
-    const activeRunsGutterRef = useRef<HTMLSpanElement | null>(null)
-    const [activeRunsGutterHeight, setActiveRunsGutterHeight] = useState(0)
     const knowledgeItems = knowledgeData?.knowledge ?? []
     const pinnedKnowledgeItems = knowledgeItems.filter((n: { is_pinned: boolean }) => n.is_pinned)
     const isWorkspaceHome = location.pathname === `/w/${workspaceId}`
@@ -358,15 +360,6 @@ export default function AppShell() {
         return () => window.cancelAnimationFrame(rafId)
     }, [renamingConversationId])
 
-    // Measure the vertical gutter text heights for scrollable containers
-    useEffect(() => {
-        const el = recentChatsGutterRef.current
-        if (el) setGutterHeight(el.offsetHeight)
-    }, [agentSublistOpen, recentConversations.length])
-    useEffect(() => {
-        const el = activeRunsGutterRef.current
-        if (el) setActiveRunsGutterHeight(el.offsetHeight)
-    }, [executionsSublistOpen, ongoingExecutions.length])
 
     const toggleInsightSection = useCallback((section: InsightSectionKey) => {
         setActiveInsightSection(prev => (prev === section ? null : section))
@@ -580,17 +573,17 @@ export default function AppShell() {
                                 </div>
                             </div>
 
-                            <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-3">
+                            <div className="flex-1 min-h-0 flex flex-col px-4 pt-3 pb-3">
                                 {/* Nav */}
-                                <nav className="space-y-1">
-                                        <Link to={`/w/${workspaceId}`} className={`sidebar-item ${location.pathname === `/w/${workspaceId}` ? 'active' : ''}`}>
+                                <nav className="flex flex-col flex-1 min-h-0 gap-1">
+                                        <Link to={`/w/${workspaceId}`} className={`sidebar-item flex-shrink-0 ${location.pathname === `/w/${workspaceId}` ? 'active' : ''}`}>
                                             <Home className="w-4 h-4" /> Knowledge
                                         </Link>
-                                        <Link to={`/w/${workspaceId}/search`} className={`sidebar-item ${isActive('/search') ? 'active' : ''}`}>
+                                        <Link to={`/w/${workspaceId}/search`} className={`sidebar-item flex-shrink-0 ${isActive('/search') ? 'active' : ''}`}>
                                             <Search className="w-4 h-4" /> Search
                                         </Link>
                                         {/* Workspace Agent with expandable recent conversations */}
-                                        <div>
+                                        <div className="flex flex-col flex-1 min-h-0">
                                             <div className="flex items-center">
                                                 <Link to={`/w/${workspaceId}/agent`} className={`sidebar-item flex-1 ${isActive('/agent') && !isActive('/agents') ? 'active' : ''}`}>
                                                     <MessageSquare className="w-4 h-4" /> Workspace Agent
@@ -608,11 +601,9 @@ export default function AppShell() {
                                             </div>
                                             {agentSublistOpen && recentConversations.length > 0 && (
                                                 <div
-                                                    className="ml-3 mt-1 flex items-stretch overflow-hidden"
-                                                    style={{ minHeight: gutterHeight || undefined, maxHeight: (gutterHeight || 120) * 2 }}
+                                                    className="ml-3 mt-1 flex items-stretch overflow-hidden flex-1 min-h-0"
                                                 >
                                                     <span
-                                                        ref={recentChatsGutterRef}
                                                         className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/40 select-none flex-shrink-0 pt-0.5"
                                                         style={{ writingMode: 'vertical-lr' }}
                                                     >
@@ -695,7 +686,7 @@ export default function AppShell() {
                                     </nav>
                             </div>
 
-                            <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-4">
+                            <div className="flex-shrink-0 overflow-y-auto px-3 pb-4 space-y-4 max-h-[30%]">
                                 {/* Pinned knowledge */}
                                 {pinnedKnowledgeItems.length > 0 && (
                                     <div>
@@ -722,12 +713,12 @@ export default function AppShell() {
 
                         {/* ── Bottom half: workspace-agnostic navigation ── */}
                         <div className="h-1/2 flex flex-col glass-card overflow-hidden" style={{ boxShadow: 'none' }}>
-                            <div className="flex-shrink-0 px-4 pt-3 pb-2">
-                                <nav className="space-y-1">
-                                    <Link to="/agents" className={`sidebar-item ${isActive('/agents') ? 'active' : ''}`}>
+                            <div className="flex-1 min-h-0 flex flex-col px-4 pt-3 pb-2">
+                                <nav className="flex flex-col flex-1 min-h-0 gap-1">
+                                    <Link to="/agents" className={`sidebar-item flex-shrink-0 ${isActive('/agents') ? 'active' : ''}`}>
                                         <Bot className="w-4 h-4" /> Agents
                                     </Link>
-                                    <div>
+                                    <div className="flex flex-col flex-1 min-h-0">
                                         <div className="flex items-center">
                                             <Link to="/executions" className={`sidebar-item flex-1 ${isActive('/executions') ? 'active' : ''}`}>
                                                 <Activity className="w-4 h-4" /> Executions
@@ -745,11 +736,9 @@ export default function AppShell() {
                                         </div>
                                         {executionsSublistOpen && ongoingExecutions.length > 0 && (
                                             <div
-                                                className="ml-3 mt-1 flex items-stretch overflow-hidden"
-                                                style={{ minHeight: activeRunsGutterHeight || undefined, maxHeight: (activeRunsGutterHeight || 100) * 2 }}
+                                                className="ml-3 mt-1 flex items-stretch overflow-hidden flex-1 min-h-0"
                                             >
                                                 <span
-                                                    ref={activeRunsGutterRef}
                                                     className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/40 select-none flex-shrink-0 pt-0.5"
                                                     style={{ writingMode: 'vertical-lr' }}
                                                 >
@@ -781,8 +770,6 @@ export default function AppShell() {
                                     </div>
                                 </nav>
                             </div>
-
-                            <div className="flex-1 overflow-y-auto" />
 
                             {/* Settings — bottom of sidebar, same style as workspace selector */}
                             <div className="flex-shrink-0 border-t border-border/60">
