@@ -1458,19 +1458,35 @@ export default function WorkspaceAgentPage() {
                                         </div>
                                     )}
 
-                                    <MentionEditor
-                                        ref={mentionEditorRef}
-                                        disabled={inputDisabled}
-                                        placeholder={activeConversationIsArchived ? 'Restore this chat to continue messaging...' : 'Ask a question, or type @ to mention a workspace or chat…'}
-                                        workspaces={(allWorkspaces as { id: string; name: string }[]).filter(w => w.id !== workspaceId).map(w => ({ type: 'workspace' as const, id: w.id, name: w.name }))}
-                                        conversations={(conversations as Conversation[]).filter(c => c.id !== activeCid).map(c => ({ type: 'chat' as const, id: c.id, name: c.title || 'Untitled Chat' }))}
-                                        onTextChange={(text) => {
-                                            setInputText(text)
-                                            if (lastError) clearLastError()
-                                        }}
-                                        onMentionsChange={() => {}}
-                                        onSubmit={handleSend}
-                                    />
+                                    <div className="flex items-start gap-2">
+                                        <button
+                                            type="button"
+                                            className={`mt-1.5 flex-shrink-0 rounded-lg p-1.5 transition-colors ${
+                                                optimizeEnabled
+                                                    ? 'bg-accent/15 text-accent'
+                                                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/35'
+                                            }`}
+                                            onClick={() => setOptimizeEnabled(prev => { const next = !prev; sessionStorage.setItem('optimizeEnabled', String(next)); return next })}
+                                            title={optimizeEnabled ? 'Prompt optimization enabled' : 'Enable prompt optimization'}
+                                        >
+                                            <Sparkles className="h-4 w-4" />
+                                        </button>
+                                        <div className="min-w-0 flex-1">
+                                            <MentionEditor
+                                                ref={mentionEditorRef}
+                                                disabled={inputDisabled}
+                                                placeholder={activeConversationIsArchived ? 'Restore this chat to continue messaging...' : 'Ask a question, or type @ to mention a workspace or chat…'}
+                                                workspaces={(allWorkspaces as { id: string; name: string }[]).filter(w => w.id !== workspaceId).map(w => ({ type: 'workspace' as const, id: w.id, name: w.name }))}
+                                                conversations={(conversations as Conversation[]).filter(c => c.id !== activeCid).map(c => ({ type: 'chat' as const, id: c.id, name: c.title || 'Untitled Chat' }))}
+                                                onTextChange={(text) => {
+                                                    setInputText(text)
+                                                    if (lastError) clearLastError()
+                                                }}
+                                                onMentionsChange={() => {}}
+                                                onSubmit={handleSend}
+                                            />
+                                        </div>
+                                    </div>
 
                                     <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                                         <div className="flex flex-wrap items-center gap-2">
@@ -1575,19 +1591,6 @@ export default function WorkspaceAgentPage() {
                                             >
                                                 <AtSign className="h-3.5 w-3.5" />
                                                 Mention
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className={`chat-control-pill transition-colors ${
-                                                    optimizeEnabled
-                                                        ? 'bg-accent/15 border-accent/40 text-accent'
-                                                        : ''
-                                                }`}
-                                                onClick={() => setOptimizeEnabled(prev => { const next = !prev; sessionStorage.setItem('optimizeEnabled', String(next)); return next })}
-                                                title={optimizeEnabled ? 'Prompt optimization enabled' : 'Enable prompt optimization'}
-                                            >
-                                                <Sparkles className={`h-3.5 w-3.5 ${optimizeEnabled ? 'text-accent' : ''}`} />
-                                                Optimize
                                             </button>
                                         </div>
 
