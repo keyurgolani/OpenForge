@@ -262,7 +262,7 @@ export default function WorkspaceAgentPage() {
     const { workspaceId = '', conversationId } = useParams<{ workspaceId: string; conversationId?: string }>()
     const navigate = useNavigate()
     const qc = useQueryClient()
-    const { error: showError } = useToast()
+    const { success: showSuccess, error: showError } = useToast()
     const [inputText, setInputText] = useState('')
     const [activeCid, setActiveCid] = useState(conversationId ?? null)
     const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -1043,6 +1043,18 @@ export default function WorkspaceAgentPage() {
         }
     }
 
+    const handleCopyConv = async (cid: string) => {
+        try {
+            const blob = await exportConversation(workspaceId, cid, 'txt')
+            const text = await blob.text()
+            await navigator.clipboard.writeText(text)
+            showSuccess('Copied to clipboard')
+        } catch (err: any) {
+            const detail = err?.response?.data?.detail || err?.message || 'Unable to copy conversation.'
+            showError('Copy failed', detail)
+        }
+    }
+
     const handleSelectConversation = (cid: string) => {
         setActiveChatRailSection('conversations')
         suppressAutoSelectRef.current = false
@@ -1733,6 +1745,7 @@ export default function WorkspaceAgentPage() {
                                                         onSelect={() => handleSelectConversation(c.id)}
                                                         onDelete={() => handleDeleteConv(c.id)}
                                                         onDownload={(format) => handleDownloadConv(c.id, format)}
+                                                        onCopy={() => handleCopyConv(c.id)}
                                                         onRename={(title) => updateConversation(workspaceId, c.id, { title, title_locked: true }).then(() => invalidateAllConvQueries())}
                                                     />
                                                 ))
@@ -1796,6 +1809,7 @@ export default function WorkspaceAgentPage() {
                                                         onSelect={() => handleSelectConversation(c.id)}
                                                         onDelete={() => handleDeleteConv(c.id)}
                                                         onDownload={(format) => handleDownloadConv(c.id, format)}
+                                                        onCopy={() => handleCopyConv(c.id)}
                                                         onRename={(title) => updateConversation(workspaceId, c.id, { title, title_locked: true }).then(() => invalidateAllConvQueries())}
                                                     />
                                                 ))
@@ -1879,6 +1893,7 @@ export default function WorkspaceAgentPage() {
                                                         onRestore={() => handleRestoreConv(c.id)}
                                                         onPermanentDelete={() => handlePermanentlyDeleteConv(c.id)}
                                                         onDownload={(format) => handleDownloadConv(c.id, format)}
+                                                        onCopy={() => handleCopyConv(c.id)}
                                                     />
                                                 ))
                                             )}
@@ -1895,10 +1910,11 @@ export default function WorkspaceAgentPage() {
 }
 
 // ── Conversation row with inline rename ─────────────────────────────────────
-function ConversationRow({ conv, active, workspaceId, onSelect, onDelete, onDownload, onRename }: {
+function ConversationRow({ conv, active, workspaceId, onSelect, onDelete, onDownload, onCopy, onRename }: {
     conv: Conversation; active: boolean; workspaceId: string
     onSelect: () => void; onDelete: () => void
     onDownload: (format: 'json' | 'markdown' | 'txt') => void
+    onCopy: () => void
     onRename: (title: string) => void
 }) {
     const [editing, setEditing] = useState(false)
@@ -1970,6 +1986,10 @@ function ConversationRow({ conv, active, workspaceId, onSelect, onDelete, onDown
                         </button>
                         {showDownloadMenu && (
                             <div className="absolute right-0 top-full mt-1 z-50 min-w-[100px] rounded-lg border border-border/60 bg-popover py-1 shadow-lg">
+                                <button type="button" onClick={(e) => { e.stopPropagation(); onCopy(); setShowDownloadMenu(false) }}
+                                    className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 flex items-center gap-1.5">
+                                    <Copy className="w-3 h-3" /> Copy Text
+                                </button>
                                 {(['json', 'markdown', 'txt'] as const).map(fmt => (
                                     <button key={fmt} type="button" onClick={(e) => { e.stopPropagation(); onDownload(fmt); setShowDownloadMenu(false) }}
                                         className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 capitalize">
@@ -1993,6 +2013,9 @@ function ConversationRow({ conv, active, workspaceId, onSelect, onDelete, onDown
                 <ContextMenuItem onSelect={(e) => { e.preventDefault(); openRename() }} className="gap-2">
                     <Pencil className="w-4 h-4" /> Rename Chat
                 </ContextMenuItem>
+                <ContextMenuItem onSelect={(e) => { e.preventDefault(); onCopy() }} className="gap-2">
+                    <Copy className="w-4 h-4" /> Copy Text
+                </ContextMenuItem>
                 <ContextMenuItem onSelect={(e) => { e.preventDefault(); onDownload('json') }} className="gap-2">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                     Download Chat
@@ -2013,6 +2036,7 @@ function TrashedConversationRow({
     onRestore,
     onPermanentDelete,
     onDownload,
+    onCopy,
 }: {
     conv: Conversation
     active: boolean
@@ -2020,6 +2044,7 @@ function TrashedConversationRow({
     onRestore: () => void
     onPermanentDelete: () => void
     onDownload: (format: 'json' | 'markdown' | 'txt') => void
+    onCopy: () => void
 }) {
     const [showDownloadMenu, setShowDownloadMenu] = useState(false)
     const [confirmingDelete, setConfirmingDelete] = useState(false)
@@ -2071,6 +2096,11 @@ function TrashedConversationRow({
                         </button>
                         {showDownloadMenu && (
                             <div className="absolute right-0 top-full mt-1 z-50 min-w-[100px] rounded-lg border border-border/60 bg-popover py-1 shadow-lg">
+                                <button type="button"
+                                    onClick={(e) => { e.stopPropagation(); onCopy(); setShowDownloadMenu(false) }}
+                                    className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 flex items-center gap-1.5">
+                                    <Copy className="w-3 h-3" /> Copy Text
+                                </button>
                                 {(['json', 'markdown', 'txt'] as const).map(fmt => (
                                     <button key={fmt} type="button"
                                         onClick={(e) => { e.stopPropagation(); onDownload(fmt); setShowDownloadMenu(false) }}
@@ -2107,6 +2137,9 @@ function TrashedConversationRow({
                 <ContextMenuItem onSelect={(e) => { e.preventDefault(); onRestore() }} className="gap-2">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
                     Restore Chat
+                </ContextMenuItem>
+                <ContextMenuItem onSelect={(e) => { e.preventDefault(); onCopy() }} className="gap-2">
+                    <Copy className="w-4 h-4" /> Copy Text
                 </ContextMenuItem>
                 <ContextMenuItem onSelect={(e) => { e.preventDefault(); onDownload('json') }} className="gap-2">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>

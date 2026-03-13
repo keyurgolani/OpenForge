@@ -15,6 +15,171 @@ from openforge.schemas.conversation import (
 router = APIRouter()
 
 
+def _format_timeline_entry_txt(entry: dict, indent: str = "  ") -> list[str]:
+    """Format a single timeline entry as plain text lines."""
+    t = entry.get("type", "")
+    lines: list[str] = []
+
+    if t == "thinking":
+        content = (entry.get("content") or "").strip()
+        if content:
+            lines.append(f"{indent}[THINKING]")
+            for line in content.splitlines():
+                lines.append(f"{indent}  {line}")
+
+    elif t == "tool_call":
+        tool = entry.get("tool_name", "unknown")
+        success = entry.get("success")
+        status = "OK" if success else ("FAILED" if success is False else "running")
+        lines.append(f"{indent}[TOOL] {tool}  ({status})")
+        args = entry.get("arguments") or {}
+        if args:
+            for k, v in args.items():
+                val = str(v)
+                if len(val) > 500:
+                    val = val[:500] + "..."
+                lines.append(f"{indent}  {k}: {val}")
+        output = entry.get("output")
+        error = entry.get("error")
+        if error:
+            lines.append(f"{indent}  Error: {error}")
+        elif output is not None:
+            out_str = json.dumps(output, ensure_ascii=False) if not isinstance(output, str) else output
+            if len(out_str) > 1000:
+                out_str = out_str[:1000] + "..."
+            lines.append(f"{indent}  Output: {out_str}")
+
+    elif t == "hitl_request":
+        tool_id = entry.get("tool_id", "unknown")
+        status = entry.get("status", "pending")
+        risk = entry.get("risk_level", "")
+        lines.append(f"{indent}[HITL] {tool_id}  (risk: {risk}, {status})")
+        tool_input = entry.get("tool_input") or {}
+        if tool_input:
+            for k, v in tool_input.items():
+                val = str(v)
+                if len(val) > 500:
+                    val = val[:500] + "..."
+                lines.append(f"{indent}  {k}: {val}")
+
+    elif t == "subagent_invocation":
+        tool = entry.get("tool_name", "subagent")
+        success = entry.get("success")
+        status = "OK" if success else ("FAILED" if success is False else "running")
+        lines.append(f"{indent}[SUBAGENT] {tool}  ({status})")
+        args = entry.get("arguments") or {}
+        if args:
+            instruction = args.get("instruction", "")
+            if instruction:
+                lines.append(f"{indent}  Instruction: {instruction}")
+        response = (entry.get("subagent_response") or "").strip()
+        if response:
+            if len(response) > 1000:
+                response = response[:1000] + "..."
+            lines.append(f"{indent}  Response: {response}")
+        sub_timeline = entry.get("subagent_timeline") or []
+        for sub_entry in sub_timeline:
+            lines.extend(_format_timeline_entry_txt(sub_entry, indent + "    "))
+
+    return lines
+
+
+def _format_timeline_entry_md(entry: dict, depth: int = 0) -> list[str]:
+    """Format a single timeline entry as Markdown lines."""
+    t = entry.get("type", "")
+    lines: list[str] = []
+    prefix = "  " * depth
+
+    if t == "thinking":
+        content = (entry.get("content") or "").strip()
+        if content:
+            lines.append(f"{prefix}<details>")
+            lines.append(f"{prefix}<summary>Thinking</summary>")
+            lines.append("")
+            lines.append(content)
+            lines.append(f"{prefix}</details>")
+            lines.append("")
+
+    elif t == "tool_call":
+        tool = entry.get("tool_name", "unknown")
+        success = entry.get("success")
+        icon = "✅" if success else ("❌" if success is False else "⏳")
+        lines.append(f"{prefix}> **{icon} Tool: `{tool}`**")
+        args = entry.get("arguments") or {}
+        if args:
+            lines.append(f"{prefix}>")
+            for k, v in args.items():
+                val = str(v)
+                if len(val) > 500:
+                    val = val[:500] + "..."
+                if "\n" in val:
+                    lines.append(f"{prefix}> **{k}:**")
+                    lines.append(f"{prefix}> ```")
+                    for vl in val.splitlines():
+                        lines.append(f"{prefix}> {vl}")
+                    lines.append(f"{prefix}> ```")
+                else:
+                    lines.append(f"{prefix}> `{k}`: {val}")
+        output = entry.get("output")
+        error = entry.get("error")
+        if error:
+            lines.append(f"{prefix}>")
+            lines.append(f"{prefix}> ❌ **Error:** {error}")
+        elif output is not None:
+            out_str = json.dumps(output, ensure_ascii=False) if not isinstance(output, str) else output
+            if len(out_str) > 1000:
+                out_str = out_str[:1000] + "..."
+            lines.append(f"{prefix}>")
+            lines.append(f"{prefix}> **Output:**")
+            lines.append(f"{prefix}> ```")
+            for ol in out_str.splitlines():
+                lines.append(f"{prefix}> {ol}")
+            lines.append(f"{prefix}> ```")
+        lines.append("")
+
+    elif t == "hitl_request":
+        tool_id = entry.get("tool_id", "unknown")
+        status = entry.get("status", "pending")
+        risk = entry.get("risk_level", "")
+        icon = "✅" if status == "approved" else ("🚫" if status == "denied" else "⏳")
+        lines.append(f"{prefix}> **{icon} HITL Approval: `{tool_id}`** — risk: {risk}, {status}")
+        tool_input = entry.get("tool_input") or {}
+        if tool_input:
+            lines.append(f"{prefix}>")
+            for k, v in tool_input.items():
+                val = str(v)
+                if len(val) > 500:
+                    val = val[:500] + "..."
+                lines.append(f"{prefix}> `{k}`: {val}")
+        lines.append("")
+
+    elif t == "subagent_invocation":
+        tool = entry.get("tool_name", "subagent")
+        success = entry.get("success")
+        icon = "✅" if success else ("❌" if success is False else "⏳")
+        lines.append(f"{prefix}> **{icon} Subagent: `{tool}`**")
+        args = entry.get("arguments") or {}
+        instruction = args.get("instruction", "")
+        if instruction:
+            lines.append(f"{prefix}>")
+            lines.append(f"{prefix}> *Instruction:* {instruction}")
+        response = (entry.get("subagent_response") or "").strip()
+        if response:
+            if len(response) > 1000:
+                response = response[:1000] + "..."
+            lines.append(f"{prefix}>")
+            lines.append(f"{prefix}> **Response:** {response}")
+        sub_timeline = entry.get("subagent_timeline") or []
+        if sub_timeline:
+            lines.append(f"{prefix}>")
+            lines.append(f"{prefix}> *Subagent timeline:*")
+            for sub_entry in sub_timeline:
+                lines.extend(_format_timeline_entry_md(sub_entry, depth + 1))
+        lines.append("")
+
+    return lines
+
+
 @router.get("/{workspace_id}/conversations", response_model=list[ConversationResponse])
 async def list_conversations(
     workspace_id: UUID,
@@ -153,6 +318,7 @@ async def export_conversation(
                     "model_used": msg.model_used,
                     "provider_used": msg.provider_used,
                     "token_count": msg.token_count,
+                    "timeline": msg.timeline,
                     "created_at": msg.created_at.isoformat() if msg.created_at else None,
                 }
                 for msg in (conv.messages or [])
@@ -180,14 +346,17 @@ async def export_conversation(
                 lines.append(f"*Model: {msg.model_used}*")
                 lines.append("")
             lines.append(msg.content or "")
-            if msg.thinking:
-                lines.append("")
+            lines.append("")
+            if msg.timeline:
+                for entry in msg.timeline:
+                    lines.extend(_format_timeline_entry_md(entry))
+            elif msg.thinking:
                 lines.append("<details>")
                 lines.append("<summary>Thinking</summary>")
                 lines.append("")
                 lines.append(msg.thinking)
                 lines.append("</details>")
-            lines.append("")
+                lines.append("")
             lines.append("---")
             lines.append("")
 
@@ -213,6 +382,10 @@ async def export_conversation(
             lines.append("")
             lines.append(msg.content or "")
             lines.append("")
+            if msg.timeline:
+                for entry in msg.timeline:
+                    lines.extend(_format_timeline_entry_txt(entry))
+                lines.append("")
             lines.append("-" * 40)
             lines.append("")
 
