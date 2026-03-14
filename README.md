@@ -10,37 +10,16 @@ Organize your knowledge, have AI-powered conversations grounded in your own know
 
 OpenForge is currently undergoing a **major architectural transformation** to establish a vision-centric, scalable, and flexible foundation for the future.
 
-### Current Phase: Phase 1 Complete ✅
+### Current Phase: Phase 2 Complete ✅
 
-We have successfully completed **Phase 1: Product Model Reset and Architecture Lock**, which involved:
+**Completed:**
+- ✅ Phase 1: Product Model Reset and Architecture Lock
+- ✅ Phase 2: Codebase Cleanup and Structural Simplification
 
-- **Breaking Changes**: The codebase is undergoing intentional breaking changes to replace the agent-centric architecture with a domain-driven design
-- **New Architecture**: Established final domain model (Profiles, Workflows, Missions, Triggers, Runs, Artifacts, Knowledge)
-- **Database Reset**: New schema aligned with final product vocabulary
-- **Legacy Isolation**: Old agent-centric code marked for deprecation
+**Upcoming:**
+- Phase 3: Prompt System, Policy Model, and Trust Foundations
 
-### Roadmap
-
-The complete transformation plan is documented in [`sdlc/roadmap.md`](./sdlc/roadmap.md), which outlines 14 phases across 5 waves:
-
-**Wave 1 — Foundation Reset** (In Progress)
-- ✅ Phase 1: Product Model Reset and Architecture Lock (Complete)
-- ⏳ Phase 2: Codebase Cleanup and Structural Simplification
-- ⏳ Phase 3: Prompt System, Policy Model, and Trust Foundations
-
-**Future Waves:**
-- Wave 2: Retrieval, Knowledge, and Product Shell
-- Wave 3: Core Model Refactor
-- Wave 4: Runtime, Orchestration, and Autonomy
-- Wave 5: Curated Capability Layer and Final Productization
-
-### What This Means for You
-
-- **Breaking Changes**: Expect database schema changes, API changes, and navigation updates
-- **Migration Path**: Legacy features remain functional during transition but are marked for deprecation
-- **New Development**: All new work targets the final domain architecture
-
-For detailed information about each phase, see the [complete roadmap](./sdlc/roadmap.md).
+For the complete roadmap, see [`sdlc/roadmap.md`](./sdlc/roadmap.md).
 
 ---
 
@@ -80,21 +59,82 @@ The onboarding wizard will guide you through adding an LLM provider and creating
 
 ---
 
+## Project Structure
+
+```
+openforge/
+├── backend/
+│   └── openforge/
+│       ├── api/                    # HTTP routes (thin layer)
+│       ├── common/                 # Shared utilities
+│       │   ├── config/             # Centralized configuration
+│       │   └── errors/             # Exception types
+│       ├── db/                     # Database models and migrations
+│       ├── domains/                # Domain-driven business logic
+│       │   ├── profiles/            # Agent profile definitions
+│       │   ├── workflows/           # Workflow definitions
+│       │   ├── missions/            # Mission definitions
+│       │   ├── triggers/            # Trigger definitions
+│       │   ├── runs/                # Run instances
+│       │   ├── artifacts/           # Output artifacts
+│       │   ├── knowledge/           # Knowledge management
+│       │   └── common/              # Shared domain utilities
+│       ├── infrastructure/          # Low-level infrastructure
+│       │   ├── db/                  # Database connections
+│       │   ├── queue/               # Celery and Redis
+│       │   └── search/              # Search engine
+│       ├── integrations/             # External integrations
+│       │   ├── llm/                  # LLM provider integration
+│       │   ├── tools/                # Tool server integration
+│       │   ├── workspace/            # Workspace file operations
+│       │   └── files/                # File handling utilities
+│       ├── legacy/                   # Deprecated code (to be removed)
+│       ├── runtime/                  # Execution engine
+│       ├── schemas/                  # Pydantic schemas
+│       ├── services/                 # Application services
+│       ├── utils/                    # Utility functions
+│       └── main.py                   # Application entry point
+├── frontend/
+│   └── src/
+│       ├── components/               # Shared UI components
+│       ├── features/                 # Feature-specific components
+│       │   ├── profiles/              # Profile management
+│       │   ├── workflows/             # Workflow UI
+│       │   ├── missions/              # Mission UI
+│       │   ├── runs/                  # Run monitoring
+│       │   ├── artifacts/             # Artifact viewing
+│       │   └── knowledge/             # Knowledge management
+│       ├── hooks/                    # React hooks
+│       ├── lib/                       # Utilities and API clients
+│       ├── pages/                     # Page components (thin shells)
+│       ├── stores/                    # State management
+│       ├── styles/                    # CSS and Tailwind
+│       └── types/                     # TypeScript types
+├── docs/
+│   ├── architecture/              # Architecture decisions
+│   └── development/                # Development guides
+└── tool_server/                   # Tool execution server
+```
+
+For detailed information about where code goes, see [`docs/development/where-code-goes.md`](./docs/development/where-code-goes.md).
+
+---
+
 ## Configuration
 
 | Variable | Default | Description |
 |---|---|---|
-| `DB_PASSWORD` | `changeme` | **Required** — PostgreSQL password |
-| `PORT` | `3000` | Port to expose the app on |
-| `WORKSPACE_ROOT` | `/workspace` | Internal path for workspace files |
-| `WORKSPACE_HOST_PATH` | `./data/workspace` | Host path for workspace volume mount |
-| `UPLOADS_HOST_PATH` | `./data/uploads` | Host path for uploads volume mount |
-| `POSTGRES_DATA_PATH` | `./data/postgres` | Host path for PostgreSQL data |
-| `QDRANT_DATA_PATH` | `./data/qdrant` | Host path for Qdrant vector data |
-| `ENCRYPTION_KEY` | *(auto-generated)* | Fernet key for encrypting API keys — **set this for persistence** |
-| `LOG_LEVEL` | `warning` | Log verbosity: `debug`, `info`, `warning`, `error` |
+| `DATABASE_URL` | `postgresql+asyncpg://...` | PostgreSQL connection URL |
+| `QDRANT_URL` | `http://localhost:6333` | Qdrant server URL |
+| `REDIS_URL` | `redis://redis:6379/0` | Redis connection URL |
+| `WORKSPACE_ROOT` | `/workspace` | Workspace files directory |
+| `UPLOADS_ROOT` | `/uploads` | Uploaded files directory |
+| `PORT` | `3000` | Server port |
+| `LOG_LEVEL` | `info` | Logging level |
+| `ENCRYPTION_KEY` | *(auto-generated)* | Fernet key for API key encryption |
+| `ADMIN_PASSWORD` | *(empty)* | Admin password (empty = disabled) |
 
-> ⚠️ **Set `ENCRYPTION_KEY`** before first run if you want API keys to survive container restarts. Generate one with: `python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
+See [Environment Configuration](./docs/development/environment.md) for all options.
 
 ---
 
@@ -168,3 +208,5 @@ MIT — see [LICENSE](./LICENSE)
 ## Contributing
 
 PRs welcome! Please open an issue first for significant changes.
+
+See [Contributor Guidelines](./docs/development/where-code-goes.md) for code placement rules.

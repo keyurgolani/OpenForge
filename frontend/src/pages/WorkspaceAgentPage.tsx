@@ -20,7 +20,6 @@ import {
     bulkPermanentlyDeleteConversations,
 } from '@/lib/api'
 import { useStreamingChat, type Mention, type TimelineEntry } from '@/hooks/useStreamingChat'
-import { AgentTimeline, AgentTimelineDot } from '@/components/agent'
 import { useToast } from '@/components/shared/ToastProvider'
 import {
     Plus, Send, Square, Loader2, MessageSquare, Trash2, Bot, User, Sparkles,
@@ -1206,18 +1205,11 @@ export default function WorkspaceAgentPage() {
                                                 Agent Generating Response
                                             </div>
                                             <div className="chat-workflow-stack w-full">
-                                                <AgentTimeline
-                                                    timeline={streamingTimeline}
-                                                    isStreaming={isStreaming}
-                                                    workspaceId={workspaceId}
-                                                    conversationId={activeCid ?? undefined}
-                                                    requestVisibility={() => ensureExpandedBlockVisible(streamingMessageRef.current)}
-                                                    mentionMaps={mentionMaps}
-                                                    renderContent={(content) => renderMessageContent(content, workspaceId, mentionMaps)}
-                                                />
+                                                <div className="text-xs text-muted-foreground/40 p-4 text-center">
+                                                    Timeline view not available
+                                                </div>
                                                 {(streamingContent || isInterrupted) && (
                                                 <div className={`chat-workflow-step chat-workflow-step--iconic chat-workflow-step--response chat-section-reveal ${streamingContent ? 'chat-workflow-step-live' : ''}`}>
-                                                    <AgentTimelineDot type="response" />
                                                     <div className="chat-workflow-header">
                                                         <MessageSquare className="h-3.5 w-3.5" />
                                                         <span>Response</span>
@@ -2536,18 +2528,11 @@ function ChatMessageCard({
                         {hasWorkflowSteps && (
                             <div className="chat-workflow-stack w-full">
                                 {(msg.timeline?.length ?? 0) > 0 && (
-                                    <AgentTimeline
-                                        timeline={msg.timeline as TimelineEntry[]}
-                                        workspaceId={workspaceId}
-                                        conversationId={msg.id}
-                                        readonly
-                                        requestVisibility={requestVisibility}
-                                        mentionMaps={mentionMaps}
-                                        renderContent={(content) => renderMessageContent(content, workspaceId, mentionMaps)}
-                                    />
+                                    <div className="text-xs text-muted-foreground/40 p-2 text-center">
+                                        Timeline view not available
+                                    </div>
                                 )}
                                 <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--response chat-section-reveal">
-                                    <AgentTimelineDot type="response" />
                                     <div className="chat-workflow-header">
                                         <MessageSquare className="h-3.5 w-3.5" />
                                         <span>Response</span>
@@ -2574,7 +2559,6 @@ function ChatMessageCard({
                                     </div>
                                 </div>
                                 <div className="chat-workflow-step chat-workflow-step--iconic chat-section-reveal">
-                                    <AgentTimelineDot type="meta" />
                                     <span className="chat-message-meta flex items-center gap-1.5 pl-1 pt-0.5">
                                         {new Date(msg.created_at).toLocaleTimeString()}
                                         {generationSeconds && ` · Took ${generationSeconds}s`}

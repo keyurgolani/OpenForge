@@ -9,12 +9,16 @@ For new development, use the domain packages in openforge.domains.*
 Legacy modules:
 - agent_definition: Use openforge.domains.profiles instead
 - agent_registry: Being replaced by domain services
-- agent_schedules: Use openforge.domains.triggers instead
+- agent_schedules_api: Use openforge.domains.triggers instead
+- targets_api: Use openforge.domains.artifacts instead
 - target_service: Use openforge.domains.artifacts instead
 
 Migration path:
 - Phase 1: Legacy modules marked, new domains created
-- Phase 2+: Gradual migration of functionality to new domains
+- Phase 2: Legacy modules moved to this package, re-exports with deprecation warnings
+- Phase 3+: Gradual removal as domains are fully implemented
 """
 
-# Legacy modules are not exported to prevent accidental imports
+# LEGACY MODULE
+# Scheduled for deletion.
+# Do not import into non-legacy modules.

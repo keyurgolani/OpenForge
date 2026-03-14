@@ -18,7 +18,6 @@ const EditorDispatcher = lazy(() => import('./components/knowledge/editors/Edito
 const WorkspaceAgentPage = lazy(() => import('./pages/WorkspaceAgentPage'))
 const SearchPage = lazy(() => import('./pages/SearchPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
-const AgentsPage = lazy(() => import('./pages/AgentsPage'))
 const ExecutionListPage = lazy(() => import('./pages/ExecutionListPage'))
 const ExecutionMonitorPage = lazy(() => import('./pages/ExecutionMonitorPage'))
 
@@ -153,11 +152,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                 <Route path="/executions/:executionId" element={
                                     <ErrorBoundary>
                                         <ExecutionMonitorPage />
-                                    </ErrorBoundary>
-                                } />
-                                <Route path="/agents" element={
-                                    <ErrorBoundary>
-                                        <AgentsPage />
                                     </ErrorBoundary>
                                 } />
                                 <Route path="/settings" element={

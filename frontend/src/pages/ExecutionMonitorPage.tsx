@@ -9,7 +9,6 @@ import {
     Activity, CheckCircle2, XCircle, AlertTriangle, Shield, Square,
 } from 'lucide-react'
 import MarkdownIt from 'markdown-it'
-import { AgentTimeline } from '@/components/agent'
 import type { TimelineEntry } from '@/hooks/useStreamingChat'
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
@@ -270,13 +269,9 @@ export default function ExecutionMonitorPage() {
                                 </p>
                             </div>
                         ) : (
-                            <AgentTimeline
-                                timeline={execution.timeline}
-                                workspaceId={execution.workspace_id}
-                                conversationId={execution.conversation_id}
-                                readonly
-                                isStreaming={isLive}
-                            />
+                            <div className="text-xs text-muted-foreground/40 p-4 text-center">
+                                Timeline view not available
+                            </div>
                         )}
                     </div>
 

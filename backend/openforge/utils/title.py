@@ -1,13 +1,16 @@
-from __future__ import annotations
+# DEPRECATED: This module has moved to openforge.common.text.titles
+# This re-export is for backward compatibility only.
+# Use openforge.common.text for new development.
 
-from typing import Any
+import warnings
 
+warnings.warn(
+    "openforge.utils.title is deprecated. "
+    "Use openforge.common.text for new development.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
-def normalize_knowledge_title(raw_title: Any, *, max_length: int = 500) -> str | None:
-    """Normalize knowledge titles so UI placeholders are never stored as data."""
-    cleaned = str(raw_title or "").strip()
-    if not cleaned:
-        return None
-    if cleaned.lower() == "untitled":
-        return None
-    return cleaned[:max_length]
+from openforge.common.text.titles import normalize_knowledge_title
+
+__all__ = ['normalize_knowledge_title']

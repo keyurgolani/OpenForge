@@ -14,11 +14,10 @@ addopts = """
 --cov=openforge.api.search
 --cov=openforge.api.tasks
 --cov=openforge.services.attachment_pipeline
---cov=openforge.services.automation_config
---cov=openforge.services.config_service
+--cov=openforge.common.config
 --cov=openforge.schemas.search
 --cov=openforge.schemas.workspace
---cov=openforge.utils.text
+--cov=openforge.common.text
 --cov-report=term-missing
 --cov-fail-under=70
 """

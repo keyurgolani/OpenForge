@@ -531,32 +531,6 @@ class AgentSchedule(Base):
     )
 
 
-# LEGACY MODULE - Scheduled for removal
-# Replacement domain: openforge.domains.artifacts
-class ContinuousTarget(Base):
-    """Persistent output targets that agents can update incrementally."""
-    __tablename__ = "continuous_targets"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    workspace_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
-    )
-    knowledge_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("knowledge.id", ondelete="SET NULL"), nullable=True
-    )
-    name: Mapped[str] = mapped_column(String(200), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=now_utc
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc
-    )
-
-    __table_args__ = (
-        UniqueConstraint("workspace_id", "name", name="uq_continuous_target_name"),
-    )
-
 # =============================================================================
 # NEW DOMAIN MODELS (Phase 1 Architecture)
 # =============================================================================
