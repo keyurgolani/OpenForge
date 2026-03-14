@@ -33,6 +33,7 @@ class WorkspaceSearchTool(BaseTool):
             "properties": {
                 "query": {"type": "string", "description": "Search query — describe what you are looking for"},
                 "limit": {"type": "integer", "default": 5, "description": "Maximum number of results to return"},
+                "expand_context": {"type": "boolean", "default": False, "description": "Include parent chunk text for additional context around each result"},
             },
             "required": ["query"],
         }
@@ -40,12 +41,15 @@ class WorkspaceSearchTool(BaseTool):
     async def execute(self, params: dict, context: ToolContext) -> ToolResult:
         url = f"{context.main_app_url}/api/v1/workspaces/{context.workspace_id}/search"
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                resp = await client.get(url, params={
+            query_params = {
                     "q": params["query"],
                     "limit": params.get("limit", 5),
                     "mode": "chat",
-                })
+                }
+            if params.get("expand_context"):
+                query_params["expand_context"] = "true"
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.get(url, params=query_params)
                 resp.raise_for_status()
             return ToolResult(success=True, output=resp.json())
         except Exception as exc:

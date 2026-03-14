@@ -33,9 +33,6 @@ interface Agent {
     icon: string | null
     system_prompt: string | null
     tool_categories: string[]
-    rag_enabled: boolean
-    rag_threshold: number
-    rag_limit: number
     max_iterations: number
     tool_overrides: Record<string, string>
     max_tool_calls_per_minute: number
@@ -52,9 +49,6 @@ function normalizeAgent(raw: AgentRaw): Agent {
         icon: raw.icon,
         system_prompt: c.system_prompt ?? null,
         tool_categories: c.allowed_tool_categories ?? [],
-        rag_enabled: c.rag_enabled ?? false,
-        rag_threshold: c.rag_score_threshold ?? 0.35,
-        rag_limit: c.rag_limit ?? 5,
         max_iterations: c.max_iterations ?? 20,
         tool_overrides: c.tool_overrides ?? {},
         max_tool_calls_per_minute: c.max_tool_calls_per_minute ?? 30,
@@ -406,9 +400,6 @@ const PERM_COLORS: Record<string, string> = {
 function ConfigureModal({ agent, onClose }: { agent: Agent; onClose: () => void }) {
     const qc = useQueryClient()
     const [systemPrompt, setSystemPrompt] = useState(agent.system_prompt ?? '')
-    const [ragEnabled, setRagEnabled] = useState(agent.rag_enabled)
-    const [ragThreshold, setRagThreshold] = useState(agent.rag_threshold)
-    const [ragLimit, setRagLimit] = useState(agent.rag_limit)
     const [maxIterations, setMaxIterations] = useState(agent.max_iterations)
     const [toolOverrides, setToolOverrides] = useState<Record<string, string>>(agent.tool_overrides)
     const [maxCallsPerMinute, setMaxCallsPerMinute] = useState(agent.max_tool_calls_per_minute)
@@ -457,9 +448,6 @@ function ConfigureModal({ agent, onClose }: { agent: Agent; onClose: () => void 
         mutationFn: () => updateAgent(agent.id, {
             config: {
                 system_prompt: systemPrompt,
-                rag_enabled: ragEnabled,
-                rag_score_threshold: ragThreshold,
-                rag_limit: ragLimit,
                 max_iterations: maxIterations,
                 tool_overrides: toolOverrides,
                 max_tool_calls_per_minute: maxCallsPerMinute,
@@ -628,53 +616,6 @@ function ConfigureModal({ agent, onClose }: { agent: Agent; onClose: () => void 
                     </div>
                 </div>
 
-                {/* RAG Settings */}
-                <div className="space-y-3 border border-border/40 rounded-xl p-4">
-                    <div className="flex items-center justify-between">
-                        <label className="text-xs font-medium">RAG (Knowledge Retrieval)</label>
-                        <button
-                            className="btn-ghost p-0.5"
-                            onClick={() => setRagEnabled(!ragEnabled)}
-                        >
-                            {ragEnabled
-                                ? <ToggleRight className="w-5 h-5 text-emerald-400" />
-                                : <ToggleLeft className="w-5 h-5 text-muted-foreground" />}
-                        </button>
-                    </div>
-                    {ragEnabled && (
-                        <div className="space-y-2">
-                            <div>
-                                <label className="text-[10px] text-muted-foreground block mb-1">
-                                    Threshold: {ragThreshold.toFixed(2)}
-                                </label>
-                                <input
-                                    type="range"
-                                    min="0"
-                                    max="1"
-                                    step="0.05"
-                                    value={ragThreshold}
-                                    onChange={e => setRagThreshold(parseFloat(e.target.value))}
-                                    className="w-full accent-accent"
-                                />
-                            </div>
-                            <div>
-                                <label className="text-[10px] text-muted-foreground block mb-1">
-                                    Limit: {ragLimit}
-                                </label>
-                                <input
-                                    type="range"
-                                    min="1"
-                                    max="20"
-                                    step="1"
-                                    value={ragLimit}
-                                    onChange={e => setRagLimit(parseInt(e.target.value))}
-                                    className="w-full accent-accent"
-                                />
-                            </div>
-                        </div>
-                    )}
-                </div>
-
                 {/* Max iterations */}
                 <div>
                     <label className="text-xs text-muted-foreground block mb-1.5">
@@ -790,9 +731,6 @@ export default function AgentsPage() {
                                     )}
 
                                     <div className="flex flex-wrap gap-1.5">
-                                        {agent.rag_enabled && (
-                                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400/80 border border-emerald-500/20">RAG</span>
-                                        )}
                                         {(agent.tool_categories ?? []).slice(0, 3).map(cat => (
                                             <span key={cat} className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/30 text-muted-foreground border border-border/40">
                                                 {cat}

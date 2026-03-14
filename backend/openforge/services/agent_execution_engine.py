@@ -15,16 +15,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from openforge.core.llm_gateway import llm_gateway
-from openforge.core.search_engine import search_engine
 from openforge.core.context_assembler import ContextAssembler
 from openforge.core.agent_definition import AgentDefinition
 from openforge.core.prompt_catalogue import resolve_agent_system_prompt, resolve_prompt_text
 from openforge.services.conversation_service import conversation_service
 from openforge.services.llm_service import llm_service
-from openforge.services.chat_retrieval import (
-    build_context_sources,
-    select_relevant_rag_results,
-)
 from openforge.services.attachment_pipeline import (
     extract_http_urls,
     get_extractor,
@@ -620,6 +615,109 @@ class AgentExecutionEngine:
         )
         return header + "\n".join(context_blocks), url_attachments
 
+    async def _maybe_summarize_history(
+        self,
+        db: AsyncSession,
+        conversation_id: UUID,
+        history: list[dict],
+        workspace_id: UUID,
+    ) -> list[dict]:
+        """Summarize older messages when conversation exceeds 20 messages.
+
+        Keeps the last 10 messages as-is, summarizes older ones via LLM.
+        Caches the summary in Redis for 1 hour.
+        """
+        if len(history) <= 20:
+            return history
+
+        keep_count = 10
+        recent = history[-keep_count:]
+        older = history[:-keep_count]
+
+        # Check Redis cache
+        cache_key = f"conv_summary:{conversation_id}:{len(older)}"
+        cached_summary: str | None = None
+        try:
+            from openforge.db.redis_client import get_redis
+            redis = await get_redis()
+            cached_summary = await redis.get(cache_key)
+        except Exception:
+            pass
+
+        if cached_summary:
+            summary_message = {"role": "system", "content": f"[Summary of earlier conversation]:\n{cached_summary}"}
+            return [summary_message] + recent
+
+        # Generate summary via LLM
+        try:
+            messages_text = "\n".join(
+                f"[{m['role'].upper()}]: {m['content'][:500]}" for m in older
+            )
+            summary_prompt = await resolve_prompt_text(
+                db, "conversation_summary", messages=messages_text[:8000]
+            )
+
+            provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(
+                db, workspace_id
+            )
+            summary = await llm_gateway.chat(
+                messages=[{"role": "user", "content": summary_prompt}],
+                provider_name=provider_name,
+                api_key=api_key,
+                model=model,
+                base_url=base_url,
+            )
+
+            # Cache in Redis
+            try:
+                from openforge.db.redis_client import get_redis
+                redis = await get_redis()
+                await redis.set(cache_key, summary, ex=3600)
+            except Exception:
+                pass
+
+            summary_message = {"role": "system", "content": f"[Summary of earlier conversation]:\n{summary}"}
+            return [summary_message] + recent
+        except Exception as e:
+            logger.warning("Conversation summarization failed, using full history: %s", e)
+            return history
+
+    async def _maybe_summarize_tool_output(
+        self,
+        db: AsyncSession,
+        workspace_id: UUID,
+        result_content: str,
+        tool_name: str,
+    ) -> str:
+        """Summarize tool output if it exceeds 4000 tokens.
+
+        Full output is already persisted in tool call logs and timeline
+        before this point, so summarizing for LLM context is safe.
+        """
+        token_count = llm_gateway.count_tokens(result_content)
+        if token_count <= 4000:
+            return result_content
+
+        try:
+            provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(
+                db, workspace_id
+            )
+            summary = await llm_gateway.chat(
+                messages=[{"role": "user", "content": (
+                    f"Summarize this tool output from '{tool_name}', preserving key data, "
+                    f"IDs, structure, and any actionable information. Be concise.\n\n"
+                    f"{result_content[:12000]}"
+                )}],
+                provider_name=provider_name,
+                api_key=api_key,
+                model=model,
+                base_url=base_url,
+            )
+            return f"[Summarized tool output — original was {token_count} tokens]\n{summary}"
+        except Exception as e:
+            logger.warning("Tool output summarization failed for %s, hard-truncating: %s", tool_name, e)
+            return result_content[:4000] + f"\n[Output truncated from {len(result_content)} chars]"
+
     async def _resolve_mentions(
         self,
         db: AsyncSession,
@@ -853,28 +951,16 @@ class AgentExecutionEngine:
                     attachments_processed=all_attachments_processed,
                 )
 
-            # 4. RAG context retrieval (if agent has RAG enabled)
+            # 4. Context sources (auto-RAG removed — agents retrieve knowledge
+            #    on demand via the workspace__search tool)
             context_sources: list[dict] = []
-            rag_results: list = []
-            if agent.rag_enabled:
-                rag_query = user_content
-                if attachment_context:
-                    rag_query = f"{rag_query}\n{attachment_context}"
-                if url_context:
-                    rag_query = f"{rag_query}\n{url_context}"
-
-                raw_rag_results = search_engine.search(
-                    query=rag_query,
-                    workspace_id=str(workspace_id),
-                    limit=agent.rag_limit * 2 + 2,
-                    score_threshold=agent.rag_score_threshold,
-                )
-                rag_results = select_relevant_rag_results(raw_rag_results, limit=agent.rag_limit)
-                context_sources = build_context_sources(rag_results)
 
             # 5. Assemble initial prompt
             history = await conversation_service.get_recent_messages(
                 db, conversation_id, limit=agent.history_limit
+            )
+            history = await self._maybe_summarize_history(
+                db, conversation_id, history, workspace_id
             )
 
             system_prompt = await resolve_agent_system_prompt(db, agent)
@@ -922,7 +1008,7 @@ class AgentExecutionEngine:
             assembled = context_assembler.assemble(
                 system_prompt=system_prompt,
                 conversation_messages=history,
-                rag_results=rag_results,
+                rag_results=[],
                 extra_context="\n".join(extra_context_parts) if extra_context_parts else None,
             )
 
@@ -1596,6 +1682,11 @@ class AgentExecutionEngine:
                         else:
                             result_content = f"Tool error: {result.get('error', 'Unknown error')}"
 
+                        # Summarize large tool outputs to keep context manageable
+                        result_content = await self._maybe_summarize_tool_output(
+                            db, workspace_id, result_content, tool_id,
+                        )
+
                         if hitl_steering:
                             result_content += f"\n\n[User guidance at approval time]: {hitl_steering}"
 
@@ -1916,20 +2007,10 @@ class AgentExecutionEngine:
                     workspace_id=workspace_id,
                 )
 
-            rag_results: list = []
-            try:
-                raw_rag = search_engine.search(
-                    query=instruction, workspace_id=str(workspace_id), limit=5, score_threshold=0.35
-                )
-                rag_results = select_relevant_rag_results(raw_rag, limit=5)
-            except Exception:
-                pass
-
             loop_messages = list(
                 context_assembler.assemble(
                     system_prompt=system_prompt,
                     conversation_messages=[{"role": "user", "content": instruction}],
-                    rag_results=rag_results,
                 )
             )
 

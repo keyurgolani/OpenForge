@@ -28,6 +28,8 @@ class AgentDefinition:
 
     # Knowledge
     knowledge_scope: str = "workspace"
+    # Deprecated: auto-RAG replaced by agentic retrieval via workspace__search tool.
+    # Kept for backward compatibility with existing DB configs.
     rag_enabled: bool = True
     rag_limit: int = 5
     rag_score_threshold: float = 0.35

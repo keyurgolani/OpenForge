@@ -10,6 +10,7 @@ class SearchResult(BaseModel):
     knowledge_type: str
     chunk_text: str
     header_path: Optional[str] = None
+    parent_chunk_text: Optional[str] = None
     tags: list[str] = []
     score: float
     created_at: Optional[str] = None

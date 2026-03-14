@@ -10,8 +10,7 @@ class ContextAssembler:
 
     Budget allocation (of model's max context):
     - System prompt: 12% (hard minimum, never truncated)
-    - RAG context: 35%
-    - Conversation history: 35%
+    - Conversation history: 70%
     - Output headroom: 18%
     """
 
@@ -19,21 +18,15 @@ class ContextAssembler:
         self,
         system_prompt: str,
         conversation_messages: list[dict],
-        rag_results: list[dict],
+        rag_results: list[dict] | None = None,
         max_context_tokens: int = 16000,
         extra_context: str | None = None,
     ) -> list[dict]:
         """Returns assembled messages list for LLM call."""
-        rag_budget = int(max_context_tokens * 0.35)
-        history_budget = int(max_context_tokens * 0.35)
-
-        # Build RAG context
-        rag_text = self._build_rag_context(rag_results, rag_budget)
+        history_budget = int(max_context_tokens * 0.70)
 
         # Build full system prompt
         full_system = system_prompt
-        if rag_text:
-            full_system += "\n\nWorkspace knowledge snippets (internal grounding data):\n\n" + rag_text
         if extra_context:
             full_system += extra_context
 

@@ -88,6 +88,7 @@ class SearchEngine:
         knowledge_type: Optional[str] = None,
         tag: Optional[str] = None,
         score_threshold: float = 0.0,
+        expand_context: bool = False,
     ) -> list[dict]:
         """4-representation search: dense + sparse + summary → RRF → cross-encoder rerank."""
         try:
@@ -170,7 +171,7 @@ class SearchEngine:
             else:
                 candidates = candidates[:limit]
 
-            return [self._format_result(hit) for hit in candidates]
+            return [self._format_result(hit, include_parent=expand_context) for hit in candidates]
         except Exception as e:
             logger.warning("4-rep search failed, falling back to dense-only: %s", e)
 
@@ -184,14 +185,14 @@ class SearchEngine:
                 with_payload=True,
                 score_threshold=score_threshold,
             )
-            return [self._format_result(hit) for hit in results]
+            return [self._format_result(hit, include_parent=expand_context) for hit in results]
         except Exception as e:
             logger.error("Qdrant search failed: %s", e)
             return []
 
-    def _format_result(self, hit) -> dict:
+    def _format_result(self, hit, include_parent: bool = False) -> dict:
         payload = hit.payload or {}
-        return {
+        result = {
             "knowledge_id": payload.get("knowledge_id"),
             "conversation_id": payload.get("conversation_id"),
             "title": normalize_knowledge_title(payload.get("title")) or "",
@@ -202,6 +203,9 @@ class SearchEngine:
             "score": hit.score,
             "created_at": payload.get("created_at", ""),
         }
+        if include_parent:
+            result["parent_chunk_text"] = payload.get("parent_chunk_text") or None
+        return result
 
     def search_deduplicated(
         self,
@@ -210,9 +214,10 @@ class SearchEngine:
         limit: int = 20,
         knowledge_type: Optional[str] = None,
         tag: Optional[str] = None,
+        expand_context: bool = False,
     ) -> list[dict]:
         """Search and deduplicate: keep highest-scoring result per knowledge item or conversation."""
-        raw = self.search(query, workspace_id, limit * 3, knowledge_type, tag)
+        raw = self.search(query, workspace_id, limit * 3, knowledge_type, tag, expand_context=expand_context)
         seen: dict[str, dict] = {}
         for r in raw:
             # Use conversation_id for chat results, knowledge_id for knowledge items

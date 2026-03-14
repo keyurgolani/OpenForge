@@ -15,7 +15,6 @@ addopts = """
 --cov=openforge.api.tasks
 --cov=openforge.services.attachment_pipeline
 --cov=openforge.services.automation_config
---cov=openforge.services.chat_retrieval
 --cov=openforge.services.config_service
 --cov=openforge.schemas.search
 --cov=openforge.schemas.workspace

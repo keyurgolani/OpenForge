@@ -18,6 +18,7 @@ async def search(
     knowledge_type: Optional[str] = None,
     tag: Optional[str] = None,
     limit: int = 20,
+    expand_context: bool = False,
     db: AsyncSession = Depends(get_db),
 ):
     raw_results = search_engine.search_deduplicated(
@@ -26,6 +27,7 @@ async def search(
         limit=limit,
         knowledge_type=knowledge_type,
         tag=tag,
+        expand_context=expand_context,
     )
 
     results = []
@@ -38,6 +40,7 @@ async def search(
             knowledge_type=r["knowledge_type"],
             chunk_text=r["chunk_text"],
             header_path=r.get("header_path"),
+            parent_chunk_text=r.get("parent_chunk_text"),
             tags=r.get("tags", []),
             score=r["score"],
             created_at=r.get("created_at"),

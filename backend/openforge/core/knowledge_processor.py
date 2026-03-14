@@ -1,7 +1,7 @@
 from uuid import uuid4, uuid5, UUID, NAMESPACE_URL
 from openforge.core.embedding import embed_text, embed_texts, sparse_encode
 from openforge.core.embedding_document import build_knowledge_embedding_document
-from openforge.core.markdown_utils import chunk_markdown
+from openforge.core.markdown_utils import chunk_markdown_with_parents
 from openforge.db.qdrant_client import get_qdrant
 from openforge.config import get_settings
 from openforge.utils.title import normalize_knowledge_title
@@ -46,18 +46,19 @@ class KnowledgeProcessor:
             logger.info(f"Knowledge {knowledge_id} too short to embed, skipping.")
             return
 
-        # Step 2: Chunk
-        chunks = chunk_markdown(embedding_document)
+        # Step 2: Chunk with parent-child contextual architecture
+        normalized_title = normalize_knowledge_title(title) or ""
+        chunks = chunk_markdown_with_parents(embedding_document, title=normalized_title)
         if not chunks:
             return
 
-        # Step 3: Embed
-        texts = [c["text"] for c in chunks]
-        embeddings = embed_texts(texts)
+        # Step 3: Embed using contextualized text for dense (richer semantic signal),
+        # original text for sparse encoding (BM25 works better on raw text)
+        dense_texts = [c["contextualized_text"] for c in chunks]
+        embeddings = embed_texts(dense_texts)
 
         # Step 4: Upsert chunk points
         now_str = datetime.now(timezone.utc).isoformat()
-        normalized_title = normalize_knowledge_title(title) or ""
         points = []
         for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
             sparse_indices, sparse_values = sparse_encode(chunk["text"])
@@ -77,6 +78,8 @@ class KnowledgeProcessor:
                     "chunk_index": i,
                     "chunk_text": chunk["text"],
                     "header_path": chunk.get("header_path") or "",
+                    "parent_chunk_text": chunk.get("parent_text") or "",
+                    "contextualized": True,
                     "tags": tags,
                     "title": normalized_title,
                     "created_at": now_str,
