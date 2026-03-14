@@ -32,6 +32,7 @@ class ToolContext:
     execution_id: str
     main_app_url: str
     conversation_id: str = ""
+    agent_id: str = ""
 
 
 class BaseTool(ABC):

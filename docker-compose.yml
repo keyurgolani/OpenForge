@@ -127,9 +127,11 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - LOG_LEVEL=${LOG_LEVEL:-warning}
       - SEARXNG_URL=http://searxng:8080
+      - TARGETS_ROOT=/targets
     volumes:
       - ${WORKSPACE_HOST_PATH:-./data/workspace}:/workspace
       - ${SKILLS_HOST_PATH:-./data/skills}:/skills
+      - ${TARGETS_HOST_PATH:-./data/targets}:/targets
     depends_on:
       - redis
       - searxng

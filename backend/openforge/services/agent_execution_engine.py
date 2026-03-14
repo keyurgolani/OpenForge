@@ -1450,6 +1450,7 @@ class AgentExecutionEngine:
                             workspace_id=str(workspace_id),
                             execution_id=execution_id,
                             conversation_id=str(conversation_id) if conversation_id else "",
+                            agent_id=agent.id,
                         )
                         if not result.get("success"):
                             available = ", ".join(
@@ -1478,6 +1479,7 @@ class AgentExecutionEngine:
                             workspace_id=str(workspace_id),
                             execution_id=execution_id,
                             conversation_id=str(conversation_id) if conversation_id else "",
+                            agent_id=agent.id,
                         )
 
                     call_duration_ms = int((time.perf_counter() - call_start_perf) * 1000)
@@ -2217,6 +2219,7 @@ class AgentExecutionEngine:
                             params=_sub_exec_args,
                             workspace_id=str(workspace_id),
                             execution_id=execution_id,
+                            agent_id=target_agent.id if target_agent else "",
                         )
 
                     # Update the tool_call entry with result

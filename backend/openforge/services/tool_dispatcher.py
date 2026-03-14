@@ -33,6 +33,7 @@ class ToolDispatcher:
         workspace_id: str,
         execution_id: str,
         conversation_id: str = "",
+        agent_id: str = "",
     ) -> dict[str, Any]:
         """Execute a tool via the tool server REST API."""
         payload = {
@@ -44,6 +45,7 @@ class ToolDispatcher:
                 "execution_id": execution_id,
                 "main_app_url": get_settings().main_app_url,
                 "conversation_id": conversation_id,
+                "agent_id": agent_id,
             },
         }
         try:

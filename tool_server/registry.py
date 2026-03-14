@@ -96,6 +96,10 @@ TOOL_ALIASES: dict[str, str] = {
     "save_knowledge":               "workspace.save_knowledge",
     "delete_knowledge":             "workspace.delete_knowledge",
 
+    # target tools — moved from workspace to agent category
+    "workspace.update_target":      "agent.write_target",
+    "workspace.write_target":       "agent.write_target",
+
     # memory tools — common mistakes
     "memory.save":                  "memory.store",
     "memory.get":                   "memory.recall",

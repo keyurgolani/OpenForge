@@ -4,7 +4,6 @@ from tools.workspace.list_knowledge import WorkspaceListKnowledgeTool
 from tools.workspace.delete_knowledge import WorkspaceDeleteKnowledgeTool
 from tools.workspace.list_chats import WorkspaceListChatsTool
 from tools.workspace.read_chat import WorkspaceReadChatTool
-from tools.workspace.update_target import UpdateTargetTool
 
 TOOLS = [
     WorkspaceSearchTool(),
@@ -13,5 +12,4 @@ TOOLS = [
     WorkspaceDeleteKnowledgeTool(),
     WorkspaceListChatsTool(),
     WorkspaceReadChatTool(),
-    UpdateTargetTool(),
 ]
