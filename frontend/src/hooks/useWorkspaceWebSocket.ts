@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 
-type WsHandler = (msg: Record<string, unknown>) => void
+export type WsHandler = (msg: Record<string, unknown>) => void
 
 interface WsManager {
     send: (msg: object) => boolean
@@ -10,21 +10,23 @@ interface WsManager {
 
 const managers = new Map<string, { ws: WebSocket; handlers: Map<string, Set<WsHandler>>; reconnectTimer: ReturnType<typeof setTimeout> | null; pingInterval: ReturnType<typeof setInterval> | null; statusListeners: Set<(connected: boolean) => void>; isConnected: boolean; reconnectAttempt: number }>()
 
-function getOrCreateManager(workspaceId: string) {
-    if (!managers.has(workspaceId)) {
-        managers.set(workspaceId, { ws: null as unknown as WebSocket, handlers: new Map(), reconnectTimer: null, pingInterval: null, statusListeners: new Set(), isConnected: false, reconnectAttempt: 0 })
+function getOrCreateManager(key: string) {
+    if (!managers.has(key)) {
+        managers.set(key, { ws: null as unknown as WebSocket, handlers: new Map(), reconnectTimer: null, pingInterval: null, statusListeners: new Set(), isConnected: false, reconnectAttempt: 0 })
     }
-    return managers.get(workspaceId)!
+    return managers.get(key)!
 }
 
-export function useWorkspaceWebSocket(workspaceId: string): WsManager {
-    const managerRef = useRef(getOrCreateManager(workspaceId))
+export function useWorkspaceWebSocket(workspaceId: string, channel?: 'agent' | 'system'): WsManager {
+    const managerKey = `${workspaceId}:${channel || 'legacy'}`
+    const managerRef = useRef(getOrCreateManager(managerKey))
     const [isConnected, setIsConnected] = useState(managerRef.current.isConnected)
 
     const connect = useCallback(() => {
         const manager = managerRef.current
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-        const wsUrl = `${protocol}//${window.location.host}/ws/workspace/${workspaceId}`
+        const channelSuffix = channel ? `/${channel}` : ''
+        const wsUrl = `${protocol}//${window.location.host}/ws/workspace/${workspaceId}${channelSuffix}`
 
         if (manager.ws && (manager.ws.readyState === WebSocket.OPEN || manager.ws.readyState === WebSocket.CONNECTING)) {
             return
@@ -88,7 +90,7 @@ export function useWorkspaceWebSocket(workspaceId: string): WsManager {
         ws.onerror = () => {
             ws.close()
         }
-    }, [workspaceId])
+    }, [workspaceId, channel, managerKey])
 
     useEffect(() => {
         const manager = managerRef.current;

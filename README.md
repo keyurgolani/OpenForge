@@ -6,6 +6,44 @@ Organize your knowledge, have AI-powered conversations grounded in your own know
 
 ---
 
+## ⚠️ Project Status: Active Development
+
+OpenForge is currently undergoing a **major architectural transformation** to establish a vision-centric, scalable, and flexible foundation for the future.
+
+### Current Phase: Phase 1 Complete ✅
+
+We have successfully completed **Phase 1: Product Model Reset and Architecture Lock**, which involved:
+
+- **Breaking Changes**: The codebase is undergoing intentional breaking changes to replace the agent-centric architecture with a domain-driven design
+- **New Architecture**: Established final domain model (Profiles, Workflows, Missions, Triggers, Runs, Artifacts, Knowledge)
+- **Database Reset**: New schema aligned with final product vocabulary
+- **Legacy Isolation**: Old agent-centric code marked for deprecation
+
+### Roadmap
+
+The complete transformation plan is documented in [`sdlc/roadmap.md`](./sdlc/roadmap.md), which outlines 14 phases across 5 waves:
+
+**Wave 1 — Foundation Reset** (In Progress)
+- ✅ Phase 1: Product Model Reset and Architecture Lock (Complete)
+- ⏳ Phase 2: Codebase Cleanup and Structural Simplification
+- ⏳ Phase 3: Prompt System, Policy Model, and Trust Foundations
+
+**Future Waves:**
+- Wave 2: Retrieval, Knowledge, and Product Shell
+- Wave 3: Core Model Refactor
+- Wave 4: Runtime, Orchestration, and Autonomy
+- Wave 5: Curated Capability Layer and Final Productization
+
+### What This Means for You
+
+- **Breaking Changes**: Expect database schema changes, API changes, and navigation updates
+- **Migration Path**: Legacy features remain functional during transition but are marked for deprecation
+- **New Development**: All new work targets the final domain architecture
+
+For detailed information about each phase, see the [complete roadmap](./sdlc/roadmap.md).
+
+---
+
 ## Features
 
 - 📝 **Multi-type knowledge** — Notes, fleeting thoughts, bookmarks, and code gists

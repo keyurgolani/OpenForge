@@ -1,3 +1,19 @@
+"""
+TRANSITIONAL MONOLITH
+
+This module is the current unified chat pipeline that handles all agent execution.
+It is scheduled for extraction and refactoring into the runtime package in a later phase.
+
+Architecture Evolution:
+- Phase 1: This module continues to handle chat-based execution
+- Phase 2+: Will be extracted into:
+  - Runtime coordinator (runtime/coordinator.py)
+  - Node executors (runtime/node_executors/)
+  - State management (runtime/state_store.py)
+
+New development should target the domain architecture (openforge.domains.*) when possible.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -201,9 +217,18 @@ class AgentExecutionEngine:
             except Exception as e:
                 logger.warning("Redis publish failed, falling back to WS: %s", e)
 
-        # Fallback: direct WebSocket
-        from openforge.api.websocket import ws_manager
-        await ws_manager.send_to_workspace(str(workspace_id), event)
+        # Fallback: direct WebSocket (channel-aware)
+        from openforge.api.websocket import ws_manager, CHANNEL_AGENT, AGENT_EVENT_TYPES
+        event_type = event.get("type")
+
+        # Also send to execution-specific connections
+        if execution_id:
+            await ws_manager.send_to_execution(str(execution_id), event)
+
+        if event_type in AGENT_EVENT_TYPES:
+            await ws_manager.send_to_workspace_channel(str(workspace_id), CHANNEL_AGENT, event)
+        else:
+            await ws_manager.send_to_workspace(str(workspace_id), event)
 
     async def _update_stream_state(
         self,

@@ -240,7 +240,7 @@ function applyNestedEvent(timeline: TimelineEntry[], scopePath: number[], innerE
 
 export function useStreamingChat(conversationId: string | null) {
     const { workspaceId = '' } = useParams<{ workspaceId: string }>()
-    const { on, send, isConnected } = useWorkspaceWebSocket(workspaceId)
+    const { on, send, isConnected } = useWorkspaceWebSocket(workspaceId, 'agent')
     const queryClient = useQueryClient()
 
     // ── Jitter-buffer state ────────────────────────────────────────────────────

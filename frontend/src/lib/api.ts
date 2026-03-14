@@ -304,4 +304,59 @@ export const loginAuth = (password: string): Promise<{ authenticated: boolean; a
 export const logoutAuth = (): Promise<void> =>
     fetch('/api/auth/logout', { method: 'POST' }).then(() => undefined)
 
+// ── Domain APIs (Phase 1 Architecture) ───────────────────────────────────────
+
+// Profiles
+export const listProfiles = (params?: { skip?: number; limit?: number }): Promise<any> =>
+    api.get('/profiles', { params }).then(r => r.data)
+export const getProfile = (id: string): Promise<any> => api.get(`/profiles/${id}`).then(r => r.data)
+export const createProfile = (data: object): Promise<any> => api.post('/profiles', data).then(r => r.data)
+export const updateProfile = (id: string, data: object): Promise<any> =>
+    api.patch(`/profiles/${id}`, data).then(r => r.data)
+export const deleteProfile = (id: string): Promise<void> => api.delete(`/profiles/${id}`)
+
+// Workflows
+export const listWorkflows = (params?: { skip?: number; limit?: number }): Promise<any> =>
+    api.get('/workflows', { params }).then(r => r.data)
+export const getWorkflow = (id: string): Promise<any> => api.get(`/workflows/${id}`).then(r => r.data)
+export const createWorkflow = (data: object): Promise<any> => api.post('/workflows', data).then(r => r.data)
+export const updateWorkflow = (id: string, data: object): Promise<any> =>
+    api.patch(`/workflows/${id}`, data).then(r => r.data)
+export const deleteWorkflow = (id: string): Promise<void> => api.delete(`/workflows/${id}`)
+
+// Missions
+export const listMissions = (params?: { skip?: number; limit?: number }): Promise<any> =>
+    api.get('/missions', { params }).then(r => r.data)
+export const getMission = (id: string): Promise<any> => api.get(`/missions/${id}`).then(r => r.data)
+export const createMission = (data: object): Promise<any> => api.post('/missions', data).then(r => r.data)
+export const updateMission = (id: string, data: object): Promise<any> =>
+    api.patch(`/missions/${id}`, data).then(r => r.data)
+export const deleteMission = (id: string): Promise<void> => api.delete(`/missions/${id}`)
+
+// Triggers
+export const listTriggers = (params?: { skip?: number; limit?: number }): Promise<any> =>
+    api.get('/triggers', { params }).then(r => r.data)
+export const getTrigger = (id: string): Promise<any> => api.get(`/triggers/${id}`).then(r => r.data)
+export const createTrigger = (data: object): Promise<any> => api.post('/triggers', data).then(r => r.data)
+export const updateTrigger = (id: string, data: object): Promise<any> =>
+    api.patch(`/triggers/${id}`, data).then(r => r.data)
+export const deleteTrigger = (id: string): Promise<void> => api.delete(`/triggers/${id}`)
+
+// Runs
+export const listRuns = (params?: { skip?: number; limit?: number; workspace_id?: string }): Promise<any> =>
+    api.get('/runs', { params }).then(r => r.data)
+export const getRun = (id: string): Promise<any> => api.get(`/runs/${id}`).then(r => r.data)
+export const createRun = (data: object): Promise<any> => api.post('/runs', data).then(r => r.data)
+export const updateRun = (id: string, data: object): Promise<any> =>
+    api.patch(`/runs/${id}`, data).then(r => r.data)
+
+// Artifacts
+export const listArtifacts = (params?: { skip?: number; limit?: number; workspace_id?: string }): Promise<any> =>
+    api.get('/artifacts', { params }).then(r => r.data)
+export const getArtifact = (id: string): Promise<any> => api.get(`/artifacts/${id}`).then(r => r.data)
+export const createArtifact = (data: object): Promise<any> => api.post('/artifacts', data).then(r => r.data)
+export const updateArtifact = (id: string, data: object): Promise<any> =>
+    api.patch(`/artifacts/${id}`, data).then(r => r.data)
+export const deleteArtifact = (id: string): Promise<void> => api.delete(`/artifacts/${id}`)
+
 export default api

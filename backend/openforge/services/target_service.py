@@ -1,3 +1,13 @@
+"""
+LEGACY MODULE
+
+Do not extend this module for new architecture work.
+Replacement domain: openforge.domains.artifacts
+
+This service is scheduled for deprecation in a future phase.
+Use ArtifactService from openforge.domains.artifacts for new development.
+"""
+
 """Service for continuous targets — persistent output files that agents update incrementally."""
 
 from __future__ import annotations

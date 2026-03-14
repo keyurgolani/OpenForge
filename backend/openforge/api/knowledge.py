@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, BackgroundTasks
+from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 from typing import Optional
+from datetime import datetime, timezone
 import json
+import logging
 import re
 from openforge.db.postgres import get_db
 from openforge.services.knowledge_service import knowledge_service
@@ -437,3 +439,151 @@ async def extract_bookmark_content(
         audit_task_type="extract_bookmark_content",
     )
     return {"extracted": extracted}
+
+
+# ── Bookmark import ─────────────────────────────────────────────────────
+
+logger = logging.getLogger("openforge.knowledge_import")
+
+
+class BookmarkItem(BaseModel):
+    url: str
+    title: Optional[str] = None
+    tags: list[str] = []
+    description: Optional[str] = None
+    created_at: Optional[str] = None
+    note: Optional[str] = None
+
+
+class BookmarkImportRequest(BaseModel):
+    bookmarks: list[BookmarkItem]
+
+
+class BookmarkImportResponse(BaseModel):
+    imported: int
+    skipped: int
+    errors: list[str]
+
+
+@router.post(
+    "/{workspace_id}/knowledge/import/bookmarks",
+    response_model=BookmarkImportResponse,
+    status_code=200,
+)
+async def import_bookmarks(
+    workspace_id: UUID,
+    body: BookmarkImportRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    from openforge.db.models import Knowledge, KnowledgeTag, Workspace
+    from openforge.utils.text import count_words
+    from openforge.services.automation_config import (
+        is_auto_bookmark_content_extraction_enabled,
+        is_auto_knowledge_intelligence_enabled,
+    )
+
+    # Verify workspace exists
+    ws_exists = await db.scalar(select(Workspace.id).where(Workspace.id == workspace_id))
+    if not ws_exists:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    # Fetch existing bookmark URLs in this workspace for duplicate detection
+    existing_result = await db.execute(
+        select(Knowledge.url).where(
+            Knowledge.workspace_id == workspace_id,
+            Knowledge.type == "bookmark",
+            Knowledge.url.isnot(None),
+        )
+    )
+    existing_urls: set[str] = {row[0] for row in existing_result.all()}
+
+    auto_intel = await is_auto_knowledge_intelligence_enabled(db)
+    auto_extract = await is_auto_bookmark_content_extraction_enabled(db)
+
+    imported = 0
+    skipped = 0
+    errors: list[str] = []
+
+    for bookmark in body.bookmarks:
+        url = (bookmark.url or "").strip()
+        if not url:
+            errors.append("Bookmark with empty URL skipped")
+            continue
+
+        # Skip duplicates
+        if url in existing_urls:
+            skipped += 1
+            continue
+
+        title = (bookmark.title or "").strip() or url
+        content = bookmark.note or bookmark.description or ""
+        has_initial_content = bool(content.strip())
+
+        # Parse created_at timestamp if provided
+        parsed_created_at = None
+        if bookmark.created_at:
+            try:
+                parsed_created_at = datetime.fromisoformat(bookmark.created_at.replace("Z", "+00:00"))
+                if parsed_created_at.tzinfo is None:
+                    parsed_created_at = parsed_created_at.replace(tzinfo=timezone.utc)
+            except (ValueError, TypeError):
+                pass  # fall back to auto-generated timestamp
+
+        initial_embedding_status = (
+            "scraping" if not has_initial_content else "pending"
+        )
+
+        try:
+            knowledge_record = Knowledge(
+                workspace_id=workspace_id,
+                type="bookmark",
+                title=title,
+                content=content,
+                url=url,
+                word_count=count_words(content, knowledge_type="bookmark"),
+                embedding_status=initial_embedding_status,
+            )
+            if parsed_created_at:
+                knowledge_record.created_at = parsed_created_at
+
+            db.add(knowledge_record)
+            await db.flush()  # get the id without committing
+
+            # Add tags
+            for tag in bookmark.tags:
+                tag_clean = tag.lower().strip()
+                if tag_clean:
+                    db.add(KnowledgeTag(
+                        knowledge_id=knowledge_record.id,
+                        tag=tag_clean,
+                        source="user",
+                    ))
+
+            existing_urls.add(url)
+            imported += 1
+
+            # Schedule background extraction for each bookmark
+            if auto_extract:
+                background_tasks.add_task(
+                    knowledge_service.run_bookmark_content_extraction_job,
+                    knowledge_id=knowledge_record.id,
+                    workspace_id=workspace_id,
+                    audit_task_type="extract_bookmark_content",
+                    trigger_intelligence_after_extract=auto_intel and not has_initial_content,
+                )
+            elif has_initial_content and auto_intel:
+                background_tasks.add_task(
+                    knowledge_service.run_knowledge_intelligence_job,
+                    knowledge_id=knowledge_record.id,
+                    workspace_id=workspace_id,
+                    audit_task_type="generate_knowledge_intelligence",
+                )
+
+        except Exception as exc:
+            logger.warning("Failed to import bookmark %s: %s", url, exc)
+            errors.append(f"Failed to import {url}: {str(exc)}")
+
+    await db.commit()
+
+    return BookmarkImportResponse(imported=imported, skipped=skipped, errors=errors)

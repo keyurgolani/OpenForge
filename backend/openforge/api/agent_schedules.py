@@ -1,3 +1,13 @@
+"""
+LEGACY MODULE
+
+Do not extend this module for new architecture work.
+Replacement domain: openforge.domains.triggers
+
+This API endpoint is scheduled for deprecation in a future phase.
+Use /api/v1/triggers endpoints for new development.
+"""
+
 """API endpoints for scheduled agent triggers."""
 
 from __future__ import annotations

@@ -376,6 +376,9 @@ class HITLRequest(Base):
     )
 
 
+# LEGACY MODULE - Transitional runtime object
+# Replacement domain: openforge.domains.profiles
+# This will be removed in a future phase after migration to AgentProfile
 class AgentDefinitionModel(Base):
     """Persisted agent definitions."""
     __tablename__ = "agent_definitions"
@@ -396,6 +399,7 @@ class AgentDefinitionModel(Base):
     )
 
 
+# Transitional. Scheduled for replacement in later phase.
 class AgentExecution(Base):
     """Tracks individual agent execution runs."""
     __tablename__ = "agent_executions"
@@ -496,6 +500,8 @@ class AgentMemory(Base):
     )
 
 
+# LEGACY MODULE - Scheduled for removal
+# Replacement domain: openforge.domains.triggers
 class AgentSchedule(Base):
     """Scheduled agent trigger definitions with cron expressions."""
     __tablename__ = "agent_schedules"
@@ -525,6 +531,8 @@ class AgentSchedule(Base):
     )
 
 
+# LEGACY MODULE - Scheduled for removal
+# Replacement domain: openforge.domains.artifacts
 class ContinuousTarget(Base):
     """Persistent output targets that agents can update incrementally."""
     __tablename__ = "continuous_targets"
@@ -548,3 +556,139 @@ class ContinuousTarget(Base):
     __table_args__ = (
         UniqueConstraint("workspace_id", "name", name="uq_continuous_target_name"),
     )
+
+# =============================================================================
+# NEW DOMAIN MODELS (Phase 1 Architecture)
+# =============================================================================
+
+# These models represent the final architecture nouns and will be used
+# for all new development. They align with the canonical product vocabulary.
+
+
+class AgentProfileModel(Base):
+    """Agent Profile - a worker abstraction defining capabilities."""
+    __tablename__ = "agent_profiles"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    role: Mapped[str] = mapped_column(String(50), default="assistant")
+    system_prompt_ref: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    model_policy_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    memory_policy_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    safety_policy_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    capability_bundle_ids: Mapped[list] = mapped_column(JSONB, default=list)
+    output_contract_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_template: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(50), default="draft")
+    icon: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+
+class WorkflowDefinitionModel(Base):
+    """Workflow Definition - a composable execution graph."""
+    __tablename__ = "workflow_definitions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    entry_node: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    state_schema: Mapped[dict] = mapped_column(JSONB, default=dict)
+    nodes: Mapped[list] = mapped_column(JSONB, default=list)
+    edges: Mapped[list] = mapped_column(JSONB, default=list)
+    default_input_schema: Mapped[dict] = mapped_column(JSONB, default=dict)
+    default_output_schema: Mapped[dict] = mapped_column(JSONB, default=dict)
+    status: Mapped[str] = mapped_column(String(50), default="draft")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+
+class MissionDefinitionModel(Base):
+    """Mission Definition - a packaged autonomous unit."""
+    __tablename__ = "mission_definitions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    workflow_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    default_profile_ids: Mapped[list] = mapped_column(JSONB, default=list)
+    default_trigger_ids: Mapped[list] = mapped_column(JSONB, default=list)
+    autonomy_mode: Mapped[str] = mapped_column(String(50), default="supervised")
+    approval_policy_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    budget_policy_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    output_artifact_types: Mapped[list] = mapped_column(JSONB, default=list)
+    status: Mapped[str] = mapped_column(String(50), default="draft")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+
+class TriggerDefinitionModel(Base):
+    """Trigger Definition - an automation rule."""
+    __tablename__ = "trigger_definitions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    trigger_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    target_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    schedule_expression: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    payload_template: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    status: Mapped[str] = mapped_column(String(50), default="draft")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+
+class RunModel(Base):
+    """Run - an execution instance."""
+    __tablename__ = "runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    run_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    workflow_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    mission_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    parent_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(50), default="pending")
+    state_snapshot: Mapped[dict] = mapped_column(JSONB, default=dict)
+    input_payload: Mapped[dict] = mapped_column(JSONB, default=dict)
+    output_payload: Mapped[dict] = mapped_column(JSONB, default=dict)
+    error_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ArtifactModel(Base):
+    """Artifact - an output produced by a mission run."""
+    __tablename__ = "artifacts"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    artifact_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    source_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    source_mission_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    content: Mapped[dict] = mapped_column(JSONB, default=dict)
+    metadata: Mapped[dict] = mapped_column(JSONB, default=dict)
+    status: Mapped[str] = mapped_column(String(50), default="draft")
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)

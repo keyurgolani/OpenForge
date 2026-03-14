@@ -395,6 +395,10 @@ app.include_router(api_router)
 from openforge.api.websocket import ws_router
 app.include_router(ws_router)
 
+# Register domain routers (Phase 1 architecture)
+from openforge.domains import register_domain_routers
+register_domain_routers(app)
+
 # Serve static frontend files (production)
 static_dir = Path(__file__).parent.parent.parent / "static"
 if static_dir.exists():

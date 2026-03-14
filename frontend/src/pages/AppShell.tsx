@@ -716,9 +716,10 @@ export default function AppShell() {
                         <div className="h-1/2 flex flex-col glass-card overflow-hidden" style={{ boxShadow: 'none' }}>
                             <div className="flex-1 min-h-0 flex flex-col px-4 pt-3 pb-2">
                                 <nav className="flex flex-col flex-1 min-h-0 gap-1">
-                                    <Link to="/agents" className={`sidebar-item flex-shrink-0 ${isActive('/agents') ? 'active' : ''}`}>
+                                    {/* PHASE 1: Agents link demoted - accessible via /agents but not in primary nav */}
+                                    {/* <Link to="/agents" className={`sidebar-item flex-shrink-0 ${isActive('/agents') ? 'active' : ''}`}>
                                         <Bot className="w-4 h-4" /> Agents
-                                    </Link>
+                                    </Link> */}
                                     <div className="flex flex-col flex-1 min-h-0">
                                         <div className="flex items-center">
                                             <Link to="/executions" className={`sidebar-item flex-1 ${isActive('/executions') ? 'active' : ''}`}>
@@ -851,14 +852,14 @@ export default function AppShell() {
 
                         {/* Bottom half: workspace-agnostic */}
                         <div className="h-1/2 flex flex-col items-center py-3 gap-1 glass-card" style={{ boxShadow: 'none' }}>
-                            {/* Agents */}
-                            <Link
+                            {/* PHASE 1: Agents link demoted - accessible via /agents but not in primary nav */}
+                            {/* <Link
                                 to="/agents"
                                 title="Agents"
                                 className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isActive('/agents') ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
                             >
                                 <Bot className="w-4 h-4" />
-                            </Link>
+                            </Link> */}
 
                             {/* Executions */}
                             <Link
@@ -1075,7 +1076,7 @@ export default function AppShell() {
                 <div className="relative z-0 flex-1 min-h-0 flex gap-3 p-3">
                     <main
                         data-openforge-main-content="1"
-                        className={`relative z-20 flex-1 min-h-0 overflow-auto ${(isWorkspaceHome || isSearchPage || isSettingsPage || isWorkspaceAgentPage || isKnowledgePage || isExecutionsPage)
+                        className={`relative z-20 flex-1 min-h-0 flex flex-col ${isSettingsPage ? 'overflow-hidden' : 'overflow-auto'} ${(isWorkspaceHome || isSearchPage || isSettingsPage || isWorkspaceAgentPage || isKnowledgePage || isExecutionsPage)
                             ? ''
                             : 'rounded-2xl border border-border/60 bg-card/25'}`}
                     >

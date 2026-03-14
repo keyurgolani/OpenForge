@@ -1,3 +1,13 @@
+"""
+LEGACY MODULE
+
+Do not extend this module for new architecture work.
+Replacement domain: openforge.domains.profiles
+
+This module is scheduled for deprecation in a future phase.
+Use ProfileService from openforge.domains.profiles for new development.
+"""
+
 """Agent registry — manages agent definitions at runtime."""
 
 from __future__ import annotations
