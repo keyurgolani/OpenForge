@@ -668,7 +668,6 @@ class AgentExecutionEngine:
                             chat_name=mname,
                             conversation_history=history_text[:12000],
                         )
-
                         summary_result = await self.execute_subagent(
                             workspace_id=workspace_id,
                             instruction=summary_instruction,
@@ -1067,6 +1066,13 @@ class AgentExecutionEngine:
 
             loop_messages = list(assembled)
 
+            # Initialize rate limiter for this execution
+            from openforge.services.policy_engine import ToolCallRateLimiter
+            rate_limiter = ToolCallRateLimiter(
+                max_per_minute=agent.max_tool_calls_per_minute,
+                max_per_execution=agent.max_tool_calls_per_execution,
+            )
+
             for loop_iteration in range(agent.max_iterations):
                 if cancel_event.is_set():
                     was_cancelled = True
@@ -1236,11 +1242,32 @@ class AgentExecutionEngine:
                     hitl_approved = True
                     hitl_steering = ""
 
-                    # Check async policy (includes ToolPermission table)
+                    # Check rate limits
+                    rate_error = rate_limiter.check()
+                    if rate_error:
+                        timeline[tool_entry_idx]["success"] = False
+                        timeline[tool_entry_idx]["error"] = rate_error
+                        await self._publish(
+                            execution_id, workspace_id, "agent_tool_call_result",
+                            conversation_id=conversation_id,
+                            data={
+                                "call_id": call_id,
+                                "tool_name": tool_id,
+                                "success": False,
+                                "error": rate_error,
+                            },
+                        )
+                        tool_results_for_messages.append({
+                            "tool_call_id": call_id,
+                            "content": f"Tool error: {rate_error}",
+                        })
+                        continue
+
+                    # Check async policy (agent override → global table → risk defaults)
                     from openforge.db.postgres import AsyncSessionLocal
                     async with AsyncSessionLocal() as policy_db:
                         policy_decision = await policy_engine.evaluate_async(
-                            tool_id, risk_level, policy_db
+                            tool_id, risk_level, policy_db, agent=agent
                         )
 
                     if policy_decision == "blocked":
@@ -1455,6 +1482,7 @@ class AgentExecutionEngine:
 
                     call_duration_ms = int((time.perf_counter() - call_start_perf) * 1000)
                     tool_finished_at = datetime.now(timezone.utc)
+                    rate_limiter.record()
 
                     # Update timeline entry with result
                     if tool_id == "agent.invoke" and result.get("success"):
@@ -2049,7 +2077,7 @@ class AgentExecutionEngine:
                     from openforge.db.postgres import AsyncSessionLocal
                     async with AsyncSessionLocal() as _sub_policy_db:
                         _sub_policy_decision = await policy_engine.evaluate_async(
-                            sub_tool_id, sub_risk_level, _sub_policy_db
+                            sub_tool_id, sub_risk_level, _sub_policy_db, agent=target_agent
                         )
 
                     if _sub_policy_decision == "blocked":

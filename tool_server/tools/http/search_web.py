@@ -1,6 +1,9 @@
+import json
+
 import httpx
 from protocol import BaseTool, ToolContext, ToolResult
 from config import get_settings
+from content_boundary import wrap_untrusted
 
 
 class SearchWebTool(BaseTool):
@@ -84,4 +87,5 @@ class SearchWebTool(BaseTool):
         if not results:
             return ToolResult(success=True, output={"results": [], "message": "No results found."})
 
-        return ToolResult(success=True, output={"results": results, "query": query})
+        raw_output = json.dumps({"results": results, "query": query}, ensure_ascii=False)
+        return ToolResult(success=True, output=wrap_untrusted(raw_output, f"web search: {query}"))

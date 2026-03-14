@@ -4,13 +4,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
     listAgents, updateAgent, triggerAgent,
     listAgentSchedules, createAgentSchedule, updateAgentSchedule, deleteAgentSchedule,
-    listTargets, listWorkspaces,
+    listTargets, listWorkspaces, getToolRegistry,
 } from '@/lib/api'
 import { formatDistanceToNow } from 'date-fns'
 import {
     Bot, Play, Clock, Settings2, Plus, Trash2, Edit, Target, Calendar,
     Loader2, X, Check, ChevronDown, ChevronUp,
-    ExternalLink,
+    ExternalLink, Shield, Search,
     ToggleLeft, ToggleRight, Save,
 } from 'lucide-react'
 
@@ -37,6 +37,9 @@ interface Agent {
     rag_threshold: number
     rag_limit: number
     max_iterations: number
+    tool_overrides: Record<string, string>
+    max_tool_calls_per_minute: number
+    max_tool_calls_per_execution: number
 }
 
 function normalizeAgent(raw: AgentRaw): Agent {
@@ -53,6 +56,9 @@ function normalizeAgent(raw: AgentRaw): Agent {
         rag_threshold: c.rag_score_threshold ?? 0.35,
         rag_limit: c.rag_limit ?? 5,
         max_iterations: c.max_iterations ?? 20,
+        tool_overrides: c.tool_overrides ?? {},
+        max_tool_calls_per_minute: c.max_tool_calls_per_minute ?? 30,
+        max_tool_calls_per_execution: c.max_tool_calls_per_execution ?? 200,
     }
 }
 
@@ -389,6 +395,14 @@ function ScheduleInlineEditor({ schedule, onSave, onCancel }: { schedule: Schedu
 
 /* ── Agent Configuration Modal ───────────────────────────────────────────── */
 
+const PERM_OPTIONS = ['default', 'allowed', 'hitl', 'blocked'] as const
+const PERM_COLORS: Record<string, string> = {
+    default: 'bg-muted/40 text-muted-foreground',
+    allowed: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+    hitl: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+    blocked: 'bg-red-500/15 text-red-400 border-red-500/30',
+}
+
 function ConfigureModal({ agent, onClose }: { agent: Agent; onClose: () => void }) {
     const qc = useQueryClient()
     const [systemPrompt, setSystemPrompt] = useState(agent.system_prompt ?? '')
@@ -396,6 +410,48 @@ function ConfigureModal({ agent, onClose }: { agent: Agent; onClose: () => void 
     const [ragThreshold, setRagThreshold] = useState(agent.rag_threshold)
     const [ragLimit, setRagLimit] = useState(agent.rag_limit)
     const [maxIterations, setMaxIterations] = useState(agent.max_iterations)
+    const [toolOverrides, setToolOverrides] = useState<Record<string, string>>(agent.tool_overrides)
+    const [maxCallsPerMinute, setMaxCallsPerMinute] = useState(agent.max_tool_calls_per_minute)
+    const [maxCallsPerExecution, setMaxCallsPerExecution] = useState(agent.max_tool_calls_per_execution)
+    const [permSectionOpen, setPermSectionOpen] = useState(Object.keys(agent.tool_overrides).length > 0)
+    const [permFilter, setPermFilter] = useState('')
+
+    const { data: toolRegistry } = useQuery({
+        queryKey: ['tool-registry'],
+        queryFn: getToolRegistry,
+        enabled: permSectionOpen,
+    })
+
+    const tools: { id: string; category: string; display_name: string; risk_level: string }[] =
+        toolRegistry?.tools ?? []
+
+    const filteredTools = useMemo(() => {
+        if (!permFilter) return tools
+        const q = permFilter.toLowerCase()
+        return tools.filter(t => t.id.toLowerCase().includes(q) || t.display_name.toLowerCase().includes(q))
+    }, [tools, permFilter])
+
+    const toolsByCategory = useMemo(() => {
+        const groups: Record<string, typeof filteredTools> = {}
+        for (const t of filteredTools) {
+            ;(groups[t.category] ??= []).push(t)
+        }
+        return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b))
+    }, [filteredTools])
+
+    const overrideCount = Object.values(toolOverrides).filter(v => v !== 'default').length
+
+    function setOverride(toolId: string, perm: string) {
+        setToolOverrides(prev => {
+            const next = { ...prev }
+            if (perm === 'default') {
+                delete next[toolId]
+            } else {
+                next[toolId] = perm
+            }
+            return next
+        })
+    }
 
     const mutation = useMutation({
         mutationFn: () => updateAgent(agent.id, {
@@ -405,6 +461,9 @@ function ConfigureModal({ agent, onClose }: { agent: Agent; onClose: () => void 
                 rag_score_threshold: ragThreshold,
                 rag_limit: ragLimit,
                 max_iterations: maxIterations,
+                tool_overrides: toolOverrides,
+                max_tool_calls_per_minute: maxCallsPerMinute,
+                max_tool_calls_per_execution: maxCallsPerExecution,
             },
         }),
         onSuccess: () => {
@@ -417,7 +476,7 @@ function ConfigureModal({ agent, onClose }: { agent: Agent; onClose: () => void 
 
     return (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-            <div className="glass-card w-full max-w-lg rounded-2xl border border-border/60 p-6 space-y-4 animate-fade-in max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="glass-card w-full max-w-2xl rounded-2xl border border-border/60 p-6 space-y-4 animate-fade-in max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between">
                     <h2 className="text-lg font-semibold flex items-center gap-2">
                         <Settings2 className="w-4 h-4 text-accent" />
@@ -451,6 +510,121 @@ function ConfigureModal({ agent, onClose }: { agent: Agent; onClose: () => void 
                         {(!agent.tool_categories || agent.tool_categories.length === 0) && (
                             <span className="text-xs text-muted-foreground/60">All tools enabled</span>
                         )}
+                    </div>
+                </div>
+
+                {/* Per-Agent Tool Permissions */}
+                <div className="border border-border/40 rounded-xl overflow-hidden">
+                    <button
+                        className="w-full flex items-center justify-between p-4 hover:bg-muted/20 transition-colors"
+                        onClick={() => setPermSectionOpen(!permSectionOpen)}
+                    >
+                        <div className="flex items-center gap-2">
+                            <Shield className="w-4 h-4 text-accent" />
+                            <span className="text-xs font-medium">Tool Permissions</span>
+                            {overrideCount > 0 && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/15 text-accent">
+                                    {overrideCount} override{overrideCount !== 1 ? 's' : ''}
+                                </span>
+                            )}
+                        </div>
+                        {permSectionOpen ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+                    </button>
+                    {permSectionOpen && (
+                        <div className="border-t border-border/40 p-4 space-y-3">
+                            <p className="text-[10px] text-muted-foreground/70">
+                                Override global permissions for this agent. "Default" uses the global setting.
+                            </p>
+                            <div className="relative">
+                                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/50" />
+                                <input
+                                    className="input w-full pl-8 text-xs py-1.5"
+                                    placeholder="Filter tools..."
+                                    value={permFilter}
+                                    onChange={e => setPermFilter(e.target.value)}
+                                />
+                            </div>
+                            <div className="max-h-64 overflow-y-auto space-y-3">
+                                {toolsByCategory.map(([category, catTools]) => (
+                                    <div key={category}>
+                                        <div className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-1.5">{category}</div>
+                                        <div className="space-y-1">
+                                            {catTools.map(tool => {
+                                                const currentPerm = toolOverrides[tool.id] ?? 'default'
+                                                return (
+                                                    <div key={tool.id} className="flex items-center justify-between gap-2 py-1 px-2 rounded-lg hover:bg-muted/10">
+                                                        <div className="flex items-center gap-2 min-w-0">
+                                                            <span className="text-xs truncate" title={tool.id}>{tool.display_name}</span>
+                                                            {tool.risk_level !== 'low' && (
+                                                                <span className={`text-[9px] px-1 py-0.5 rounded ${tool.risk_level === 'medium' ? 'bg-amber-500/10 text-amber-400' : 'bg-red-500/10 text-red-400'}`}>
+                                                                    {tool.risk_level}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex gap-0.5 flex-shrink-0">
+                                                            {PERM_OPTIONS.map(p => (
+                                                                <button
+                                                                    key={p}
+                                                                    className={`text-[9px] px-1.5 py-0.5 rounded border transition-colors ${
+                                                                        currentPerm === p
+                                                                            ? PERM_COLORS[p] + ' border-current'
+                                                                            : 'border-transparent text-muted-foreground/40 hover:text-muted-foreground/70'
+                                                                    }`}
+                                                                    onClick={() => setOverride(tool.id, p)}
+                                                                >
+                                                                    {p === 'hitl' ? 'HITL' : p.charAt(0).toUpperCase() + p.slice(1)}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+                                ))}
+                                {tools.length === 0 && (
+                                    <p className="text-xs text-muted-foreground/50 text-center py-4">Loading tools...</p>
+                                )}
+                                {tools.length > 0 && filteredTools.length === 0 && (
+                                    <p className="text-xs text-muted-foreground/50 text-center py-4">No tools match filter</p>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Rate Limits */}
+                <div className="space-y-3 border border-border/40 rounded-xl p-4">
+                    <label className="text-xs font-medium">Rate Limits</label>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-[10px] text-muted-foreground block mb-1">
+                                Per minute: {maxCallsPerMinute}
+                            </label>
+                            <input
+                                type="range"
+                                min="5"
+                                max="120"
+                                step="5"
+                                value={maxCallsPerMinute}
+                                onChange={e => setMaxCallsPerMinute(parseInt(e.target.value))}
+                                className="w-full accent-accent"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[10px] text-muted-foreground block mb-1">
+                                Per execution: {maxCallsPerExecution}
+                            </label>
+                            <input
+                                type="range"
+                                min="10"
+                                max="500"
+                                step="10"
+                                value={maxCallsPerExecution}
+                                onChange={e => setMaxCallsPerExecution(parseInt(e.target.value))}
+                                className="w-full accent-accent"
+                            />
+                        </div>
                     </div>
                 </div>
 

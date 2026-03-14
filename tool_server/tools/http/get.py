@@ -1,6 +1,9 @@
+import json
+
 import httpx
 from protocol import BaseTool, ToolContext, ToolResult
 from security import security
+from content_boundary import wrap_untrusted
 
 
 class HttpGetTool(BaseTool):
@@ -45,12 +48,13 @@ class HttpGetTool(BaseTool):
         try:
             async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
                 resp = await client.get(url, headers=headers)
-            output = {"status": resp.status_code, "body": resp.text, "headers": dict(resp.headers)}
             body_str = resp.text
-            if self.max_output and len(body_str) > self.max_output:
+            wrapped_body = wrap_untrusted(body_str, url)
+            output = {"status": resp.status_code, "body": wrapped_body, "headers": dict(resp.headers)}
+            if self.max_output and len(wrapped_body) > self.max_output:
                 return ToolResult(
                     success=True,
-                    output={"status": resp.status_code, "body": body_str[: self.max_output]},
+                    output={"status": resp.status_code, "body": wrap_untrusted(body_str[: self.max_output], url)},
                     truncated=True,
                     original_length=len(body_str),
                 )

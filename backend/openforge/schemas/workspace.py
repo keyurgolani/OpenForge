@@ -64,7 +64,7 @@ class WorkspaceResponse(BaseModel):
     vision_provider_id: Optional[UUID] = None
     vision_model: Optional[str] = None
     sort_order: int
-    agent_enabled: bool = False
+    agent_enabled: bool = True
     agent_tool_categories: list = []
     agent_max_tool_loops: int = 20
     knowledge_count: int = 0

@@ -250,6 +250,50 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Agent registry initialization failed (continuing): %s", e)
 
+    # Seed default tool permissions (idempotent — only inserts if table is empty)
+    try:
+        from openforge.db.postgres import AsyncSessionLocal
+        from openforge.db.models import ToolPermission
+        from sqlalchemy import select, func
+
+        async with AsyncSessionLocal() as db:
+            count = (await db.execute(select(func.count()).select_from(ToolPermission))).scalar()
+            if count == 0:
+                # Irreversible-write tools → require HITL
+                hitl_tools = [
+                    "filesystem.delete_file",
+                    "workspace.delete_knowledge",
+                    "memory.forget",
+                    "skills.remove",
+                ]
+                # Dangerous tools → require HITL
+                dangerous_tools = [
+                    "shell.execute",
+                    "shell.execute_python",
+                    "http.post",
+                    "agent.invoke",
+                ]
+                for tool_id in hitl_tools + dangerous_tools:
+                    db.add(ToolPermission(tool_id=tool_id, permission="hitl"))
+                await db.commit()
+                logger.info("Seeded default tool permissions (%d HITL rules).", len(hitl_tools) + len(dangerous_tools))
+    except Exception as e:
+        logger.warning("Tool permission seeding skipped: %s", e)
+
+    # Enable agent mode on all existing workspaces (idempotent)
+    try:
+        from openforge.db.postgres import AsyncSessionLocal
+        from openforge.db.models import Workspace
+        from sqlalchemy import update
+
+        async with AsyncSessionLocal() as db:
+            await db.execute(
+                update(Workspace).where(Workspace.agent_enabled == False).values(agent_enabled=True)
+            )
+            await db.commit()
+    except Exception as e:
+        logger.debug("Workspace agent_enabled migration skipped: %s", e)
+
     # Start Redis agent relay (bridges Celery worker events to WebSocket)
     relay_task = None
     try:
@@ -286,7 +330,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="OpenForge",
     description="Self-hosted AI workspace and knowledge management",
-    version="0.1.0",
+    version="1.0.0",
     lifespan=lifespan,
 )
 

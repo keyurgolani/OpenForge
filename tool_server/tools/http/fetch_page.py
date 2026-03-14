@@ -2,6 +2,7 @@ import re
 import httpx
 from protocol import BaseTool, ToolContext, ToolResult
 from security import security
+from content_boundary import wrap_untrusted
 
 # Patterns to strip before text extraction
 _SCRIPT_RE = re.compile(r"<script[^>]*>.*?</script>", re.DOTALL | re.IGNORECASE)
@@ -62,6 +63,7 @@ class FetchPageTool(BaseTool):
             ) as client:
                 resp = await client.get(url)
             text = _strip_html(resp.text)
-            return self._maybe_truncate("", text)
+            wrapped = wrap_untrusted(text, url)
+            return self._maybe_truncate("", wrapped)
         except Exception as exc:
             return ToolResult(success=False, error=str(exc))

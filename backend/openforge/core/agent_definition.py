@@ -19,6 +19,9 @@ class AgentDefinition:
     tools_enabled: bool = True
     allowed_tool_categories: list[str] | None = None  # None = all
     blocked_tool_ids: list[str] = field(default_factory=list)
+    tool_overrides: dict[str, str] = field(default_factory=dict)  # tool_id → "allowed"|"hitl"|"blocked"
+    max_tool_calls_per_minute: int = 30
+    max_tool_calls_per_execution: int = 200
 
     # Skills
     skill_ids: list[str] = field(default_factory=list)
@@ -54,6 +57,9 @@ class AgentDefinition:
             "tools_enabled": self.tools_enabled,
             "allowed_tool_categories": self.allowed_tool_categories,
             "blocked_tool_ids": self.blocked_tool_ids,
+            "tool_overrides": self.tool_overrides,
+            "max_tool_calls_per_minute": self.max_tool_calls_per_minute,
+            "max_tool_calls_per_execution": self.max_tool_calls_per_execution,
             "skill_ids": self.skill_ids,
             "knowledge_scope": self.knowledge_scope,
             "rag_enabled": self.rag_enabled,
@@ -86,15 +92,15 @@ class AgentDefinition:
     def merge_workspace_overrides(
         self,
         *,
-        agent_enabled: bool,
-        agent_tool_categories: list[str],
-        agent_max_tool_loops: int,
+        agent_enabled: bool = True,
+        agent_tool_categories: list[str] | None = None,
+        agent_max_tool_loops: int | None = None,
     ) -> AgentDefinition:
-        """Return a copy with workspace-level overrides applied."""
-        import copy
-        merged = copy.copy(self)
-        merged.tools_enabled = agent_enabled
-        if agent_tool_categories:
-            merged.allowed_tool_categories = agent_tool_categories
-        merged.max_iterations = agent_max_tool_loops
-        return merged
+        """Return a copy with workspace-level overrides applied.
+
+        Agent mode is always on and tool categories are controlled by the
+        agent definition's own config, so workspace-level overrides are
+        no longer applied.  The method is kept for backward compatibility
+        with callers that still pass these kwargs.
+        """
+        return self

@@ -89,7 +89,7 @@ class Workspace(Base):
     agent_id: Mapped[Optional[str]] = mapped_column(
         String(100), nullable=True, default="workspace_agent"
     )
-    agent_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    agent_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     agent_tool_categories: Mapped[List[str]] = mapped_column(JSONB, nullable=False, default=list)
     agent_max_tool_loops: Mapped[int] = mapped_column(Integer, nullable=False, default=20)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

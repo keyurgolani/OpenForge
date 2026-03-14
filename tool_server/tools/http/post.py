@@ -1,6 +1,7 @@
 import httpx
 from protocol import BaseTool, ToolContext, ToolResult
 from security import security
+from content_boundary import wrap_untrusted
 
 
 class HttpPostTool(BaseTool):
@@ -50,11 +51,12 @@ class HttpPostTool(BaseTool):
         try:
             async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
                 resp = await client.post(url, json=body, headers=headers)
-            output = {"status": resp.status_code, "body": resp.text}
-            if self.max_output and len(resp.text) > self.max_output:
+            wrapped_body = wrap_untrusted(resp.text, url)
+            output = {"status": resp.status_code, "body": wrapped_body}
+            if self.max_output and len(wrapped_body) > self.max_output:
                 return ToolResult(
                     success=True,
-                    output={"status": resp.status_code, "body": resp.text[: self.max_output]},
+                    output={"status": resp.status_code, "body": wrap_untrusted(resp.text[: self.max_output], url)},
                     truncated=True,
                     original_length=len(resp.text),
                 )
