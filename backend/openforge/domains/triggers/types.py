@@ -10,7 +10,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from backend.openforge.domains.common.enums import TriggerType
+from openforge.domains.common.enums import TriggerType
 
 
 class TriggerStatus(str, Enum):

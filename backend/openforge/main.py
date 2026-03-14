@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pathlib import Path
 
-from openforge.config import get_settings
+from openforge.common.config import get_settings
 from openforge.services.task_scheduler import task_scheduler
 
 settings = get_settings()

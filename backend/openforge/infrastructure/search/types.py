@@ -5,31 +5,28 @@ Provides typed dataclasses for search operations.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 from uuid import UUID
-
 
 from enum import Enum
 
 
 class SearchType(str, Enum):
     """Type of search to perform."""
+
     VECTOR = "vector"
     HYBRID = "hybrid"
     FULL_TEXT = "full_text"
-
-
     KNOWLEDGE = "knowledge"
-
-
     WORKSPACE = "workspace"
-
-
     ALL = "all"
 
 
+@dataclass
 class SearchQuery:
     """Query object for search operations."""
+
     query: str
     search_type: SearchType = SearchType.VECTOR
     top_k: int = 5
@@ -43,7 +40,7 @@ class SearchQuery:
     include_metadata: bool = True
 
     def to_dict(self) -> dict[str, Any]:
-        result = {
+        return {
             "query": self.query,
             "search_type": self.search_type.value,
             "top_k": self.top_k,
@@ -55,11 +52,9 @@ class SearchQuery:
             "vector": self.vector,
             "include_metadata": self.include_metadata,
         }
-        return result
 
-
-    def model_dump(self) -> str:
-        return f"SearchQuery(query={self.query!r}, search_type={self.search_type!r})"
+    def model_dump(self) -> dict[str, Any]:
+        return self.to_dict()
 
 
 @dataclass

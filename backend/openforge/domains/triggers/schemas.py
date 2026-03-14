@@ -8,12 +8,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from backend.openforge.domains.common.enums import TriggerType
-from backend.openforge.domains.triggers.types import (
-    TriggerDefinition,
-    TriggerStatus,
-    TriggerTargetType,
-)
+from openforge.domains.common.enums import TriggerType
+from openforge.domains.triggers.types import TriggerStatus, TriggerTargetType
 
 
 class TriggerCreate(BaseModel):

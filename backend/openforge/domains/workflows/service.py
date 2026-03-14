@@ -1,41 +1,27 @@
-"""
-Workflow domain service.
-
-TODO: Implement workflow management business logic.
-"""
+"""Workflow domain service."""
 
 from uuid import UUID
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from openforge.db.models import WorkflowDefinitionModel
+from openforge.domains.common.crud import CrudDomainService
 
 
-class WorkflowService:
+class WorkflowService(CrudDomainService):
     """Service for managing workflow definitions."""
 
-    def __init__(self, db: AsyncSession):
-        self.db = db
+    model = WorkflowDefinitionModel
 
     async def list_workflows(self, skip: int = 0, limit: int = 100):
-        """List all workflows."""
-        # TODO: Implement
-        return [], 0
+        return await self.list_records(skip=skip, limit=limit)
 
     async def get_workflow(self, workflow_id: UUID):
-        """Get a workflow by ID."""
-        # TODO: Implement
-        return None
+        return await self.get_record(workflow_id)
 
     async def create_workflow(self, workflow_data: dict):
-        """Create a new workflow."""
-        # TODO: Implement
-        return None
+        return await self.create_record(workflow_data)
 
     async def update_workflow(self, workflow_id: UUID, workflow_data: dict):
-        """Update a workflow."""
-        # TODO: Implement
-        return None
+        return await self.update_record(workflow_id, workflow_data)
 
     async def delete_workflow(self, workflow_id: UUID):
-        """Delete a workflow."""
-        # TODO: Implement
-        return False
+        return await self.delete_record(workflow_id)

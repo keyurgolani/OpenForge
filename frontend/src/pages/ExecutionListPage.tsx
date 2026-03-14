@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { listAllExecutions, listAgents } from '@/lib/api'
+import { chatRoute, ROUTES } from '@/lib/routes'
 import { formatDistanceToNow } from 'date-fns'
 import { Activity, Clock, Wrench, MessageCircle, ArrowRight, Loader2, Play, Pause, CheckCircle2, XCircle, AlertTriangle, Timer } from 'lucide-react'
 
@@ -107,7 +108,7 @@ function ExecutionRow({ exec, agentMap, onClick }: {
                     title="Open conversation"
                     onClick={(e) => {
                         e.stopPropagation()
-                        navigate(`/w/${exec.workspace_id}/agent/${exec.conversation_id}`)
+                        navigate(chatRoute(exec.workspace_id, exec.conversation_id))
                     }}
                 >
                     <MessageCircle className="w-3.5 h-3.5" />
@@ -166,7 +167,7 @@ function ExecutionWidget({ title, icon, iconColor, executions, agentMap, emptyTe
                                 key={exec.id}
                                 exec={exec}
                                 agentMap={agentMap}
-                                onClick={() => navigate(`/executions/${exec.id}`)}
+                                onClick={() => navigate(ROUTES.LEGACY_EXECUTION_DETAIL.replace(':executionId', exec.id))}
                             />
                         ))}
                     </tbody>
@@ -218,7 +219,7 @@ export default function ExecutionListPage() {
                 <div className="text-center">
                     <Activity className="w-10 h-10 mx-auto mb-3 opacity-30" />
                     <p className="text-sm text-muted-foreground">No agent executions yet.</p>
-                    <p className="text-xs text-muted-foreground/60 mt-1">Start an agent conversation to see executions here.</p>
+                    <p className="text-xs text-muted-foreground/60 mt-1">Start a chat to see executions here.</p>
                 </div>
             </div>
         )

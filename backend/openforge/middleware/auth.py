@@ -3,7 +3,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from jose import jwt, JWTError
 
-from openforge.config import get_settings
+from openforge.common.config import get_settings
 
 # Paths that never require authentication
 PUBLIC_PATHS = {

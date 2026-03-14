@@ -8,8 +8,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from backend.openforge.domains.common.enums import ExecutionStatus
-from backend.openforge.domains.runs.types import Run, RunType
+from openforge.domains.common.enums import ExecutionStatus
+from openforge.domains.runs.types import RunType
 
 
 class RunCreate(BaseModel):

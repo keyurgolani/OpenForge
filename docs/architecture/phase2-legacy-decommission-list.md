@@ -26,7 +26,7 @@ This document classifies every old architecture file for Phase 2 cleanup.
 | `core/knowledge_processor.py` | move to legacy temporarily | Still used by knowledge processing | knowledge |
 | `core/llm_gateway.py` | rewrite now | Move to integrations/llm/service.py | integrations |
 | `core/markdown_utils.py` | move to legacy temporarily | Still used by knowledge processing | knowledge |
-| `core/product_vocabulary.py` | delete now | No longer needed | N/A |
+| `core/product_vocabulary.py` | keep temporarily with explicit owner | Canonical vocabulary source required by Phase 1 architecture lock | product architecture |
 | `core/prompt_catalogue.py` | move to legacy temporarily | Still used by runtime | runtime |
 | `core/search_engine.py` | move to legacy temporarily | Still used by knowledge | knowledge |
 | `core/knowledge_processors/` | move to legacy temporarily | Still used by knowledge processing | knowledge |

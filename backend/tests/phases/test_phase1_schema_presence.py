@@ -1,88 +1,89 @@
 """
-Phase 1 Schema Presence Tests
-
-Tests to verify new tables/models exist for profiles, workflows, missions, triggers, runs, artifacts.
+Phase 1 schema and package presence tests.
 """
 
-import pytest
-from sqlalchemy import inspect
-from sqlalchemy.ext.asyncio import AsyncSession
+from importlib import import_module
 
 from openforge.db.base import Base
 from openforge.db.models import (
     AgentProfileModel,
-    WorkflowDefinitionModel
-    MissionDefinitionModel
-    TriggerDefinitionModel
-    RunModel
-    ArtifactModel
+    ArtifactModel,
+    MissionDefinitionModel,
+    RunModel,
+    TriggerDefinitionModel,
+    WorkflowDefinitionModel,
 )
 
 
+def test_db_base_module_exists():
+    """The shared SQLAlchemy declarative base must be importable."""
+    assert Base is not None
+
+
 def test_domain_tables_exist():
-    """Test that all Phase 1 domain tables exist."""
-    # Check that models are registered with SQLAlchemy
-    assert hasattr(AgentProfileModel, '__tablename__')
-    assert AgentProfileModel.__tablename__ == "agent_profiles"
+    """Phase 1 domain tables should be present in the DB model layer."""
+    expected = {
+        AgentProfileModel: "agent_profiles",
+        WorkflowDefinitionModel: "workflow_definitions",
+        MissionDefinitionModel: "mission_definitions",
+        TriggerDefinitionModel: "trigger_definitions",
+        RunModel: "runs",
+        ArtifactModel: "artifacts",
+    }
 
-    assert hasattr(WorkflowDefinitionModel, '__tablename__')
-    assert WorkflowDefinitionModel.__tablename__ == "workflow_definitions"
-
-    assert hasattr(MissionDefinitionModel, '__tablename__')
-    assert MissionDefinitionModel.__tablename__ == "mission_definitions"
-
-    assert hasattr(TriggerDefinitionModel, '__tablename__')
-    assert TriggerDefinitionModel.__tablename__ == "trigger_definitions"
-
-    assert hasattr(RunModel, '__tablename__')
-    assert RunModel.__tablename__ == "runs"
-
-    assert hasattr(ArtifactModel, '__tablename__')
-    assert ArtifactModel.__tablename__ == "artifacts"
+    for model, table_name in expected.items():
+        assert hasattr(model, "__tablename__")
+        assert model.__tablename__ == table_name
 
 
-def test_domain_models_have_correct_columns():
-    """Test that domain models have the expected columns."""
-    # Profile
-    assert hasattr(AgentProfileModel, 'id')
-    assert hasattr(AgentProfileModel, 'name')
-    assert hasattr(AgentProfileModel, 'slug')
-    assert hasattr(AgentProfileModel, 'role')
-    assert hasattr(AgentProfileModel, 'status')
+def test_domain_models_have_expected_fields():
+    """Phase 1 domain models should expose the core contract fields."""
+    assert hasattr(AgentProfileModel, "name")
+    assert hasattr(AgentProfileModel, "slug")
+    assert hasattr(AgentProfileModel, "role")
+    assert hasattr(AgentProfileModel, "status")
 
-    # Workflow
-    assert hasattr(WorkflowDefinitionModel, 'id')
-    assert hasattr(WorkflowDefinitionModel, 'name')
-    assert hasattr(WorkflowDefinitionModel, 'slug')
-    assert hasattr(WorkflowDefinitionModel, 'nodes')
-    assert hasattr(WorkflowDefinitionModel, 'edges')
-    assert hasattr(WorkflowDefinitionModel, 'status')
+    assert hasattr(WorkflowDefinitionModel, "entry_node")
+    assert hasattr(WorkflowDefinitionModel, "state_schema")
+    assert hasattr(WorkflowDefinitionModel, "nodes")
+    assert hasattr(WorkflowDefinitionModel, "edges")
+    assert hasattr(WorkflowDefinitionModel, "default_input_schema")
+    assert hasattr(WorkflowDefinitionModel, "default_output_schema")
 
-    # Mission
-    assert hasattr(MissionDefinitionModel, 'id')
-    assert hasattr(MissionDefinitionModel, 'name')
-    assert hasattr(MissionDefinitionModel, 'slug')
-    assert hasattr(MissionDefinitionModel, 'workflow_id')
-    assert hasattr(MissionDefinitionModel, 'status')
+    assert hasattr(MissionDefinitionModel, "workflow_id")
+    assert hasattr(MissionDefinitionModel, "default_profile_ids")
+    assert hasattr(MissionDefinitionModel, "default_trigger_ids")
+    assert hasattr(MissionDefinitionModel, "autonomy_mode")
 
-    # Trigger
-    assert hasattr(TriggerDefinitionModel, 'id')
-    assert hasattr(TriggerDefinitionModel, 'name')
-    assert hasattr(TriggerDefinitionModel, 'trigger_type')
-    assert hasattr(TriggerDefinitionModel, 'target_id')
-    assert hasattr(TriggerDefinitionModel, 'status')
+    assert hasattr(TriggerDefinitionModel, "trigger_type")
+    assert hasattr(TriggerDefinitionModel, "target_type")
+    assert hasattr(TriggerDefinitionModel, "target_id")
 
-    # Run
-    assert hasattr(RunModel, 'id')
-    assert hasattr(RunModel, 'run_type')
-    assert hasattr(RunModel, 'workspace_id')
-    assert hasattr(RunModel, 'status')
-    assert hasattr(RunModel, 'input_payload')
-    assert hasattr(RunModel, 'output_payload')
+    assert hasattr(RunModel, "run_type")
+    assert hasattr(RunModel, "workspace_id")
+    assert hasattr(RunModel, "state_snapshot")
+    assert hasattr(RunModel, "input_payload")
+    assert hasattr(RunModel, "output_payload")
 
-    # Artifact
-    assert hasattr(ArtifactModel, 'id')
-    assert hasattr(ArtifactModel, 'artifact_type')
-    assert hasattr(ArtifactModel, 'workspace_id')
-    assert hasattr(ArtifactModel, 'title')
-    assert hasattr(ArtifactModel, 'status')
+    assert hasattr(ArtifactModel, "artifact_type")
+    assert hasattr(ArtifactModel, "workspace_id")
+    assert hasattr(ArtifactModel, "source_run_id")
+    assert hasattr(ArtifactModel, "source_mission_id")
+    assert hasattr(ArtifactModel, "title")
+
+
+def test_domain_package_model_modules_are_importable():
+    """Each Phase 1 domain package should expose an importable models module."""
+    module_names = [
+        "openforge.domains.profiles.models",
+        "openforge.domains.workflows.models",
+        "openforge.domains.missions.models",
+        "openforge.domains.triggers.models",
+        "openforge.domains.runs.models",
+        "openforge.domains.artifacts.models",
+        "openforge.domains.knowledge.models",
+    ]
+
+    for module_name in module_names:
+        module = import_module(module_name)
+        assert module is not None

@@ -179,28 +179,17 @@ class TestImportRules:
                 f"Legacy import found in router.py: {forbidden}"
             )
 
-    def test_domain_routers_are_mounted(self):
-        """Domain routers should be mounted in the API router."""
-        router_file = BACKEND_ROOT / "api" / "router.py"
-        if not router_file.exists():
-            pytest.skip("router.py not found")
+    def test_domain_routers_are_registered_through_router_registry(self):
+        """Domain routers should be mounted through the dedicated registry in main.py."""
+        main_file = BACKEND_ROOT / "main.py"
+        if not main_file.exists():
+            pytest.skip("main.py not found")
 
-        with open(router_file, "r") as f:
+        with open(main_file, "r", encoding="utf-8") as f:
             content = f.read()
 
-        required_imports = [
-            "profiles_router",
-            "workflows_router",
-            "missions_router",
-            "triggers_router",
-            "runs_router",
-            "artifacts_router",
-        ]
-
-        for required in required_imports:
-            assert required in content, (
-                f"Domain router not found in router.py: {required}"
-            )
+        assert "from openforge.domains import register_domain_routers" in content
+        assert "register_domain_routers(app)" in content
 
 
 class TestConfigCentralization:

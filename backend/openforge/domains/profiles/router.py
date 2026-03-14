@@ -2,26 +2,24 @@
 Profile domain API router.
 """
 
-from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.openforge.db.session import get_db
+from openforge.db.postgres import get_db
 
-from .schemas import ProfileCreate, ProfileResponse, ProfileUpdate
+from .schemas import ProfileCreate, ProfileListResponse, ProfileResponse, ProfileUpdate
 from .service import ProfileService
 
 router = APIRouter()
 
 
-def get_profile_service(db: AsyncSession = Depends(get_db)) -> ProfileService:
+def get_profile_service(db=Depends(get_db)) -> ProfileService:
     """Dependency to get profile service."""
     return ProfileService(db)
 
 
-@router.get("/", response_model=dict)
+@router.get("/", response_model=ProfileListResponse)
 async def list_profiles(
     skip: int = 0,
     limit: int = 100,
@@ -85,3 +83,4 @@ async def delete_profile(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Profile not found",
         )
+    return None

@@ -3,7 +3,7 @@
 import logging
 from celery import Celery
 from celery.signals import worker_init
-from openforge.config import get_settings
+from openforge.common.config import get_settings
 
 logger = logging.getLogger("openforge.worker")
 

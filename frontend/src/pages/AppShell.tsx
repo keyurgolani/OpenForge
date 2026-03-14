@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Outlet, useNavigate, useParams, Link, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { listWorkspaces, listKnowledge, listConversations, updateConversation, deleteConversation, permanentlyDeleteConversation, exportConversation, countPendingHITL, listPendingHITL, approveHITL, denyHITL, listAllExecutions } from '@/lib/api'
+import { listWorkspaces, listKnowledge, listConversations, updateConversation, deleteConversation, permanentlyDeleteConversation, exportConversation, countPendingHITL, listPendingHITL, approveHITL, denyHITL, listRuns } from '@/lib/api'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import { useUIStore } from '@/stores/uiStore'
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
 import { getShortcutDisplay } from '@/lib/keyboard'
 import { onQuickKnowledgeOpen, type QuickKnowledgeType } from '@/lib/quick-knowledge'
+import { artifactsRoute, chatRoute, knowledgeRoute, missionsRoute, profilesRoute, runsRoute, searchRoute, workspaceOverviewRoute, workflowsRoute } from '@/lib/routes'
 import CommandPalette from '@/components/shared/CommandPalette'
 import CreateDispatcher from '@/components/knowledge/create/CreateDispatcher'
 import KnowledgeTypeGrid from '@/components/knowledge/KnowledgeTypeGrid'
@@ -91,7 +92,7 @@ export default function AppShell() {
     const [workspaceQuery, setWorkspaceQuery] = useState('')
     const [activeInsightSection, setActiveInsightSection] = useState<InsightSectionKey | null>('tasks')
     const [agentSublistOpen, setAgentSublistOpen] = useState(true)
-    const [executionsSublistOpen, setExecutionsSublistOpen] = useState(true)
+    const [runsSublistOpen, setRunsSublistOpen] = useState(true)
     const [renamingConversationId, setRenamingConversationId] = useState<string | null>(null)
     const [renamingConversationDraft, setRenamingConversationDraft] = useState('')
     const [deleteModalOpen, setDeleteModalOpen] = useState(false)
@@ -112,9 +113,10 @@ export default function AppShell() {
         queryFn: () => listConversations(workspaceId, { category: 'chats' }),
         enabled: !!workspaceId,
     })
-    const { data: ongoingExecutions = [] } = useQuery<{ id: string; workspace_id: string; agent_id: string; agent_name: string | null; status: string; started_at: string }[]>({
-        queryKey: ['ongoing-executions'],
-        queryFn: () => listAllExecutions({ status: 'running,queued,paused_hitl', limit: 10 }),
+    const { data: runsData } = useQuery<{ runs: { id: string; workspace_id: string; run_type: string; status: string; started_at?: string | null }[]; total: number }>({
+        queryKey: ['runs', workspaceId, 'sidebar'],
+        queryFn: () => listRuns({ workspace_id: workspaceId, limit: 25 }),
+        enabled: !!workspaceId,
         refetchInterval: 5000,
     })
 
@@ -200,23 +202,35 @@ export default function AppShell() {
     const conversationRenameInputRef = useRef<HTMLInputElement | null>(null)
     const knowledgeItems = knowledgeData?.knowledge ?? []
     const pinnedKnowledgeItems = knowledgeItems.filter((n: { is_pinned: boolean }) => n.is_pinned)
-    const isWorkspaceHome = location.pathname === `/w/${workspaceId}`
+    const ongoingRuns = useMemo(
+        () =>
+            (runsData?.runs ?? []).filter((run) =>
+                ['pending', 'queued', 'running', 'paused'].includes(run.status),
+            ).slice(0, 10),
+        [runsData],
+    )
+    const isWorkspaceHome = location.pathname === workspaceOverviewRoute(workspaceId)
+    const isKnowledgeBoardPage = location.pathname === knowledgeRoute(workspaceId)
     const isSearchPage = location.pathname.includes('/search')
     const isSettingsPage = location.pathname.includes('/settings')
-    const isWorkspaceAgentPage = location.pathname.includes('/agent')
-    const isKnowledgePage = location.pathname.includes('/knowledge/') || location.pathname.includes('/knowledge/')
-    const isExecutionsPage = location.pathname.includes('/executions')
+    const isWorkspaceAgentPage = location.pathname.includes('/chat') || location.pathname.includes('/agent')
+    const isKnowledgePage = location.pathname.includes('/knowledge/')
+    const isRunsPage = location.pathname.includes('/runs') || location.pathname.includes('/executions')
+    const isProfilesPage = location.pathname.includes('/profiles')
+    const isWorkflowsPage = location.pathname.includes('/workflows')
+    const isMissionsPage = location.pathname.includes('/missions')
+    const isArtifactsPage = location.pathname.includes('/artifacts')
     const currentSectionMeta = useMemo(() => {
-        if (location.pathname.includes('/agent')) {
+        if (location.pathname.includes('/chat') || location.pathname.includes('/agent')) {
             return {
-                title: 'Workspace Agent',
+                title: 'Chat',
                 description: 'Ask questions, review context, and manage conversations.',
             }
         }
         if (location.pathname.includes('/search')) {
             return {
-                title: 'Workspace Search',
-                description: 'Search by meaning across your knowledge and saved sources.',
+                title: 'Search',
+                description: 'Search across workspace knowledge without changing the primary IA.',
             }
         }
         if (location.pathname.includes('/settings')) {
@@ -227,20 +241,44 @@ export default function AppShell() {
         }
         if (location.pathname.match(/\/executions\/.+/)) {
             return {
-                title: 'Execution Detail',
-                description: 'Live execution timeline and status.',
+                title: 'Legacy Execution Detail',
+                description: 'Transitional execution monitoring retained outside the primary IA.',
+            }
+        }
+        if (location.pathname.includes('/runs')) {
+            return {
+                title: 'Runs',
+                description: 'Durable execution records and current run activity.',
             }
         }
         if (location.pathname.includes('/executions')) {
             return {
-                title: 'Agent Executions',
-                description: 'Execution history and active runs.',
+                title: 'Legacy Executions',
+                description: 'Compatibility surface for the transitional execution monitor.',
             }
         }
-        if (location.pathname.includes('/agents')) {
+        if (location.pathname.includes('/profiles')) {
             return {
-                title: 'Agents',
-                description: 'Agent definitions, schedules, and triggers.',
+                title: 'Profiles',
+                description: 'Reusable worker definitions, prompts, and capability bundles.',
+            }
+        }
+        if (location.pathname.includes('/workflows')) {
+            return {
+                title: 'Workflows',
+                description: 'Composable execution graphs and orchestration definitions.',
+            }
+        }
+        if (location.pathname.includes('/missions')) {
+            return {
+                title: 'Missions',
+                description: 'Packaged autonomous work that assembles workflows, profiles, and triggers.',
+            }
+        }
+        if (location.pathname.includes('/artifacts')) {
+            return {
+                title: 'Artifacts',
+                description: 'Persistent outputs produced by workspace runs and missions.',
             }
         }
         if (location.pathname.includes('/knowledge/') || location.pathname.includes('/knowledge/')) {
@@ -249,9 +287,15 @@ export default function AppShell() {
                 description: 'Review and edit a single knowledge item in full detail.',
             }
         }
+        if (location.pathname.includes('/knowledge')) {
+            return {
+                title: 'Knowledge',
+                description: 'Filter, scan, and act on workspace context and source material.',
+            }
+        }
         return {
-            title: 'Workspace Knowledge',
-            description: 'Filter, scan, and act on knowledge without leaving the board.',
+            title: 'Workspace',
+            description: 'Overview of the canonical domain surfaces in this workspace.',
         }
     }, [location.pathname])
 
@@ -400,8 +444,8 @@ export default function AppShell() {
         try {
             await deleteConversation(workspaceId, conversationId)
             qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
-            if (location.pathname.includes(`/agent/${conversationId}`)) {
-                navigate(`/w/${workspaceId}/agent`)
+            if (location.pathname.includes(`/chat/${conversationId}`) || location.pathname.includes(`/agent/${conversationId}`)) {
+                navigate(chatRoute(workspaceId))
             }
         } catch (error) {
             console.error('Failed to move conversation to trash from sidebar:', error)
@@ -415,8 +459,8 @@ export default function AppShell() {
             await deleteConversation(workspaceId, conversationToDelete.id)
             await permanentlyDeleteConversation(workspaceId, conversationToDelete.id)
             qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
-            if (location.pathname.includes(`/agent/${conversationToDelete.id}`)) {
-                navigate(`/w/${workspaceId}/agent`)
+            if (location.pathname.includes(`/chat/${conversationToDelete.id}`) || location.pathname.includes(`/agent/${conversationToDelete.id}`)) {
+                navigate(chatRoute(workspaceId))
             }
         } catch (error) {
             console.error('Failed to permanently delete conversation:', error)
@@ -531,8 +575,8 @@ export default function AppShell() {
                                                                         ? location.pathname.slice(prefix.length)
                                                                         : ''
                                                                     // Drop knowledge-specific IDs and conversation IDs since they're workspace-specific
-                                                                    const keepPath = subPath.startsWith('/agent/') ? '/agent'
-                                                                        : subPath.startsWith('/knowledge/') ? ''
+                                                                    const keepPath = subPath.startsWith('/chat/') || subPath.startsWith('/agent/') ? '/chat'
+                                                                        : subPath.startsWith('/knowledge/') ? '/knowledge'
                                                                         : subPath
                                                                     navigate(`/w/${workspace.id}${keepPath}`)
                                                                 }
@@ -577,17 +621,17 @@ export default function AppShell() {
                             <div className="flex-1 min-h-0 flex flex-col px-4 pt-3 pb-3">
                                 {/* Nav */}
                                 <nav className="flex flex-col flex-1 min-h-0 gap-1">
-                                        <Link to={`/w/${workspaceId}`} className={`sidebar-item flex-shrink-0 ${location.pathname === `/w/${workspaceId}` ? 'active' : ''}`}>
-                                            <Home className="w-4 h-4" /> Knowledge
+                                        <Link to={workspaceOverviewRoute(workspaceId)} className={`sidebar-item flex-shrink-0 ${isWorkspaceHome ? 'active' : ''}`}>
+                                            <Home className="w-4 h-4" /> Workspace
                                         </Link>
-                                        <Link to={`/w/${workspaceId}/search`} className={`sidebar-item flex-shrink-0 ${isActive('/search') ? 'active' : ''}`}>
-                                            <Search className="w-4 h-4" /> Search
+                                        <Link to={knowledgeRoute(workspaceId)} className={`sidebar-item flex-shrink-0 ${isKnowledgeBoardPage ? 'active' : ''}`}>
+                                            <Folder className="w-4 h-4" /> Knowledge
                                         </Link>
-                                        {/* Workspace Agent with expandable recent conversations */}
+                                        {/* Chat with expandable recent conversations */}
                                         <div className="flex flex-col flex-1 min-h-0">
                                             <div className="flex items-center">
-                                                <Link to={`/w/${workspaceId}/agent`} className={`sidebar-item flex-1 ${isActive('/agent') && !isActive('/agents') ? 'active' : ''}`}>
-                                                    <MessageSquare className="w-4 h-4" /> Workspace Agent
+                                                <Link to={chatRoute(workspaceId)} className={`sidebar-item flex-1 ${isActive('/chat') || isActive('/agent') ? 'active' : ''}`}>
+                                                    <MessageSquare className="w-4 h-4" /> Chat
                                                 </Link>
                                                 {recentConversations.length > 0 && (
                                                     <button
@@ -617,7 +661,7 @@ export default function AppShell() {
                                                         <ContextMenu key={c.id}>
                                                             <ContextMenuTrigger asChild>
                                                                 {isRenaming ? (
-                                                                    <div className={`sidebar-item text-xs ${isActive(`/agent/${c.id}`) ? 'active' : ''}`}>
+                                                                    <div className={`sidebar-item text-xs ${isActive(`/chat/${c.id}`) || isActive(`/agent/${c.id}`) ? 'active' : ''}`}>
                                                                         <MessageSquare className="w-3 h-3" />
                                                                         <input
                                                                             ref={conversationRenameInputRef}
@@ -640,7 +684,7 @@ export default function AppShell() {
                                                                         />
                                                                     </div>
                                                                 ) : (
-                                                                    <Link to={`/w/${workspaceId}/agent/${c.id}`} className={`sidebar-item text-xs ${isActive(`/agent/${c.id}`) ? 'active' : ''}`}>
+                                                                    <Link to={chatRoute(workspaceId, c.id)} className={`sidebar-item text-xs ${isActive(`/chat/${c.id}`) || isActive(`/agent/${c.id}`) ? 'active' : ''}`}>
                                                                         <MessageSquare className="w-3 h-3" />
                                                                         <span className="truncate">{c.title ?? 'New Chat'}</span>
                                                                     </Link>
@@ -716,60 +760,76 @@ export default function AppShell() {
                         <div className="h-1/2 flex flex-col glass-card overflow-hidden" style={{ boxShadow: 'none' }}>
                             <div className="flex-1 min-h-0 flex flex-col px-4 pt-3 pb-2">
                                 <nav className="flex flex-col flex-1 min-h-0 gap-1">
-                                    {/* PHASE 1: Agents link demoted - accessible via /agents but not in primary nav */}
-                                    {/* <Link to="/agents" className={`sidebar-item flex-shrink-0 ${isActive('/agents') ? 'active' : ''}`}>
-                                        <Bot className="w-4 h-4" /> Agents
-                                    </Link> */}
-                                    <div className="flex flex-col flex-1 min-h-0">
-                                        <div className="flex items-center">
-                                            <Link to="/executions" className={`sidebar-item flex-1 ${isActive('/executions') ? 'active' : ''}`}>
-                                                <Activity className="w-4 h-4" /> Executions
+                                    {isAgnosticPage ? (
+                                        <Link to="/executions" className={`sidebar-item flex-shrink-0 ${location.pathname.includes('/executions') ? 'active' : ''}`}>
+                                            <Activity className="w-4 h-4" /> Legacy Executions
+                                        </Link>
+                                    ) : (
+                                        <>
+                                            <Link to={profilesRoute(workspaceId)} className={`sidebar-item flex-shrink-0 ${isProfilesPage ? 'active' : ''}`}>
+                                                <Bot className="w-4 h-4" /> Profiles
                                             </Link>
-                                            {ongoingExecutions.length > 0 && (
-                                                <button
-                                                    className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors flex-shrink-0"
-                                                    onClick={() => setExecutionsSublistOpen(p => !p)}
-                                                >
-                                                    {executionsSublistOpen
-                                                        ? <ChevronDown className="w-3 h-3" />
-                                                        : <ChevronRight className="w-3 h-3" />}
-                                                </button>
-                                            )}
-                                        </div>
-                                        {executionsSublistOpen && ongoingExecutions.length > 0 && (
-                                            <div
-                                                className="ml-3 mt-1 flex items-stretch overflow-hidden flex-1 min-h-0"
-                                            >
-                                                <span
-                                                    className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/40 select-none flex-shrink-0 pt-0.5"
-                                                    style={{ writingMode: 'vertical-lr' }}
-                                                >
-                                                    Active Runs
-                                                </span>
-                                                <div className="pl-1.5 space-y-0.5 flex-1 min-w-0 overflow-y-auto">
-                                                    {ongoingExecutions.map(exec => (
-                                                        <Link
-                                                            key={exec.id}
-                                                            to={`/executions/${exec.id}`}
-                                                            className={`sidebar-item text-xs ${location.pathname.includes(`/executions/${exec.id}`) ? 'active' : ''}`}
+                                            <Link to={workflowsRoute(workspaceId)} className={`sidebar-item flex-shrink-0 ${isWorkflowsPage ? 'active' : ''}`}>
+                                                <Folder className="w-4 h-4" /> Workflows
+                                            </Link>
+                                            <Link to={missionsRoute(workspaceId)} className={`sidebar-item flex-shrink-0 ${isMissionsPage ? 'active' : ''}`}>
+                                                <Zap className="w-4 h-4" /> Missions
+                                            </Link>
+                                            <div className="flex flex-col flex-1 min-h-0">
+                                                <div className="flex items-center">
+                                                    <Link to={runsRoute(workspaceId)} className={`sidebar-item flex-1 ${isRunsPage ? 'active' : ''}`}>
+                                                        <Activity className="w-4 h-4" /> Runs
+                                                    </Link>
+                                                    {ongoingRuns.length > 0 && (
+                                                        <button
+                                                            className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors flex-shrink-0"
+                                                            onClick={() => setRunsSublistOpen(p => !p)}
                                                         >
-                                                            <Activity className="w-3 h-3" />
-                                                            <span className="truncate">{exec.agent_name ?? exec.agent_id}</span>
-                                                            {exec.status === 'running' && (
-                                                                <span className="relative flex h-1.5 w-1.5 ml-auto flex-shrink-0">
-                                                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                                                                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
-                                                                </span>
-                                                            )}
-                                                            {exec.status === 'paused_hitl' && (
-                                                                <span className="flex h-1.5 w-1.5 rounded-full bg-amber-400 ml-auto flex-shrink-0" />
-                                                            )}
-                                                        </Link>
-                                                    ))}
+                                                            {runsSublistOpen
+                                                                ? <ChevronDown className="w-3 h-3" />
+                                                                : <ChevronRight className="w-3 h-3" />}
+                                                        </button>
+                                                    )}
                                                 </div>
+                                                {runsSublistOpen && ongoingRuns.length > 0 && (
+                                                    <div
+                                                        className="ml-3 mt-1 flex items-stretch overflow-hidden flex-1 min-h-0"
+                                                    >
+                                                        <span
+                                                            className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/40 select-none flex-shrink-0 pt-0.5"
+                                                            style={{ writingMode: 'vertical-lr' }}
+                                                        >
+                                                            Active Runs
+                                                        </span>
+                                                        <div className="pl-1.5 space-y-0.5 flex-1 min-w-0 overflow-y-auto">
+                                                            {ongoingRuns.map(run => (
+                                                                <Link
+                                                                    key={run.id}
+                                                                    to={runsRoute(workspaceId)}
+                                                                    className={`sidebar-item text-xs ${isRunsPage ? 'active' : ''}`}
+                                                                >
+                                                                    <Activity className="w-3 h-3" />
+                                                                    <span className="truncate">{run.run_type} {run.id.slice(0, 8)}</span>
+                                                                    {run.status === 'running' && (
+                                                                        <span className="relative flex h-1.5 w-1.5 ml-auto flex-shrink-0">
+                                                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                                                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
+                                                                        </span>
+                                                                    )}
+                                                                    {run.status === 'paused' && (
+                                                                        <span className="flex h-1.5 w-1.5 rounded-full bg-amber-400 ml-auto flex-shrink-0" />
+                                                                    )}
+                                                                </Link>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
-                                        )}
-                                    </div>
+                                            <Link to={artifactsRoute(workspaceId)} className={`sidebar-item flex-shrink-0 ${isArtifactsPage ? 'active' : ''}`}>
+                                                <FileText className="w-4 h-4" /> Artifacts
+                                            </Link>
+                                        </>
+                                    )}
                                 </nav>
                             </div>
 
@@ -825,23 +885,23 @@ export default function AppShell() {
                                 {/* Nav icons */}
                                 <nav className="flex flex-col gap-1 w-full items-center mt-1">
                                     <Link
-                                        to={`/w/${workspaceId}`}
-                                        title="Knowledge"
-                                        className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${location.pathname === `/w/${workspaceId}` ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
+                                        to={workspaceOverviewRoute(workspaceId)}
+                                        title="Workspace"
+                                        className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isWorkspaceHome ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
                                     >
                                         <Home className="w-4 h-4" />
                                     </Link>
                                     <Link
-                                        to={`/w/${workspaceId}/search`}
-                                        title="Search"
-                                        className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isActive('/search') ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
+                                        to={knowledgeRoute(workspaceId)}
+                                        title="Knowledge"
+                                        className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isKnowledgeBoardPage ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
                                     >
-                                        <Search className="w-4 h-4" />
+                                        <Folder className="w-4 h-4" />
                                     </Link>
                                     <Link
-                                        to={`/w/${workspaceId}/agent`}
-                                        title="Workspace Agent"
-                                        className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isActive('/agent') && !isActive('/agents') ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
+                                        to={chatRoute(workspaceId)}
+                                        title="Chat"
+                                        className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isActive('/chat') || isActive('/agent') ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
                                     >
                                         <MessageSquare className="w-4 h-4" />
                                     </Link>
@@ -852,23 +912,53 @@ export default function AppShell() {
 
                         {/* Bottom half: workspace-agnostic */}
                         <div className="h-1/2 flex flex-col items-center py-3 gap-1 glass-card" style={{ boxShadow: 'none' }}>
-                            {/* PHASE 1: Agents link demoted - accessible via /agents but not in primary nav */}
-                            {/* <Link
-                                to="/agents"
-                                title="Agents"
-                                className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isActive('/agents') ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
-                            >
-                                <Bot className="w-4 h-4" />
-                            </Link> */}
-
-                            {/* Executions */}
-                            <Link
-                                to="/executions"
-                                title="Executions"
-                                className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isActive('/executions') ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
-                            >
-                                <Activity className="w-4 h-4" />
-                            </Link>
+                            {isAgnosticPage ? (
+                                <Link
+                                    to="/executions"
+                                    title="Legacy Executions"
+                                    className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${location.pathname.includes('/executions') ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
+                                >
+                                    <Activity className="w-4 h-4" />
+                                </Link>
+                            ) : (
+                                <>
+                                    <Link
+                                        to={profilesRoute(workspaceId)}
+                                        title="Profiles"
+                                        className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isProfilesPage ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
+                                    >
+                                        <Bot className="w-4 h-4" />
+                                    </Link>
+                                    <Link
+                                        to={workflowsRoute(workspaceId)}
+                                        title="Workflows"
+                                        className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isWorkflowsPage ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
+                                    >
+                                        <Folder className="w-4 h-4" />
+                                    </Link>
+                                    <Link
+                                        to={missionsRoute(workspaceId)}
+                                        title="Missions"
+                                        className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isMissionsPage ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
+                                    >
+                                        <Zap className="w-4 h-4" />
+                                    </Link>
+                                    <Link
+                                        to={runsRoute(workspaceId)}
+                                        title="Runs"
+                                        className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isRunsPage ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
+                                    >
+                                        <Activity className="w-4 h-4" />
+                                    </Link>
+                                    <Link
+                                        to={artifactsRoute(workspaceId)}
+                                        title="Artifacts"
+                                        className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isArtifactsPage ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
+                                    >
+                                        <FileText className="w-4 h-4" />
+                                    </Link>
+                                </>
+                            )}
 
                             <div className="flex-1" />
 
@@ -1034,7 +1124,7 @@ export default function AppShell() {
                                                         )}
                                                         <button
                                                             type="button"
-                                                            onClick={() => { setHitlShadeOpen(false); navigate(`/w/${req.workspace_id}/agent/${req.conversation_id}`) }}
+                                                            onClick={() => { setHitlShadeOpen(false); navigate(chatRoute(req.workspace_id, req.conversation_id)) }}
                                                             className="flex items-center gap-1 text-[10px] text-accent/70 hover:text-accent transition-colors"
                                                         >
                                                             <ExternalLink className="w-3 h-3" />
@@ -1076,14 +1166,14 @@ export default function AppShell() {
                 <div className="relative z-0 flex-1 min-h-0 flex gap-3 p-3">
                     <main
                         data-openforge-main-content="1"
-                        className={`relative z-20 flex-1 min-h-0 flex flex-col ${isSettingsPage ? 'overflow-hidden' : 'overflow-auto'} ${(isWorkspaceHome || isSearchPage || isSettingsPage || isWorkspaceAgentPage || isKnowledgePage || isExecutionsPage)
+                        className={`relative z-20 flex-1 min-h-0 flex flex-col ${isSettingsPage ? 'overflow-hidden' : 'overflow-auto'} ${(isWorkspaceHome || isKnowledgeBoardPage || isSearchPage || isSettingsPage || isWorkspaceAgentPage || isKnowledgePage || isRunsPage || isProfilesPage || isWorkflowsPage || isMissionsPage || isArtifactsPage)
                             ? ''
                             : 'rounded-2xl border border-border/60 bg-card/25'}`}
                     >
                         <Outlet />
                     </main>
 
-                    {isWorkspaceHome && (
+                    {isKnowledgeBoardPage && (
                         <Siderail
                             storageKey="openforge.shell.insights.pct"
                             collapsedStorageKey="openforge.shell.insights.collapsed"

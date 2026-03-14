@@ -1,41 +1,28 @@
-"""
-Artifact domain service.
-
-TODO: Implement artifact management business logic.
-"""
+"""Artifact domain service."""
 
 from uuid import UUID
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from openforge.db.models import ArtifactModel
+from openforge.domains.common.crud import CrudDomainService
 
 
-class ArtifactService:
+class ArtifactService(CrudDomainService):
     """Service for managing artifacts."""
 
-    def __init__(self, db: AsyncSession):
-        self.db = db
+    model = ArtifactModel
+    field_aliases = {"metadata": "metadata_json"}
 
-    async def list_artifacts(self, skip: int = 0, limit: int = 100):
-        """List all artifacts."""
-        # TODO: Implement
-        return [], 0
+    async def list_artifacts(self, skip: int = 0, limit: int = 100, workspace_id: UUID | None = None):
+        return await self.list_records(skip=skip, limit=limit, filters={"workspace_id": workspace_id})
 
     async def get_artifact(self, artifact_id: UUID):
-        """Get an artifact by ID."""
-        # TODO: Implement
-        return None
+        return await self.get_record(artifact_id)
 
     async def create_artifact(self, artifact_data: dict):
-        """Create a new artifact."""
-        # TODO: Implement
-        return None
+        return await self.create_record(artifact_data)
 
     async def update_artifact(self, artifact_id: UUID, artifact_data: dict):
-        """Update an artifact."""
-        # TODO: Implement
-        return None
+        return await self.update_record(artifact_id, artifact_data)
 
     async def delete_artifact(self, artifact_id: UUID):
-        """Delete an artifact."""
-        # TODO: Implement
-        return False
+        return await self.delete_record(artifact_id)

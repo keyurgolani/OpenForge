@@ -1,7 +1,7 @@
 """
 OpenForge API Router
 
-Mounts all API routes and domain routers.
+Mounts non-domain API routes.
 Legacy routes (agents, agent_schedules, targets) have been removed.
 Use domain routes (/api/v1/profiles, /api/v1/triggers, /api/v1/artifacts) instead.
 """
@@ -25,13 +25,6 @@ from openforge.api import tool_permissions as tool_permissions_api
 from openforge.api import models as models_api
 
 # Domain routers (new architecture)
-from openforge.domains.profiles.router import router as profiles_router
-from openforge.domains.workflows.router import router as workflows_router
-from openforge.domains.missions.router import router as missions_router
-from openforge.domains.triggers.router import router as triggers_router
-from openforge.domains.runs.router import router as runs_router
-from openforge.domains.artifacts.router import router as artifacts_router
-
 api_router = APIRouter(prefix="/api/v1")
 
 # Legacy routes (transitional)
@@ -53,9 +46,3 @@ api_router.include_router(tool_permissions_api.router, prefix="/tools", tags=["t
 api_router.include_router(models_api.router, prefix="/models", tags=["models"])
 
 # Domain routes (new architecture)
-api_router.include_router(profiles_router, prefix="/profiles", tags=["profiles"])
-api_router.include_router(workflows_router, prefix="/workflows", tags=["workflows"])
-api_router.include_router(missions_router, prefix="/missions", tags=["missions"])
-api_router.include_router(triggers_router, prefix="/triggers", tags=["triggers"])
-api_router.include_router(runs_router, prefix="/runs", tags=["runs"])
-api_router.include_router(artifacts_router, prefix="/artifacts", tags=["artifacts"])

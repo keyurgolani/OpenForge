@@ -2,26 +2,24 @@
 Workflow domain API router.
 """
 
-from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.openforge.db.session import get_db
+from openforge.db.postgres import get_db
 
-from .schemas import WorkflowCreate, WorkflowResponse, WorkflowUpdate
+from .schemas import WorkflowCreate, WorkflowListResponse, WorkflowResponse, WorkflowUpdate
 from .service import WorkflowService
 
 router = APIRouter()
 
 
-def get_workflow_service(db: AsyncSession = Depends(get_db)) -> WorkflowService:
+def get_workflow_service(db=Depends(get_db)) -> WorkflowService:
     """Dependency to get workflow service."""
     return WorkflowService(db)
 
 
-@router.get("/", response_model=dict)
+@router.get("/", response_model=WorkflowListResponse)
 async def list_workflows(
     skip: int = 0,
     limit: int = 100,
@@ -85,3 +83,4 @@ async def delete_workflow(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Workflow not found",
         )
+    return None

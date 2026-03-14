@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from openforge.config import get_settings
+from openforge.common.config import get_settings
 import asyncio
 import logging
 

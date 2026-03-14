@@ -2,26 +2,24 @@
 Mission domain API router.
 """
 
-from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.openforge.db.session import get_db
+from openforge.db.postgres import get_db
 
-from .schemas import MissionCreate, MissionResponse, MissionUpdate
+from .schemas import MissionCreate, MissionListResponse, MissionResponse, MissionUpdate
 from .service import MissionService
 
 router = APIRouter()
 
 
-def get_mission_service(db: AsyncSession = Depends(get_db)) -> MissionService:
+def get_mission_service(db=Depends(get_db)) -> MissionService:
     """Dependency to get mission service."""
     return MissionService(db)
 
 
-@router.get("/", response_model=dict)
+@router.get("/", response_model=MissionListResponse)
 async def list_missions(
     skip: int = 0,
     limit: int = 100,
@@ -85,3 +83,4 @@ async def delete_mission(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Mission not found",
         )
+    return None

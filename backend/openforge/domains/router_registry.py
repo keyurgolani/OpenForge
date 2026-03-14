@@ -6,7 +6,7 @@ This module provides a central registry for all domain routers.
 
 from fastapi import FastAPI
 
-from backend.openforge.core.product_vocabulary import API_PREFIXES, DomainNoun
+from openforge.core.product_vocabulary import API_PREFIXES, DomainNoun
 
 from .artifacts.router import router as artifacts_router
 from .missions.router import router as missions_router

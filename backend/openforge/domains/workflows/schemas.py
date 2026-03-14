@@ -8,13 +8,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from backend.openforge.domains.workflows.types import (
-    NodeType,
-    WorkflowDefinition,
-    WorkflowEdge,
-    WorkflowNode,
-    WorkflowStatus,
-)
+from openforge.domains.workflows.types import NodeType, WorkflowEdge, WorkflowNode, WorkflowStatus
 
 
 class WorkflowNodeCreate(BaseModel):

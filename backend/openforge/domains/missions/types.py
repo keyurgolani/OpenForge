@@ -10,7 +10,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from backend.openforge.domains.common.enums import ExecutionMode
+from openforge.domains.common.enums import ExecutionMode
 
 
 class MissionStatus(str, Enum):

@@ -12,9 +12,9 @@ from .types import (
 )
 from .schemas import (
     ProfileCreate,
-    ProfileUpdate,
-    ProfileResponse,
     ProfileListResponse,
+    ProfileResponse,
+    ProfileUpdate,
 )
 from .router import router
 

@@ -32,6 +32,7 @@ import {
     ContextMenuSeparator
 } from '@/components/ui/context-menu'
 import { sanitizeProviderDisplayName } from '@/lib/provider-display'
+import { chatRoute } from '@/lib/routes'
 import { renderAgentMessageContent, type MentionResolutionMaps } from '@/lib/agent-content'
 import Siderail from '@/components/shared/Siderail'
 function renderMessageContent(
@@ -439,7 +440,7 @@ export default function WorkspaceAgentPage() {
         if (activeCid === mostRecentConversationId) return
         shouldRestoreTextareaFocusRef.current = true
         setActiveCid(mostRecentConversationId)
-        navigate(`/w/${workspaceId}/agent/${mostRecentConversationId}`, { replace: true })
+        navigate(chatRoute(workspaceId, mostRecentConversationId), { replace: true })
     }, [activeCid, conversationId, mostRecentConversationId, navigate, workspaceId])
 
     useEffect(() => {
@@ -781,7 +782,7 @@ export default function WorkspaceAgentPage() {
         qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'subagent'] }); qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'trash'] })
         scheduleComposerFocus(40)
         setActiveCid(conv.id)
-        navigate(`/w/${workspaceId}/agent/${conv.id}`)
+        navigate(chatRoute(workspaceId, conv.id))
     }
 
     const handleDeleteConv = async (cid: string) => {
@@ -791,7 +792,7 @@ export default function WorkspaceAgentPage() {
         if (activeCid === cid) {
             suppressAutoSelectRef.current = true
             setActiveCid(null)
-            navigate(`/w/${workspaceId}/agent`)
+            navigate(chatRoute(workspaceId))
         }
     }
 
@@ -819,7 +820,7 @@ export default function WorkspaceAgentPage() {
             if (activeCid === cid) {
                 suppressAutoSelectRef.current = true
                 setActiveCid(null)
-                navigate(`/w/${workspaceId}/agent`)
+                navigate(chatRoute(workspaceId))
             }
         } catch (err: any) {
             const detail = err?.response?.data?.detail || err?.message || 'Unable to permanently delete conversation.'
@@ -841,7 +842,7 @@ export default function WorkspaceAgentPage() {
             if (affected.some(c => c.id === activeCid)) {
                 suppressAutoSelectRef.current = true
                 setActiveCid(null)
-                navigate(`/w/${workspaceId}/agent`)
+                navigate(chatRoute(workspaceId))
             }
         }
     }
@@ -858,7 +859,7 @@ export default function WorkspaceAgentPage() {
             if (activeCid && trashedConversations.some(c => c.id === activeCid)) {
                 suppressAutoSelectRef.current = true
                 setActiveCid(null)
-                navigate(`/w/${workspaceId}/agent`)
+                navigate(chatRoute(workspaceId))
             }
         } catch (err: any) {
             showError('Bulk delete failed', err?.response?.data?.detail || err?.message || 'Unable to delete.')
@@ -901,14 +902,14 @@ export default function WorkspaceAgentPage() {
         suppressAutoSelectRef.current = false
         scheduleComposerFocus(20)
         setActiveCid(cid)
-        navigate(`/w/${workspaceId}/agent/${cid}`)
+        navigate(chatRoute(workspaceId, cid))
     }
 
     const handleSelectTrashedConversation = (cid: string) => {
         setActiveChatRailSection('trash')
         suppressAutoSelectRef.current = false
         setActiveCid(cid)
-        navigate(`/w/${workspaceId}/agent/${cid}`)
+        navigate(chatRoute(workspaceId, cid))
     }
 
     const handleSend = async () => {
@@ -960,7 +961,7 @@ export default function WorkspaceAgentPage() {
             qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
             qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'subagent'] }); qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'trash'] })
             setActiveCid(conv.id)
-            navigate(`/w/${workspaceId}/agent/${conv.id}`)
+            navigate(chatRoute(workspaceId, conv.id))
         }
 
         const override: { provider_id?: string; model_id?: string; attachment_ids?: string[]; mentions?: Mention[]; optimize?: boolean } = {}

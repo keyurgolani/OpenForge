@@ -2,33 +2,32 @@
 Artifact domain API router.
 """
 
-from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.openforge.db.session import get_db
+from openforge.db.postgres import get_db
 
-from .schemas import ArtifactCreate, ArtifactResponse, ArtifactUpdate
+from .schemas import ArtifactCreate, ArtifactListResponse, ArtifactResponse, ArtifactUpdate
 from .service import ArtifactService
 
 router = APIRouter()
 
 
-def get_artifact_service(db: AsyncSession = Depends(get_db)) -> ArtifactService:
+def get_artifact_service(db=Depends(get_db)) -> ArtifactService:
     """Dependency to get artifact service."""
     return ArtifactService(db)
 
 
-@router.get("/", response_model=dict)
+@router.get("/", response_model=ArtifactListResponse)
 async def list_artifacts(
     skip: int = 0,
     limit: int = 100,
+    workspace_id: UUID | None = None,
     service: ArtifactService = Depends(get_artifact_service),
 ):
     """List all artifacts."""
-    artifacts, total = await service.list_artifacts(skip=skip, limit=limit)
+    artifacts, total = await service.list_artifacts(skip=skip, limit=limit, workspace_id=workspace_id)
     return {"artifacts": artifacts, "total": total}
 
 
@@ -85,3 +84,4 @@ async def delete_artifact(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Artifact not found",
         )
+    return None

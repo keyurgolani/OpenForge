@@ -8,8 +8,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from backend.openforge.domains.artifacts.types import Artifact, ArtifactStatus
-from backend.openforge.domains.common.enums import ArtifactType
+from openforge.domains.artifacts.types import ArtifactStatus
+from openforge.domains.common.enums import ArtifactType
 
 
 class ArtifactCreate(BaseModel):

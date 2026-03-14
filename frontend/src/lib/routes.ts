@@ -1,83 +1,119 @@
 /**
- * Route Definitions
+ * Canonical frontend route definitions.
  *
- * Centralized route constants for the frontend application.
+ * These helpers keep the workspace IA aligned with the final product nouns:
+ * Workspace, Knowledge, Chat, Profiles, Workflows, Missions, Runs, Artifacts.
  */
 
+const WORKSPACE_PREFIX = '/w/:workspaceId';
+
 export const ROUTES = {
-  // Auth
   LOGIN: '/login',
-
-  // Onboarding
   ONBOARDING: '/onboarding',
-
-  // Workspace
-  HOME: '/',
-  WORKSPACE: '/workspaces/:workspaceId',
-  WORKSPACE_HOME: '/workspaces/:workspaceId/home',
-
-  // Agent/Chat
-  AGENT: '/workspaces/:workspaceId/agent',
-  AGENT_CONVERSATION: '/workspaces/:workspaceId/agent/:conversationId',
-
-  // Knowledge
-  KNOWLEDGE: '/workspaces/:workspaceId/knowledge',
-  KNOWLEDGE_ITEM: '/workspaces/:workspaceId/knowledge/:knowledgeId',
-
-  // Search
-  SEARCH: '/workspaces/:workspaceId/search',
-
-  // Executions
-  EXECUTIONS: '/workspaces/:workspaceId/executions',
-  EXECUTION_DETAIL: '/workspaces/:workspaceId/executions/:executionId',
-
-  // Settings
   SETTINGS: '/settings',
   SETTINGS_PROVIDERS: '/settings/providers',
   SETTINGS_TOOLS: '/settings/tools',
   SETTINGS_MCP: '/settings/mcp',
 
-  // Profiles (new architecture)
-  PROFILES: '/profiles',
-  PROFILE_DETAIL: '/profiles/:profileId',
+  WORKSPACE: WORKSPACE_PREFIX,
+  WORKSPACE_OVERVIEW: WORKSPACE_PREFIX,
+  KNOWLEDGE: `${WORKSPACE_PREFIX}/knowledge`,
+  KNOWLEDGE_ITEM: `${WORKSPACE_PREFIX}/knowledge/:knowledgeId`,
+  CHAT: `${WORKSPACE_PREFIX}/chat`,
+  CHAT_CONVERSATION: `${WORKSPACE_PREFIX}/chat/:conversationId`,
+  SEARCH: `${WORKSPACE_PREFIX}/search`,
+  PROFILES: `${WORKSPACE_PREFIX}/profiles`,
+  PROFILE_DETAIL: `${WORKSPACE_PREFIX}/profiles/:profileId`,
+  WORKFLOWS: `${WORKSPACE_PREFIX}/workflows`,
+  WORKFLOW_DETAIL: `${WORKSPACE_PREFIX}/workflows/:workflowId`,
+  MISSIONS: `${WORKSPACE_PREFIX}/missions`,
+  MISSION_DETAIL: `${WORKSPACE_PREFIX}/missions/:missionId`,
+  RUNS: `${WORKSPACE_PREFIX}/runs`,
+  RUN_DETAIL: `${WORKSPACE_PREFIX}/runs/:runId`,
+  ARTIFACTS: `${WORKSPACE_PREFIX}/artifacts`,
+  ARTIFACT_DETAIL: `${WORKSPACE_PREFIX}/artifacts/:artifactId`,
 
-  // Workflows (new architecture)
-  WORKFLOWS: '/workflows',
-  WORKFLOW_DETAIL: '/workflows/:workflowId',
-
-  // Missions (new architecture)
-  MISSIONS: '/missions',
-  MISSION_DETAIL: '/missions/:missionId',
-
-  // Triggers (new architecture)
-  TRIGGERS: '/triggers',
-  TRIGGER_DETAIL: '/triggers/:triggerId',
-
-  // Runs (new architecture)
-  RUNS: '/runs',
-  RUN_DETAIL: '/runs/:runId',
-
-  // Artifacts (new architecture)
-  ARTIFACTS: '/artifacts',
-  ARTIFACT_DETAIL: '/artifacts/:artifactId',
+  // Transitional compatibility routes kept out of the primary IA.
+  LEGACY_AGENT: `${WORKSPACE_PREFIX}/agent`,
+  LEGACY_AGENT_CONVERSATION: `${WORKSPACE_PREFIX}/agent/:conversationId`,
+  LEGACY_EXECUTIONS: '/executions',
+  LEGACY_EXECUTION_DETAIL: '/executions/:executionId',
 } as const;
 
-/**
- * Helper to create route with workspace ID
- */
-export function workspaceRoute(route: string, workspaceId: string): string {
-  return route.replace(':workspaceId', workspaceId);
-}
-
-/**
- * Helper to create route with multiple params
- */
-export function routeWithParams(route: string, params: Record<string, string>): string {
+export function routeWithParams(
+  route: string,
+  params: Record<string, string | number | undefined | null>,
+): string {
   let result = route;
   for (const [key, value] of Object.entries(params)) {
-    result = result.replace(`:${key}`, value);
+    if (value === undefined || value === null) {
+      continue;
+    }
+    result = result.replace(`:${key}`, String(value));
   }
   return result;
+}
+
+export function workspaceRoute(workspaceId: string, suffix = ''): string {
+  const normalizedSuffix = suffix.startsWith('/') || suffix === '' ? suffix : `/${suffix}`;
+  return `/w/${workspaceId}${normalizedSuffix}`;
+}
+
+export function workspaceOverviewRoute(workspaceId: string): string {
+  return routeWithParams(ROUTES.WORKSPACE_OVERVIEW, { workspaceId });
+}
+
+export function knowledgeRoute(workspaceId: string, knowledgeId?: string): string {
+  if (knowledgeId) {
+    return routeWithParams(ROUTES.KNOWLEDGE_ITEM, { workspaceId, knowledgeId });
+  }
+  return routeWithParams(ROUTES.KNOWLEDGE, { workspaceId });
+}
+
+export function chatRoute(workspaceId: string, conversationId?: string): string {
+  if (conversationId) {
+    return routeWithParams(ROUTES.CHAT_CONVERSATION, { workspaceId, conversationId });
+  }
+  return routeWithParams(ROUTES.CHAT, { workspaceId });
+}
+
+export function searchRoute(workspaceId: string): string {
+  return routeWithParams(ROUTES.SEARCH, { workspaceId });
+}
+
+export function profilesRoute(workspaceId: string, profileId?: string): string {
+  if (profileId) {
+    return routeWithParams(ROUTES.PROFILE_DETAIL, { workspaceId, profileId });
+  }
+  return routeWithParams(ROUTES.PROFILES, { workspaceId });
+}
+
+export function workflowsRoute(workspaceId: string, workflowId?: string): string {
+  if (workflowId) {
+    return routeWithParams(ROUTES.WORKFLOW_DETAIL, { workspaceId, workflowId });
+  }
+  return routeWithParams(ROUTES.WORKFLOWS, { workspaceId });
+}
+
+export function missionsRoute(workspaceId: string, missionId?: string): string {
+  if (missionId) {
+    return routeWithParams(ROUTES.MISSION_DETAIL, { workspaceId, missionId });
+  }
+  return routeWithParams(ROUTES.MISSIONS, { workspaceId });
+}
+
+export function runsRoute(workspaceId: string, runId?: string): string {
+  if (runId) {
+    return routeWithParams(ROUTES.RUN_DETAIL, { workspaceId, runId });
+  }
+  return routeWithParams(ROUTES.RUNS, { workspaceId });
+}
+
+export function artifactsRoute(workspaceId: string, artifactId?: string): string {
+  if (artifactId) {
+    return routeWithParams(ROUTES.ARTIFACT_DETAIL, { workspaceId, artifactId });
+  }
+  return routeWithParams(ROUTES.ARTIFACTS, { workspaceId });
 }
 
 export default ROUTES;

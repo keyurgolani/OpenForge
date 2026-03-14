@@ -4,9 +4,16 @@ Missions domain package.
 Mission Definitions - packaged autonomous units that combine workflows, profiles, and triggers.
 """
 
-from backend.openforge.domains.missions.types import MissionDefinition, MissionStatus
+from .types import MissionDefinition, MissionStatus
+from .schemas import MissionCreate, MissionListResponse, MissionResponse, MissionUpdate
+from .router import router
 
 __all__ = [
     "MissionDefinition",
     "MissionStatus",
+    "MissionCreate",
+    "MissionUpdate",
+    "MissionResponse",
+    "MissionListResponse",
+    "router",
 ]

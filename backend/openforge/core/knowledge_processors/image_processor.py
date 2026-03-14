@@ -138,7 +138,7 @@ class ImageProcessor:
 
         # ── Step 4: CLIP visual embedding ──
         try:
-            self._embed_clip(knowledge_id, workspace_id, file_path)
+            await self._embed_clip(knowledge_id, workspace_id, file_path)
             result["clip_embedded"] = True
         except Exception as e:
             logger.warning("CLIP embedding failed for %s: %s", knowledge_id, e)
@@ -231,7 +231,7 @@ class ImageProcessor:
         text = pytesseract.image_to_string(img)
         return (text or "").strip()
 
-    def _embed_clip(
+    async def _embed_clip(
         self, knowledge_id: UUID, workspace_id: UUID, file_path: str
     ) -> None:
         """Encode image with CLIP and store in openforge_visual collection."""

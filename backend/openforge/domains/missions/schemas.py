@@ -8,8 +8,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from backend.openforge.domains.common.enums import ExecutionMode
-from backend.openforge.domains.missions.types import MissionDefinition, MissionStatus
+from openforge.domains.common.enums import ExecutionMode
+from openforge.domains.missions.types import MissionStatus
 
 
 class MissionCreate(BaseModel):

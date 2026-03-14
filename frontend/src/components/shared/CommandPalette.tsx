@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Command } from 'cmdk'
 import { listWorkspaces, listKnowledge } from '@/lib/api'
+import { chatRoute, knowledgeRoute, searchRoute, workspaceOverviewRoute } from '@/lib/routes'
 import { useUIStore } from '@/stores/uiStore'
 import { isModKey, getShortcutDisplay } from '@/lib/keyboard'
 import { openQuickKnowledge, type QuickKnowledgeType } from '@/lib/quick-knowledge'
@@ -120,11 +121,11 @@ export default function CommandPalette() {
                                         <PaletteItem icon={<Code2 className="w-4 h-4" />} onSelect={() => handleCreateKnowledge('gist')}>New Code Gist</PaletteItem>
                                         <PaletteItem
                                             icon={<MessageSquare className="w-4 h-4" />}
-                                            onSelect={() => run(() => navigate(`/w/${workspaceId}/agent`))}
-                                        >Go to Agent</PaletteItem>
+                                            onSelect={() => run(() => navigate(chatRoute(workspaceId)))}
+                                        >Go to Chat</PaletteItem>
                                         <PaletteItem
                                             icon={<Search className="w-4 h-4" />}
-                                            onSelect={() => run(() => navigate(`/w/${workspaceId}/search`))}
+                                            onSelect={() => run(() => navigate(searchRoute(workspaceId)))}
                                         >Go to Search</PaletteItem>
                                         <PaletteItem
                                             icon={<Settings className="w-4 h-4" />}
@@ -141,7 +142,7 @@ export default function CommandPalette() {
                                         <PaletteItem
                                             key={ws.id}
                                             icon={<span className="flex items-center justify-center">{getWorkspaceIcon(ws.icon)}</span>}
-                                            onSelect={() => run(() => navigate(`/w/${ws.id}`))}
+                                            onSelect={() => run(() => navigate(workspaceOverviewRoute(ws.id)))}
                                         >
                                             {ws.name}
                                         </PaletteItem>
@@ -156,7 +157,7 @@ export default function CommandPalette() {
                                         <PaletteItem
                                             key={n.id}
                                             icon={<FileText className="w-4 h-4" />}
-                                            onSelect={() => run(() => navigate(`/w/${workspaceId}/knowledge/${n.id}`))}
+                                            onSelect={() => run(() => navigate(knowledgeRoute(workspaceId, n.id)))}
                                             hint={n.type}
                                         >
                                             {n.title || n.ai_title || 'Untitled'}

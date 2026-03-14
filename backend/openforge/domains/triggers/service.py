@@ -1,41 +1,27 @@
-"""
-Trigger domain service.
-
-TODO: Implement trigger management business logic.
-"""
+"""Trigger domain service."""
 
 from uuid import UUID
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from openforge.db.models import TriggerDefinitionModel
+from openforge.domains.common.crud import CrudDomainService
 
 
-class TriggerService:
+class TriggerService(CrudDomainService):
     """Service for managing trigger definitions."""
 
-    def __init__(self, db: AsyncSession):
-        self.db = db
+    model = TriggerDefinitionModel
 
     async def list_triggers(self, skip: int = 0, limit: int = 100):
-        """List all triggers."""
-        # TODO: Implement
-        return [], 0
+        return await self.list_records(skip=skip, limit=limit)
 
     async def get_trigger(self, trigger_id: UUID):
-        """Get a trigger by ID."""
-        # TODO: Implement
-        return None
+        return await self.get_record(trigger_id)
 
     async def create_trigger(self, trigger_data: dict):
-        """Create a new trigger."""
-        # TODO: Implement
-        return None
+        return await self.create_record(trigger_data)
 
     async def update_trigger(self, trigger_id: UUID, trigger_data: dict):
-        """Update a trigger."""
-        # TODO: Implement
-        return None
+        return await self.update_record(trigger_id, trigger_data)
 
     async def delete_trigger(self, trigger_id: UUID):
-        """Delete a trigger."""
-        # TODO: Implement
-        return False
+        return await self.delete_record(trigger_id)

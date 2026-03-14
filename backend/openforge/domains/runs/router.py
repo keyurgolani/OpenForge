@@ -2,33 +2,32 @@
 Run domain API router.
 """
 
-from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.openforge.db.session import get_db
+from openforge.db.postgres import get_db
 
-from .schemas import RunCreate, RunResponse, RunUpdate
+from .schemas import RunCreate, RunListResponse, RunResponse, RunUpdate
 from .service import RunService
 
 router = APIRouter()
 
 
-def get_run_service(db: AsyncSession = Depends(get_db)) -> RunService:
+def get_run_service(db=Depends(get_db)) -> RunService:
     """Dependency to get run service."""
     return RunService(db)
 
 
-@router.get("/", response_model=dict)
+@router.get("/", response_model=RunListResponse)
 async def list_runs(
     skip: int = 0,
     limit: int = 100,
+    workspace_id: UUID | None = None,
     service: RunService = Depends(get_run_service),
 ):
     """List all runs."""
-    runs, total = await service.list_runs(skip=skip, limit=limit)
+    runs, total = await service.list_runs(skip=skip, limit=limit, workspace_id=workspace_id)
     return {"runs": runs, "total": total}
 
 
@@ -71,3 +70,18 @@ async def update_run(
             detail="Run not found",
         )
     return run
+
+
+@router.delete("/{run_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_run(
+    run_id: UUID,
+    service: RunService = Depends(get_run_service),
+):
+    """Delete a run."""
+    success = await service.delete_run(run_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Run not found",
+        )
+    return None

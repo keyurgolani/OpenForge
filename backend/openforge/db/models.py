@@ -5,15 +5,13 @@ from sqlalchemy import (
     Index, CheckConstraint, LargeBinary, UniqueConstraint
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.orm import DeclarativeBase, mapped_column, Mapped, relationship
+from sqlalchemy.orm import mapped_column, Mapped, relationship
 from typing import Optional, List, Dict, Any
+
+from openforge.db.base import Base
 
 def now_utc():
     return datetime.now(timezone.utc)
-
-
-class Base(DeclarativeBase):
-    pass
 
 
 class Config(Base):
@@ -659,7 +657,7 @@ class ArtifactModel(Base):
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     content: Mapped[dict] = mapped_column(JSONB, default=dict)
-    metadata: Mapped[dict] = mapped_column(JSONB, default=dict)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
     status: Mapped[str] = mapped_column(String(50), default="draft")
     version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)

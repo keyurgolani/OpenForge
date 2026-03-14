@@ -2,26 +2,24 @@
 Trigger domain API router.
 """
 
-from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.openforge.db.session import get_db
+from openforge.db.postgres import get_db
 
-from .schemas import TriggerCreate, TriggerResponse, TriggerUpdate
+from .schemas import TriggerCreate, TriggerListResponse, TriggerResponse, TriggerUpdate
 from .service import TriggerService
 
 router = APIRouter()
 
 
-def get_trigger_service(db: AsyncSession = Depends(get_db)) -> TriggerService:
+def get_trigger_service(db=Depends(get_db)) -> TriggerService:
     """Dependency to get trigger service."""
     return TriggerService(db)
 
 
-@router.get("/", response_model=dict)
+@router.get("/", response_model=TriggerListResponse)
 async def list_triggers(
     skip: int = 0,
     limit: int = 100,
@@ -85,3 +83,4 @@ async def delete_trigger(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Trigger not found",
         )
+    return None

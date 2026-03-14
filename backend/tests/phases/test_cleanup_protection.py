@@ -174,6 +174,48 @@ class TestFrontendFileOrganization:
             feature_dir = features_dir / feature
             assert feature_dir.exists(), f"Feature directory not found: {feature}"
 
+    def test_domain_page_shells_exist(self):
+        """Canonical Phase 1 page shells should exist."""
+        expected_pages = [
+            "WorkspaceOverviewPage.tsx",
+            "ProfilesPage.tsx",
+            "WorkflowsPage.tsx",
+            "MissionsPage.tsx",
+            "RunsPage.tsx",
+            "ArtifactsPage.tsx",
+        ]
+        pages_dir = FRONTEND_ROOT / "pages"
+        for page in expected_pages:
+            assert (pages_dir / page).exists(), f"Expected page shell not found: {page}"
+
+    def test_route_helpers_use_canonical_workspace_prefix(self):
+        """Frontend route helpers should use /w/:workspaceId as the canonical prefix."""
+        routes_file = FRONTEND_ROOT / "lib" / "routes.ts"
+        content = routes_file.read_text(encoding="utf-8")
+
+        assert "/w/:workspaceId" in content
+        assert "/workspaces/:workspaceId" not in content
+
+    def test_main_mounts_canonical_workspace_routes(self):
+        """The main router should mount the canonical final-domain pages."""
+        main_file = FRONTEND_ROOT / "main.tsx"
+        content = main_file.read_text(encoding="utf-8")
+
+        for segment in ['path="knowledge"', 'path="chat"', 'path="profiles"', 'path="workflows"', 'path="missions"', 'path="runs"', 'path="artifacts"']:
+            assert segment in content, f"Expected route segment missing from main.tsx: {segment}"
+
+        assert "LegacyChatRedirect" in content
+
+    def test_app_shell_primary_navigation_uses_final_labels(self):
+        """AppShell should use the final IA labels rather than the legacy agent/execution framing."""
+        app_shell = (FRONTEND_ROOT / "pages" / "AppShell.tsx").read_text(encoding="utf-8")
+
+        for label in ["Workspace", "Knowledge", "Chat", "Profiles", "Workflows", "Missions", "Runs", "Artifacts", "Settings"]:
+            assert label in app_shell, f"Expected navigation label missing from AppShell: {label}"
+
+        assert "Workspace Agent" not in app_shell
+        assert "Agent Executions" not in app_shell
+
 
 class TestServiceOwnership:
     """Test that service ownership boundaries are respected."""

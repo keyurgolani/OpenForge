@@ -1,36 +1,27 @@
-"""
-Run domain service.
-
-TODO: Implement run management business logic.
-"""
+"""Run domain service."""
 
 from uuid import UUID
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from openforge.db.models import RunModel
+from openforge.domains.common.crud import CrudDomainService
 
 
-class RunService:
+class RunService(CrudDomainService):
     """Service for managing runs."""
 
-    def __init__(self, db: AsyncSession):
-        self.db = db
+    model = RunModel
 
-    async def list_runs(self, skip: int = 0, limit: int = 100):
-        """List all runs."""
-        # TODO: Implement
-        return [], 0
+    async def list_runs(self, skip: int = 0, limit: int = 100, workspace_id: UUID | None = None):
+        return await self.list_records(skip=skip, limit=limit, filters={"workspace_id": workspace_id})
 
     async def get_run(self, run_id: UUID):
-        """Get a run by ID."""
-        # TODO: Implement
-        return None
+        return await self.get_record(run_id)
 
     async def create_run(self, run_data: dict):
-        """Create a new run."""
-        # TODO: Implement
-        return None
+        return await self.create_record(run_data)
 
     async def update_run(self, run_id: UUID, run_data: dict):
-        """Update a run."""
-        # TODO: Implement
-        return None
+        return await self.update_record(run_id, run_data)
+
+    async def delete_run(self, run_id: UUID):
+        return await self.delete_record(run_id)

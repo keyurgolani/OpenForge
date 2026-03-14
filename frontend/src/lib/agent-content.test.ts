@@ -16,7 +16,7 @@ test('normalizeStructuredEntityRefs converts structured OpenForge entity refs to
         result,
         [
             'Read [Roadmap](/w/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/knowledge/11111111-1111-1111-1111-111111111111)',
-            'Then [Chat: Sprint Sync](/w/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/agent/22222222-2222-2222-2222-222222222222)',
+            'Then [Chat: Sprint Sync](/w/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/chat/22222222-2222-2222-2222-222222222222)',
             'Inside [Workspace: Ops](/w/33333333-3333-3333-3333-333333333333).',
         ].join('\n'),
     )

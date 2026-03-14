@@ -14,6 +14,6 @@ the canonical product vocabulary:
 - common: Shared domain types, enums, and base models
 """
 
-from backend.openforge.domains.router_registry import register_domain_routers
+from openforge.domains.router_registry import register_domain_routers
 
 __all__ = ["register_domain_routers"]

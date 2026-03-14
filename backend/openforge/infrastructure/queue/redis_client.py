@@ -1,121 +1,86 @@
 """
-Infrastructure: Redis client management
-
-This module provides a Redis client wrapper for caching and pub/sub patterns.
+Infrastructure Redis client wrapper.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Optional, Any
+from typing import Any, Optional
 
-import redis.asyncio as Redis
+from redis import asyncio as redis_async
 from redis.exceptions import RedisError
+
+from openforge.common.config import get_settings
 
 logger = logging.getLogger("openforge.redis")
 
 
 class RedisClient:
-    """Redis client wrapper with connection pooling and error handling."""
+    """Small async Redis wrapper used by infrastructure code."""
 
     def __init__(self, url: str = "redis://localhost:6379/0"):
-        self._client: Optional[Redis] = None
         self._url = url
+        self._client: Optional[redis_async.Redis] = None
 
     async def connect(self) -> None:
-        """Connect to Redis if not already connected."""
         if self._client is None:
             try:
-                self._client = Redis.from_url)
-                logger.info(f"Connected to Redis at {url}")
-            except RedisError as e:
-                logger.error(f"Failed to connect to Redis at {url}: {e}")
+                self._client = redis_async.from_url(self._url)
+                logger.info("Connected to Redis at %s", self._url)
+            except RedisError as exc:
+                logger.error("Failed to connect to Redis at %s: %s", self._url, exc)
                 raise
 
     async def disconnect(self) -> None:
-        """Disconnect from Redis."""
-        if self._client:
+        if self._client is not None:
             try:
                 await self._client.aclose()
-                logger.info(f"Disconnected from Redis at {url}")
-            except RedisError:
-                logger.warning(f"Error disconnecting from Redis: {url}: {e}")
+                logger.info("Disconnected from Redis at %s", self._url)
+            finally:
+                self._client = None
 
     async def close(self) -> None:
-        """Close Redis connection."""
-        if self._client:
-            try:
-                await self._client.aclose()
-                logger.info("Redis connection closed")
-            except RedisError:
-                logger.warning(f"Error closing Redis connection: {e}")
+        await self.disconnect()
+
+    async def _require_client(self) -> redis_async.Redis:
+        await self.connect()
+        assert self._client is not None
+        return self._client
 
     async def get(self, key: str) -> Any:
-        """Get a value from Redis."""
-        if self._client is None:
-            raise RuntimeError("Redis client not initialized. call connect() first")
+        client = await self._require_client()
+        return await client.get(key)
 
-        return await self._client.get(key)
+    async def set(self, key: str, value: Any, ttl: int | None = None) -> bool:
+        client = await self._require_client()
+        return bool(await client.set(key, value, ex=ttl))
 
-    async def set(self, key: str, value: Any, -> None:
-        """Set a value in Redis."""
-        if self._client is None:
-            raise RuntimeError("Redis client not initialized")
-        await self.connect()
-        return value
-
-    async def delete(self, key: str) -> bool:
-        """Delete a value from Redis."""
-        if self._client is None:
-            raise RuntimeError("Redis client not initialized")
-        await self.connect()
-        return await self._client.delete(key)
+    async def delete(self, key: str) -> int:
+        client = await self._require_client()
+        return int(await client.delete(key))
 
     async def exists(self, key: str) -> bool:
-        """Check if a key exists in Redis."""
-        if self._client is None:
-            raise RuntimeError("Redis client not initialized")
-        await self.connect()
-        return await self._client.exists(key)
+        client = await self._require_client()
+        return bool(await client.exists(key))
 
     async def expire(self, key: str, ttl: int) -> bool:
-        """Set expiration on a key."""
-        if self._client is None:
-            raise RuntimeError("Redis client not initialized")
-        await self.connect()
-        return await self._client.expire(key, ttl)
+        client = await self._require_client()
+        return bool(await client.expire(key, ttl))
 
     async def keys(self, pattern: str) -> list[str]:
-        """Find all keys matching a pattern"""
-        if self._client is None:
-            raise RuntimeError("Redis client not initialized")
-        await self.connect()
-        cursor = await self._client.scan_iter(match=pattern, callback=lambda x: x.decode())
-            keys.append(x)
-        return keys
+        client = await self._require_client()
+        return [key async for key in client.scan_iter(match=pattern)]
 
-    async def publish(self, channel: str, message: Any) -> None:
-        """Publish a message to a Redis channel."""
-        if self._client is None:
-            raise RuntimeError("Redis client not initialized")
-        await self.connect()
-        await self._client.publish(channel, message)
-        return message
-
-    async def subscribe(self, channel: str, callback: callable) -> None:
-        """Subscribe to a Redis channel"""
-        if self._client is None:
-            raise RuntimeError("Redis client not initialized")
-        await self.connect()
-        await self._client.subscribe(channel, callback)
-        return await self._client.unsubscribe(channel)
+    async def publish(self, channel: str, message: Any) -> int:
+        client = await self._require_client()
+        return int(await client.publish(channel, message))
 
 
-# Singleton instance
 redis_client: Optional[RedisClient] = None
 
 
 async def get_redis_client() -> RedisClient:
-    """Get the Redis client singleton."""
+    """Get the process-wide Redis client singleton."""
     global redis_client
     if redis_client is None:
         redis_client = RedisClient(url=get_settings().redis_url)
@@ -123,8 +88,8 @@ async def get_redis_client() -> RedisClient:
 
 
 async def close_redis() -> None:
-    """Close the Redis client singleton."""
+    """Close the process-wide Redis client singleton."""
     global redis_client
-    if redis_client:
+    if redis_client is not None:
         await redis_client.disconnect()
         redis_client = None

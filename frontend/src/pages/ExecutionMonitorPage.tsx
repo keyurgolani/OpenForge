@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { getExecutionById, getAgent, getConversation } from '@/lib/api'
+import ROUTES, { chatRoute } from '@/lib/routes'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import { formatDistanceToNow } from 'date-fns'
 import {
@@ -168,7 +169,7 @@ export default function ExecutionMonitorPage() {
                 {/* ── Navigation ─────────────────────────────────────────────── */}
                 <div className="flex items-center gap-3">
                     <button
-                        onClick={() => navigate(`/executions`)}
+                        onClick={() => navigate(ROUTES.LEGACY_EXECUTIONS)}
                         className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-foreground/70 transition-colors"
                     >
                         <ArrowLeft className="h-3.5 w-3.5" />
@@ -176,7 +177,7 @@ export default function ExecutionMonitorPage() {
                     </button>
                     {execution.conversation_id && (
                         <button
-                            onClick={() => navigate(`/w/${execution.workspace_id}/agent/${execution.conversation_id}`)}
+                            onClick={() => navigate(chatRoute(execution.workspace_id, execution.conversation_id))}
                             className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-foreground/70 transition-colors ml-auto"
                         >
                             <MessageCircle className="h-3.5 w-3.5" />

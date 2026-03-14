@@ -9,10 +9,14 @@
  */
 export type ExecutionStatus =
   | 'pending'
+  | 'queued'
   | 'running'
   | 'completed'
   | 'failed'
-  | 'cancelled';
+  | 'cancelled'
+  | 'paused'
+  | 'timeout'
+  | 'ready';
 
 /**
  * Knowledge item status values
@@ -27,9 +31,13 @@ export type KnowledgeStatus =
  * Trigger status values
  */
 export type TriggerStatus =
+  | 'draft'
   | 'active'
+  | 'archived'
+  | 'deleted'
   | 'paused'
-  | 'disabled';
+  | 'disabled'
+  | 'published';
 
 /**
  * Check if a status indicates a terminal state
@@ -64,7 +72,9 @@ export function isFailureStatus(status: ExecutionStatus | KnowledgeStatus): bool
  */
 export function getStatusLabel(status: string): string {
   const labels: Record<string, string> = {
+    draft: 'Draft',
     pending: 'Pending',
+    queued: 'Queued',
     running: 'Running',
     processing: 'Processing',
     completed: 'Completed',
@@ -72,8 +82,12 @@ export function getStatusLabel(status: string): string {
     failed: 'Failed',
     cancelled: 'Cancelled',
     active: 'Active',
+    archived: 'Archived',
+    deleted: 'Deleted',
     paused: 'Paused',
     disabled: 'Disabled',
+    published: 'Published',
+    timeout: 'Timeout',
   };
   return labels[status] || status;
 }
@@ -88,7 +102,9 @@ export type StatusColor = 'default' | 'success' | 'warning' | 'error' | 'info';
  */
 export function getStatusColor(status: ExecutionStatus | KnowledgeStatus | TriggerStatus): StatusColor {
   const colorMap: Record<string, StatusColor> = {
+    draft: 'default',
     pending: 'default',
+    queued: 'default',
     running: 'info',
     processing: 'info',
     completed: 'success',
@@ -96,8 +112,12 @@ export function getStatusColor(status: ExecutionStatus | KnowledgeStatus | Trigg
     failed: 'error',
     cancelled: 'warning',
     active: 'success',
+    archived: 'warning',
+    deleted: 'error',
     paused: 'warning',
     disabled: 'default',
+    published: 'success',
+    timeout: 'error',
   };
   return colorMap[status] || 'default';
 }

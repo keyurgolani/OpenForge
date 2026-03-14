@@ -1,4 +1,5 @@
 import MarkdownIt from 'markdown-it'
+import { chatRoute, knowledgeRoute, workspaceOverviewRoute } from '@/lib/routes'
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
 const STRUCTURED_ENTITY_RE = /\[\[(knowledge|chat|workspace):([a-f0-9-]+):([^\]]+)\]\]/gi
@@ -22,13 +23,13 @@ export function normalizeStructuredEntityRefs(content: string, workspaceId: stri
     return content.replace(STRUCTURED_ENTITY_RE, (_match, type: string, uuid: string, title: string) => {
         const entityType = String(type).toLowerCase()
         if (entityType === 'knowledge') {
-            return `[${title}](/w/${workspaceId}/knowledge/${uuid})`
+            return `[${title}](${knowledgeRoute(workspaceId, uuid)})`
         }
         if (entityType === 'chat') {
-            return `[Chat: ${title}](/w/${workspaceId}/agent/${uuid})`
+            return `[Chat: ${title}](${chatRoute(workspaceId, uuid)})`
         }
         if (entityType === 'workspace') {
-            return `[Workspace: ${title}](/w/${uuid})`
+            return `[Workspace: ${title}](${workspaceOverviewRoute(uuid)})`
         }
         return title
     })
@@ -45,7 +46,7 @@ function injectIdLinks(
             const knowledgeId = uuid.toLowerCase()
             const title = maps?.knowledgeById.get(knowledgeId) ?? shortEntityLabel(uuid)
             const targetWorkspaceId = maps?.knowledgeWorkspaceById.get(knowledgeId)?.workspaceId ?? workspaceId
-            return `${pre}[${title}](/w/${targetWorkspaceId}/knowledge/${uuid})${post}`
+            return `${pre}[${title}](${knowledgeRoute(targetWorkspaceId, uuid)})${post}`
         },
     )
 
@@ -53,7 +54,7 @@ function injectIdLinks(
         new RegExp(`((?:conversation_id|chat_id)\\s*[:=]\\s*\`?)(${UUID_PATTERN})(\`?)`, 'gi'),
         (_, pre, uuid: string, post) => {
             const title = maps?.chatsById.get(uuid.toLowerCase()) ?? shortEntityLabel(uuid)
-            return `${pre}[Chat: ${title}](/w/${workspaceId}/agent/${uuid})${post}`
+            return `${pre}[Chat: ${title}](${chatRoute(workspaceId, uuid)})${post}`
         },
     )
 
@@ -61,7 +62,7 @@ function injectIdLinks(
         new RegExp(`(workspace_id\\s*[:=]\\s*\`?)(${UUID_PATTERN})(\`?)`, 'gi'),
         (_, pre, uuid: string, post) => {
             const name = maps?.workspacesById.get(uuid.toLowerCase()) ?? shortEntityLabel(uuid)
-            return `${pre}[Workspace: ${name}](/w/${uuid})${post}`
+            return `${pre}[Workspace: ${name}](${workspaceOverviewRoute(uuid)})${post}`
         },
     )
 
@@ -71,7 +72,7 @@ function injectIdLinks(
             const escapedName = nameLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
             out = out.replace(
                 new RegExp(`@(${escapedName})(?![^[]*\\])`, 'gi'),
-                (_, matched) => `[@${matched}](/w/${workspaceRefId})`,
+                (_, matched) => `[@${matched}](${workspaceOverviewRoute(workspaceRefId)})`,
             )
         }
 
@@ -80,7 +81,7 @@ function injectIdLinks(
             const escapedName = nameLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
             out = out.replace(
                 new RegExp(`@(${escapedName})(?![^[]*\\])`, 'gi'),
-                (_, matched) => `[@${matched}](/w/${workspaceId}/agent/${chatId})`,
+                (_, matched) => `[@${matched}](${chatRoute(workspaceId, chatId)})`,
             )
         }
 
@@ -89,14 +90,14 @@ function injectIdLinks(
             (uuid: string) => {
                 const entityId = uuid.toLowerCase()
                 const workspaceName = maps.workspacesById.get(entityId)
-                if (workspaceName) return `[Workspace: ${workspaceName}](/w/${uuid})`
+                if (workspaceName) return `[Workspace: ${workspaceName}](${workspaceOverviewRoute(uuid)})`
 
                 const chatTitle = maps.chatsById.get(entityId)
-                if (chatTitle) return `[Chat: ${chatTitle}](/w/${workspaceId}/agent/${uuid})`
+                if (chatTitle) return `[Chat: ${chatTitle}](${chatRoute(workspaceId, uuid)})`
 
                 const knowledgeTitle = maps.knowledgeById.get(entityId) ?? shortEntityLabel(uuid)
                 const targetWorkspaceId = maps.knowledgeWorkspaceById.get(entityId)?.workspaceId ?? workspaceId
-                return `[${knowledgeTitle}](/w/${targetWorkspaceId}/knowledge/${uuid})`
+                return `[${knowledgeTitle}](${knowledgeRoute(targetWorkspaceId, uuid)})`
             },
         )
     }

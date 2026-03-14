@@ -1,41 +1,27 @@
-"""
-Mission domain service.
-
-TODO: Implement mission management business logic.
-"""
+"""Mission domain service."""
 
 from uuid import UUID
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from openforge.db.models import MissionDefinitionModel
+from openforge.domains.common.crud import CrudDomainService
 
 
-class MissionService:
+class MissionService(CrudDomainService):
     """Service for managing mission definitions."""
 
-    def __init__(self, db: AsyncSession):
-        self.db = db
+    model = MissionDefinitionModel
 
     async def list_missions(self, skip: int = 0, limit: int = 100):
-        """List all missions."""
-        # TODO: Implement
-        return [], 0
+        return await self.list_records(skip=skip, limit=limit)
 
     async def get_mission(self, mission_id: UUID):
-        """Get a mission by ID."""
-        # TODO: Implement
-        return None
+        return await self.get_record(mission_id)
 
     async def create_mission(self, mission_data: dict):
-        """Create a new mission."""
-        # TODO: Implement
-        return None
+        return await self.create_record(mission_data)
 
     async def update_mission(self, mission_id: UUID, mission_data: dict):
-        """Update a mission."""
-        # TODO: Implement
-        return None
+        return await self.update_record(mission_id, mission_data)
 
     async def delete_mission(self, mission_id: UUID):
-        """Delete a mission."""
-        # TODO: Implement
-        return False
+        return await self.delete_record(mission_id)

@@ -1,41 +1,27 @@
-"""
-Profile domain service.
-
-TODO: Implement profile management business logic.
-"""
+"""Profile domain service."""
 
 from uuid import UUID
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from openforge.db.models import AgentProfileModel
+from openforge.domains.common.crud import CrudDomainService
 
 
-class ProfileService:
+class ProfileService(CrudDomainService):
     """Service for managing agent profiles."""
 
-    def __init__(self, db: AsyncSession):
-        self.db = db
+    model = AgentProfileModel
 
     async def list_profiles(self, skip: int = 0, limit: int = 100):
-        """List all profiles."""
-        # TODO: Implement
-        return [], 0
+        return await self.list_records(skip=skip, limit=limit)
 
     async def get_profile(self, profile_id: UUID):
-        """Get a profile by ID."""
-        # TODO: Implement
-        return None
+        return await self.get_record(profile_id)
 
     async def create_profile(self, profile_data: dict):
-        """Create a new profile."""
-        # TODO: Implement
-        return None
+        return await self.create_record(profile_data)
 
     async def update_profile(self, profile_id: UUID, profile_data: dict):
-        """Update a profile."""
-        # TODO: Implement
-        return None
+        return await self.update_record(profile_id, profile_data)
 
     async def delete_profile(self, profile_id: UUID):
-        """Delete a profile."""
-        # TODO: Implement
-        return False
+        return await self.delete_record(profile_id)

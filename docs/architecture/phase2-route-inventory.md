@@ -1,171 +1,102 @@
 # Phase 2 — Route Inventory
 
-This document inventories all mounted routes and classifies them for cleanup.
+This inventory reflects the active route ownership after the Phase 1 vocabulary reset and the Phase 2 cleanup pass.
 
 ## Classification Legend
 
-- **keep** — Route is needed and has clear ownership
-- **rename** — Route needs to be renamed for consistency
-- **move** — Route should be moved to a different router
-- **delete** — Route is no longer needed
+- **keep** — active route with clear ownership
+- **compatibility** — retained temporarily to avoid breaking transitional flows, but not part of the primary IA
+- **delete** — route family scheduled for removal once the transitional runtime/chat surfaces are replaced
 
 ---
 
-## Backend Routes
+## Backend API Routes
 
-### API Router (`backend/openforge/api/router.py`)
+### Canonical domain routes
 
-| Route | Method | Classification | Action | Owner |
-|-------|--------|----------------|--------|-------|
-| `/api/v1/profiles` | GET, POST | keep | keep | profiles |
-| `/api/v1/profiles/{id}` | GET, PUT, DELETE | keep | keep | profiles |
-| `/api/v1/workflows` | GET, POST | keep | keep | workflows |
-| `/api/v1/workflows/{id}` | GET, PUT, DELETE | keep | keep | workflows |
-| `/api/v1/missions` | GET, POST | keep | keep | missions |
-| `/api/v1/missions/{id}` | GET, PUT, DELETE | keep | keep | missions |
-| `/api/v1/triggers` | GET, POST | keep | keep | triggers |
-| `/api/v1/triggers/{id}` | GET, PUT, DELETE | keep | keep | triggers |
-| `/api/v1/runs` | GET, POST | keep | keep | runs |
-| `/api/v1/runs/{id}` | GET, PUT, DELETE | keep | keep | runs |
-| `/api/v1/artifacts` | GET, POST | keep | keep | artifacts |
-| `/api/v1/artifacts/{id}` | GET, PUT, DELETE | keep | keep | artifacts |
-| `/api/v1/knowledge` | GET, POST | keep | keep | knowledge |
-| `/api/v1/knowledge/{id}` | GET, PUT, DELETE | keep | keep | knowledge |
-| `/api/v1/conversations` | GET, POST | keep | keep | runtime |
-| `/api/v1/conversations/{id}` | GET, PUT, DELETE | keep | keep | runtime |
-| `/api/v1/search` | GET | keep | keep | knowledge |
-| `/api/v1/settings` | GET, PUT | keep | keep | common |
-| `/api/v1/tasks` | GET, POST | keep | keep | triggers |
-| `/api/v1/tasks/{id}` | GET, PUT, DELETE | keep | keep | triggers |
-| `/api/v1/hitl` | GET, POST | keep | keep | runtime |
-| `/api/v1/hitl/{id}` | GET, PUT, DELETE | keep | keep | runtime |
-| `/api/v1/websocket` | WebSocket | keep | keep | runtime |
-| `/api/v1/attachments` | POST | keep | keep | knowledge |
-| `/api/v1/export` | GET | keep | keep | knowledge |
-| `/api/v1/mcp` | GET, POST | keep | keep | integrations |
-| `/api/v1/workspaces` | GET, POST | keep | keep | integrations |
-| `/api/v1/workspaces/{id}` | GET, PUT, DELETE | keep | keep | integrations |
+| Route Pattern | Classification | Owner |
+|---------------|----------------|-------|
+| `/api/v1/profiles/` | keep | profiles |
+| `/api/v1/profiles/{profile_id}` | keep | profiles |
+| `/api/v1/workflows/` | keep | workflows |
+| `/api/v1/workflows/{workflow_id}` | keep | workflows |
+| `/api/v1/missions/` | keep | missions |
+| `/api/v1/missions/{mission_id}` | keep | missions |
+| `/api/v1/triggers/` | keep | triggers |
+| `/api/v1/triggers/{trigger_id}` | keep | triggers |
+| `/api/v1/runs/` | keep | runs |
+| `/api/v1/runs/{run_id}` | keep | runs |
+| `/api/v1/artifacts/` | keep | artifacts |
+| `/api/v1/artifacts/{artifact_id}` | keep | artifacts |
 
-### Domain Routers
+### Transitional non-domain routes with explicit owners
 
-#### Profiles Router (`backend/openforge/domains/profiles/router.py`)
+| Route Pattern | Classification | Owner |
+|---------------|----------------|-------|
+| `/api/v1/workspaces/` | keep | integrations/workspace |
+| `/api/v1/workspaces/{workspace_id}/knowledge/*` | keep | knowledge |
+| `/api/v1/workspaces/{workspace_id}/conversations/*` | keep | runtime/chat |
+| `/api/v1/workspaces/{workspace_id}/search` | keep | knowledge |
+| `/api/v1/tasks/*` | keep | triggers |
+| `/api/v1/hitl/*` | keep | runtime |
+| `/api/v1/settings/*` | keep | common/config |
+| `/api/v1/onboarding/*` | keep | common/config |
+| `/api/v1/mcp/*` | keep | integrations |
+| `/api/v1/models/*` | keep | runtime/infrastructure |
+| `/api/v1/export/*` | keep | knowledge |
+| `/api/v1/attachments/*` | keep | knowledge |
+| `/ws/*` | keep | runtime |
 
-| Route | Method | Classification | Action | Owner |
-|-------|--------|----------------|--------|-------|
-| `/api/v1/profiles` | GET, POST | keep | keep | profiles |
-| `/api/v1/profiles/{id}` | GET, PUT, DELETE | keep | keep | profiles |
+### Explicit legacy route families
 
-#### Workflows Router (`backend/openforge/domains/workflows/router.py`)
+| Route Pattern | Classification | Owner |
+|---------------|----------------|-------|
+| `/api/v1/agents/*` | compatibility | runtime/chat |
+| `/api/v1/agent-schedules/*` | delete | legacy runtime |
+| `/api/v1/targets/*` | delete | legacy runtime |
 
-| Route | Method | Classification | Action | Owner |
-|-------|--------|----------------|--------|-------|
-| `/api/v1/workflows` | GET, POST | keep | keep | workflows |
-| `/api/v1/workflows/{id}` | GET, PUT, DELETE | keep | keep | workflows |
-
-#### Missions Router (`backend/openforge/domains/missions/router.py`)
-
-| Route | Method | Classification | Action | Owner |
-|-------|--------|----------------|--------|-------|
-| `/api/v1/missions` | GET, POST | keep | keep | missions |
-| `/api/v1/missions/{id}` | GET, PUT, DELETE | keep | keep | missions |
-
-#### Triggers Router (`backend/openforge/domains/triggers/router.py`)
-
-| Route | Method | Classification | Action | Owner |
-|-------|--------|----------------|--------|-------|
-| `/api/v1/triggers` | GET, POST | keep | keep | triggers |
-| `/api/v1/triggers/{id}` | GET, PUT, DELETE | keep | keep | triggers |
-
-#### Runs Router (`backend/openforge/domains/runs/router.py`)
-
-| Route | Method | Classification | Action | Owner |
-|-------|--------|----------------|--------|-------|
-| `/api/v1/runs` | GET, POST | keep | keep | runs |
-| `/api/v1/runs/{id}` | GET, PUT, DELETE | keep | keep | runs |
-
-#### Artifacts Router (`backend/openforge/domains/artifacts/router.py`)
-
-| Route | Method | Classification | Action | Owner |
-|-------|--------|----------------|--------|-------|
-| `/api/v1/artifacts` | GET, POST | keep | keep | artifacts |
-| `/api/v1/artifacts/{id}` | GET, PUT, DELETE | keep | keep | artifacts |
-
-### Legacy Routes (Deleted)
-
-| Route | Method | Classification | Action | Owner |
-|-------|--------|----------------|--------|-------|
-| `/api/v1/agents` | GET, POST | delete | Deleted | N/A |
-| `/api/v1/agents/{id}` | GET, PUT, DELETE | delete | Deleted | N/A |
-| `/api/v1/agent_schedules` | GET, POST | delete | Deleted | N/A |
-| `/api/v1/agent_schedules/{id}` | GET, PUT, DELETE | delete | Deleted | N/A |
-| `/api/v1/targets` | GET, POST | delete | Deleted | N/A |
-| `/api/v1/targets/{id}` | GET, PUT, DELETE | delete | Deleted | N/A |
+Notes:
+- The canonical domain routers are registered through `openforge.domains.router_registry` from `main.py`.
+- `backend/openforge/api/router.py` now mounts only non-domain routes.
 
 ---
 
-## Summary Statistics
+## Frontend Routes
 
-- **Total routes inventoried**: 40
-- **Keep**: 35 routes
-- **Delete**: 5 routes (already deleted)
+### Primary workspace IA
 
----
+| Route Pattern | Classification | Owner |
+|---------------|----------------|-------|
+| `/w/:workspaceId` | keep | workspace overview |
+| `/w/:workspaceId/knowledge` | keep | knowledge |
+| `/w/:workspaceId/knowledge/:knowledgeId` | keep | knowledge |
+| `/w/:workspaceId/chat` | keep | runtime/chat |
+| `/w/:workspaceId/chat/:conversationId` | keep | runtime/chat |
+| `/w/:workspaceId/profiles` | keep | profiles |
+| `/w/:workspaceId/workflows` | keep | workflows |
+| `/w/:workspaceId/missions` | keep | missions |
+| `/w/:workspaceId/runs` | keep | runs |
+| `/w/:workspaceId/artifacts` | keep | artifacts |
+| `/settings` | keep | settings |
 
-## Route Ownership Summary
+### Transitional frontend compatibility routes
 
-### profiles (2 routes)
-- `/api/v1/profiles` (GET, POST)
-- `/api/v1/profiles/{id}` (GET, PUT, DELETE)
+| Route Pattern | Classification | Owner |
+|---------------|----------------|-------|
+| `/w/:workspaceId/agent` | compatibility | runtime/chat |
+| `/w/:workspaceId/agent/:conversationId` | compatibility | runtime/chat |
+| `/w/:workspaceId/search` | compatibility | knowledge |
+| `/executions` | compatibility | runtime |
+| `/executions/:executionId` | compatibility | runtime |
 
-### workflows (2 routes)
-- `/api/v1/workflows` (GET, POST)
-- `/api/v1/workflows/{id}` (GET, PUT, DELETE)
-
-### missions (2 routes)
-- `/api/v1/missions` (GET, POST)
-- `/api/v1/missions/{id}` (GET, PUT, DELETE)
-
-### triggers (4 routes)
-- `/api/v1/triggers` (GET, POST)
-- `/api/v1/triggers/{id}` (GET, PUT, DELETE)
-- `/api/v1/tasks` (GET, POST)
-- `/api/v1/tasks/{id}` (GET, PUT, DELETE)
-
-### runs (2 routes)
-- `/api/v1/runs` (GET, POST)
-- `/api/v1/runs/{id}` (GET, PUT, DELETE)
-
-### artifacts (2 routes)
-- `/api/v1/artifacts` (GET, POST)
-- `/api/v1/artifacts/{id}` (GET, PUT, DELETE)
-
-### knowledge (5 routes)
-- `/api/v1/knowledge` (GET, POST)
-- `/api/v1/knowledge/{id}` (GET, PUT, DELETE)
-- `/api/v1/search` (GET)
-- `/api/v1/attachments` (POST)
-- `/api/v1/export` (GET)
-
-### runtime (6 routes)
-- `/api/v1/conversations` (GET, POST)
-- `/api/v1/conversations/{id}` (GET, PUT, DELETE)
-- `/api/v1/hitl` (GET, POST)
-- `/api/v1/hitl/{id}` (GET, PUT, DELETE)
-- `/api/v1/websocket` (WebSocket)
-
-### common (2 routes)
-- `/api/v1/settings` (GET, PUT)
-
-### integrations (4 routes)
-- `/api/v1/mcp` (GET, POST)
-- `/api/v1/workspaces` (GET, POST)
-- `/api/v1/workspaces/{id}` (GET, PUT, DELETE)
+Notes:
+- `/w/:workspaceId/agent*` now redirects into the canonical `/chat` route family.
+- `/executions*` is retained for the legacy execution monitor until run detail UX is built on the final domain model.
 
 ---
 
-## Next Steps
+## Cleanup Direction
 
-1. Verify all routes are properly mounted
-2. Ensure no dead endpoints remain
-3. Standardize route naming patterns
-4. Thin remaining non-domain routers
+1. Keep building new UX on `/chat`, `/profiles`, `/workflows`, `/missions`, `/runs`, and `/artifacts`.
+2. Treat `/agent*` and `/executions*` as compatibility-only, not primary IA.
+3. Remove `/agent-schedules*` and target-oriented routes when the Mission/Trigger runtime boundary replaces them.

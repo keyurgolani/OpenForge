@@ -1,19 +1,26 @@
 import React, { Suspense, lazy, useState, useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter, Route, Routes, Navigate } from 'react-router-dom'
+import { BrowserRouter, Route, Routes, Navigate, useParams } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ToastProvider, useToast } from '@/components/shared/ToastProvider'
 import ErrorBoundary from '@/components/shared/ErrorBoundary'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import SpatialBackdrop from '@/components/shared/SpatialBackdrop'
 import api, { checkAuth } from '@/lib/api'
+import ROUTES, { chatRoute } from '@/lib/routes'
 import { ThemeProvider } from '@/components/theme-provider'
 import LoginPage from '@/pages/LoginPage'
 import './index.css'
 
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage'))
 const AppShell = lazy(() => import('./pages/AppShell'))
+const WorkspaceOverviewPage = lazy(() => import('./pages/WorkspaceOverviewPage'))
 const WorkspaceHome = lazy(() => import('./pages/WorkspaceHome'))
+const ProfilesPage = lazy(() => import('./pages/ProfilesPage'))
+const WorkflowsPage = lazy(() => import('./pages/WorkflowsPage'))
+const MissionsPage = lazy(() => import('./pages/MissionsPage'))
+const RunsPage = lazy(() => import('./pages/RunsPage'))
+const ArtifactsPage = lazy(() => import('./pages/ArtifactsPage'))
 const EditorDispatcher = lazy(() => import('./components/knowledge/editors/EditorDispatcher'))
 const WorkspaceAgentPage = lazy(() => import('./pages/WorkspaceAgentPage'))
 const SearchPage = lazy(() => import('./pages/SearchPage'))
@@ -92,6 +99,11 @@ function AxiosInterceptorSetup() {
     return null
 }
 
+function LegacyChatRedirect() {
+    const { workspaceId = '', conversationId } = useParams<{ workspaceId: string; conversationId?: string }>()
+    return <Navigate to={chatRoute(workspaceId, conversationId)} replace />
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
         <QueryClientProvider client={queryClient}>
@@ -103,17 +115,22 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                         <AuthGuard>
                         <Suspense fallback={<PageLoader />}>
                         <Routes>
-                            <Route path="/onboarding" element={
+                            <Route path={ROUTES.ONBOARDING} element={
                                 <ErrorBoundary>
                                     <OnboardingPage />
                                 </ErrorBoundary>
                             } />
-                            <Route path="/w/:workspaceId" element={
+                            <Route path={ROUTES.WORKSPACE} element={
                                 <ErrorBoundary>
                                     <AppShell />
                                 </ErrorBoundary>
                             }>
                                 <Route index element={
+                                    <ErrorBoundary>
+                                        <WorkspaceOverviewPage />
+                                    </ErrorBoundary>
+                                } />
+                                <Route path="knowledge" element={
                                     <ErrorBoundary>
                                         <WorkspaceHome />
                                     </ErrorBoundary>
@@ -123,14 +140,41 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                         <EditorDispatcher />
                                     </ErrorBoundary>
                                 } />
-                                <Route path="agent" element={
+                                <Route path="chat" element={
                                     <ErrorBoundary>
                                         <WorkspaceAgentPage />
                                     </ErrorBoundary>
                                 } />
-                                <Route path="agent/:conversationId" element={
+                                <Route path="chat/:conversationId" element={
                                     <ErrorBoundary>
                                         <WorkspaceAgentPage />
+                                    </ErrorBoundary>
+                                } />
+                                <Route path="agent" element={<LegacyChatRedirect />} />
+                                <Route path="agent/:conversationId" element={<LegacyChatRedirect />} />
+                                <Route path="profiles" element={
+                                    <ErrorBoundary>
+                                        <ProfilesPage />
+                                    </ErrorBoundary>
+                                } />
+                                <Route path="workflows" element={
+                                    <ErrorBoundary>
+                                        <WorkflowsPage />
+                                    </ErrorBoundary>
+                                } />
+                                <Route path="missions" element={
+                                    <ErrorBoundary>
+                                        <MissionsPage />
+                                    </ErrorBoundary>
+                                } />
+                                <Route path="runs" element={
+                                    <ErrorBoundary>
+                                        <RunsPage />
+                                    </ErrorBoundary>
+                                } />
+                                <Route path="artifacts" element={
+                                    <ErrorBoundary>
+                                        <ArtifactsPage />
                                     </ErrorBoundary>
                                 } />
                                 <Route path="search" element={
@@ -144,23 +188,23 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                     <AppShell />
                                 </ErrorBoundary>
                             }>
-                                <Route path="/executions" element={
+                                <Route path={ROUTES.LEGACY_EXECUTIONS} element={
                                     <ErrorBoundary>
                                         <ExecutionListPage />
                                     </ErrorBoundary>
                                 } />
-                                <Route path="/executions/:executionId" element={
+                                <Route path={ROUTES.LEGACY_EXECUTION_DETAIL} element={
                                     <ErrorBoundary>
                                         <ExecutionMonitorPage />
                                     </ErrorBoundary>
                                 } />
-                                <Route path="/settings" element={
+                                <Route path={ROUTES.SETTINGS} element={
                                     <ErrorBoundary>
                                         <SettingsPage />
                                     </ErrorBoundary>
                                 } />
                             </Route>
-                            <Route path="/" element={<Navigate to="/onboarding" replace />} />
+                            <Route path="/" element={<Navigate to={ROUTES.ONBOARDING} replace />} />
                         </Routes>
                     </Suspense>
                         </AuthGuard>

@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import type { ReactElement } from 'react'
 import { searchKnowledge } from '@/lib/api'
+import { chatRoute } from '@/lib/routes'
 import { Search, Loader2, FileText, Bookmark, Code2, Zap, ExternalLink, Copy, SearchX, MessageSquare, Image as ImageIcon, Music, FileType2, Table, Presentation } from 'lucide-react'
 import PreviewDispatcher from '@/components/knowledge/preview/PreviewDispatcher'
 import {
@@ -220,7 +221,7 @@ export default function SearchPage() {
                                         <div key={card.key} className="break-inside-avoid mb-4">
                                             <div
                                                 className="glass-card-hover rounded-2xl p-4 cursor-pointer animate-fade-in space-y-3"
-                                                onClick={() => card.chunks[0]?.conversation_id && navigate(`/w/${workspaceId}/agent/${card.chunks[0].conversation_id}`)}
+                                                onClick={() => card.chunks[0]?.conversation_id && navigate(chatRoute(workspaceId, card.chunks[0].conversation_id))}
                                             >
                                                 <div className="flex items-start justify-between gap-3">
                                                     <div className="min-w-0 space-y-2">
