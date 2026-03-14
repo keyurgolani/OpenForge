@@ -26,7 +26,7 @@ import {
     Plus, Send, Square, Loader2, MessageSquare, Trash2, Bot, User, Sparkles,
     ChevronDown, ChevronRight, ChevronLeft, ChevronUp, ChevronsUp, Check, Pencil,
     Paperclip, X, Copy, Search, Network, AtSign,
-    RotateCcw, Trash,
+    RotateCcw, Trash, Mic, Pause, Play,
 } from 'lucide-react'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem,
@@ -140,6 +140,14 @@ export default function WorkspaceAgentPage() {
     const [attachments, setAttachments] = useState<File[]>([])
     const [uploadingFiles, setUploadingFiles] = useState(false)
     const [optimizeEnabled, setOptimizeEnabled] = useState(() => sessionStorage.getItem('optimizeEnabled') === 'true')
+
+    // Audio recording
+    const [recordingState, setRecordingState] = useState<'idle' | 'recording' | 'paused'>('idle')
+    const [recordingDuration, setRecordingDuration] = useState(0)
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+    const audioStreamRef = useRef<MediaStream | null>(null)
+    const audioChunksRef = useRef<Blob[]>([])
+    const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
     const [streamResponseExpanded, setStreamResponseExpanded] = useState(false)
     const [streamResponseHasHiddenTop, setStreamResponseHasHiddenTop] = useState(false)
     const { data: workspace } = useQuery({
@@ -989,7 +997,13 @@ export default function WorkspaceAgentPage() {
                 type === 'application/pdf' ||
                 type.startsWith('text/') ||
                 type.startsWith('image/') ||
-                ['pdf', 'txt', 'md', 'json', 'csv', 'xml', 'yaml', 'yml', 'png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)
+                type.startsWith('audio/') ||
+                type === 'video/webm' ||
+                type.startsWith('application/vnd.openxmlformats') ||
+                type.startsWith('application/ms') ||
+                ['pdf', 'txt', 'md', 'json', 'csv', 'xml', 'yaml', 'yml', 'png', 'jpg', 'jpeg', 'gif', 'webp',
+                 'mp3', 'wav', 'ogg', 'flac', 'm4a', 'webm', 'weba',
+                 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt'].includes(ext)
             )
         })
         setAttachments(prev => [...prev, ...allowed].slice(0, 5)) // Max 5 files
@@ -998,6 +1012,112 @@ export default function WorkspaceAgentPage() {
 
     const removeAttachment = (index: number) => {
         setAttachments(prev => prev.filter((_, i) => i !== index))
+    }
+
+    // --- Audio recording ---
+    const clearRecordingTimer = () => {
+        if (recordingTimerRef.current) { clearInterval(recordingTimerRef.current); recordingTimerRef.current = null }
+    }
+
+    const stopAudioRecording = useCallback((discard = false) => {
+        clearRecordingTimer()
+        const recorder = mediaRecorderRef.current
+        if (recorder && recorder.state !== 'inactive') {
+            if (discard) {
+                // Detach onstop handler to avoid adding to attachments
+                recorder.onstop = () => {
+                    audioStreamRef.current?.getTracks().forEach(t => t.stop())
+                    audioStreamRef.current = null
+                    mediaRecorderRef.current = null
+                }
+            }
+            recorder.stop()
+        }
+        if (discard) {
+            audioStreamRef.current?.getTracks().forEach(t => t.stop())
+            audioStreamRef.current = null
+            mediaRecorderRef.current = null
+        }
+        setRecordingState('idle')
+        setRecordingDuration(0)
+    }, [])
+
+    const startAudioRecording = async () => {
+        if (attachments.length >= 5) {
+            showError('Attachment limit reached', 'Remove an attachment first.')
+            return
+        }
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+            audioStreamRef.current = stream
+            audioChunksRef.current = []
+
+            const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                ? 'audio/webm;codecs=opus'
+                : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
+
+            const recorder = new MediaRecorder(stream, { mimeType })
+            mediaRecorderRef.current = recorder
+
+            recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data) }
+            recorder.onstop = () => {
+                const blob = new Blob(audioChunksRef.current, { type: mimeType })
+                const cleanMime = mimeType.split(';')[0].trim()
+                const ext = cleanMime === 'audio/mp4' ? '.m4a' : '.webm'
+                const ts = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '-')
+                const audioFile = new File([blob], `recording-${ts}${ext}`, { type: cleanMime })
+                setAttachments(prev => [...prev, audioFile].slice(0, 5))
+                audioStreamRef.current?.getTracks().forEach(t => t.stop())
+                audioStreamRef.current = null
+                mediaRecorderRef.current = null
+                setRecordingState('idle')
+                setRecordingDuration(0)
+                clearRecordingTimer()
+            }
+
+            recorder.start(250)
+            setRecordingState('recording')
+            setRecordingDuration(0)
+
+            const start = Date.now()
+            recordingTimerRef.current = setInterval(() => {
+                setRecordingDuration((Date.now() - start) / 1000)
+            }, 200)
+        } catch (err: any) {
+            showError('Microphone error', err?.name === 'NotAllowedError'
+                ? 'Microphone access denied. Please allow microphone access.'
+                : 'Could not access microphone. Check your device settings.')
+        }
+    }
+
+    const pauseAudioRecording = () => {
+        if (mediaRecorderRef.current?.state === 'recording') {
+            mediaRecorderRef.current.pause()
+            setRecordingState('paused')
+            clearRecordingTimer()
+        }
+    }
+
+    const resumeAudioRecording = () => {
+        if (mediaRecorderRef.current?.state === 'paused') {
+            mediaRecorderRef.current.resume()
+            setRecordingState('recording')
+            const resumeStart = Date.now() - recordingDuration * 1000
+            recordingTimerRef.current = setInterval(() => {
+                setRecordingDuration((Date.now() - resumeStart) / 1000)
+            }, 200)
+        }
+    }
+
+    // Cleanup recording on unmount
+    useEffect(() => {
+        return () => { stopAudioRecording(true) }
+    }, [stopAudioRecording])
+
+    const formatRecordingDuration = (seconds: number) => {
+        const m = Math.floor(seconds / 60)
+        const s = Math.floor(seconds % 60)
+        return `${m}:${s.toString().padStart(2, '0')}`
     }
 
     const formatFileSize = (bytes: number) => {
@@ -1210,6 +1330,40 @@ export default function WorkspaceAgentPage() {
                                         </div>
                                     )}
 
+                                    {recordingState !== 'idle' && (
+                                        <div className="mb-3 flex items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2">
+                                            <div className="relative flex items-center justify-center">
+                                                {recordingState === 'recording' && (
+                                                    <span className="absolute inline-flex h-3 w-3 animate-ping rounded-full bg-red-500/60" />
+                                                )}
+                                                <span className={`inline-flex h-3 w-3 rounded-full ${recordingState === 'recording' ? 'bg-red-500' : 'bg-yellow-500'}`} />
+                                            </div>
+                                            <span className="font-mono text-xs tabular-nums text-foreground">
+                                                {formatRecordingDuration(recordingDuration)}
+                                            </span>
+                                            <span className="text-[10px] text-muted-foreground">
+                                                {recordingState === 'recording' ? 'Recording...' : 'Paused'}
+                                            </span>
+                                            <div className="ml-auto flex items-center gap-1.5">
+                                                {recordingState === 'recording' ? (
+                                                    <button type="button" onClick={pauseAudioRecording} className="rounded p-1 text-muted-foreground hover:bg-muted/35 hover:text-foreground" title="Pause">
+                                                        <Pause className="h-3.5 w-3.5" />
+                                                    </button>
+                                                ) : (
+                                                    <button type="button" onClick={resumeAudioRecording} className="rounded p-1 text-muted-foreground hover:bg-muted/35 hover:text-foreground" title="Resume">
+                                                        <Play className="h-3.5 w-3.5" />
+                                                    </button>
+                                                )}
+                                                <button type="button" onClick={() => stopAudioRecording(false)} className="rounded p-1 text-emerald-400 hover:bg-emerald-500/15" title="Stop & attach">
+                                                    <Square className="h-3.5 w-3.5 fill-current" />
+                                                </button>
+                                                <button type="button" onClick={() => stopAudioRecording(true)} className="rounded p-1 text-muted-foreground hover:bg-red-500/15 hover:text-red-300" title="Discard">
+                                                    <X className="h-3.5 w-3.5" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     <div className="flex items-start gap-2">
                                         <button
                                             type="button"
@@ -1314,7 +1468,7 @@ export default function WorkspaceAgentPage() {
                                                 ref={fileInputRef}
                                                 type="file"
                                                 multiple
-                                                accept=".pdf,.txt,.md,.json,.csv,.xml,.yaml,.yml,.png,.jpg,.jpeg,.gif,.webp,image/*,text/*,application/pdf"
+                                                accept=".pdf,.txt,.md,.json,.csv,.xml,.yaml,.yml,.png,.jpg,.jpeg,.gif,.webp,.mp3,.wav,.ogg,.flac,.m4a,.webm,.weba,.docx,.doc,.xlsx,.xls,.pptx,.ppt,image/*,text/*,audio/*,video/webm,application/pdf"
                                                 className="hidden"
                                                 onChange={handleFileSelect}
                                             />
@@ -1323,13 +1477,27 @@ export default function WorkspaceAgentPage() {
                                                 className="chat-control-pill disabled:opacity-50"
                                                 onClick={() => fileInputRef.current?.click()}
                                                 disabled={(uploadingFiles || activeConversationIsArchived) || attachments.length >= 5}
-                                                title="Attach files (PDF, images, text)"
+                                                title="Attach files"
                                             >
                                                 <Paperclip className="h-3.5 w-3.5" />
                                                 Attach
                                                 {attachments.length > 0 && (
                                                     <span className="rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent">{attachments.length}</span>
                                                 )}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className={`chat-control-pill disabled:opacity-50 ${recordingState !== 'idle' ? 'bg-red-500/15 text-red-400 border-red-500/30' : ''}`}
+                                                onClick={recordingState === 'idle' ? startAudioRecording : () => stopAudioRecording(false)}
+                                                disabled={uploadingFiles || activeConversationIsArchived}
+                                                title={recordingState === 'idle' ? 'Record audio' : 'Stop recording'}
+                                            >
+                                                {recordingState === 'idle' ? (
+                                                    <Mic className="h-3.5 w-3.5" />
+                                                ) : (
+                                                    <Square className="h-3.5 w-3.5 fill-current" />
+                                                )}
+                                                {recordingState === 'idle' ? 'Record' : 'Stop'}
                                             </button>
                                             <button
                                                 type="button"
