@@ -44,7 +44,7 @@ export const FILE_BASED_TYPES: Set<QuickKnowledgeType> = new Set([
 /** MIME accept strings for each file-based knowledge type */
 export const ACCEPTED_MIMES: Record<string, string> = {
     image: 'image/png,image/jpeg,image/gif,image/webp,image/bmp,image/tiff',
-    audio: 'audio/mpeg,audio/wav,audio/ogg,audio/flac,audio/mp4,audio/x-m4a,audio/webm',
+    audio: 'audio/mpeg,audio/wav,audio/ogg,audio/flac,audio/mp4,audio/x-m4a,audio/webm,video/webm',
     pdf: 'application/pdf',
     document: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword',
     sheet: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel',

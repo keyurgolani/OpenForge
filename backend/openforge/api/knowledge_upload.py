@@ -38,7 +38,8 @@ ALLOWED_UPLOAD_TYPES: dict[str, dict] = {
     "audio/flac": {"knowledge_type": "audio", "extensions": [".flac"]},
     "audio/mp4": {"knowledge_type": "audio", "extensions": [".m4a"]},
     "audio/x-m4a": {"knowledge_type": "audio", "extensions": [".m4a"]},
-    "audio/webm": {"knowledge_type": "audio", "extensions": [".weba"]},
+    "audio/webm": {"knowledge_type": "audio", "extensions": [".webm", ".weba"]},
+    "video/webm": {"knowledge_type": "audio", "extensions": [".webm"]},
     # PDF
     "application/pdf": {"knowledge_type": "pdf", "extensions": [".pdf"]},
     # Word

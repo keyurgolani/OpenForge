@@ -43,6 +43,8 @@ ALLOWED_TYPES = {
     "audio/flac": [".flac"],
     "audio/mp4": [".m4a"],
     "audio/x-m4a": [".m4a"],
+    "audio/webm": [".webm", ".weba"],
+    "video/webm": [".webm"],
     # Office documents
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
     "application/msword": [".doc"],
