@@ -1,33 +1,61 @@
-"""
-Approval Node Executor.
+"""Approval node executor."""
 
-TODO: Implement human approval node.
-"""
+from __future__ import annotations
 
-from typing import Any
+from .base import BaseNodeExecutor, NodeExecutionContext, NodeExecutionResult
 
 
-class ApprovalNodeExecutor:
-    """
-    Executor for human approval nodes.
+class ApprovalNodeExecutor(BaseNodeExecutor):
+    """Executor for workflow approval nodes."""
 
-    This will be implemented in Phase 2+ to handle:
-    - Approval request creation
-    - Waiting for approval
-    - Approval decision handling
-    """
+    supported_types = ("approval",)
 
-    async def execute(self, node_config: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
-        """
-        Execute an approval node.
+    def __init__(self, approval_service):
+        self.approval_service = approval_service
 
-        TODO: Implement in Phase 2.
+    async def execute(self, context: NodeExecutionContext) -> NodeExecutionResult:
+        state = dict(context.state)
+        config = context.node.get("config", {})
+        approval_request_id = state.get("approval_request_id")
 
-        Args:
-            node_config: Node configuration
-            state: Current workflow state
+        if approval_request_id is not None:
+            request = await self.approval_service.get_request(approval_request_id)
+            if request is not None and request.status == "approved":
+                state["approval_status"] = "approved"
+                return NodeExecutionResult(state=state, next_edge_type="approved")
+            if request is not None and request.status == "denied":
+                state["approval_status"] = "denied"
+                return NodeExecutionResult(state=state, next_edge_type="denied")
+            if request is not None:
+                state["approval_status"] = request.status
+                return NodeExecutionResult(
+                    state=state,
+                    interrupt=True,
+                    interrupt_status="waiting_approval",
+                    approval_request_id=request.id,
+                )
 
-        Returns:
-            Updated state with approval result
-        """
-        raise NotImplementedError("Approval node executor will be implemented in Phase 2")
+        request = await self.approval_service.create_request(
+            request_type="workflow_approval",
+            scope_type="run",
+            scope_id=str(context.run.id),
+            source_run_id=context.run.id,
+            requested_action=config.get("requested_action") or context.node.get("label", "Approve workflow step"),
+            tool_name=None,
+            reason_code="workflow_approval_required",
+            reason_text=config.get("requested_action") or context.node.get("label", "Approve workflow step"),
+            risk_category=config.get("risk_category", "medium"),
+            payload_preview={
+                "workflow_id": str(context.workflow["id"]),
+                "workflow_version_id": str(context.workflow_version["id"]),
+                "node_key": context.node.get("node_key"),
+            },
+        )
+        state["approval_request_id"] = request.id
+        state["approval_status"] = "pending"
+        return NodeExecutionResult(
+            state=state,
+            interrupt=True,
+            interrupt_status="waiting_approval",
+            approval_request_id=request.id,
+        )

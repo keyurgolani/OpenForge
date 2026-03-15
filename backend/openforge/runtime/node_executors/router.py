@@ -1,33 +1,21 @@
-"""
-Router Node Executor.
+"""Router node executor."""
 
-TODO: Implement conditional routing node.
-"""
+from __future__ import annotations
 
-from typing import Any
+from .base import BaseNodeExecutor, NodeExecutionContext, NodeExecutionResult
 
 
-class RouterNodeExecutor:
-    """
-    Executor for conditional routing nodes.
+class RouterNodeExecutor(BaseNodeExecutor):
+    """Simple state-based router."""
 
-    This will be implemented in Phase 2+ to handle:
-    - Condition evaluation
-    - Path selection
-    - Branch routing
-    """
+    supported_types = ("router",)
 
-    async def execute(self, node_config: dict[str, Any], state: dict[str, Any]) -> str:
-        """
-        Execute a router node and return the next node ID.
-
-        TODO: Implement in Phase 2.
-
-        Args:
-            node_config: Node configuration
-            state: Current workflow state
-
-        Returns:
-            Next node ID to execute
-        """
-        raise NotImplementedError("Router node executor will be implemented in Phase 2")
+    async def execute(self, context: NodeExecutionContext) -> NodeExecutionResult:
+        config = context.node.get("config", {})
+        state = dict(context.state)
+        for route in config.get("routes", []):
+            state_key = route.get("state_key")
+            expected_value = route.get("equals")
+            if state.get(state_key) == expected_value:
+                return NodeExecutionResult(state=state, next_edge_type=route.get("edge_type", "success"))
+        return NodeExecutionResult(state=state, next_edge_type=config.get("default_edge_type", "success"))

@@ -1,33 +1,25 @@
-"""
-Subworkflow Node Executor.
+"""Subworkflow node executor."""
 
-TODO: Implement subworkflow execution node.
-"""
+from __future__ import annotations
 
-from typing import Any
+from .base import BaseNodeExecutor, NodeExecutionContext, NodeExecutionResult
 
 
-class SubworkflowNodeExecutor:
-    """
-    Executor for subworkflow nodes.
+class SubworkflowNodeExecutor(BaseNodeExecutor):
+    """Spawn a child workflow run through the coordinator."""
 
-    This will be implemented in Phase 2+ to handle:
-    - Nested workflow execution
-    - Input/output mapping
-    - Context isolation
-    """
+    supported_types = ("subworkflow",)
 
-    async def execute(self, node_config: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
-        """
-        Execute a subworkflow node.
-
-        TODO: Implement in Phase 2.
-
-        Args:
-            node_config: Node configuration
-            state: Current workflow state
-
-        Returns:
-            Updated state with subworkflow results
-        """
-        raise NotImplementedError("Subworkflow node executor will be implemented in Phase 2")
+    async def execute(self, context: NodeExecutionContext) -> NodeExecutionResult:
+        state = dict(context.state)
+        config = context.node.get("config", {})
+        child_run_id = await context.coordinator.execute_workflow(
+            workflow_id=config["workflow_id"],
+            workflow_version_id=config.get("workflow_version_id"),
+            input_payload=state,
+            workspace_id=context.run.workspace_id,
+            parent_run_id=context.run.id,
+            spawned_by_step_id=context.step_id,
+        )
+        state[config.get("state_key", "child_run_id")] = str(child_run_id)
+        return NodeExecutionResult(state=state, spawned_run_id=child_run_id, next_edge_type="success")

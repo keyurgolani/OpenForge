@@ -513,9 +513,13 @@ class WorkflowDefinitionModel(Base):
     __tablename__ = "workflow_definitions"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    current_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
     entry_node: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     state_schema: Mapped[dict] = mapped_column(JSONB, default=dict)
@@ -523,11 +527,92 @@ class WorkflowDefinitionModel(Base):
     edges: Mapped[list] = mapped_column(JSONB, default=list)
     default_input_schema: Mapped[dict] = mapped_column(JSONB, default=dict)
     default_output_schema: Mapped[dict] = mapped_column(JSONB, default=dict)
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_template: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(50), default="draft")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
     created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
     updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+    __table_args__ = (
+        Index("idx_workflow_definitions_workspace_status", "workspace_id", "status"),
+    )
+
+
+class WorkflowVersionModel(Base):
+    """Versioned executable graph snapshot for a workflow."""
+    __tablename__ = "workflow_versions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workflow_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workflow_definitions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    state_schema: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    entry_node_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    default_input_schema: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    default_output_schema: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="draft")
+    change_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+
+    __table_args__ = (
+        UniqueConstraint("workflow_id", "version_number", name="uq_workflow_versions_workflow_version"),
+    )
+
+
+class WorkflowNodeModel(Base):
+    """Node within a workflow version."""
+    __tablename__ = "workflow_nodes"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workflow_version_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workflow_versions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    node_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    node_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    config_json: Mapped[dict] = mapped_column("config", JSONB, nullable=False, default=dict)
+    executor_ref: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
+    input_mapping_json: Mapped[dict] = mapped_column("input_mapping", JSONB, nullable=False, default=dict)
+    output_mapping_json: Mapped[dict] = mapped_column("output_mapping", JSONB, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+
+    __table_args__ = (
+        UniqueConstraint("workflow_version_id", "node_key", name="uq_workflow_nodes_version_key"),
+    )
+
+
+class WorkflowEdgeModel(Base):
+    """Directed edge between workflow nodes."""
+    __tablename__ = "workflow_edges"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workflow_version_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workflow_versions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    from_node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workflow_nodes.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    to_node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workflow_nodes.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    edge_type: Mapped[str] = mapped_column(String(50), nullable=False, default="success")
+    condition_json: Mapped[dict] = mapped_column("condition", JSONB, nullable=False, default=dict)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    label: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+
+    __table_args__ = (
+        Index("idx_workflow_edges_version_priority", "workflow_version_id", "priority"),
+    )
 
 
 class MissionDefinitionModel(Base):
@@ -578,17 +663,102 @@ class RunModel(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     run_type: Mapped[str] = mapped_column(String(50), nullable=False)
     workflow_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    workflow_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     mission_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     parent_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    root_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    spawned_by_step_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     workspace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(50), default="pending")
     state_snapshot: Mapped[dict] = mapped_column(JSONB, default=dict)
     input_payload: Mapped[dict] = mapped_column(JSONB, default=dict)
     output_payload: Mapped[dict] = mapped_column(JSONB, default=dict)
+    current_node_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     error_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+
+    __table_args__ = (
+        Index("idx_runs_workspace_status", "workspace_id", "status"),
+        Index("idx_runs_root_status", "root_run_id", "status"),
+    )
+
+
+class RunStepModel(Base):
+    """Durable execution step within a run."""
+    __tablename__ = "run_steps"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    node_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    node_key: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    step_index: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
+    input_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    output_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    checkpoint_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    error_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+
+    __table_args__ = (
+        UniqueConstraint("run_id", "step_index", name="uq_run_steps_run_step_index"),
+    )
+
+
+class CheckpointModel(Base):
+    """Persisted run checkpoint."""
+    __tablename__ = "checkpoints"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    step_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("run_steps.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    checkpoint_type: Mapped[str] = mapped_column(String(50), nullable=False, default="after_step")
+    state_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+
+    __table_args__ = (
+        Index("idx_checkpoints_run_created", "run_id", "created_at"),
+    )
+
+
+class RuntimeEventModel(Base):
+    """Persisted runtime event for a run."""
+    __tablename__ = "runtime_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    step_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("run_steps.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    workflow_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    workflow_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    node_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    node_key: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    payload_json: Mapped[dict] = mapped_column("payload", JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+
+    __table_args__ = (
+        Index("idx_runtime_events_run_created", "run_id", "created_at"),
+    )
 
 
 class ArtifactModel(Base):

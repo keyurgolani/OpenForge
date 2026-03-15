@@ -17,7 +17,8 @@ async def start_agent_relay() -> None:
     redis = await get_redis()
     pubsub = redis.pubsub()
     await pubsub.psubscribe("agent:*")
-    logger.info("Runtime stream relay started on agent:*")
+    await pubsub.psubscribe("runtime:*")
+    logger.info("Runtime stream relay started on agent:* and runtime:*")
 
     try:
         async for message in pubsub.listen():
@@ -33,5 +34,6 @@ async def start_agent_relay() -> None:
     except asyncio.CancelledError:
         logger.info("Runtime stream relay stopping")
         await pubsub.punsubscribe("agent:*")
+        await pubsub.punsubscribe("runtime:*")
         await pubsub.aclose()
         raise

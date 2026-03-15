@@ -19,8 +19,10 @@ const WorkspaceHome = lazy(() => import('./pages/WorkspaceHome'))
 const ProfilesPage = lazy(() => import('./pages/ProfilesPage'))
 const ProfileDetailPage = lazy(() => import('./pages/ProfileDetailPage'))
 const WorkflowsPage = lazy(() => import('./pages/WorkflowsPage'))
+const WorkflowDetailPage = lazy(() => import('./pages/WorkflowDetailPage'))
 const MissionsPage = lazy(() => import('./pages/MissionsPage'))
 const RunsPage = lazy(() => import('./pages/RunsPage'))
+const RunDetailPage = lazy(() => import('./pages/RunDetailPage'))
 const ArtifactsPage = lazy(() => import('./pages/ArtifactsPage'))
 const ArtifactDetailPage = lazy(() => import('./pages/ArtifactDetailPage'))
 const EditorDispatcher = lazy(() => import('./components/knowledge/editors/EditorDispatcher'))
@@ -180,6 +182,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                         <WorkflowsPage />
                                     </ErrorBoundary>
                                 } />
+                                <Route path="workflows/:workflowId" element={
+                                    <ErrorBoundary>
+                                        <WorkflowDetailPage />
+                                    </ErrorBoundary>
+                                } />
                                 <Route path="missions" element={
                                     <ErrorBoundary>
                                         <MissionsPage />
@@ -188,6 +195,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                 <Route path="runs" element={
                                     <ErrorBoundary>
                                         <RunsPage />
+                                    </ErrorBoundary>
+                                } />
+                                <Route path="runs/:runId" element={
+                                    <ErrorBoundary>
+                                        <RunDetailPage />
                                     </ErrorBoundary>
                                 } />
                                 <Route path="artifacts" element={

@@ -123,7 +123,7 @@ export function PrimaryNavExpanded({
 
   // Filter ongoing runs
   const ongoingRuns = runs.filter((run) =>
-    ['pending', 'queued', 'running', 'paused'].includes(run.status)
+    ['pending', 'queued', 'running', 'waiting_approval', 'interrupted', 'retrying', 'paused'].includes(run.status)
   ).slice(0, 10);
 
   // Focus rename input when renaming

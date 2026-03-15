@@ -14,6 +14,8 @@ import type {
     ArtifactVersionCreate,
     ArtifactVersionsResponse,
 } from '@/types/artifacts'
+import type { Checkpoint, Run, RunLineage, RunStep, RuntimeEvent } from '@/types/runs'
+import type { WorkflowDefinition, WorkflowVersion } from '@/types/workflows'
 
 const api = axios.create({
     baseURL: '/api/v1',
@@ -395,11 +397,22 @@ export const updateProfile = (id: string, data: object): Promise<any> =>
 export const deleteProfile = (id: string): Promise<void> => api.delete(`/profiles/${id}`)
 
 // Workflows
-export const listWorkflows = (params?: { skip?: number; limit?: number }): Promise<any> =>
+export const listWorkflows = (params?: {
+    skip?: number
+    limit?: number
+    workspace_id?: string
+    status?: string
+    is_system?: boolean
+    is_template?: boolean
+}): Promise<{ workflows: WorkflowDefinition[]; total: number }> =>
     api.get('/workflows', { params }).then(r => r.data)
-export const getWorkflow = (id: string): Promise<any> => api.get(`/workflows/${id}`).then(r => r.data)
-export const createWorkflow = (data: object): Promise<any> => api.post('/workflows', data).then(r => r.data)
-export const updateWorkflow = (id: string, data: object): Promise<any> =>
+export const getWorkflow = (id: string): Promise<WorkflowDefinition> => api.get(`/workflows/${id}`).then(r => r.data)
+export const listWorkflowVersions = (workflowId: string): Promise<{ versions: WorkflowVersion[]; total: number }> =>
+    api.get(`/workflows/${workflowId}/versions`).then(r => r.data)
+export const getWorkflowVersion = (workflowId: string, versionId: string): Promise<WorkflowVersion> =>
+    api.get(`/workflows/${workflowId}/versions/${versionId}`).then(r => r.data)
+export const createWorkflow = (data: object): Promise<WorkflowDefinition> => api.post('/workflows', data).then(r => r.data)
+export const updateWorkflow = (id: string, data: object): Promise<WorkflowDefinition> =>
     api.patch(`/workflows/${id}`, data).then(r => r.data)
 export const deleteWorkflow = (id: string): Promise<void> => api.delete(`/workflows/${id}`)
 
@@ -422,11 +435,24 @@ export const updateTrigger = (id: string, data: object): Promise<any> =>
 export const deleteTrigger = (id: string): Promise<void> => api.delete(`/triggers/${id}`)
 
 // Runs
-export const listRuns = (params?: { skip?: number; limit?: number; workspace_id?: string }): Promise<any> =>
+export const listRuns = (params?: {
+    skip?: number
+    limit?: number
+    workspace_id?: string
+    status?: string
+    run_type?: string
+}): Promise<{ runs: Run[]; total: number }> =>
     api.get('/runs', { params }).then(r => r.data)
-export const getRun = (id: string): Promise<any> => api.get(`/runs/${id}`).then(r => r.data)
-export const createRun = (data: object): Promise<any> => api.post('/runs', data).then(r => r.data)
-export const updateRun = (id: string, data: object): Promise<any> =>
+export const getRun = (id: string): Promise<Run> => api.get(`/runs/${id}`).then(r => r.data)
+export const listRunSteps = (id: string): Promise<{ steps: RunStep[]; total: number }> =>
+    api.get(`/runs/${id}/steps`).then(r => r.data)
+export const getRunLineage = (id: string): Promise<RunLineage> => api.get(`/runs/${id}/lineage`).then(r => r.data)
+export const listRunCheckpoints = (id: string): Promise<{ checkpoints: Checkpoint[]; total: number }> =>
+    api.get(`/runs/${id}/checkpoints`).then(r => r.data)
+export const listRunEvents = (id: string): Promise<{ events: RuntimeEvent[]; total: number }> =>
+    api.get(`/runs/${id}/events`).then(r => r.data)
+export const createRun = (data: object): Promise<Run> => api.post('/runs', data).then(r => r.data)
+export const updateRun = (id: string, data: object): Promise<Run> =>
     api.patch(`/runs/${id}`, data).then(r => r.data)
 
 // Artifacts

@@ -1,33 +1,37 @@
-"""
-Tool Node Executor.
+"""Tool node executor."""
 
-TODO: Implement tool execution node.
-"""
+from __future__ import annotations
 
 from typing import Any
 
+from .base import BaseNodeExecutor, NodeExecutionContext, NodeExecutionError, NodeExecutionResult
 
-class ToolNodeExecutor:
-    """
-    Executor for tool execution nodes.
 
-    This will be implemented in Phase 2+ to handle:
-    - Tool invocation
-    - Parameter validation
-    - Result handling
-    """
+class ToolNodeExecutor(BaseNodeExecutor):
+    """Deterministic first-pass tool/transform executor."""
 
-    async def execute(self, node_config: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
-        """
-        Execute a tool node.
+    supported_types = ("tool", "transform", "join")
 
-        TODO: Implement in Phase 2.
+    async def execute(self, context: NodeExecutionContext) -> NodeExecutionResult:
+        config = context.node.get("config", {})
+        operation = config.get("operation", "template")
+        state = dict(context.state)
 
-        Args:
-            node_config: Node configuration
-            state: Current workflow state
+        if operation == "template":
+            template = config.get("template", "")
+            output_key = config.get("output_key", "result")
+            state[output_key] = template.format(**state)
+            return NodeExecutionResult(state=state, output={output_key: state[output_key]})
 
-        Returns:
-            Updated state
-        """
-        raise NotImplementedError("Tool node executor will be implemented in Phase 2")
+        if operation == "set_value":
+            output_key = config["output_key"]
+            state[output_key] = config.get("value")
+            return NodeExecutionResult(state=state, output={output_key: state[output_key]})
+
+        if operation == "append_list":
+            output_key = config["output_key"]
+            state.setdefault(output_key, [])
+            state[output_key].append(config.get("value"))
+            return NodeExecutionResult(state=state, output={output_key: state[output_key]})
+
+        raise NodeExecutionError(f"Unsupported tool node operation '{operation}'", code="unsupported_tool_operation")

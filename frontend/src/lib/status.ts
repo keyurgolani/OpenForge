@@ -11,6 +11,9 @@ export type ExecutionStatus =
   | 'pending'
   | 'queued'
   | 'running'
+  | 'waiting_approval'
+  | 'interrupted'
+  | 'retrying'
   | 'completed'
   | 'failed'
   | 'cancelled'
@@ -54,7 +57,7 @@ export function isTerminalStatus(status: ExecutionStatus | KnowledgeStatus): boo
  * Check if a status indicates an active/running state
  */
 export function isActiveStatus(status: ExecutionStatus | KnowledgeStatus): boolean {
-  return ['pending', 'running', 'processing'].includes(status);
+  return ['pending', 'queued', 'running', 'processing', 'retrying'].includes(status);
 }
 
 /**
@@ -80,6 +83,9 @@ export function getStatusLabel(status: string): string {
     pending: 'Pending',
     queued: 'Queued',
     running: 'Running',
+    waiting_approval: 'Waiting Approval',
+    interrupted: 'Interrupted',
+    retrying: 'Retrying',
     processing: 'Processing',
     completed: 'Completed',
     ready: 'Ready',
@@ -114,6 +120,9 @@ export function getStatusColor(status: ExecutionStatus | KnowledgeStatus | Trigg
     pending: 'default',
     queued: 'default',
     running: 'info',
+    waiting_approval: 'warning',
+    interrupted: 'warning',
+    retrying: 'info',
     processing: 'info',
     completed: 'success',
     ready: 'success',

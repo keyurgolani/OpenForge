@@ -1,62 +1,85 @@
-"""
-Run schemas for API request/response models.
-"""
+"""Run API schemas."""
 
-from datetime import datetime
-from typing import Any, Optional
+from __future__ import annotations
+
+from pydantic import BaseModel, ConfigDict, Field
 from uuid import UUID
-
-from pydantic import BaseModel, Field
+from typing import Any
 
 from openforge.domains.common.enums import ExecutionStatus
-from openforge.domains.runs.types import RunType
+
+from .types import Checkpoint, Run, RunLineage, RunStep, RunType, RuntimeEvent
 
 
 class RunCreate(BaseModel):
-    """Schema for creating a run."""
-
-    run_type: RunType = Field(...)
-    workflow_id: Optional[UUID] = Field(default=None)
-    mission_id: Optional[UUID] = Field(default=None)
-    parent_run_id: Optional[UUID] = Field(default=None)
-    workspace_id: UUID = Field(...)
+    run_type: RunType = RunType.WORKFLOW
+    workflow_id: UUID | None = None
+    workflow_version_id: UUID | None = None
+    mission_id: UUID | None = None
+    parent_run_id: UUID | None = None
+    root_run_id: UUID | None = None
+    spawned_by_step_id: UUID | None = None
+    workspace_id: UUID
     input_payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class RunUpdate(BaseModel):
-    """Schema for updating a run."""
+    status: ExecutionStatus | None = None
+    state_snapshot: dict[str, Any] | None = None
+    output_payload: dict[str, Any] | None = None
+    current_node_id: UUID | None = None
+    error_code: str | None = Field(default=None, max_length=100)
+    error_message: str | None = Field(default=None, max_length=5000)
 
-    status: Optional[ExecutionStatus] = Field(default=None)
-    state_snapshot: Optional[dict[str, Any]] = Field(default=None)
-    output_payload: Optional[dict[str, Any]] = Field(default=None)
-    error_code: Optional[str] = Field(default=None, max_length=100)
-    error_message: Optional[str] = Field(default=None, max_length=5000)
 
-
-class RunResponse(BaseModel):
-    """Schema for run response."""
-
-    id: UUID
-    run_type: RunType
-    workflow_id: Optional[UUID]
-    mission_id: Optional[UUID]
-    parent_run_id: Optional[UUID]
+class RunStartRequest(BaseModel):
+    workflow_id: UUID
+    workflow_version_id: UUID | None = None
     workspace_id: UUID
-    status: ExecutionStatus
-    state_snapshot: dict[str, Any]
-    input_payload: dict[str, Any]
-    output_payload: dict[str, Any]
-    error_code: Optional[str]
-    error_message: Optional[str]
-    started_at: Optional[datetime]
-    completed_at: Optional[datetime]
+    input_payload: dict[str, Any] = Field(default_factory=dict)
+    parent_run_id: UUID | None = None
+    spawned_by_step_id: UUID | None = None
 
-    class Config:
-        from_attributes = True
+
+class RunResumeRequest(BaseModel):
+    state_patch: dict[str, Any] = Field(default_factory=dict)
+
+
+class RunResponse(Run):
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RunListResponse(BaseModel):
-    """Schema for run list response."""
-
     runs: list[RunResponse]
     total: int
+
+
+class RunStepResponse(RunStep):
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RunStepListResponse(BaseModel):
+    steps: list[RunStepResponse]
+    total: int
+
+
+class CheckpointResponse(Checkpoint):
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CheckpointListResponse(BaseModel):
+    checkpoints: list[CheckpointResponse]
+    total: int
+
+
+class RuntimeEventResponse(RuntimeEvent):
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RuntimeEventListResponse(BaseModel):
+    events: list[RuntimeEventResponse]
+    total: int
+
+
+class RunLineageResponse(RunLineage):
+    model_config = ConfigDict(from_attributes=True)

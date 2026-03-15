@@ -1,96 +1,135 @@
-"""
-Workflow schemas for API request/response models.
-"""
+"""Workflow API schemas."""
+
+from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
-from openforge.domains.workflows.types import NodeType, WorkflowEdge, WorkflowNode, WorkflowStatus
+from openforge.domains.common.enums import NodeType
+
+from .types import (
+    WorkflowDefinition,
+    WorkflowEdge,
+    WorkflowEdgeStatus,
+    WorkflowNode,
+    WorkflowNodeStatus,
+    WorkflowStatus,
+    WorkflowVersion,
+    WorkflowVersionStatus,
+)
 
 
 class WorkflowNodeCreate(BaseModel):
-    """Schema for creating a workflow node."""
-
-    id: str = Field(..., min_length=1, max_length=100)
-    node_type: NodeType = Field(...)
-    name: str = Field(..., min_length=1, max_length=255)
-    description: Optional[str] = Field(default=None, max_length=1000)
+    id: UUID | None = None
+    node_key: str = Field(min_length=1, max_length=120)
+    node_type: NodeType
+    label: str = Field(min_length=1, max_length=255)
+    description: str | None = None
     config: dict[str, Any] = Field(default_factory=dict)
-    position_x: Optional[int] = Field(default=None)
-    position_y: Optional[int] = Field(default=None)
+    executor_ref: str | None = None
+    input_mapping: dict[str, Any] = Field(default_factory=dict)
+    output_mapping: dict[str, Any] = Field(default_factory=dict)
+    status: WorkflowNodeStatus = WorkflowNodeStatus.ACTIVE
+
+
+class WorkflowNodeUpdate(BaseModel):
+    node_key: str | None = Field(default=None, min_length=1, max_length=120)
+    node_type: NodeType | None = None
+    label: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = None
+    config: dict[str, Any] | None = None
+    executor_ref: str | None = None
+    input_mapping: dict[str, Any] | None = None
+    output_mapping: dict[str, Any] | None = None
+    status: WorkflowNodeStatus | None = None
 
 
 class WorkflowEdgeCreate(BaseModel):
-    """Schema for creating a workflow edge."""
+    id: UUID | None = None
+    from_node_id: UUID
+    to_node_id: UUID
+    edge_type: str = Field(default="success", min_length=1, max_length=50)
+    condition: dict[str, Any] = Field(default_factory=dict)
+    priority: int = Field(default=100)
+    label: str | None = None
+    status: WorkflowEdgeStatus = WorkflowEdgeStatus.ACTIVE
 
-    id: str = Field(..., min_length=1, max_length=100)
-    source_node_id: str = Field(..., min_length=1)
-    target_node_id: str = Field(..., min_length=1)
-    condition: Optional[dict[str, Any]] = Field(default=None)
-    label: Optional[str] = Field(default=None, max_length=255)
+
+class WorkflowEdgeUpdate(BaseModel):
+    from_node_id: UUID | None = None
+    to_node_id: UUID | None = None
+    edge_type: str | None = Field(default=None, min_length=1, max_length=50)
+    condition: dict[str, Any] | None = None
+    priority: int | None = None
+    label: str | None = None
+    status: WorkflowEdgeStatus | None = None
+
+
+class WorkflowVersionCreate(BaseModel):
+    state_schema: dict[str, Any] = Field(default_factory=dict)
+    entry_node_id: UUID | None = None
+    default_input_schema: dict[str, Any] = Field(default_factory=dict)
+    default_output_schema: dict[str, Any] = Field(default_factory=dict)
+    status: WorkflowVersionStatus = WorkflowVersionStatus.DRAFT
+    change_note: str | None = None
+    nodes: list[WorkflowNodeCreate] = Field(default_factory=list)
+    edges: list[WorkflowEdgeCreate] = Field(default_factory=list)
 
 
 class WorkflowCreate(BaseModel):
-    """Schema for creating a workflow definition."""
-
-    name: str = Field(..., min_length=1, max_length=255)
-    slug: str = Field(..., min_length=1, max_length=100)
-    description: Optional[str] = Field(default=None, max_length=2000)
-    version: int = Field(default=1, ge=1)
-    entry_node: Optional[str] = Field(default=None, max_length=100)
-    state_schema: dict[str, Any] = Field(default_factory=dict)
-    nodes: list[WorkflowNodeCreate] = Field(default_factory=list)
-    edges: list[WorkflowEdgeCreate] = Field(default_factory=list)
-    default_input_schema: dict[str, Any] = Field(default_factory=dict)
-    default_output_schema: dict[str, Any] = Field(default_factory=dict)
-    status: WorkflowStatus = Field(default=WorkflowStatus.DRAFT)
+    workspace_id: UUID
+    name: str = Field(min_length=1, max_length=255)
+    slug: str = Field(min_length=1, max_length=100)
+    description: str | None = Field(default=None, max_length=2000)
+    status: WorkflowStatus = WorkflowStatus.DRAFT
+    is_system: bool = False
+    is_template: bool = False
+    version: WorkflowVersionCreate
 
 
 class WorkflowUpdate(BaseModel):
-    """Schema for updating a workflow definition."""
-
-    name: Optional[str] = Field(default=None, min_length=1, max_length=255)
-    slug: Optional[str] = Field(default=None, min_length=1, max_length=100)
-    description: Optional[str] = Field(default=None, max_length=2000)
-    version: Optional[int] = Field(default=None, ge=1)
-    entry_node: Optional[str] = Field(default=None, max_length=100)
-    state_schema: Optional[dict[str, Any]] = Field(default=None)
-    nodes: Optional[list[WorkflowNodeCreate]] = Field(default=None)
-    edges: Optional[list[WorkflowEdgeCreate]] = Field(default=None)
-    default_input_schema: Optional[dict[str, Any]] = Field(default=None)
-    default_output_schema: Optional[dict[str, Any]] = Field(default=None)
-    status: Optional[WorkflowStatus] = Field(default=None)
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    slug: str | None = Field(default=None, min_length=1, max_length=100)
+    description: str | None = Field(default=None, max_length=2000)
+    status: WorkflowStatus | None = None
+    is_system: bool | None = None
+    is_template: bool | None = None
 
 
-class WorkflowResponse(BaseModel):
-    """Schema for workflow response."""
-
-    id: UUID
-    name: str
-    slug: str
-    description: Optional[str]
-    version: int
-    entry_node: Optional[str]
-    state_schema: dict[str, Any]
-    nodes: list[WorkflowNode]
-    edges: list[WorkflowEdge]
-    default_input_schema: dict[str, Any]
-    default_output_schema: dict[str, Any]
-    status: WorkflowStatus
-    created_at: Optional[datetime]
-    updated_at: Optional[datetime]
-    created_by: Optional[UUID]
-    updated_by: Optional[UUID]
-
-    class Config:
-        from_attributes = True
+class WorkflowResponse(WorkflowDefinition):
+    model_config = ConfigDict(from_attributes=True)
 
 
 class WorkflowListResponse(BaseModel):
-    """Schema for workflow list response."""
-
     workflows: list[WorkflowResponse]
+    total: int
+
+
+class WorkflowVersionResponse(WorkflowVersion):
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WorkflowVersionListResponse(BaseModel):
+    versions: list[WorkflowVersionResponse]
+    total: int
+
+
+class WorkflowNodeResponse(WorkflowNode):
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WorkflowNodeListResponse(BaseModel):
+    nodes: list[WorkflowNodeResponse]
+    total: int
+
+
+class WorkflowEdgeResponse(WorkflowEdge):
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WorkflowEdgeListResponse(BaseModel):
+    edges: list[WorkflowEdgeResponse]
     total: int

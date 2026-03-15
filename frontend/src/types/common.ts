@@ -3,7 +3,19 @@
  */
 
 export type ExecutionMode = 'autonomous' | 'supervised' | 'interactive' | 'manual';
-export type ExecutionStatus = 'pending' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'paused' | 'timeout';
+export type ExecutionStatus =
+  | 'pending'
+  | 'queued'
+  | 'running'
+  | 'waiting_approval'
+  | 'interrupted'
+  | 'retrying'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'paused'
+  | 'timeout'
+  | 'ready';
 export type TriggerType = 'schedule' | 'event' | 'webhook' | 'manual';
 export type ArtifactType =
   | 'note'

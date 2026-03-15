@@ -1,16 +1,65 @@
 import { useQuery } from '@tanstack/react-query'
 
-import { listWorkflows } from '@/lib/api'
-import type { WorkflowDefinition } from '@/types/workflows'
+import { getWorkflow, getWorkflowVersion, listWorkflowVersions, listWorkflows } from '@/lib/api'
+import type { WorkflowDefinition, WorkflowStatus, WorkflowVersion } from '@/types/workflows'
 
 interface WorkflowsResponse {
   workflows: WorkflowDefinition[]
   total: number
 }
 
-export function useWorkflowsQuery(limit = 100) {
+interface WorkflowQueryOptions {
+  workspaceId?: string
+  limit?: number
+  status?: WorkflowStatus
+  isSystem?: boolean
+  isTemplate?: boolean
+}
+
+interface WorkflowVersionsResponse {
+  versions: WorkflowVersion[]
+  total: number
+}
+
+export function useWorkflowsQuery({
+  workspaceId,
+  limit = 100,
+  status,
+  isSystem,
+  isTemplate,
+}: WorkflowQueryOptions = {}) {
   return useQuery<WorkflowsResponse>({
-    queryKey: ['workflows', limit],
-    queryFn: () => listWorkflows({ limit }),
+    queryKey: ['workflows', workspaceId ?? 'all', limit, status ?? 'all', isSystem ?? 'all', isTemplate ?? 'all'],
+    queryFn: () => listWorkflows({
+      workspace_id: workspaceId,
+      limit,
+      status,
+      is_system: isSystem,
+      is_template: isTemplate,
+    }),
+  })
+}
+
+export function useWorkflowQuery(workflowId?: string) {
+  return useQuery<WorkflowDefinition>({
+    queryKey: ['workflow', workflowId],
+    queryFn: () => getWorkflow(workflowId as string),
+    enabled: Boolean(workflowId),
+  })
+}
+
+export function useWorkflowVersionsQuery(workflowId?: string) {
+  return useQuery<WorkflowVersionsResponse>({
+    queryKey: ['workflow', workflowId, 'versions'],
+    queryFn: () => listWorkflowVersions(workflowId as string),
+    enabled: Boolean(workflowId),
+  })
+}
+
+export function useWorkflowVersionQuery(workflowId?: string, versionId?: string) {
+  return useQuery<WorkflowVersion>({
+    queryKey: ['workflow', workflowId, 'versions', versionId],
+    queryFn: () => getWorkflowVersion(workflowId as string, versionId as string),
+    enabled: Boolean(workflowId && versionId),
   })
 }

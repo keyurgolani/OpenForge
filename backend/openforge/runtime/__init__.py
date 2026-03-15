@@ -15,8 +15,9 @@ Components:
 """
 
 from .coordinator import RuntimeCoordinator
-from .events import EventPublisher, RuntimeEvent
 from .checkpoint_store import CheckpointStore
+from .event_publisher import EventPublisher
+from .events import RuntimeEvent
 from .state_store import StateStore
 from .hitl import HITLService, hitl_service
 from .policy import PolicyEngine, policy_engine, ToolCallRateLimiter

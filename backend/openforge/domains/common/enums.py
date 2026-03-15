@@ -23,6 +23,9 @@ class ExecutionStatus(str, Enum):
     PENDING = "pending"
     QUEUED = "queued"
     RUNNING = "running"
+    WAITING_APPROVAL = "waiting_approval"
+    INTERRUPTED = "interrupted"
+    RETRYING = "retrying"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
@@ -97,6 +100,8 @@ class NodeType(str, Enum):
     APPROVAL = "approval"  # Human approval node
     ARTIFACT = "artifact"  # Artifact generation node
     SUBWORKFLOW = "subworkflow"  # Nested workflow node
+    JOIN = "join"  # Reducer/join node
+    TERMINAL = "terminal"  # Terminal completion/failure node
     INPUT = "input"  # Input node
     OUTPUT = "output"  # Output node
     TRANSFORM = "transform"  # Data transformation node

@@ -15,6 +15,7 @@ EXPECTED_MIGRATIONS = [
     "005_phase5_graph_foundation.py",
     "006_phase7_profile_core.py",
     "007_phase8_artifact_unification.py",
+    "008_phase9_workflow_runtime.py",
 ]
 
 

@@ -1,33 +1,27 @@
-"""
-LLM Node Executor.
+"""LLM node executor."""
 
-TODO: Implement LLM inference node execution.
-"""
+from __future__ import annotations
 
-from typing import Any
+from .base import BaseNodeExecutor, NodeExecutionContext, NodeExecutionResult
 
 
-class LLMNodeExecutor:
-    """
-    Executor for LLM inference nodes.
+class LLMNodeExecutor(BaseNodeExecutor):
+    """Bounded Phase 9 LLM executor surface.
 
-    This will be implemented in Phase 2+ to handle:
-    - LLM API calls
-    - Prompt template rendering
-    - Response parsing
+    This first pass intentionally stays deterministic unless the node config
+    explicitly opts into a live response pathway later.
     """
 
-    async def execute(self, node_config: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
-        """
-        Execute an LLM inference node.
+    supported_types = ("llm",)
 
-        TODO: Implement in Phase 2.
-
-        Args:
-            node_config: Node configuration
-            state: Current workflow state
-
-        Returns:
-            Updated state
-        """
-        raise NotImplementedError("LLM node executor will be implemented in Phase 2")
+    async def execute(self, context: NodeExecutionContext) -> NodeExecutionResult:
+        state = dict(context.state)
+        config = context.node.get("config", {})
+        output_key = config.get("output_key", "llm_output")
+        if config.get("static_response") is not None:
+            state[output_key] = str(config["static_response"]).format(**state)
+        elif config.get("response_template") is not None:
+            state[output_key] = str(config["response_template"]).format(**state)
+        else:
+            state[output_key] = ""
+        return NodeExecutionResult(state=state, output={output_key: state[output_key]})

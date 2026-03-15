@@ -1,18 +1,19 @@
-"""
-Workflow domain types.
+"""Workflow domain types."""
 
-This module defines the core types and enums for Workflow Definitions.
-"""
+from __future__ import annotations
 
+from datetime import datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+from openforge.domains.common.enums import NodeType
 
 
 class WorkflowStatus(str, Enum):
-    """Status of a workflow definition."""
+    """Top-level workflow definition status."""
 
     DRAFT = "draft"
     ACTIVE = "active"
@@ -20,85 +21,111 @@ class WorkflowStatus(str, Enum):
     DELETED = "deleted"
 
 
-class NodeType(str, Enum):
-    """Types of nodes in a workflow graph."""
+class WorkflowVersionStatus(str, Enum):
+    """Lifecycle state for a workflow version."""
 
-    LLM = "llm"  # LLM inference node
-    TOOL = "tool"  # Tool execution node
-    ROUTER = "router"  # Conditional routing node
-    APPROVAL = "approval"  # Human approval node
-    ARTIFACT = "artifact"  # Artifact generation node
-    SUBWORKFLOW = "subworkflow"  # Nested workflow node
-    INPUT = "input"  # Input node
-    OUTPUT = "output"  # Output node
-    TRANSFORM = "transform"  # Data transformation node
+    DRAFT = "draft"
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+    SUPERSEDED = "superseded"
+
+
+class WorkflowNodeStatus(str, Enum):
+    """Workflow node status."""
+
+    ACTIVE = "active"
+    DISABLED = "disabled"
+
+
+class WorkflowEdgeStatus(str, Enum):
+    """Workflow edge status."""
+
+    ACTIVE = "active"
+    DISABLED = "disabled"
 
 
 class WorkflowNode(BaseModel):
-    """A node in the workflow graph."""
+    """Executable node within a workflow version."""
 
-    id: str = Field(..., min_length=1, max_length=100)
-    node_type: NodeType = Field(...)
-    name: str = Field(..., min_length=1, max_length=255)
-    description: Optional[str] = Field(default=None, max_length=1000)
+    id: UUID
+    workflow_version_id: UUID
+    node_key: str = Field(min_length=1, max_length=120)
+    node_type: NodeType
+    label: str = Field(min_length=1, max_length=255)
+    description: str | None = None
     config: dict[str, Any] = Field(default_factory=dict)
-    position_x: Optional[int] = Field(default=None)
-    position_y: Optional[int] = Field(default=None)
+    executor_ref: str | None = None
+    input_mapping: dict[str, Any] = Field(default_factory=dict)
+    output_mapping: dict[str, Any] = Field(default_factory=dict)
+    status: WorkflowNodeStatus = WorkflowNodeStatus.ACTIVE
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class WorkflowEdge(BaseModel):
-    """An edge in the workflow graph."""
+    """Directed edge between workflow nodes."""
 
-    id: str = Field(..., min_length=1, max_length=100)
-    source_node_id: str = Field(..., min_length=1)
-    target_node_id: str = Field(..., min_length=1)
-    condition: Optional[dict[str, Any]] = Field(default=None)
-    label: Optional[str] = Field(default=None, max_length=255)
+    id: UUID
+    workflow_version_id: UUID
+    from_node_id: UUID
+    to_node_id: UUID
+    edge_type: str = Field(default="success", min_length=1, max_length=50)
+    condition: dict[str, Any] = Field(default_factory=dict)
+    priority: int = Field(default=100)
+    label: str | None = None
+    status: WorkflowEdgeStatus = WorkflowEdgeStatus.ACTIVE
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WorkflowVersion(BaseModel):
+    """Versioned executable graph snapshot."""
+
+    id: UUID
+    workflow_id: UUID
+    version_number: int = Field(ge=1)
+    state_schema: dict[str, Any] = Field(default_factory=dict)
+    entry_node_id: UUID | None = None
+    entry_node: WorkflowNode | None = None
+    default_input_schema: dict[str, Any] = Field(default_factory=dict)
+    default_output_schema: dict[str, Any] = Field(default_factory=dict)
+    status: WorkflowVersionStatus = WorkflowVersionStatus.DRAFT
+    change_note: str | None = None
+    nodes: list[WorkflowNode] = Field(default_factory=list)
+    edges: list[WorkflowEdge] = Field(default_factory=list)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class WorkflowDefinition(BaseModel):
-    """
-    Workflow Definition - a composable execution graph.
+    """Top-level workflow definition and current executable projection."""
 
-    A Workflow defines how tasks are performed through a graph of nodes and edges.
-    It is NOT a runtime instance - it's the definition/blueprint.
-
-    Attributes:
-        id: Unique identifier
-        name: Display name
-        slug: URL-friendly identifier
-        description: Human-readable description
-        version: Version number for this workflow definition
-        entry_node: ID of the starting node
-        state_schema: JSON schema for workflow state
-        nodes: List of workflow nodes
-        edges: List of edges connecting nodes
-        default_input_schema: JSON schema for expected inputs
-        default_output_schema: JSON schema for outputs
-        status: Current status
-        created_at: Creation timestamp
-        updated_at: Last update timestamp
-        created_by: User who created this workflow
-        updated_by: User who last updated this workflow
-    """
-
-    id: UUID = Field(...)
-    name: str = Field(..., min_length=1, max_length=255)
-    slug: str = Field(..., min_length=1, max_length=100)
-    description: Optional[str] = Field(default=None, max_length=2000)
+    id: UUID
+    workspace_id: UUID | None = None
+    name: str
+    slug: str
+    description: str | None = None
+    status: WorkflowStatus = WorkflowStatus.DRAFT
+    current_version_id: UUID | None = None
+    is_system: bool = False
+    is_template: bool = False
+    current_version: WorkflowVersion | None = None
     version: int = Field(default=1, ge=1)
-    entry_node: Optional[str] = Field(default=None, max_length=100)
+    entry_node: str | None = None
     state_schema: dict[str, Any] = Field(default_factory=dict)
     nodes: list[WorkflowNode] = Field(default_factory=list)
     edges: list[WorkflowEdge] = Field(default_factory=list)
     default_input_schema: dict[str, Any] = Field(default_factory=dict)
     default_output_schema: dict[str, Any] = Field(default_factory=dict)
-    status: WorkflowStatus = Field(default=WorkflowStatus.DRAFT)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    created_by: UUID | None = None
+    updated_by: UUID | None = None
 
-    created_at: Optional[str] = Field(default=None)
-    updated_at: Optional[str] = Field(default=None)
-    created_by: Optional[UUID] = Field(default=None)
-    updated_by: Optional[UUID] = Field(default=None)
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
