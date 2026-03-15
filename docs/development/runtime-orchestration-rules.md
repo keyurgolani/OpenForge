@@ -16,6 +16,9 @@ These rules keep workflow orchestration aligned with the Phase 9 architecture in
 8. New node types must register through the executor registry and declare explicit transition behavior.
 9. Retries, cancellations, and resumes must update durable lifecycle state instead of relying on transient in-memory flags.
 10. Workflow inspection APIs and UI should read from durable runtime tables, not reconstruct state heuristically from logs.
+11. Delegation mode, merge strategy, and join-group semantics must remain explicit in runtime state and APIs.
+12. Fan-out behavior without tracked join or reduce semantics is not acceptable.
+13. New composite execution behavior must not be hidden behind generic tool calls or `execution_engine.py`.
 
 ## Anti-patterns
 

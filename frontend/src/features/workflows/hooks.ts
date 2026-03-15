@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 
-import { getWorkflow, getWorkflowVersion, listWorkflowVersions, listWorkflows } from '@/lib/api'
+import { getWorkflow, getWorkflowTemplate, getWorkflowVersion, listWorkflowTemplates, listWorkflowVersions, listWorkflows } from '@/lib/api'
 import type { WorkflowDefinition, WorkflowStatus, WorkflowVersion } from '@/types/workflows'
 
 interface WorkflowsResponse {
@@ -61,5 +61,20 @@ export function useWorkflowVersionQuery(workflowId?: string, versionId?: string)
     queryKey: ['workflow', workflowId, 'versions', versionId],
     queryFn: () => getWorkflowVersion(workflowId as string, versionId as string),
     enabled: Boolean(workflowId && versionId),
+  })
+}
+
+export function useWorkflowTemplatesQuery(templateKind?: string) {
+  return useQuery<WorkflowsResponse>({
+    queryKey: ['workflow-templates', templateKind ?? 'all'],
+    queryFn: () => listWorkflowTemplates({ template_kind: templateKind }),
+  })
+}
+
+export function useWorkflowTemplateQuery(workflowId?: string) {
+  return useQuery<WorkflowDefinition>({
+    queryKey: ['workflow-template', workflowId],
+    queryFn: () => getWorkflowTemplate(workflowId as string),
+    enabled: Boolean(workflowId),
   })
 }

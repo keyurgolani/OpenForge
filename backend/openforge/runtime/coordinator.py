@@ -14,6 +14,11 @@ from .event_publisher import EventPublisher
 from .events import (
     APPROVAL_REQUESTED,
     ARTIFACT_EMITTED,
+    CHILD_RUN_SPAWNED,
+    FANOUT_STARTED,
+    HANDOFF_APPLIED,
+    JOIN_COMPLETED,
+    MERGE_APPLIED,
     RUN_CANCELLED,
     RUN_COMPLETED,
     RUN_FAILED,
@@ -64,6 +69,13 @@ class RuntimeCoordinator:
         workflow_version_id: UUID | None = None,
         parent_run_id: UUID | None = None,
         spawned_by_step_id: UUID | None = None,
+        delegation_mode: str | None = None,
+        merge_strategy: str | None = None,
+        join_group_id: str | None = None,
+        branch_key: str | None = None,
+        branch_index: int | None = None,
+        handoff_reason: str | None = None,
+        composite_metadata: dict[str, Any] | None = None,
     ) -> UUID:
         workflow = await self.workflow_service.get_runtime_workflow(workflow_id, workflow_version_id)
         if workflow is None:
@@ -85,6 +97,13 @@ class RuntimeCoordinator:
             input_payload=input_payload,
             state_snapshot=dict(input_payload),
             output_payload={},
+            delegation_mode=delegation_mode,
+            merge_strategy=merge_strategy,
+            join_group_id=join_group_id,
+            branch_key=branch_key,
+            branch_index=branch_index,
+            handoff_reason=handoff_reason,
+            composite_metadata=composite_metadata or {},
             started_at=now_utc(),
         )
         self.db.add(run)
@@ -176,6 +195,11 @@ class RuntimeCoordinator:
                 step_index=await self._next_step_index(run.id),
                 status="pending",
                 input_snapshot=dict(state),
+                delegation_mode=node.get("config", {}).get("delegation_mode"),
+                merge_strategy=node.get("config", {}).get("merge_strategy") or node.get("config", {}).get("strategy"),
+                join_group_id=node.get("config", {}).get("join_group_id"),
+                handoff_reason=node.get("config", {}).get("handoff_reason"),
+                composite_metadata={"node_type": node.get("node_type")},
             )
             self.db.add(step)
             await self.db.flush()
@@ -315,6 +339,76 @@ class RuntimeCoordinator:
                         node_key=node.get("node_key"),
                         event_type=ARTIFACT_EMITTED,
                         payload={"artifact_ids": [str(value) for value in result.emitted_artifact_ids]},
+                    )
+                )
+
+            for spawned_run_id in result.spawned_run_ids or ([result.spawned_run_id] if result.spawned_run_id else []):
+                await self.event_publisher.publish(
+                    RuntimeEvent(
+                        run_id=run.id,
+                        step_id=step.id,
+                        workflow_id=workflow["id"],
+                        workflow_version_id=workflow["current_version"]["id"],
+                        node_id=current_node_id,
+                        node_key=node.get("node_key"),
+                        event_type=CHILD_RUN_SPAWNED,
+                        payload={"child_run_id": str(spawned_run_id)},
+                    )
+                )
+
+            if node.get("node_type") == "fanout":
+                await self.event_publisher.publish(
+                    RuntimeEvent(
+                        run_id=run.id,
+                        step_id=step.id,
+                        workflow_id=workflow["id"],
+                        workflow_version_id=workflow["current_version"]["id"],
+                        node_id=current_node_id,
+                        node_key=node.get("node_key"),
+                        event_type=FANOUT_STARTED,
+                        payload={"join_group_id": node.get("config", {}).get("join_group_id")},
+                    )
+                )
+
+            if node.get("node_type") == "handoff":
+                await self.event_publisher.publish(
+                    RuntimeEvent(
+                        run_id=run.id,
+                        step_id=step.id,
+                        workflow_id=workflow["id"],
+                        workflow_version_id=workflow["current_version"]["id"],
+                        node_id=current_node_id,
+                        node_key=node.get("node_key"),
+                        event_type=HANDOFF_APPLIED,
+                        payload={"handoff": state.get("handoff", {})},
+                    )
+                )
+
+            if node.get("node_type") == "join":
+                await self.event_publisher.publish(
+                    RuntimeEvent(
+                        run_id=run.id,
+                        step_id=step.id,
+                        workflow_id=workflow["id"],
+                        workflow_version_id=workflow["current_version"]["id"],
+                        node_id=current_node_id,
+                        node_key=node.get("node_key"),
+                        event_type=JOIN_COMPLETED,
+                        payload={"join_group_id": node.get("config", {}).get("join_group_id")},
+                    )
+                )
+
+            if node.get("node_type") in {"delegate_call", "subworkflow", "reduce"}:
+                await self.event_publisher.publish(
+                    RuntimeEvent(
+                        run_id=run.id,
+                        step_id=step.id,
+                        workflow_id=workflow["id"],
+                        workflow_version_id=workflow["current_version"]["id"],
+                        node_id=current_node_id,
+                        node_key=node.get("node_key"),
+                        event_type=MERGE_APPLIED,
+                        payload={"merge_strategy": node.get("config", {}).get("merge_strategy") or node.get("config", {}).get("strategy")},
                     )
                 )
 

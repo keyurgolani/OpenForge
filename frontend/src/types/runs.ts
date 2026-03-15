@@ -21,6 +21,13 @@ export interface Run {
   input_payload: Record<string, unknown>;
   output_payload: Record<string, unknown>;
   current_node_id?: string | null;
+  delegation_mode?: string | null;
+  merge_strategy?: string | null;
+  join_group_id?: string | null;
+  branch_key?: string | null;
+  branch_index?: number | null;
+  handoff_reason?: string | null;
+  composite_metadata: Record<string, unknown>;
   error_code?: string | null;
   error_message?: string | null;
   started_at?: string | null;
@@ -39,6 +46,13 @@ export interface RunStep {
   status: ExecutionStatus;
   input_snapshot: Record<string, unknown>;
   output_snapshot: Record<string, unknown>;
+  delegation_mode?: string | null;
+  merge_strategy?: string | null;
+  join_group_id?: string | null;
+  branch_key?: string | null;
+  branch_index?: number | null;
+  handoff_reason?: string | null;
+  composite_metadata: Record<string, unknown>;
   checkpoint_id?: string | null;
   error_code?: string | null;
   error_message?: string | null;
@@ -76,6 +90,9 @@ export interface RunLineage {
   run_id: string;
   parent_run?: Run | null;
   child_runs: Run[];
+  tree: Record<string, unknown>;
+  delegation_history: Array<Record<string, unknown>>;
+  branch_groups: Array<Record<string, unknown>>;
 }
 
 export interface RunCreate {
@@ -88,6 +105,13 @@ export interface RunCreate {
   spawned_by_step_id?: string | null;
   workspace_id: string;
   input_payload?: Record<string, unknown>;
+  delegation_mode?: string | null;
+  merge_strategy?: string | null;
+  join_group_id?: string | null;
+  branch_key?: string | null;
+  branch_index?: number | null;
+  handoff_reason?: string | null;
+  composite_metadata?: Record<string, unknown>;
 }
 
 export interface RunUpdate {
@@ -95,6 +119,20 @@ export interface RunUpdate {
   state_snapshot?: Record<string, unknown>;
   output_payload?: Record<string, unknown>;
   current_node_id?: string | null;
+  delegation_mode?: string | null;
+  merge_strategy?: string | null;
+  join_group_id?: string | null;
+  branch_key?: string | null;
+  branch_index?: number | null;
+  handoff_reason?: string | null;
+  composite_metadata?: Record<string, unknown>;
   error_code?: string | null;
   error_message?: string | null;
+}
+
+export interface RunCompositeDebug {
+  run_id: string;
+  delegation_history: Array<Record<string, unknown>>;
+  branch_groups: Array<Record<string, unknown>>;
+  merge_outcomes: Array<Record<string, unknown>>;
 }

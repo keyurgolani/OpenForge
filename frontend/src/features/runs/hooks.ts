@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 
-import { getRun, getRunLineage, listRunCheckpoints, listRunEvents, listRunSteps, listRuns } from '@/lib/api'
-import type { Checkpoint, Run, RunLineage, RunStep, RunType, RuntimeEvent } from '@/types/runs'
+import { getRun, getRunCompositeDebug, getRunLineage, listRunCheckpoints, listRunEvents, listRunSteps, listRuns } from '@/lib/api'
+import type { Checkpoint, Run, RunCompositeDebug, RunLineage, RunStep, RunType, RuntimeEvent } from '@/types/runs'
 import type { ExecutionStatus } from '@/types/common'
 
 interface RunsResponse {
@@ -75,6 +75,14 @@ export function useRunEventsQuery(runId?: string) {
   return useQuery<RunEventsResponse>({
     queryKey: ['run', runId, 'events'],
     queryFn: () => listRunEvents(runId as string),
+    enabled: Boolean(runId),
+  })
+}
+
+export function useRunCompositeDebugQuery(runId?: string) {
+  return useQuery<RunCompositeDebug>({
+    queryKey: ['run', runId, 'composite'],
+    queryFn: () => getRunCompositeDebug(runId as string),
     enabled: Boolean(runId),
   })
 }

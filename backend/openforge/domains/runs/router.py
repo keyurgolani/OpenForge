@@ -10,6 +10,7 @@ from openforge.db.postgres import get_db
 
 from .schemas import (
     CheckpointListResponse,
+    CompositeDebugResponse,
     RunCreate,
     RunLineageResponse,
     RunListResponse,
@@ -127,3 +128,8 @@ async def list_run_checkpoints(run_id: UUID, service: RunService = Depends(get_r
 async def list_run_events(run_id: UUID, service: RunService = Depends(get_run_service)):
     events = await service.list_events(run_id)
     return {"events": events, "total": len(events)}
+
+
+@router.get("/{run_id}/composite", response_model=CompositeDebugResponse)
+async def get_run_composite_debug(run_id: UUID, service: RunService = Depends(get_run_service)):
+    return await service.get_composite_debug(run_id)

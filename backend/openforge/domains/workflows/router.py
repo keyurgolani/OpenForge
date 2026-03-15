@@ -10,6 +10,7 @@ from openforge.db.postgres import get_db
 
 from .schemas import (
     WorkflowCreate,
+    WorkflowTemplateCloneRequest,
     WorkflowEdgeCreate,
     WorkflowEdgeListResponse,
     WorkflowEdgeResponse,
@@ -55,6 +56,37 @@ async def list_workflows(
         list_kwargs["is_template"] = is_template
     workflows, total = await service.list_workflows(**list_kwargs)
     return {"workflows": workflows, "total": total}
+
+
+@router.get("/templates", response_model=WorkflowListResponse)
+async def list_workflow_templates(
+    skip: int = 0,
+    limit: int = 100,
+    template_kind: str | None = None,
+    service: WorkflowService = Depends(get_workflow_service),
+):
+    workflows, total = await service.list_templates(skip=skip, limit=limit, template_kind=template_kind)
+    return {"workflows": workflows, "total": total}
+
+
+@router.get("/templates/{workflow_id}", response_model=WorkflowResponse)
+async def get_workflow_template(workflow_id: UUID, service: WorkflowService = Depends(get_workflow_service)):
+    workflow = await service.get_template(workflow_id)
+    if not workflow:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workflow template not found")
+    return workflow
+
+
+@router.post("/templates/{workflow_id}/clone", response_model=WorkflowResponse, status_code=status.HTTP_201_CREATED)
+async def clone_workflow_template(
+    workflow_id: UUID,
+    body: WorkflowTemplateCloneRequest,
+    service: WorkflowService = Depends(get_workflow_service),
+):
+    workflow = await service.clone_template(workflow_id, body.model_dump(exclude_unset=True))
+    if not workflow:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workflow template not found")
+    return workflow
 
 
 @router.get("/{workflow_id}", response_model=WorkflowResponse)

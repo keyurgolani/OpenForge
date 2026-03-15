@@ -141,6 +141,31 @@ async def test_create_workflow_creates_initial_version_nodes_edges_and_current_p
 
 
 @pytest.mark.asyncio
+async def test_create_workflow_persists_phase10_template_metadata() -> None:
+    workspace_id = uuid4()
+    db = FakeAsyncSession()
+    service = WorkflowService(db)
+
+    workflow = await service.create_workflow(
+        {
+            "workspace_id": workspace_id,
+            "name": "Map Reduce Research",
+            "slug": "map-reduce-research",
+            "description": "Composite research template",
+            "status": "active",
+            "is_system": True,
+            "is_template": True,
+            "template_kind": "composite_pattern",
+            "template_metadata": {"pattern": "map_reduce_research", "badges": ["fanout", "reduce"]},
+            "version": _review_publish_version_payload(),
+        }
+    )
+
+    assert workflow["template_kind"] == "composite_pattern"
+    assert workflow["template_metadata"]["pattern"] == "map_reduce_research"
+
+
+@pytest.mark.asyncio
 async def test_create_version_and_activate_updates_current_workflow_version() -> None:
     workflow_id = uuid4()
     current_version_id = uuid4()

@@ -17,6 +17,7 @@ def build_default_links(
     source_mission_id: UUID | None = None,
     source_profile_id: UUID | None = None,
     source_evidence_packet_id: UUID | None = None,
+    composite_sources: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Create automatic lineage links from top-level source fields."""
 
@@ -39,6 +40,17 @@ def build_default_links(
                 "target_type": target_type.value,
                 "target_id": target_id,
                 "metadata": {},
+            }
+        )
+    for source in composite_sources or []:
+        links.append(
+            {
+                "artifact_id": artifact_id,
+                "version_id": version_id,
+                "link_type": source.get("link_type", ArtifactLinkType.RELATED.value),
+                "target_type": source["target_type"],
+                "target_id": source["target_id"],
+                "metadata": source.get("metadata", {}),
             }
         )
     return links

@@ -115,6 +115,8 @@ class WorkflowDefinition(BaseModel):
     current_version_id: UUID | None = None
     is_system: bool = False
     is_template: bool = False
+    template_kind: str | None = None
+    template_metadata: dict[str, Any] = Field(default_factory=dict)
     current_version: WorkflowVersion | None = None
     version: int = Field(default=1, ge=1)
     entry_node: str | None = None

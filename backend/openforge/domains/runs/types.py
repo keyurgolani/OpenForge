@@ -32,6 +32,13 @@ class RunStep(BaseModel):
     status: ExecutionStatus
     input_snapshot: dict[str, Any] = Field(default_factory=dict)
     output_snapshot: dict[str, Any] = Field(default_factory=dict)
+    delegation_mode: str | None = None
+    merge_strategy: str | None = None
+    join_group_id: str | None = None
+    branch_key: str | None = None
+    branch_index: int | None = None
+    handoff_reason: str | None = None
+    composite_metadata: dict[str, Any] = Field(default_factory=dict)
     checkpoint_id: UUID | None = None
     error_code: str | None = None
     error_message: str | None = None
@@ -92,6 +99,13 @@ class Run(BaseModel):
     input_payload: dict[str, Any] = Field(default_factory=dict)
     output_payload: dict[str, Any] = Field(default_factory=dict)
     current_node_id: UUID | None = None
+    delegation_mode: str | None = None
+    merge_strategy: str | None = None
+    join_group_id: str | None = None
+    branch_key: str | None = None
+    branch_index: int | None = None
+    handoff_reason: str | None = None
+    composite_metadata: dict[str, Any] = Field(default_factory=dict)
     error_code: str | None = None
     error_message: str | None = None
     started_at: datetime | None = None
@@ -109,3 +123,6 @@ class RunLineage(BaseModel):
     run_id: UUID
     parent_run: Run | None = None
     child_runs: list[Run] = Field(default_factory=list)
+    tree: dict[str, Any] = Field(default_factory=dict)
+    delegation_history: list[dict[str, Any]] = Field(default_factory=list)
+    branch_groups: list[dict[str, Any]] = Field(default_factory=list)

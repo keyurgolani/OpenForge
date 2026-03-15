@@ -87,6 +87,8 @@ class WorkflowCreate(BaseModel):
     status: WorkflowStatus = WorkflowStatus.DRAFT
     is_system: bool = False
     is_template: bool = False
+    template_kind: str | None = Field(default=None, max_length=80)
+    template_metadata: dict[str, Any] = Field(default_factory=dict)
     version: WorkflowVersionCreate
 
 
@@ -97,6 +99,14 @@ class WorkflowUpdate(BaseModel):
     status: WorkflowStatus | None = None
     is_system: bool | None = None
     is_template: bool | None = None
+    template_kind: str | None = Field(default=None, max_length=80)
+    template_metadata: dict[str, Any] | None = None
+
+
+class WorkflowTemplateCloneRequest(BaseModel):
+    workspace_id: UUID
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    slug: str | None = Field(default=None, min_length=1, max_length=100)
 
 
 class WorkflowResponse(WorkflowDefinition):

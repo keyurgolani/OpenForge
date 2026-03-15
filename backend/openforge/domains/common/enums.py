@@ -99,8 +99,12 @@ class NodeType(str, Enum):
     ROUTER = "router"  # Conditional routing node
     APPROVAL = "approval"  # Human approval node
     ARTIFACT = "artifact"  # Artifact generation node
+    DELEGATE_CALL = "delegate_call"  # Bounded child-run delegation
+    HANDOFF = "handoff"  # Transfer control to another path or target
+    FANOUT = "fanout"  # Parallel child-run branching
     SUBWORKFLOW = "subworkflow"  # Nested workflow node
     JOIN = "join"  # Reducer/join node
+    REDUCE = "reduce"  # Reduce normalized branch outputs
     TERMINAL = "terminal"  # Terminal completion/failure node
     INPUT = "input"  # Input node
     OUTPUT = "output"  # Output node

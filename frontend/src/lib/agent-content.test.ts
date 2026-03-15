@@ -1,55 +1,52 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import { describe, expect, it } from 'vitest'
 
 import { normalizeStructuredEntityRefs, renderAgentMessageContent } from './agent-content.ts'
 
-test('normalizeStructuredEntityRefs converts structured OpenForge entity refs to markdown links', () => {
-    const content = [
-        'Read [[knowledge:11111111-1111-1111-1111-111111111111:Roadmap]]',
-        'Then [[chat:22222222-2222-2222-2222-222222222222:Sprint Sync]]',
-        'Inside [[workspace:33333333-3333-3333-3333-333333333333:Ops]].',
-    ].join('\n')
+describe('agent-content', () => {
+    it('normalizeStructuredEntityRefs converts structured OpenForge entity refs to markdown links', () => {
+        const content = [
+            'Read [[knowledge:11111111-1111-1111-1111-111111111111:Roadmap]]',
+            'Then [[chat:22222222-2222-2222-2222-222222222222:Sprint Sync]]',
+            'Inside [[workspace:33333333-3333-3333-3333-333333333333:Ops]].',
+        ].join('\n')
 
-    const result = normalizeStructuredEntityRefs(content, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+        const result = normalizeStructuredEntityRefs(content, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
 
-    assert.equal(
-        result,
-        [
-            'Read [Roadmap](/w/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/knowledge/11111111-1111-1111-1111-111111111111)',
-            'Then [Chat: Sprint Sync](/w/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/chat/22222222-2222-2222-2222-222222222222)',
-            'Inside [Workspace: Ops](/w/33333333-3333-3333-3333-333333333333).',
-        ].join('\n'),
-    )
-})
+        expect(result).toBe(
+            [
+                'Read [Roadmap](/w/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/knowledge/11111111-1111-1111-1111-111111111111)',
+                'Then [Chat: Sprint Sync](/w/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/chat/22222222-2222-2222-2222-222222222222)',
+                'Inside [Workspace: Ops](/w/33333333-3333-3333-3333-333333333333).',
+            ].join('\n'),
+        )
+    })
 
-test('normalizeStructuredEntityRefs leaves unrelated text untouched', () => {
-    const content = 'No structured entity references here.'
+    it('normalizeStructuredEntityRefs leaves unrelated text untouched', () => {
+        const content = 'No structured entity references here.'
 
-    assert.equal(
-        normalizeStructuredEntityRefs(content, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
-        content,
-    )
-})
+        expect(normalizeStructuredEntityRefs(content, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')).toBe(content)
+    })
 
-test('renderAgentMessageContent renders structured entity refs as plain links without legacy card markup', () => {
-    const html = renderAgentMessageContent(
-        'Use [[knowledge:11111111-1111-1111-1111-111111111111:Roadmap]] next.',
-        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    )
+    it('renderAgentMessageContent renders structured entity refs as plain links without legacy card markup', () => {
+        const html = renderAgentMessageContent(
+            'Use [[knowledge:11111111-1111-1111-1111-111111111111:Roadmap]] next.',
+            'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        )
 
-    assert.match(html, /<a href="\/w\/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\/knowledge\/11111111-1111-1111-1111-111111111111">Roadmap<\/a>/)
-    assert.doesNotMatch(html, /entity-link/)
-    assert.doesNotMatch(html, /entity-link-badge/)
-    assert.doesNotMatch(html, />Knowledge</)
-})
+        expect(html).toMatch(/<a href="\/w\/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\/knowledge\/11111111-1111-1111-1111-111111111111">Roadmap<\/a>/)
+        expect(html).not.toMatch(/entity-link/)
+        expect(html).not.toMatch(/entity-link-badge/)
+        expect(html).not.toMatch(/>Knowledge</)
+    })
 
-test('renderAgentMessageContent keeps legacy id-link cases as plain anchors during streaming', () => {
-    const html = renderAgentMessageContent(
-        'knowledge_id: 11111111-1111-1111-1111-111111111111',
-        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    )
+    it('renderAgentMessageContent keeps legacy id-link cases as plain anchors during streaming', () => {
+        const html = renderAgentMessageContent(
+            'knowledge_id: 11111111-1111-1111-1111-111111111111',
+            'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        )
 
-    assert.match(html, /knowledge_id:\s*<a href="\/w\/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\/knowledge\/11111111-1111-1111-1111-111111111111">11111111/)
-    assert.doesNotMatch(html, /entity-link/)
-    assert.doesNotMatch(html, /entity-link-badge/)
+        expect(html).toMatch(/knowledge_id:\s*<a href="\/w\/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\/knowledge\/11111111-1111-1111-1111-111111111111">11111111/)
+        expect(html).not.toMatch(/entity-link/)
+        expect(html).not.toMatch(/entity-link-badge/)
+    })
 })

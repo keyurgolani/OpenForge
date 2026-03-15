@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import axios from 'axios'
 import type {
     Artifact,
@@ -14,7 +13,7 @@ import type {
     ArtifactVersionCreate,
     ArtifactVersionsResponse,
 } from '@/types/artifacts'
-import type { Checkpoint, Run, RunLineage, RunStep, RuntimeEvent } from '@/types/runs'
+import type { Checkpoint, Run, RunCompositeDebug, RunLineage, RunStep, RuntimeEvent } from '@/types/runs'
 import type { WorkflowDefinition, WorkflowVersion } from '@/types/workflows'
 
 const api = axios.create({
@@ -407,6 +406,13 @@ export const listWorkflows = (params?: {
 }): Promise<{ workflows: WorkflowDefinition[]; total: number }> =>
     api.get('/workflows', { params }).then(r => r.data)
 export const getWorkflow = (id: string): Promise<WorkflowDefinition> => api.get(`/workflows/${id}`).then(r => r.data)
+export const listWorkflowTemplates = (params?: { limit?: number; skip?: number; template_kind?: string }): Promise<{ workflows: WorkflowDefinition[]; total: number }> =>
+    api.get('/workflows/templates', { params }).then(r => r.data)
+export const getWorkflowTemplate = (id: string): Promise<WorkflowDefinition> => api.get(`/workflows/templates/${id}`).then(r => r.data)
+export const cloneWorkflowTemplate = (
+    id: string,
+    data: { workspace_id: string; name?: string; slug?: string },
+): Promise<WorkflowDefinition> => api.post(`/workflows/templates/${id}/clone`, data).then(r => r.data)
 export const listWorkflowVersions = (workflowId: string): Promise<{ versions: WorkflowVersion[]; total: number }> =>
     api.get(`/workflows/${workflowId}/versions`).then(r => r.data)
 export const getWorkflowVersion = (workflowId: string, versionId: string): Promise<WorkflowVersion> =>
@@ -447,6 +453,7 @@ export const getRun = (id: string): Promise<Run> => api.get(`/runs/${id}`).then(
 export const listRunSteps = (id: string): Promise<{ steps: RunStep[]; total: number }> =>
     api.get(`/runs/${id}/steps`).then(r => r.data)
 export const getRunLineage = (id: string): Promise<RunLineage> => api.get(`/runs/${id}/lineage`).then(r => r.data)
+export const getRunCompositeDebug = (id: string): Promise<RunCompositeDebug> => api.get(`/runs/${id}/composite`).then(r => r.data)
 export const listRunCheckpoints = (id: string): Promise<{ checkpoints: Checkpoint[]; total: number }> =>
     api.get(`/runs/${id}/checkpoints`).then(r => r.data)
 export const listRunEvents = (id: string): Promise<{ events: RuntimeEvent[]; total: number }> =>

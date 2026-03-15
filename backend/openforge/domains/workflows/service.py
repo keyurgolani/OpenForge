@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -38,6 +39,44 @@ class WorkflowService:
             "created_at": instance.created_at,
             "updated_at": instance.updated_at,
         }
+
+    def _node_type_value(self, value: Any) -> str | None:
+        return getattr(value, "value", value)
+
+    def _validate_version_payload(self, version_data: dict[str, Any]) -> None:
+        nodes = version_data.get("nodes", [])
+        join_groups = {
+            (node.get("config", {}) or {}).get("join_group_id")
+            for node in nodes
+            if self._node_type_value(node.get("node_type")) in {"join", "reduce"}
+        }
+        join_groups.discard(None)
+
+        for node in nodes:
+            node_type = self._node_type_value(node.get("node_type"))
+            config = node.get("config", {}) or {}
+            if node_type == "fanout":
+                if not config.get("child_workflow_id"):
+                    raise ValueError("Fanout node requires child_workflow_id")
+                if not config.get("join_group_id"):
+                    raise ValueError("Fanout node requires join_group_id")
+                if config["join_group_id"] not in join_groups:
+                    raise ValueError("Fanout node requires a matching join or reduce group")
+            if node_type in {"delegate_call", "subworkflow"} and not (
+                config.get("child_workflow_id") or config.get("workflow_id")
+            ):
+                raise ValueError(f"{node_type} node requires child_workflow_id")
+            if node_type == "handoff" and not any(
+                config.get(key) for key in ("target_node_key", "target_profile_id", "target_workflow_id")
+            ):
+                raise ValueError("Handoff node requires an explicit target")
+            if node_type == "join" and not config.get("join_group_id"):
+                raise ValueError("Join node requires join_group_id")
+            if node_type == "reduce":
+                if not config.get("strategy"):
+                    raise ValueError("Reduce node requires strategy")
+                if not (config.get("source_key") or config.get("join_group_id")):
+                    raise ValueError("Reduce node requires source_key or join_group_id")
 
     def _serialize_edge(self, instance: WorkflowEdgeModel) -> dict[str, Any]:
         return {
@@ -191,6 +230,8 @@ class WorkflowService:
             "current_version_id": definition.current_version_id,
             "is_system": getattr(definition, "is_system", False),
             "is_template": getattr(definition, "is_template", False),
+            "template_kind": getattr(definition, "template_kind", None),
+            "template_metadata": getattr(definition, "template_metadata", {}) or {},
             "current_version": current_version,
             "version": definition.version,
             "entry_node": definition.entry_node,
@@ -252,6 +293,7 @@ class WorkflowService:
     async def create_workflow(self, workflow_data: dict[str, Any]) -> dict[str, Any]:
         version_payload = workflow_data["version"]
         definition = WorkflowDefinitionModel(
+            id=workflow_data.get("id") or uuid4(),
             workspace_id=workflow_data.get("workspace_id"),
             name=workflow_data["name"],
             slug=workflow_data["slug"],
@@ -259,6 +301,8 @@ class WorkflowService:
             status=getattr(workflow_data.get("status"), "value", workflow_data.get("status", "draft")),
             is_system=workflow_data.get("is_system", False),
             is_template=workflow_data.get("is_template", False),
+            template_kind=workflow_data.get("template_kind"),
+            template_metadata=workflow_data.get("template_metadata", {}),
             version=0,
             state_schema={},
             nodes=[],
@@ -269,6 +313,7 @@ class WorkflowService:
         self.db.add(definition)
         await self.db.flush()
 
+        self._validate_version_payload(version_payload)
         version_model, _nodes, _edges, version_data = await self._create_version_models(
             definition.id,
             version_payload,
@@ -288,7 +333,7 @@ class WorkflowService:
         definition = await self.db.get(WorkflowDefinitionModel, workflow_id)
         if definition is None:
             return None
-        for key in ("name", "slug", "description", "status", "is_system", "is_template"):
+        for key in ("name", "slug", "description", "status", "is_system", "is_template", "template_kind", "template_metadata"):
             if key in workflow_data and workflow_data[key] is not None:
                 setattr(definition, key, getattr(workflow_data[key], "value", workflow_data[key]))
         await self.db.commit()
@@ -322,6 +367,7 @@ class WorkflowService:
         definition = await self.db.get(WorkflowDefinitionModel, workflow_id)
         if definition is None:
             return None
+        self._validate_version_payload(version_data)
         version_model, _nodes, _edges, serialized = await self._create_version_models(
             workflow_id,
             version_data,
@@ -466,3 +512,68 @@ class WorkflowService:
             definition["nodes"] = version["nodes"]
             definition["edges"] = version["edges"]
         return definition
+
+    async def list_templates(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        template_kind: str | None = None,
+    ) -> tuple[list[dict[str, Any]], int]:
+        workflows, total = await self.list_workflows(skip=skip, limit=limit, is_template=True)
+        if template_kind is None:
+            return workflows, total
+        filtered = [workflow for workflow in workflows if workflow.get("template_kind") == template_kind]
+        return filtered, len(filtered)
+
+    async def get_template(self, workflow_id: UUID) -> dict[str, Any] | None:
+        workflow = await self.get_workflow(workflow_id)
+        if workflow is None or not workflow.get("is_template"):
+            return None
+        return workflow
+
+    async def clone_template(self, workflow_id: UUID, clone_data: dict[str, Any]) -> dict[str, Any] | None:
+        template = await self.get_template(workflow_id)
+        if template is None or template.get("current_version") is None:
+            return None
+
+        version = deepcopy(template["current_version"])
+        node_id_map: dict[Any, UUID] = {}
+        cloned_nodes: list[dict[str, Any]] = []
+        for node in version.get("nodes", []):
+            new_id = uuid4()
+            node_id_map[node["id"]] = new_id
+            cloned_nodes.append({**node, "id": new_id})
+
+        cloned_edges: list[dict[str, Any]] = []
+        for edge in version.get("edges", []):
+            cloned_edges.append(
+                {
+                    **edge,
+                    "id": uuid4(),
+                    "from_node_id": node_id_map.get(edge["from_node_id"], edge["from_node_id"]),
+                    "to_node_id": node_id_map.get(edge["to_node_id"], edge["to_node_id"]),
+                }
+            )
+
+        payload = {
+            "workspace_id": clone_data["workspace_id"],
+            "name": clone_data.get("name") or template["name"],
+            "slug": clone_data.get("slug") or f"{template['slug']}-clone",
+            "description": template.get("description"),
+            "status": template.get("status", "draft"),
+            "is_system": False,
+            "is_template": False,
+            "template_kind": template.get("template_kind"),
+            "template_metadata": template.get("template_metadata", {}),
+            "version": {
+                "state_schema": deepcopy(version.get("state_schema", {})),
+                "entry_node_id": node_id_map.get(version.get("entry_node_id"), version.get("entry_node_id")),
+                "default_input_schema": deepcopy(version.get("default_input_schema", {})),
+                "default_output_schema": deepcopy(version.get("default_output_schema", {})),
+                "status": version.get("status", "draft"),
+                "change_note": f"Cloned from template {template['slug']}",
+                "nodes": cloned_nodes,
+                "edges": cloned_edges,
+            },
+        }
+        return await self.create_workflow(payload)

@@ -6,7 +6,12 @@ from typing import Any
 
 from .approval import ApprovalNodeExecutor
 from .artifact import ArtifactNodeExecutor
+from .delegate_call import DelegateCallNodeExecutor
+from .fanout import FanoutNodeExecutor
+from .handoff import HandoffNodeExecutor
+from .join import JoinNodeExecutor
 from .llm import LLMNodeExecutor
+from .reduce import ReduceNodeExecutor
 from .router import RouterNodeExecutor
 from .subworkflow import SubworkflowNodeExecutor
 from .tool import ToolNodeExecutor
@@ -34,8 +39,12 @@ def build_default_registry(*, artifact_service, approval_service) -> NodeExecuto
     registry.register("router", RouterNodeExecutor())
     registry.register("approval", ApprovalNodeExecutor(approval_service))
     registry.register("artifact", ArtifactNodeExecutor(artifact_service))
+    registry.register("delegate_call", DelegateCallNodeExecutor())
+    registry.register("handoff", HandoffNodeExecutor())
+    registry.register("fanout", FanoutNodeExecutor())
     registry.register("subworkflow", SubworkflowNodeExecutor())
     registry.register("llm", LLMNodeExecutor())
     registry.register("transform", ToolNodeExecutor())
-    registry.register("join", ToolNodeExecutor())
+    registry.register("join", JoinNodeExecutor())
+    registry.register("reduce", ReduceNodeExecutor())
     return registry

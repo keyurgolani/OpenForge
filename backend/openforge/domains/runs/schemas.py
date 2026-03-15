@@ -21,6 +21,13 @@ class RunCreate(BaseModel):
     spawned_by_step_id: UUID | None = None
     workspace_id: UUID
     input_payload: dict[str, Any] = Field(default_factory=dict)
+    delegation_mode: str | None = None
+    merge_strategy: str | None = None
+    join_group_id: str | None = None
+    branch_key: str | None = None
+    branch_index: int | None = None
+    handoff_reason: str | None = None
+    composite_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class RunUpdate(BaseModel):
@@ -28,6 +35,13 @@ class RunUpdate(BaseModel):
     state_snapshot: dict[str, Any] | None = None
     output_payload: dict[str, Any] | None = None
     current_node_id: UUID | None = None
+    delegation_mode: str | None = None
+    merge_strategy: str | None = None
+    join_group_id: str | None = None
+    branch_key: str | None = None
+    branch_index: int | None = None
+    handoff_reason: str | None = None
+    composite_metadata: dict[str, Any] | None = None
     error_code: str | None = Field(default=None, max_length=100)
     error_message: str | None = Field(default=None, max_length=5000)
 
@@ -83,3 +97,10 @@ class RuntimeEventListResponse(BaseModel):
 
 class RunLineageResponse(RunLineage):
     model_config = ConfigDict(from_attributes=True)
+
+
+class CompositeDebugResponse(BaseModel):
+    run_id: UUID
+    delegation_history: list[dict[str, Any]] = Field(default_factory=list)
+    branch_groups: list[dict[str, Any]] = Field(default_factory=list)
+    merge_outcomes: list[dict[str, Any]] = Field(default_factory=list)

@@ -65,3 +65,30 @@ async def test_run_service_lists_steps_lineage_checkpoints_and_events() -> None:
     assert lineage["child_runs"][0]["id"] == child_run_id
     assert checkpoints[0]["checkpoint_type"] == "after_step"
     assert events[0]["event_type"] == "artifact_emitted"
+
+
+@pytest.mark.asyncio
+async def test_run_service_serializes_phase10_composite_metadata() -> None:
+    run_id = uuid4()
+    run = RunModel(
+        id=run_id,
+        run_type="workflow",
+        workspace_id=uuid4(),
+        status="completed",
+        delegation_mode="fanout",
+        merge_strategy="concat_field",
+        join_group_id="research-branches",
+        branch_key="alpha",
+        branch_index=0,
+        handoff_reason=None,
+        composite_metadata={"pattern": "map_reduce_research"},
+    )
+    db = FakeAsyncSession(objects={(RunModel, run_id): run})
+    service = RunService(db)
+
+    serialized = await service.get_run(run_id)
+
+    assert serialized["delegation_mode"] == "fanout"
+    assert serialized["merge_strategy"] == "concat_field"
+    assert serialized["join_group_id"] == "research-branches"
+    assert serialized["composite_metadata"]["pattern"] == "map_reduce_research"

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ArrowLeft, FileOutput, GitBranch, PauseCircle, Timer, Waypoints } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 
@@ -10,6 +10,7 @@ import Section from '@/components/shared/Section'
 import StatusBadge from '@/components/shared/StatusBadge'
 import {
   useRunCheckpointsQuery,
+  useRunCompositeDebugQuery,
   useRunEventsQuery,
   useRunLineageQuery,
   useRunQuery,
@@ -17,7 +18,7 @@ import {
 } from '@/features/runs'
 import { formatDateTime, formatDuration, truncateText } from '@/lib/formatters'
 import { artifactsRoute, runsRoute, workflowsRoute } from '@/lib/routes'
-import type { RuntimeEvent } from '@/types/runs'
+import type { Run, RuntimeEvent } from '@/types/runs'
 
 function formatJson(value: unknown): string {
   const normalized = value ?? {}
@@ -52,14 +53,28 @@ function collectArtifactIds(events: RuntimeEvent[]): string[] {
   return [...ids]
 }
 
+export function groupRunsByJoinGroup(runs: Run[]): Array<{ joinGroupId: string; runs: Run[] }> {
+  const grouped = new Map<string, Run[]>()
+  for (const run of runs) {
+    if (!run.join_group_id) {
+      continue
+    }
+    const existing = grouped.get(run.join_group_id) ?? []
+    existing.push(run)
+    grouped.set(run.join_group_id, existing)
+  }
+  return [...grouped.entries()].map(([joinGroupId, branchRuns]) => ({ joinGroupId, runs: branchRuns }))
+}
+
 export default function RunDetailPage() {
   const { workspaceId = '', runId = '' } = useParams<{ workspaceId: string; runId: string }>()
   const { data: run, isLoading, error } = useRunQuery(runId)
   const { data: stepsData } = useRunStepsQuery(runId)
   const { data: lineage } = useRunLineageQuery(runId)
+  const { data: compositeDebug } = useRunCompositeDebugQuery(runId)
   const { data: checkpointsData } = useRunCheckpointsQuery(runId)
   const { data: eventsData } = useRunEventsQuery(runId)
-  const steps = stepsData?.steps ?? []
+  const steps = useMemo(() => stepsData?.steps ?? [], [stepsData])
   const checkpoints = checkpointsData?.checkpoints ?? []
   const events = eventsData?.events ?? []
   const [selectedStepId, setSelectedStepId] = useState<string>('')
@@ -85,6 +100,7 @@ export default function RunDetailPage() {
   const selectedStep = steps.find((step) => step.id === selectedStepId) ?? null
   const durationMs = getDurationMs(run.started_at, run.completed_at)
   const childRuns = lineage?.child_runs ?? []
+  const groupedChildRuns = groupRunsByJoinGroup(childRuns)
   const approvalEvents = events.filter((event) => event.event_type === 'approval_requested' || event.event_type === 'run_interrupted')
   const artifactIds = collectArtifactIds(events)
   const latestEvents = [...events].slice(-8).reverse()
@@ -122,6 +138,8 @@ export default function RunDetailPage() {
           { label: 'Run type', value: <span className="text-foreground">{run.run_type}</span>, icon: <GitBranch className="h-4 w-4" /> },
           { label: 'Current node', value: <span className="text-foreground">{run.current_node_id ? truncateText(run.current_node_id, 18) : 'None'}</span>, icon: <PauseCircle className="h-4 w-4" /> },
           { label: 'Duration', value: <span className="text-foreground">{durationMs !== null ? formatDuration(durationMs) : 'Not started'}</span>, icon: <Timer className="h-4 w-4" /> },
+          { label: 'Delegation mode', value: <span className="text-foreground">{run.delegation_mode ?? 'None'}</span>, icon: <GitBranch className="h-4 w-4" /> },
+          { label: 'Join group', value: <span className="text-foreground">{run.join_group_id ?? 'None'}</span>, icon: <PauseCircle className="h-4 w-4" /> },
         ].map((item) => (
           <div key={item.label} className="rounded-2xl border border-border/60 bg-card/30 p-4">
             <div className="flex items-center justify-between gap-3">
@@ -158,6 +176,14 @@ export default function RunDetailPage() {
               <div>
                 <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Completed</p>
                 <p className="mt-1 text-sm font-medium text-foreground">{run.completed_at ? formatDateTime(run.completed_at) : 'In progress'}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Merge strategy</p>
+                <p className="mt-1 text-sm font-medium text-foreground">{run.merge_strategy ?? 'None'}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Composite pattern</p>
+                <p className="mt-1 text-sm font-medium text-foreground">{typeof run.composite_metadata?.pattern === 'string' ? run.composite_metadata.pattern : 'None'}</p>
               </div>
               {run.error_message ? (
                 <div className="md:col-span-2 rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-100">
@@ -245,6 +271,16 @@ export default function RunDetailPage() {
                         </pre>
                       </div>
                     </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="rounded-xl border border-border/60 bg-background/35 p-3">
+                        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Delegation mode</p>
+                        <p className="mt-1 text-sm font-medium text-foreground">{selectedStep.delegation_mode ?? 'None'}</p>
+                      </div>
+                      <div className="rounded-xl border border-border/60 bg-background/35 p-3">
+                        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Join or merge</p>
+                        <p className="mt-1 text-sm font-medium text-foreground">{selectedStep.join_group_id ?? selectedStep.merge_strategy ?? 'None'}</p>
+                      </div>
+                    </div>
                     {selectedStep.error_message ? (
                       <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-100">
                         <p className="font-medium">{selectedStep.error_code || 'Step failure'}</p>
@@ -291,6 +327,76 @@ export default function RunDetailPage() {
                     ))}
                   </div>
                 </div>
+                <div className="rounded-xl border border-border/60 bg-background/35 p-3">
+                  <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Branch groups</p>
+                  <div className="mt-2 space-y-2">
+                    {groupedChildRuns.length === 0 ? (
+                      <p className="text-muted-foreground/80">No branch grouping recorded.</p>
+                    ) : groupedChildRuns.map((group) => (
+                      <div key={group.joinGroupId} className="rounded-lg border border-border/50 bg-background/50 px-3 py-2">
+                        <p className="font-medium text-foreground">{group.joinGroupId}</p>
+                        <p className="mt-1 text-xs text-muted-foreground/80">{group.runs.length} branch run{group.runs.length === 1 ? '' : 's'}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </Section>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Section title="Delegation timeline" description="Composite execution history should be understandable without reading raw runtime rows.">
+          <Card glass>
+            <CardContent className="space-y-3 pt-6">
+              {(compositeDebug?.delegation_history ?? []).length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border/60 bg-background/35 p-4 text-sm text-muted-foreground/80">
+                  No delegation events recorded for this run.
+                </div>
+              ) : (compositeDebug?.delegation_history ?? []).map((entry, index) => (
+                <div key={`${index}-${String(entry.delegation_mode)}`} className="rounded-xl border border-border/60 bg-background/35 p-3 text-sm">
+                  <p className="font-medium text-foreground">{String(entry.delegation_mode ?? 'unknown')}</p>
+                  <p className="mt-1 text-xs text-muted-foreground/80">Join group: {String(entry.join_group_id ?? 'none')} • Merge: {String(entry.merge_strategy ?? 'none')}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </Section>
+
+        <Section title="Branch groups and merge outcomes" description="Fan-out, join, and reduce behavior should stay visible to operators.">
+          <div className="space-y-4">
+            <Card glass>
+              <CardHeader>
+                <CardTitle as="h2">Branch groups</CardTitle>
+                <CardDescription>Tracked join groups surfaced by the runtime inspection API.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                {(compositeDebug?.branch_groups ?? []).length === 0 ? (
+                  <p className="text-muted-foreground/80">No branch groups recorded.</p>
+                ) : (compositeDebug?.branch_groups ?? []).map((group, index) => (
+                  <div key={`${index}-${String(group.join_group_id)}`} className="rounded-xl border border-border/60 bg-background/35 p-3">
+                    <p className="font-medium text-foreground">{String(group.join_group_id)}</p>
+                    <p className="mt-1 text-xs text-muted-foreground/80">Branches: {String(group.branch_count ?? (Array.isArray(group.runs) ? group.runs.length : 0))}</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card glass>
+              <CardHeader>
+                <CardTitle as="h2">Merge outcomes</CardTitle>
+                <CardDescription>Reducer or merge behavior applied to child outputs.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                {(compositeDebug?.merge_outcomes ?? []).length === 0 ? (
+                  <p className="text-muted-foreground/80">No merge outcomes recorded.</p>
+                ) : (compositeDebug?.merge_outcomes ?? []).map((outcome, index) => (
+                  <div key={`${index}-${String(outcome.strategy)}`} className="rounded-xl border border-border/60 bg-background/35 p-3">
+                    <p className="font-medium text-foreground">{String(outcome.strategy ?? 'unknown')}</p>
+                    <p className="mt-1 text-xs text-muted-foreground/80">Join group: {String(outcome.join_group_id ?? 'none')}</p>
+                  </div>
+                ))}
               </CardContent>
             </Card>
           </div>

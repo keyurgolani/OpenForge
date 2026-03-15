@@ -33,6 +33,13 @@ class RunService:
             "input_payload": instance.input_payload or {},
             "output_payload": instance.output_payload or {},
             "current_node_id": getattr(instance, "current_node_id", None),
+            "delegation_mode": getattr(instance, "delegation_mode", None),
+            "merge_strategy": getattr(instance, "merge_strategy", None),
+            "join_group_id": getattr(instance, "join_group_id", None),
+            "branch_key": getattr(instance, "branch_key", None),
+            "branch_index": getattr(instance, "branch_index", None),
+            "handoff_reason": getattr(instance, "handoff_reason", None),
+            "composite_metadata": getattr(instance, "composite_metadata", {}) or {},
             "error_code": instance.error_code,
             "error_message": instance.error_message,
             "started_at": instance.started_at,
@@ -52,6 +59,13 @@ class RunService:
             "status": instance.status,
             "input_snapshot": instance.input_snapshot or {},
             "output_snapshot": instance.output_snapshot or {},
+            "delegation_mode": getattr(instance, "delegation_mode", None),
+            "merge_strategy": getattr(instance, "merge_strategy", None),
+            "join_group_id": getattr(instance, "join_group_id", None),
+            "branch_key": getattr(instance, "branch_key", None),
+            "branch_index": getattr(instance, "branch_index", None),
+            "handoff_reason": getattr(instance, "handoff_reason", None),
+            "composite_metadata": getattr(instance, "composite_metadata", {}) or {},
             "checkpoint_id": instance.checkpoint_id,
             "error_code": instance.error_code,
             "error_message": instance.error_message,
@@ -148,6 +162,13 @@ class RunService:
             state_snapshot=run_data.get("state_snapshot", {}),
             output_payload=run_data.get("output_payload", {}),
             current_node_id=run_data.get("current_node_id"),
+            delegation_mode=run_data.get("delegation_mode"),
+            merge_strategy=run_data.get("merge_strategy"),
+            join_group_id=run_data.get("join_group_id"),
+            branch_key=run_data.get("branch_key"),
+            branch_index=run_data.get("branch_index"),
+            handoff_reason=run_data.get("handoff_reason"),
+            composite_metadata=run_data.get("composite_metadata", {}),
             error_code=run_data.get("error_code"),
             error_message=run_data.get("error_message"),
             started_at=run_data.get("started_at"),
@@ -187,14 +208,37 @@ class RunService:
     async def get_lineage(self, run_id: UUID) -> dict[str, Any]:
         run = await self.db.get(RunModel, run_id)
         if run is None:
-            return {"run_id": run_id, "parent_run": None, "child_runs": []}
+            return {"run_id": run_id, "parent_run": None, "child_runs": [], "tree": {}, "delegation_history": [], "branch_groups": []}
         parent_run = await self.db.get(RunModel, run.parent_run_id) if run.parent_run_id else None
         query = select(RunModel).where(RunModel.parent_run_id == run_id).order_by(RunModel.created_at.asc())
         rows = (await self.db.execute(query)).scalars().all()
+        child_runs = [self._serialize_run(row) for row in rows]
+        tree = {"run_id": run_id, "children": [{"run_id": child["id"], "children": []} for child in child_runs]}
+        delegation_history = []
+        if getattr(run, "delegation_mode", None):
+            delegation_history.append(
+                {
+                    "run_id": run_id,
+                    "delegation_mode": getattr(run, "delegation_mode", None),
+                    "merge_strategy": getattr(run, "merge_strategy", None),
+                    "join_group_id": getattr(run, "join_group_id", None),
+                }
+            )
+        branch_groups_by_id: dict[str, dict[str, Any]] = {}
+        for child in child_runs:
+            join_group_id = child.get("join_group_id")
+            if not join_group_id:
+                continue
+            group = branch_groups_by_id.setdefault(join_group_id, {"join_group_id": join_group_id, "branch_count": 0, "runs": []})
+            group["branch_count"] += 1
+            group["runs"].append(child["id"])
         return {
             "run_id": run_id,
             "parent_run": self._serialize_run(parent_run) if parent_run is not None else None,
-            "child_runs": [self._serialize_run(row) for row in rows],
+            "child_runs": child_runs,
+            "tree": tree,
+            "delegation_history": delegation_history,
+            "branch_groups": list(branch_groups_by_id.values()),
         }
 
     async def list_checkpoints(self, run_id: UUID) -> list[dict[str, Any]]:
@@ -206,6 +250,28 @@ class RunService:
         query = select(RuntimeEventModel).where(RuntimeEventModel.run_id == run_id).order_by(RuntimeEventModel.created_at.asc())
         rows = (await self.db.execute(query)).scalars().all()
         return [self._serialize_event(row) for row in rows]
+
+    async def get_composite_debug(self, run_id: UUID) -> dict[str, Any]:
+        run = await self.get_run(run_id)
+        if run is None:
+            return {"run_id": run_id, "delegation_history": [], "branch_groups": [], "merge_outcomes": []}
+        lineage = await self.get_lineage(run_id)
+        merge_outcomes = []
+        if run.get("merge_strategy") or run.get("join_group_id"):
+            merge_outcomes.append(
+                {
+                    "run_id": run_id,
+                    "strategy": run.get("merge_strategy"),
+                    "join_group_id": run.get("join_group_id"),
+                    "output_keys": sorted((run.get("output_payload") or {}).keys()),
+                }
+            )
+        return {
+            "run_id": run_id,
+            "delegation_history": lineage.get("delegation_history", []),
+            "branch_groups": lineage.get("branch_groups", []),
+            "merge_outcomes": merge_outcomes,
+        }
 
     async def start_run(self, run_data: dict[str, Any]) -> dict[str, Any] | None:
         coordinator = await self._coordinator()

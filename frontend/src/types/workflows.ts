@@ -12,8 +12,12 @@ export type NodeType =
   | 'router'
   | 'approval'
   | 'artifact'
+  | 'delegate_call'
+  | 'handoff'
+  | 'fanout'
   | 'subworkflow'
   | 'join'
+  | 'reduce'
   | 'terminal'
   | 'transform';
 
@@ -73,6 +77,8 @@ export interface WorkflowDefinition {
   current_version_id?: string | null;
   is_system: boolean;
   is_template: boolean;
+  template_kind?: string | null;
+  template_metadata: Record<string, unknown>;
   current_version?: WorkflowVersion | null;
   version: number;
   entry_node?: string | null;
@@ -138,6 +144,8 @@ export interface WorkflowCreate {
   status?: WorkflowStatus;
   is_system?: boolean;
   is_template?: boolean;
+  template_kind?: string | null;
+  template_metadata?: Record<string, unknown>;
 }
 
 export interface WorkflowUpdate {
@@ -155,4 +163,6 @@ export interface WorkflowUpdate {
   current_version_id?: string | null;
   is_system?: boolean;
   is_template?: boolean;
+  template_kind?: string | null;
+  template_metadata?: Record<string, unknown>;
 }

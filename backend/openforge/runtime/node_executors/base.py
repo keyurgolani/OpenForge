@@ -42,6 +42,7 @@ class NodeExecutionResult:
     approval_request_id: UUID | None = None
     emitted_artifact_ids: list[UUID] = field(default_factory=list)
     spawned_run_id: UUID | None = None
+    spawned_run_ids: list[UUID] = field(default_factory=list)
 
 
 class BaseNodeExecutor:

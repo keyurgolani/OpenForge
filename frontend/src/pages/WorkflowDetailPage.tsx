@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, GitBranch, PlayCircle, Route, Shapes, Waypoints } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 
@@ -11,7 +11,7 @@ import StatusBadge from '@/components/shared/StatusBadge'
 import { useWorkflowQuery, useWorkflowVersionQuery, useWorkflowVersionsQuery } from '@/features/workflows'
 import { formatDateTime } from '@/lib/formatters'
 import { workflowsRoute } from '@/lib/routes'
-import type { WorkflowNode, WorkflowVersion } from '@/types/workflows'
+import type { WorkflowDefinition, WorkflowNode, WorkflowVersion } from '@/types/workflows'
 
 function formatJson(value: unknown): string {
   const normalized = value ?? {}
@@ -35,11 +35,34 @@ function nodeTitle(node: WorkflowNode | null): string {
   return `${node.label} (${node.node_key})`
 }
 
+const COMPOSITE_NODE_TYPES = new Set(['delegate_call', 'handoff', 'fanout', 'subworkflow', 'join', 'reduce'])
+
+export function getWorkflowPatternBadges(workflow: WorkflowDefinition): string[] {
+  const metadata = workflow.template_metadata ?? {}
+  const badges = Array.isArray(metadata.badges) ? metadata.badges.filter((value): value is string => typeof value === 'string') : []
+  return workflow.template_kind ? [workflow.template_kind, ...badges] : badges
+}
+
+export function getCompositeNodeFacts(node: WorkflowNode | null): Array<{ label: string; value: string }> {
+  if (!node) {
+    return []
+  }
+  const config = node.config as Record<string, unknown>
+  const facts = [
+    { label: 'Delegation mode', value: typeof config.delegation_mode === 'string' ? config.delegation_mode : node.node_type },
+    { label: 'Target workflow', value: typeof config.child_workflow_id === 'string' ? config.child_workflow_id : typeof config.target_workflow_id === 'string' ? config.target_workflow_id : '' },
+    { label: 'Join group', value: typeof config.join_group_id === 'string' ? config.join_group_id : '' },
+    { label: 'Merge strategy', value: typeof config.merge_strategy === 'string' ? config.merge_strategy : typeof config.strategy === 'string' ? config.strategy : '' },
+    { label: 'Target profile', value: typeof config.target_profile_id === 'string' ? config.target_profile_id : '' },
+  ]
+  return facts.filter((fact) => fact.value)
+}
+
 export default function WorkflowDetailPage() {
   const { workspaceId = '', workflowId = '' } = useParams<{ workspaceId: string; workflowId: string }>()
   const { data: workflow, isLoading, error } = useWorkflowQuery(workflowId)
   const { data: versionsData } = useWorkflowVersionsQuery(workflowId)
-  const versions = versionsData?.versions ?? []
+  const versions = useMemo(() => versionsData?.versions ?? [], [versionsData])
   const [selectedVersionId, setSelectedVersionId] = useState<string>('')
   const { data: selectedVersionData } = useWorkflowVersionQuery(
     workflowId,
@@ -80,6 +103,9 @@ export default function WorkflowDetailPage() {
   const selectedNode = activeVersion?.nodes.find((node) => node.id === selectedNodeId) ?? activeVersion?.entry_node ?? null
   const selectedNodeConnections = selectedNode ? countConnections(activeVersion, selectedNode.id) : { inbound: 0, outbound: 0 }
   const connectedEdges = activeVersion?.edges.filter((edge) => edge.from_node_id === selectedNode?.id || edge.to_node_id === selectedNode?.id) ?? []
+  const workflowBadges = getWorkflowPatternBadges(workflow)
+  const compositeNodes = (activeVersion?.nodes ?? []).filter((node) => COMPOSITE_NODE_TYPES.has(node.node_type))
+  const compositeFacts = getCompositeNodeFacts(selectedNode)
 
   return (
     <div className="space-y-6 p-6">
@@ -103,6 +129,7 @@ export default function WorkflowDetailPage() {
           { label: 'Current version', value: <span className="text-foreground">v{workflow.current_version?.version_number ?? workflow.version}</span>, icon: <GitBranch className="h-4 w-4" /> },
           { label: 'Entry node', value: <span className="text-foreground">{workflow.current_version?.entry_node?.node_key ?? workflow.entry_node ?? 'None'}</span>, icon: <PlayCircle className="h-4 w-4" /> },
           { label: 'Topology', value: <span className="text-foreground">{activeVersion?.nodes.length ?? 0} nodes / {activeVersion?.edges.length ?? 0} edges</span>, icon: <Route className="h-4 w-4" /> },
+          { label: 'Composite nodes', value: <span className="text-foreground">{compositeNodes.length}</span>, icon: <Shapes className="h-4 w-4" /> },
         ].map((item) => (
           <div key={item.label} className="rounded-2xl border border-border/60 bg-card/30 p-4">
             <div className="flex items-center justify-between gap-3">
@@ -131,6 +158,10 @@ export default function WorkflowDetailPage() {
                 </p>
               </div>
               <div>
+                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Template kind</p>
+                <p className="mt-1 text-sm font-medium text-foreground">{workflow.template_kind ?? 'None'}</p>
+              </div>
+              <div>
                 <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Created</p>
                 <p className="mt-1 text-sm font-medium text-foreground">{workflow.created_at ? formatDateTime(workflow.created_at) : 'Unknown'}</p>
               </div>
@@ -143,6 +174,18 @@ export default function WorkflowDetailPage() {
                 <p className="mt-1 text-sm text-muted-foreground/90">
                   {workflow.description || 'No workflow description has been written yet.'}
                 </p>
+              </div>
+              <div className="md:col-span-2">
+                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Pattern badges</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {workflowBadges.length === 0 ? (
+                    <span className="rounded-full border border-border/60 px-2.5 py-1 text-xs text-muted-foreground/80">No composite metadata</span>
+                  ) : workflowBadges.map((badge) => (
+                    <span key={badge} className="rounded-full border border-border/60 px-2.5 py-1 text-xs text-foreground">
+                      {badge}
+                    </span>
+                  ))}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -196,6 +239,38 @@ export default function WorkflowDetailPage() {
         </Section>
       </div>
 
+      <Section title="Composite orchestration" description="Phase 10 surfaces composite patterns directly in the workflow definition.">
+        <div className="grid gap-4 md:grid-cols-3">
+          <Card glass>
+            <CardHeader>
+              <CardTitle as="h2">Pattern</CardTitle>
+              <CardDescription>The composite pattern metadata attached to this template.</CardDescription>
+            </CardHeader>
+            <CardContent className="text-sm text-foreground">
+              {typeof workflow.template_metadata?.pattern === 'string' ? workflow.template_metadata.pattern : 'No pattern metadata'}
+            </CardContent>
+          </Card>
+          <Card glass>
+            <CardHeader>
+              <CardTitle as="h2">Composite nodes</CardTitle>
+              <CardDescription>Nodes using delegation, fan-out, subworkflow, join, or reduce semantics.</CardDescription>
+            </CardHeader>
+            <CardContent className="text-sm text-foreground">
+              {compositeNodes.length === 0 ? 'No composite nodes' : compositeNodes.map((node) => node.node_key).join(', ')}
+            </CardContent>
+          </Card>
+          <Card glass>
+            <CardHeader>
+              <CardTitle as="h2">Runtime summary</CardTitle>
+              <CardDescription>The workflow features the runtime should expose at execution time.</CardDescription>
+            </CardHeader>
+            <CardContent className="text-sm text-foreground">
+              {workflowBadges.length === 0 ? 'No runtime summary available' : workflowBadges.join(', ')}
+            </CardContent>
+          </Card>
+        </div>
+      </Section>
+
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
         <Section title="Node inspector" description="Use the node list as a first-pass graph browser before a full visual editor exists.">
           <div className="grid gap-3 lg:grid-cols-2">
@@ -233,6 +308,11 @@ export default function WorkflowDetailPage() {
                       <p className="mt-1 text-sm font-medium text-foreground">{connections.outbound}</p>
                     </div>
                   </div>
+                  {COMPOSITE_NODE_TYPES.has(node.node_type) ? (
+                    <div className="mt-3 inline-flex rounded-full border border-border/60 px-2.5 py-1 text-xs text-foreground">
+                      Composite node
+                    </div>
+                  ) : null}
                 </button>
               )
             })}
@@ -260,6 +340,20 @@ export default function WorkflowDetailPage() {
                       <p className="mt-1 text-sm font-medium text-foreground">{selectedNode.executor_ref ?? 'Unassigned'}</p>
                     </div>
                   </div>
+
+                  {compositeFacts.length > 0 ? (
+                    <div>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/75">Composite semantics</p>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        {compositeFacts.map((fact) => (
+                          <div key={fact.label} className="rounded-xl border border-border/60 bg-background/35 p-3">
+                            <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">{fact.label}</p>
+                            <p className="mt-1 text-sm font-medium text-foreground">{fact.value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
 
                   <div>
                     <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/75">Config</p>
