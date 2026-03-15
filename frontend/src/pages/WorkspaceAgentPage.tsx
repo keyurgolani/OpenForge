@@ -209,7 +209,10 @@ export default function WorkspaceAgentPage() {
         clearLastError,
     } = useStreamingChat(activeCid)
 
-    const messages: Message[] = conversationData?.messages ?? []
+    const messages = useMemo<Message[]>(
+        () => conversationData?.messages ?? [],
+        [conversationData],
+    )
     const activeConversations = conversations as Conversation[]
     const subagentConversations = subagentConversationsData as Conversation[]
     const trashedConversations = trashedConversationsData as Conversation[]
@@ -727,7 +730,7 @@ export default function WorkspaceAgentPage() {
             }
         })
         return () => window.cancelAnimationFrame(rafId)
-    }, [isStreaming, uploadingFiles, activeCid])
+    }, [isStreaming, uploadingFiles, activeCid, focusComposer])
 
     const pushOptimisticUserMessage = (cid: string, content: string) => {
         const createdAt = new Date().toISOString()

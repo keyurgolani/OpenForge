@@ -10,10 +10,30 @@ const WORKSPACE_PREFIX = '/w/:workspaceId';
 export const ROUTES = {
   LOGIN: '/login',
   ONBOARDING: '/onboarding',
+
+  // Settings routes (global, not workspace-scoped)
   SETTINGS: '/settings',
-  SETTINGS_PROVIDERS: '/settings/providers',
-  SETTINGS_TOOLS: '/settings/tools',
+  SETTINGS_WORKSPACES: '/settings/workspaces',
+  SETTINGS_MODELS: '/settings/models',
+  SETTINGS_MODELS_PROVIDERS: '/settings/models/providers',
+  SETTINGS_MODELS_REASONING: '/settings/models/reasoning',
+  SETTINGS_MODELS_VISION: '/settings/models/vision',
+  SETTINGS_MODELS_EMBEDDING: '/settings/models/embedding',
+  SETTINGS_MODELS_AUDIO: '/settings/models/audio',
+  SETTINGS_MODELS_CLIP: '/settings/models/clip',
+  SETTINGS_MODELS_PDF: '/settings/models/pdf',
+  SETTINGS_PROMPTS: '/settings/prompts',
+  SETTINGS_POLICIES: '/settings/policies',
+  SETTINGS_APPROVALS: '/settings/approvals',
+  SETTINGS_PIPELINES: '/settings/pipelines',
+  SETTINGS_SKILLS: '/settings/skills',
   SETTINGS_MCP: '/settings/mcp',
+  SETTINGS_AUDIT: '/settings/audit',
+  SETTINGS_IMPORT: '/settings/import',
+  SETTINGS_EXPORT: '/settings/export',
+  // Legacy routes (redirect to new structure)
+  SETTINGS_PROVIDERS: '/settings/models/providers',
+  SETTINGS_TOOLS: '/settings/skills',
 
   WORKSPACE: WORKSPACE_PREFIX,
   WORKSPACE_OVERVIEW: WORKSPACE_PREFIX,

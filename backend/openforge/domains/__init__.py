@@ -1,19 +1,15 @@
 """
-OpenForge Domain Packages
+OpenForge domain package exports.
 
-This package contains the core domain modules for OpenForge, organized by
-the canonical product vocabulary:
-
-- profiles: Agent Profiles - worker abstractions defining capabilities
-- workflows: Workflow Definitions - composable execution graphs
-- missions: Mission Definitions - packaged autonomous units
-- triggers: Trigger Definitions - automation rules
-- runs: Runs - execution instances
-- artifacts: Artifacts - outputs produced by mission runs
-- knowledge: Knowledge - user-provided context and data
-- common: Shared domain types, enums, and base models
+Keep the package import light-weight so importing one domain submodule does not
+eagerly import every router and schema in the tree.
 """
 
-from openforge.domains.router_registry import register_domain_routers
+
+def register_domain_routers(app):
+    from openforge.domains.router_registry import register_domain_routers as _register_domain_routers
+
+    return _register_domain_routers(app)
+
 
 __all__ = ["register_domain_routers"]

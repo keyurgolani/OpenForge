@@ -468,13 +468,15 @@ async def _dispatch_celery_agent(
     from uuid import UUID
     from openforge.db.postgres import AsyncSessionLocal
     from openforge.db.models import AgentExecution
-    from openforge.runtime.transitional_agents import agent_registry
+    from openforge.runtime.profile_registry import profile_registry
 
     execution_id = str(_uuid.uuid4())
 
     async with AsyncSessionLocal() as db:
         # Get agent for workspace
-        agent = await agent_registry.get_for_workspace(db, UUID(workspace_id))
+        await profile_registry.ensure_system_profiles(db)
+        await profile_registry.load_profiles(db)
+        agent = await profile_registry.get_for_workspace(db, UUID(workspace_id))
 
         # Persist user message before queuing so it's visible on page refresh
         from openforge.services.conversation_service import conversation_service

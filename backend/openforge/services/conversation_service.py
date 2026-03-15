@@ -523,7 +523,7 @@ class ConversationService:
         base_url: str | None = None,
     ) -> str | None:
         from openforge.core.llm_gateway import llm_gateway
-        from openforge.core.prompt_catalogue import resolve_prompt_text
+        from openforge.domains.prompts.service import resolve_prompt_text
         from openforge.services.llm_service import llm_service
         from openforge.api.websocket import ws_manager
 

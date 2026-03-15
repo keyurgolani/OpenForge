@@ -1,12 +1,21 @@
 import json as _json
 import uuid as _uuid
-import litellm
 from typing import AsyncGenerator
 import tiktoken
 import httpx
 import logging
 
 logger = logging.getLogger("openforge.llm")
+
+
+def _get_litellm():
+    try:
+        import litellm
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "litellm is required for non-Ollama LLM operations but is not installed in this environment."
+        ) from exc
+    return litellm
 
 # ── LiteLLM provider prefix map ───────────────────────────────────────────────
 # ollama_chat/ routes to Ollama's /api/chat (native format).
@@ -124,6 +133,7 @@ class LLMGateway:
                 data = resp.json()
                 return (data.get("message") or {}).get("content") or ""
 
+        litellm = _get_litellm()
         response = await litellm.acompletion(
             model=self._resolve_model(provider_name, model),
             messages=messages,
@@ -155,6 +165,7 @@ class LLMGateway:
                     yield event["content"]
             return
 
+        litellm = _get_litellm()
         response = await litellm.acompletion(
             model=self._resolve_model(provider_name, model),
             messages=messages,
@@ -194,6 +205,7 @@ class LLMGateway:
 
         # ── All other providers via LiteLLM ────────────────────────────────────
         resolved_model = self._resolve_model(provider_name, model)
+        litellm = _get_litellm()
         response = await litellm.acompletion(
             model=resolved_model,
             messages=messages,
@@ -278,6 +290,7 @@ class LLMGateway:
         parser = _ThinkingParser() if include_thinking else None
 
         try:
+            litellm = _get_litellm()
             response = await litellm.acompletion(
                 model=resolved_model,
                 messages=messages,

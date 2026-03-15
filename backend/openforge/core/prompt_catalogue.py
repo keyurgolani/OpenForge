@@ -37,6 +37,10 @@ async def resolve_prompt_text(
 
 async def resolve_agent_system_prompt(db: AsyncSession, agent: Any, **variables: Any) -> str:
     raw_prompt = (getattr(agent, "system_prompt", "") or "").strip()
+    if not raw_prompt:
+        prompt_ref = (getattr(agent, "system_prompt_ref", "") or "").strip()
+        if prompt_ref:
+            raw_prompt = prompt_ref if prompt_ref.startswith("catalogue:") else f"catalogue:{prompt_ref}"
     if raw_prompt.startswith("catalogue:"):
         prompt_id = raw_prompt.split(":", 1)[1]
         return await resolve_prompt_text(db, prompt_id, **variables)

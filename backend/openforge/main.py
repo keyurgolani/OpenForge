@@ -233,22 +233,18 @@ async def lifespan(app: FastAPI):
 
     asyncio.create_task(asyncio.to_thread(_migrate_qdrant_pptx_to_slides))
 
-    # Register system agents and load custom agents
+    # Register system profiles and load persisted profiles
     try:
         from openforge.db.postgres import AsyncSessionLocal
-        from openforge.runtime.transitional_agents import (
-            agent_registry, WORKSPACE_AGENT, ROUTER_AGENT, COUNCIL_AGENT, OPTIMIZER_AGENT,
-        )
+        from openforge.runtime.profile_registry import profile_registry
 
-        for agent_def in [WORKSPACE_AGENT, ROUTER_AGENT, COUNCIL_AGENT, OPTIMIZER_AGENT]:
-            agent_registry.register_system_agent(agent_def)
+        profile_registry.register_system_profiles()
         async with AsyncSessionLocal() as db:
-            for agent_def in [WORKSPACE_AGENT, ROUTER_AGENT, COUNCIL_AGENT, OPTIMIZER_AGENT]:
-                await agent_registry.upsert_to_db(db, agent_def)
-            await agent_registry.load_custom_agents(db)
-        logger.info("Agent registry initialized.")
+            await profile_registry.ensure_system_profiles(db)
+            await profile_registry.load_profiles(db)
+        logger.info("Profile registry initialized.")
     except Exception as e:
-        logger.warning("Agent registry initialization failed (continuing): %s", e)
+        logger.warning("Profile registry initialization failed (continuing): %s", e)
 
     # Seed the Phase 3 managed prompt catalog and default trust policies.
     try:

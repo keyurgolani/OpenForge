@@ -25,7 +25,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from openforge.core.context_assembler import ContextAssembler
 from openforge.core.llm_gateway import llm_gateway
-from openforge.core.prompt_catalogue import resolve_agent_system_prompt
 from openforge.db.models import (
     AgentExecution,
     ApprovalRequestModel,
@@ -40,9 +39,10 @@ from openforge.db.models import (
     Workspace,
 )
 from openforge.integrations.tools.dispatcher import tool_dispatcher
+from openforge.domains.prompts.service import resolve_profile_system_prompt
 from openforge.runtime.hitl import hitl_service
 from openforge.runtime.policy import ToolCallRateLimiter, policy_engine
-from openforge.runtime.transitional_agents import AgentDefinition, agent_registry
+from openforge.runtime.profile_registry import ResolvedAgentProfile, profile_registry
 from openforge.services.attachment_pipeline import extract_http_urls, get_extractor, resolve_attachment_pipeline
 from openforge.services.conversation_service import conversation_service
 from openforge.services.llm_service import llm_service
@@ -664,7 +664,7 @@ class AgentExecutionEngine:
                     )
         return "\n".join(parts)
 
-    def _build_skills_section(self, installed_skills: list[dict[str, Any]], agent: AgentDefinition) -> str:
+    def _build_skills_section(self, installed_skills: list[dict[str, Any]], agent: ResolvedAgentProfile) -> str:
         if not installed_skills:
             return ""
 
@@ -695,7 +695,7 @@ class AgentExecutionEngine:
             lines.extend(f"- {name}" for name in other_names[:25])
         return "\n".join(lines)
 
-    async def _load_tools(self, db: AsyncSession, agent: AgentDefinition) -> LoadedTools:
+    async def _load_tools(self, db: AsyncSession, agent: ResolvedAgentProfile) -> LoadedTools:
         openai_tools: list[dict[str, Any]] = []
         fn_name_to_tool_info: dict[str, dict[str, Any]] = {}
 
@@ -795,9 +795,9 @@ class AgentExecutionEngine:
     ) -> dict[str, Any]:
         del parent_execution_id, parent_conversation_id, parent_workspace_id, scope_path, execution_chain_id
 
-        target_agent = agent_registry.get(agent_id) if agent_id else await agent_registry.get_for_workspace(db, workspace_id)
+        target_agent = profile_registry.get(agent_id) if agent_id else await profile_registry.get_for_workspace(db, workspace_id)
         if target_agent is None:
-            target_agent = agent_registry.get_default()
+            target_agent = profile_registry.get_default()
 
         conversation = Conversation(
             workspace_id=workspace_id,
@@ -839,7 +839,7 @@ class AgentExecutionEngine:
         conversation_id: UUID,
         user_content: str,
         db: AsyncSession,
-        agent: AgentDefinition | None = None,
+        agent: ResolvedAgentProfile | None = None,
         execution_id: str | None = None,
         attachment_ids: list[str] | None = None,
         provider_id: str | None = None,
@@ -859,7 +859,7 @@ class AgentExecutionEngine:
             logger.debug("Conversation cancel subscription unavailable: %s", exc)
 
         if agent is None:
-            agent = await agent_registry.get_for_workspace(db, workspace_id)
+            agent = await profile_registry.get_for_workspace(db, workspace_id)
 
         conversation = await db.get(Conversation, conversation_id)
         if conversation is None or conversation.workspace_id != workspace_id or conversation.is_archived:
@@ -945,10 +945,10 @@ class AgentExecutionEngine:
                 await self._update_stream_state(execution_id, attachments_processed=all_attachments_processed)
 
             history = await conversation_service.get_recent_messages(db, conversation_id, limit=agent.history_limit)
-            system_prompt = await resolve_agent_system_prompt(db, agent)
+            system_prompt = await resolve_profile_system_prompt(db, agent, context="runtime")
 
             if agent.id in {"router_agent", "council_agent"}:
-                available_agents = [a for a in agent_registry.list_all() if a.id not in {"router_agent", "council_agent"}]
+                available_agents = [a for a in profile_registry.list_all() if a.id not in {"router_agent", "council_agent"}]
                 if available_agents:
                     system_prompt += "\n\n## Available Agents\n" + "\n".join(
                         f"- **{candidate.id}**: {candidate.description}" for candidate in available_agents

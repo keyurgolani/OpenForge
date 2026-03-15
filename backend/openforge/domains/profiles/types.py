@@ -1,14 +1,11 @@
-"""
-Profile domain types.
+"""Profile domain types."""
 
-This module defines the core types and enums for Agent Profiles.
-"""
-
+from datetime import datetime
 from enum import Enum
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ProfileRole(str, Enum):
@@ -63,6 +60,7 @@ class AgentProfile(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     slug: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = Field(default=None, max_length=2000)
+    version: str = Field(default="1.0.0", min_length=1, max_length=20)
     role: ProfileRole = Field(default=ProfileRole.ASSISTANT)
     system_prompt_ref: Optional[str] = Field(default=None, max_length=500)
     model_policy_id: Optional[UUID] = Field(default=None)
@@ -75,10 +73,9 @@ class AgentProfile(BaseModel):
     status: ProfileStatus = Field(default=ProfileStatus.DRAFT)
     icon: Optional[str] = Field(default=None, max_length=100)
     
-    created_at: Optional[str] = Field(default=None)
-    updated_at: Optional[str] = Field(default=None)
+    created_at: Optional[datetime] = Field(default=None)
+    updated_at: Optional[datetime] = Field(default=None)
     created_by: Optional[UUID] = Field(default=None)
     updated_by: Optional[UUID] = Field(default=None)
-    
-    class Config:
-        from_attributes = True
+
+    model_config = ConfigDict(from_attributes=True)

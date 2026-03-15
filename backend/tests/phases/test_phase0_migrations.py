@@ -12,6 +12,8 @@ EXPECTED_MIGRATIONS = [
     "002_phase1_domain_tables.py",
     "003_phase3_trust_foundations.py",
     "004_phase4_retrieval_reset.py",
+    "005_phase5_graph_foundation.py",
+    "006_phase7_profile_core.py",
 ]
 
 

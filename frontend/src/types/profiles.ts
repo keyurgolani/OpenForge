@@ -60,3 +60,52 @@ export interface ProfileUpdate {
   status?: ProfileStatus;
   icon?: string;
 }
+
+export interface CapabilityBundleSummary {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  tools_enabled: boolean;
+  allowed_tool_categories?: string[] | null;
+  blocked_tool_ids: string[];
+  tool_overrides: Record<string, string>;
+  skill_ids: string[];
+  retrieval_enabled: boolean;
+  retrieval_limit: number;
+  retrieval_score_threshold: number;
+  knowledge_scope: string;
+}
+
+export interface ProfileValidation {
+  profile_id: string;
+  is_complete: boolean;
+  missing_fields: string[];
+  invalid_references: string[];
+  warnings: string[];
+}
+
+export interface ResolvedProfile {
+  profile: AgentProfile;
+  capability_bundles: CapabilityBundleSummary[];
+  model_policy?: Record<string, unknown> | null;
+  memory_policy?: Record<string, unknown> | null;
+  safety_policy?: Record<string, unknown> | null;
+  output_contract?: Record<string, unknown> | null;
+  effective_tools_enabled: boolean;
+  effective_allowed_tool_categories?: string[] | null;
+  effective_blocked_tool_ids: string[];
+  effective_tool_overrides: Record<string, string>;
+  effective_skill_ids: string[];
+  effective_retrieval_enabled: boolean;
+  effective_retrieval_limit: number;
+  effective_retrieval_score_threshold: number;
+  effective_knowledge_scope: string;
+  effective_history_limit: number;
+  effective_attachment_support: boolean;
+  effective_auto_bookmark_urls: boolean;
+  effective_mention_support: boolean;
+  effective_default_model?: string | null;
+  effective_allow_runtime_override: boolean;
+  effective_execution_mode: string;
+}

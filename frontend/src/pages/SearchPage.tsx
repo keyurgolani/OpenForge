@@ -106,7 +106,10 @@ export default function SearchPage() {
     })
 
     const queryRecord = data?.query ?? null
-    const results: RetrievalSearchResult[] = data?.results ?? []
+    const results = useMemo<RetrievalSearchResult[]>(
+        () => data?.results ?? [],
+        [data],
+    )
 
     useEffect(() => {
         startTransition(() => {

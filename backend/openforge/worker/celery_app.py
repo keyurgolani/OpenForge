@@ -30,11 +30,9 @@ celery_app.autodiscover_tasks(["openforge.worker"])
 
 
 @worker_init.connect
-def register_system_agents(**_kwargs):
-    """Register system agent definitions when the Celery worker starts."""
-    from openforge.runtime.transitional_agents import (
-        agent_registry, WORKSPACE_AGENT, ROUTER_AGENT, COUNCIL_AGENT, OPTIMIZER_AGENT,
-    )
-    for agent_def in [WORKSPACE_AGENT, ROUTER_AGENT, COUNCIL_AGENT, OPTIMIZER_AGENT]:
-        agent_registry.register_system_agent(agent_def)
-    logger.info("Celery worker: registered %d system agents.", len(agent_registry.list_all()))
+def register_system_profiles(**_kwargs):
+    """Register system profiles when the Celery worker starts."""
+    from openforge.runtime.profile_registry import profile_registry
+
+    profile_registry.register_system_profiles()
+    logger.info("Celery worker: registered %d system profiles.", len(profile_registry.list_all()))

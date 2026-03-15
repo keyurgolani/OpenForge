@@ -14,6 +14,7 @@ from .schemas import (
     ProfileCreate,
     ProfileListResponse,
     ProfileResponse,
+    ResolvedProfileResponse,
     ProfileUpdate,
 )
 from .router import router
@@ -26,5 +27,6 @@ __all__ = [
     "ProfileUpdate",
     "ProfileResponse",
     "ProfileListResponse",
+    "ResolvedProfileResponse",
     "router",
 ]

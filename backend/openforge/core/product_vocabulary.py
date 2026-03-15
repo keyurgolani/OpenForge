@@ -15,6 +15,12 @@ class DomainNoun(StrEnum):
     RUN = "run"
     ARTIFACT = "artifact"
     KNOWLEDGE = "knowledge"
+    GRAPH = "graph"
+    # Phase 7 profile building blocks
+    CAPABILITY_BUNDLE = "capability_bundle"
+    MODEL_POLICY = "model_policy"
+    MEMORY_POLICY = "memory_policy"
+    OUTPUT_CONTRACT = "output_contract"
 
 
 DOMAIN_LABELS: dict[DomainNoun, str] = {
@@ -25,6 +31,11 @@ DOMAIN_LABELS: dict[DomainNoun, str] = {
     DomainNoun.RUN: "Run",
     DomainNoun.ARTIFACT: "Artifact",
     DomainNoun.KNOWLEDGE: "Knowledge",
+    DomainNoun.GRAPH: "Graph",
+    DomainNoun.CAPABILITY_BUNDLE: "Capability Bundle",
+    DomainNoun.MODEL_POLICY: "Model Policy",
+    DomainNoun.MEMORY_POLICY: "Memory Policy",
+    DomainNoun.OUTPUT_CONTRACT: "Output Contract",
 }
 
 DOMAIN_LABELS_PLURAL: dict[DomainNoun, str] = {
@@ -35,6 +46,11 @@ DOMAIN_LABELS_PLURAL: dict[DomainNoun, str] = {
     DomainNoun.RUN: "Runs",
     DomainNoun.ARTIFACT: "Artifacts",
     DomainNoun.KNOWLEDGE: "Knowledge",
+    DomainNoun.GRAPH: "Graphs",
+    DomainNoun.CAPABILITY_BUNDLE: "Capability Bundles",
+    DomainNoun.MODEL_POLICY: "Model Policies",
+    DomainNoun.MEMORY_POLICY: "Memory Policies",
+    DomainNoun.OUTPUT_CONTRACT: "Output Contracts",
 }
 
 DOMAIN_DESCRIPTIONS: dict[DomainNoun, str] = {
@@ -45,10 +61,17 @@ DOMAIN_DESCRIPTIONS: dict[DomainNoun, str] = {
     DomainNoun.RUN: "Runs are durable execution instances.",
     DomainNoun.ARTIFACT: "Artifacts are persistent outputs produced by runs.",
     DomainNoun.KNOWLEDGE: "Knowledge is user-provided context and source material.",
+    DomainNoun.GRAPH: "Graph represents the knowledge graph of entities and relationships.",
+    DomainNoun.CAPABILITY_BUNDLE: "Capability bundles are composable collections of agent capabilities.",
+    DomainNoun.MODEL_POLICY: "Model policies define LLM selection and usage constraints.",
+    DomainNoun.MEMORY_POLICY: "Memory policies define context assembly and history management.",
+    DomainNoun.OUTPUT_CONTRACT: "Output contracts define expected output format and behavior.",
 }
 
 ROUTE_SEGMENTS: dict[DomainNoun, str] = {
-    noun: f"{noun.value}s" if noun is not DomainNoun.KNOWLEDGE else "knowledge"
+    noun: f"{noun.value}s"
+    if noun not in (DomainNoun.KNOWLEDGE, DomainNoun.GRAPH, DomainNoun.CAPABILITY_BUNDLE, DomainNoun.MODEL_POLICY, DomainNoun.MEMORY_POLICY, DomainNoun.OUTPUT_CONTRACT)
+    else noun.value
     for noun in DomainNoun
 }
 

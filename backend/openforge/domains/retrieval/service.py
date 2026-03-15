@@ -37,6 +37,8 @@ from .tool_output_handling import ToolOutputHandler
 from .types import (
     ConversationSummary,
     EvidencePacket,
+    GraphExpansionConfig,
+    GraphExpansionResult,
     RetrievalQuery,
     RetrievalReadResult,
     RetrievalResultStatus,
@@ -505,3 +507,133 @@ class RetrievalService:
             trust_metadata=row.trust_metadata or {},
             metadata=row.metadata_json or {},
         )
+
+    # =========================================================================
+    # Graph-Aware Retrieval (Phase 5)
+    # =========================================================================
+
+    async def search_with_graph_expansion(
+        self,
+        request: RetrievalSearchRequest,
+        graph_expansion: GraphExpansionConfig | None = None,
+    ) -> tuple[RetrievalSearchResponse, GraphExpansionResult | None]:
+        """
+        Search with optional graph-aware expansion.
+
+        If graph_expansion is enabled:
+        1. Run standard search
+        2. Extract entities from query
+        3. Find matching entities in graph
+        4. Get related documents via entity linkage
+        5. Add to candidates with graph metadata
+
+        Args:
+            request: Standard search request
+            graph_expansion: Optional graph expansion config
+
+        Returns:
+            Tuple of (search_response, graph_expansion_result)
+        """
+        # Run standard search first
+        base_response = await self.search(request)
+
+        # If graph expansion not enabled, return base response
+        if not graph_expansion or not graph_expansion.enabled:
+            return base_response, None
+
+        # Import graph services lazily to avoid circular imports
+        from openforge.domains.graph.service import GraphService
+        from openforge.domains.graph.extraction import GraphExtractionService
+        from openforge.domains.graph.types import EntityType
+
+        graph_service = GraphService(self.db)
+
+        graph_result = GraphExpansionResult()
+
+        try:
+            # Extract entities from query text
+            extraction_service = GraphExtractionService(self.db, llm_service=None)
+            entity_mentions = extraction_service._regex_entity_extraction(request.query_text)
+
+            # Find matching entities in the graph
+            matched_entities = []
+            for mention in entity_mentions[:graph_expansion.max_entities]:
+                # Search for entities matching the mention
+                from openforge.domains.graph.schemas import EntitySearchParams
+                from openforge.domains.graph.types import EntityStatus
+
+                search_params = EntitySearchParams(
+                    workspace_id=request.workspace_id,
+                    query=mention.mention_text,
+                    min_confidence=graph_expansion.min_confidence,
+                    status=EntityStatus.ACTIVE,
+                    limit=5,
+                )
+                entity_results = await graph_service.search_entities(search_params)
+
+                for entity in entity_results.entities:
+                    matched_entities.append({
+                        "id": str(entity.id),
+                        "name": entity.canonical_name,
+                        "type": entity.entity_type.value,
+                        "confidence": entity.confidence,
+                        "match_source": "query_extraction",
+                    })
+
+            graph_result.matched_entities = matched_entities[:graph_expansion.max_entities]
+
+            # Get related entities and documents if depth > 1
+            if graph_expansion.expand_depth > 1 and matched_entities:
+                related_entities = []
+                related_docs = []
+
+                for entity_data in matched_entities[:10]:
+                    entity_id = UUID(entity_data["id"])
+
+                    # Get neighbors
+                    neighbors = await graph_service.traversal.get_entity_neighbors(
+                        entity_id=entity_id,
+                        max_depth=graph_expansion.expand_depth,
+                        limit=graph_expansion.max_entities,
+                    )
+
+                    for neighbor in neighbors.neighbors:
+                        related_entities.append({
+                            "id": str(neighbor.entity_id),
+                            "name": neighbor.entity_name,
+                            "type": neighbor.entity_type.value,
+                            "via_relationship": neighbor.predicate,
+                            "direction": neighbor.direction,
+                        })
+
+                    # Get source documents for entity
+                    if graph_expansion.include_related_documents:
+                        sources = await graph_service.provenance.get_entity_sources(entity_id)
+                        for doc in sources.documents:
+                            related_docs.append({
+                                "document_id": str(doc.document_id),
+                                "title": doc.title,
+                                "via_entity": entity_data["name"],
+                            })
+
+                graph_result.related_entities = related_entities[:graph_expansion.max_entities]
+                graph_result.related_documents = related_docs[:20]
+
+            graph_result.expansion_reason = f"Query contained {len(entity_mentions)} potential entity mentions"
+            graph_result.expansion_depth = graph_expansion.expand_depth
+
+            # Add graph metadata to search results
+            for result in base_response.results:
+                result.metadata["graph_expansion"] = {
+                    "matched_entity_count": len(graph_result.matched_entities),
+                    "related_entity_count": len(graph_result.related_entities),
+                    "related_document_count": len(graph_result.related_documents),
+                }
+
+        except Exception as e:
+            # Log error but don't fail the search
+            import logging
+            logging.getLogger(__name__).warning(f"Graph expansion failed: {e}")
+            graph_result.expansion_reason = f"Expansion failed: {str(e)}"
+
+        return base_response, graph_result

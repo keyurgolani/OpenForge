@@ -374,29 +374,6 @@ class HITLRequest(Base):
     )
 
 
-# LEGACY MODULE - Transitional runtime object
-# Replacement domain: openforge.domains.profiles
-# This will be removed in a future phase after migration to AgentProfile
-class AgentDefinitionModel(Base):
-    """Persisted agent definitions."""
-    __tablename__ = "agent_definitions"
-
-    id: Mapped[str] = mapped_column(String(100), primary_key=True)
-    name: Mapped[str] = mapped_column(String(200), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    version: Mapped[str] = mapped_column(String(20), nullable=False, default="0.1.0")
-    config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    icon: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=now_utc
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc
-    )
-
-
 # Transitional. Scheduled for replacement in later phase.
 class AgentExecution(Base):
     """Tracks individual agent execution runs."""
@@ -497,38 +474,6 @@ class AgentMemory(Base):
         Index("idx_agent_memory_agent", "agent_id", "is_active"),
     )
 
-
-# LEGACY MODULE - Scheduled for removal
-# Replacement domain: openforge.domains.triggers
-class AgentSchedule(Base):
-    """Scheduled agent trigger definitions with cron expressions."""
-    __tablename__ = "agent_schedules"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    workspace_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
-    )
-    agent_id: Mapped[str] = mapped_column(String(100), nullable=False)
-    name: Mapped[str] = mapped_column(String(200), nullable=False)
-    instruction: Mapped[str] = mapped_column(Text, nullable=False)
-    cron_expression: Mapped[str] = mapped_column(String(100), nullable=False)
-    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    next_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    run_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=now_utc
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc
-    )
-
-    __table_args__ = (
-        Index("idx_agent_schedules_workspace", "workspace_id"),
-        Index("idx_agent_schedules_next_run", "is_enabled", "next_run_at"),
-    )
-
-
 # =============================================================================
 # NEW DOMAIN MODELS (Phase 1 Architecture)
 # =============================================================================
@@ -545,6 +490,7 @@ class AgentProfileModel(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    version: Mapped[str] = mapped_column(String(20), nullable=False, default="1.0.0")
     role: Mapped[str] = mapped_column(String(50), default="assistant")
     system_prompt_ref: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     model_policy_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
@@ -986,3 +932,338 @@ class ToolOutputSummaryModel(Base):
     metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+
+
+# =============================================================================
+# Phase 5: Graph Domain Models
+# =============================================================================
+
+
+class GraphExtractionJobModel(Base):
+    """Tracks entity/relationship extraction jobs."""
+    __tablename__ = "graph_extraction_jobs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    source_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    source_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="queued")
+    entity_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    relationship_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+
+    __table_args__ = (
+        Index("ix_graph_extraction_jobs_source", "source_type", "source_id"),
+        Index("ix_graph_extraction_jobs_status", "status"),
+    )
+
+
+class GraphExtractionResultModel(Base):
+    """Durable extraction output for a graph extraction job."""
+    __tablename__ = "graph_extraction_results"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    extraction_job_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("graph_extraction_jobs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    entity_mentions_json: Mapped[list] = mapped_column("entity_mentions", JSONB, nullable=False, default=list)
+    relationship_mentions_json: Mapped[list] = mapped_column("relationship_mentions", JSONB, nullable=False, default=list)
+    canonicalization_records_json: Mapped[list] = mapped_column(
+        "canonicalization_records",
+        JSONB,
+        nullable=False,
+        default=list,
+    )
+    errors_json: Mapped[list] = mapped_column("errors", JSONB, nullable=False, default=list)
+    notes_json: Mapped[list] = mapped_column("notes", JSONB, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+
+
+class EntityModel(Base):
+    """Canonical entity in the knowledge graph."""
+    __tablename__ = "entities"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    canonical_name: Mapped[str] = mapped_column(String(500), nullable=False)
+    normalized_key: Mapped[str] = mapped_column(String(500), nullable=False, index=True)
+    entity_type: Mapped[str] = mapped_column(String(100), nullable=False, default="generic", index=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    attributes_json: Mapped[dict] = mapped_column("attributes", JSONB, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="active", index=True)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    source_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+
+
+class EntityMentionModel(Base):
+    """Raw entity mention before canonicalization."""
+    __tablename__ = "entity_mentions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    extraction_job_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("graph_extraction_jobs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    canonical_entity_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("entities.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    mention_text: Mapped[str] = mapped_column(String(500), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(100), nullable=False, default="generic")
+    context_snippet: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    source_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    extraction_method: Mapped[str] = mapped_column(String(100), nullable=False, default="llm")
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    resolution_status: Mapped[str] = mapped_column(String(50), nullable=False, default="unresolved", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+
+    __table_args__ = (
+        Index("ix_entity_mentions_source", "source_type", "source_id"),
+    )
+
+
+class EntityAliasModel(Base):
+    """Alternative name for a canonical entity."""
+    __tablename__ = "entity_aliases"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    entity_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("entities.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    alias: Mapped[str] = mapped_column(String(500), nullable=False, index=True)
+    alias_type: Mapped[str] = mapped_column(String(100), nullable=False, default="alternate_name")
+    source_mention_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("entity_mentions.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+
+
+class EntityCanonicalizationRecordModel(Base):
+    """Tracks why an entity mention resolved to a canonical entity."""
+    __tablename__ = "entity_canonicalization_records"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    mention_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("entity_mentions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    canonical_entity_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("entities.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    canonicalization_state: Mapped[str] = mapped_column(String(50), nullable=False, default="resolved")
+    match_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    match_confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+
+
+class RelationshipModel(Base):
+    """Canonical relationship between entities."""
+    __tablename__ = "relationships"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    subject_entity_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("entities.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    object_entity_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("entities.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    predicate: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    relationship_type: Mapped[str] = mapped_column(String(100), nullable=False, default="generic")
+    attributes_json: Mapped[dict] = mapped_column("attributes", JSONB, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="active", index=True)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    support_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    directionality: Mapped[str] = mapped_column(String(50), nullable=False, default="directed")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+
+
+class RelationshipMentionModel(Base):
+    """Raw relationship mention before canonicalization."""
+    __tablename__ = "relationship_mentions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    extraction_job_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("graph_extraction_jobs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    canonical_relationship_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("relationships.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    subject_mention_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("entity_mentions.id", ondelete="CASCADE"), nullable=False
+    )
+    object_mention_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("entity_mentions.id", ondelete="CASCADE"), nullable=False
+    )
+    predicate: Mapped[str] = mapped_column(String(200), nullable=False)
+    source_snippet: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    source_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    extraction_method: Mapped[str] = mapped_column(String(100), nullable=False, default="llm")
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    resolution_status: Mapped[str] = mapped_column(String(50), nullable=False, default="unresolved", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+
+    __table_args__ = (
+        Index("ix_relationship_mentions_source", "source_type", "source_id"),
+    )
+
+
+class GraphProvenanceLinkModel(Base):
+    """Provenance link from graph objects to source material."""
+    __tablename__ = "graph_provenance_links"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    graph_object_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    graph_object_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    source_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    excerpt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    char_start: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    char_end: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    extraction_method: Mapped[str] = mapped_column(String(100), nullable=False, default="llm")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+
+    __table_args__ = (
+        Index("ix_graph_provenance_links_graph_object", "graph_object_type", "graph_object_id"),
+        Index("ix_graph_provenance_links_source", "source_type", "source_id"),
+    )
+
+
+# =============================================================================
+# Phase 7: Profile Core Models
+# =============================================================================
+
+
+class CapabilityBundleModel(Base):
+    """Composable bundle of agent capabilities (tools, skills, retrieval)."""
+    __tablename__ = "capability_bundles"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Tool capabilities
+    tools_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    allowed_tool_categories: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    blocked_tool_ids: Mapped[list] = mapped_column(JSONB, default=list)
+    tool_overrides: Mapped[dict] = mapped_column(JSONB, default=dict)
+    max_tool_calls_per_minute: Mapped[int] = mapped_column(Integer, default=30)
+    max_tool_calls_per_execution: Mapped[int] = mapped_column(Integer, default=200)
+
+    # Skill capabilities
+    skill_ids: Mapped[list] = mapped_column(JSONB, default=list)
+
+    # Retrieval capabilities
+    retrieval_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    retrieval_limit: Mapped[int] = mapped_column(Integer, default=5)
+    retrieval_score_threshold: Mapped[float] = mapped_column(Float, default=0.35)
+    knowledge_scope: Mapped[str] = mapped_column(String(50), default="workspace")
+
+    # Metadata
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(50), default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+
+class ModelPolicyModel(Base):
+    """Policy for LLM model selection and usage constraints."""
+    __tablename__ = "model_policies"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    default_provider_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    default_model: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    allow_runtime_override: Mapped[bool] = mapped_column(Boolean, default=True)
+    allowed_models: Mapped[list] = mapped_column(JSONB, default=list)
+    blocked_models: Mapped[list] = mapped_column(JSONB, default=list)
+    max_tokens_per_request: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    max_tokens_per_day: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(50), default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+
+class MemoryPolicyModel(Base):
+    """Policy for context assembly and memory management."""
+    __tablename__ = "memory_policies"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    history_limit: Mapped[int] = mapped_column(Integer, default=20)
+    history_strategy: Mapped[str] = mapped_column(String(50), default="sliding_window")
+    attachment_support: Mapped[bool] = mapped_column(Boolean, default=True)
+    auto_bookmark_urls: Mapped[bool] = mapped_column(Boolean, default=True)
+    mention_support: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(50), default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+
+class OutputContractModel(Base):
+    """Contract defining expected output format and behavior."""
+    __tablename__ = "output_contracts"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    execution_mode: Mapped[str] = mapped_column(String(50), default="streaming")
+    require_structured_output: Mapped[bool] = mapped_column(Boolean, default=False)
+    output_schema: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    require_citations: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(50), default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)

@@ -281,6 +281,80 @@ export function getEmptyStateCopy(domain: DomainNoun): { title: string; descript
 }
 
 // =============================================================================
+// Settings Section Labels
+// =============================================================================
+
+export type SettingsSection =
+  | 'workspaces'
+  | 'models'
+  | 'prompts'
+  | 'policies'
+  | 'approvals'
+  | 'pipelines'
+  | 'skills'
+  | 'mcp'
+  | 'audit'
+  | 'import'
+  | 'export';
+
+export type SettingsModelSubsection =
+  | 'providers'
+  | 'reasoning'
+  | 'vision'
+  | 'embedding'
+  | 'audio'
+  | 'clip'
+  | 'pdf';
+
+export const SETTINGS_LABELS: Record<SettingsSection, string> = {
+  workspaces: 'Workspaces',
+  models: 'AI Models',
+  prompts: 'Prompts',
+  policies: 'Policies',
+  approvals: 'Approvals',
+  pipelines: 'Pipelines',
+  skills: 'Skills',
+  mcp: 'MCP Servers',
+  audit: 'Audit',
+  import: 'Import',
+  export: 'Export',
+};
+
+export const SETTINGS_DESCRIPTIONS: Record<SettingsSection, string> = {
+  workspaces: 'Manage workspaces and their configurations.',
+  models: 'Configure AI model providers and model assignments.',
+  prompts: 'Manage prompt templates for agent profiles.',
+  policies: 'Define execution policies and guardrails.',
+  approvals: 'Review and approve pending human-in-the-loop items.',
+  pipelines: 'Configure data processing pipelines.',
+  skills: 'Manage custom skills and capabilities.',
+  mcp: 'Configure Model Context Protocol servers.',
+  audit: 'View audit logs and container logs.',
+  import: 'Import data from external sources.',
+  export: 'Export workspace data.',
+};
+
+export const SETTINGS_MODEL_LABELS: Record<SettingsModelSubsection, string> = {
+  providers: 'Providers',
+  reasoning: 'Reasoning',
+  vision: 'Vision',
+  embedding: 'Embedding',
+  audio: 'Audio',
+  clip: 'CLIP',
+  pdf: 'PDF',
+};
+
+export const SETTINGS_MODEL_DESCRIPTIONS: Record<SettingsModelSubsection, string> = {
+  providers: 'Configure LLM provider credentials and settings.',
+  reasoning: 'Assign reasoning models for chat and analysis.',
+  vision: 'Assign vision models for image understanding.',
+  embedding: 'Assign embedding models for vector search.',
+  audio: 'Assign audio models for speech processing.',
+  clip: 'Assign CLIP models for multimodal search.',
+  pdf: 'Assign PDF processing models.',
+};
+
+// =============================================================================
 // Terminology Notes
 // =============================================================================
 

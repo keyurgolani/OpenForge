@@ -7,7 +7,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from openforge.db.postgres import get_db
-from openforge.runtime.hitl import hitl_service
 
 from .approval_service import ApprovalService
 from .schemas import (
@@ -23,6 +22,12 @@ from .schemas import (
 from .service import PolicyService
 
 router = APIRouter()
+
+
+def _approval_field(approval, field_name: str):
+    if isinstance(approval, dict):
+        return approval.get(field_name)
+    return getattr(approval, field_name, None)
 
 
 def get_policy_service(db=Depends(get_db)) -> PolicyService:
@@ -72,13 +77,13 @@ async def get_approval(
 async def approve_request(
     approval_id: UUID,
     body: ApprovalResolutionRequest,
-    db=Depends(get_db),
+    service: ApprovalService = Depends(get_approval_service),
 ):
-    approval = await hitl_service.approve(db, approval_id, note=body.resolution_note)
+    approval = await service.approve_request(approval_id, note=body.resolution_note)
     if approval is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Approval request not found or already resolved")
-    scope_id = approval.scope_id
-    payload_preview = approval.payload_preview or {}
+    scope_id = _approval_field(approval, "scope_id")
+    payload_preview = _approval_field(approval, "payload_preview") or {}
     conversation_id = payload_preview.get("conversation_id")
     if scope_id and conversation_id:
         from openforge.api.websocket import ws_manager
@@ -88,7 +93,7 @@ async def approve_request(
             {
                 "type": "hitl_resolved",
                 "data": {
-                    "id": str(approval.id),
+                    "id": str(_approval_field(approval, "id")),
                     "conversation_id": str(conversation_id),
                     "status": "approved",
                 },
@@ -101,13 +106,13 @@ async def approve_request(
 async def deny_request(
     approval_id: UUID,
     body: ApprovalResolutionRequest,
-    db=Depends(get_db),
+    service: ApprovalService = Depends(get_approval_service),
 ):
-    approval = await hitl_service.deny(db, approval_id, note=body.resolution_note)
+    approval = await service.deny_request(approval_id, note=body.resolution_note)
     if approval is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Approval request not found or already resolved")
-    scope_id = approval.scope_id
-    payload_preview = approval.payload_preview or {}
+    scope_id = _approval_field(approval, "scope_id")
+    payload_preview = _approval_field(approval, "payload_preview") or {}
     conversation_id = payload_preview.get("conversation_id")
     if scope_id and conversation_id:
         from openforge.api.websocket import ws_manager
@@ -117,7 +122,7 @@ async def deny_request(
             {
                 "type": "hitl_resolved",
                 "data": {
-                    "id": str(approval.id),
+                    "id": str(_approval_field(approval, "id")),
                     "conversation_id": str(conversation_id),
                     "status": "denied",
                 },

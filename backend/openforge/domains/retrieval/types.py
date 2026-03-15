@@ -175,3 +175,26 @@ class ToolOutputProcessingResult(BaseModel):
     raw_char_count: int
     raw_token_estimate: int
     was_truncated: bool = False
+
+
+# =============================================================================
+# Graph-Aware Retrieval Types (Phase 5)
+# =============================================================================
+
+
+class GraphExpansionConfig(BaseModel):
+    """Configuration for graph-aware retrieval expansion."""
+    enabled: bool = False
+    expand_depth: int = Field(default=1, ge=1, le=3, description="How many hops to expand")
+    max_entities: int = Field(default=10, ge=1, le=50, description="Max entities to include")
+    min_confidence: float = Field(default=0.5, ge=0.0, le=1.0, description="Minimum entity confidence")
+    include_related_documents: bool = Field(default=True, description="Include documents related to entities")
+
+
+class GraphExpansionResult(BaseModel):
+    """Result of graph expansion during retrieval."""
+    matched_entities: list[dict[str, Any]] = Field(default_factory=list, description="Entities matched from query")
+    related_entities: list[dict[str, Any]] = Field(default_factory=list, description="Entities discovered via expansion")
+    related_documents: list[dict[str, Any]] = Field(default_factory=list, description="Documents linked to entities")
+    expansion_reason: str = Field(default="", description="Why expansion was performed")
+    expansion_depth: int = Field(default=0, description="Actual depth used")

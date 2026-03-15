@@ -23,7 +23,7 @@ from openforge.utils.task_audit import (
     start_task_log,
 )
 from openforge.utils.title import normalize_knowledge_title
-from openforge.core.prompt_catalogue import resolve_prompt_text
+from openforge.domains.prompts.service import resolve_prompt_text
 
 router = APIRouter()
 

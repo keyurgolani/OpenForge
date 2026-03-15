@@ -55,3 +55,20 @@ def test_prompt_catalogue_is_no_longer_the_home_of_managed_prompt_bodies():
 
     for fragment in forbidden_fragments:
         assert fragment not in content, f"Prompt fragment still embedded in compatibility layer: {fragment}"
+
+
+def test_active_runtime_and_services_do_not_import_legacy_prompt_catalogue_bridge():
+    backend_root = PROJECT_ROOT / "backend" / "openforge"
+    offenders: list[Path] = []
+
+    for py_file in backend_root.rglob("*.py"):
+        if py_file.name == "prompt_catalogue.py":
+            continue
+        content = py_file.read_text(encoding="utf-8")
+        if "openforge.core.prompt_catalogue" in content:
+            offenders.append(py_file.relative_to(PROJECT_ROOT))
+
+    assert not offenders, (
+        "Managed prompt resolution should route through the prompt domain directly. "
+        f"Legacy prompt catalogue imports still exist in: {offenders}"
+    )

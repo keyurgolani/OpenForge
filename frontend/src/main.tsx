@@ -17,6 +17,7 @@ const AppShell = lazy(() => import('./pages/AppShell'))
 const WorkspaceOverviewPage = lazy(() => import('./pages/WorkspaceOverviewPage'))
 const WorkspaceHome = lazy(() => import('./pages/WorkspaceHome'))
 const ProfilesPage = lazy(() => import('./pages/ProfilesPage'))
+const ProfileDetailPage = lazy(() => import('./pages/ProfileDetailPage'))
 const WorkflowsPage = lazy(() => import('./pages/WorkflowsPage'))
 const MissionsPage = lazy(() => import('./pages/MissionsPage'))
 const RunsPage = lazy(() => import('./pages/RunsPage'))
@@ -24,7 +25,27 @@ const ArtifactsPage = lazy(() => import('./pages/ArtifactsPage'))
 const EditorDispatcher = lazy(() => import('./components/knowledge/editors/EditorDispatcher'))
 const WorkspaceAgentPage = lazy(() => import('./pages/WorkspaceAgentPage'))
 const SearchPage = lazy(() => import('./pages/SearchPage'))
-const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+// Settings pages
+const SettingsIndex = lazy(() => import('./pages/settings'))
+const SettingsLayout = lazy(() => import('./pages/settings/SettingsLayout'))
+const ModelsLayout = lazy(() => import('./pages/settings/models/ModelsLayout'))
+const WorkspacesPage = lazy(() => import('./pages/settings/workspaces/WorkspacesPage'))
+const ProvidersPage = lazy(() => import('./pages/settings/models/providers/ProvidersPage'))
+const ReasoningPage = lazy(() => import('./pages/settings/models/reasoning/ReasoningPage'))
+const VisionPage = lazy(() => import('./pages/settings/models/vision/VisionPage'))
+const EmbeddingPage = lazy(() => import('./pages/settings/models/embedding/EmbeddingPage'))
+const AudioPage = lazy(() => import('./pages/settings/models/audio/AudioPage'))
+const CLIPPage = lazy(() => import('./pages/settings/models/clip/CLIPPage'))
+const PDFPage = lazy(() => import('./pages/settings/models/pdf/PDFPage'))
+const PromptsSettingsPage = lazy(() => import('./pages/settings/prompts/PromptsPage'))
+const PoliciesSettingsPage = lazy(() => import('./pages/settings/policies/PoliciesPage'))
+const ApprovalsSettingsPage = lazy(() => import('./pages/settings/approvals/ApprovalsPage'))
+const PipelinesSettingsPage = lazy(() => import('./pages/settings/pipelines/PipelinesPage'))
+const SkillsSettingsPage = lazy(() => import('./pages/settings/skills/SkillsPage'))
+const MCPSettingsPage = lazy(() => import('./pages/settings/mcp/MCPPage'))
+const AuditSettingsPage = lazy(() => import('./pages/settings/audit/AuditPage'))
+const ImportSettingsPage = lazy(() => import('./pages/settings/import/ImportPage'))
+const ExportSettingsPage = lazy(() => import('./pages/settings/export/ExportPage'))
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -148,6 +169,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                         <ProfilesPage />
                                     </ErrorBoundary>
                                 } />
+                                <Route path="profiles/:profileId" element={
+                                    <ErrorBoundary>
+                                        <ProfileDetailPage />
+                                    </ErrorBoundary>
+                                } />
                                 <Route path="workflows" element={
                                     <ErrorBoundary>
                                         <WorkflowsPage />
@@ -179,11 +205,29 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                     <AppShell />
                                 </ErrorBoundary>
                             }>
-                                <Route path={ROUTES.SETTINGS} element={
-                                    <ErrorBoundary>
-                                        <SettingsPage />
-                                    </ErrorBoundary>
-                                } />
+                                <Route path="/settings" element={<ErrorBoundary><SettingsLayout /></ErrorBoundary>}>
+                                    <Route index element={<SettingsIndex />} />
+                                    <Route path="workspaces" element={<ErrorBoundary><WorkspacesPage /></ErrorBoundary>} />
+                                    <Route path="models" element={<ErrorBoundary><ModelsLayout /></ErrorBoundary>}>
+                                        <Route index element={<Navigate to="/settings/models/providers" replace />} />
+                                        <Route path="providers" element={<ErrorBoundary><ProvidersPage /></ErrorBoundary>} />
+                                        <Route path="reasoning" element={<ErrorBoundary><ReasoningPage /></ErrorBoundary>} />
+                                        <Route path="vision" element={<ErrorBoundary><VisionPage /></ErrorBoundary>} />
+                                        <Route path="embedding" element={<ErrorBoundary><EmbeddingPage /></ErrorBoundary>} />
+                                        <Route path="audio" element={<ErrorBoundary><AudioPage /></ErrorBoundary>} />
+                                        <Route path="clip" element={<ErrorBoundary><CLIPPage /></ErrorBoundary>} />
+                                        <Route path="pdf" element={<ErrorBoundary><PDFPage /></ErrorBoundary>} />
+                                    </Route>
+                                    <Route path="prompts" element={<ErrorBoundary><PromptsSettingsPage /></ErrorBoundary>} />
+                                    <Route path="policies" element={<ErrorBoundary><PoliciesSettingsPage /></ErrorBoundary>} />
+                                    <Route path="approvals" element={<ErrorBoundary><ApprovalsSettingsPage /></ErrorBoundary>} />
+                                    <Route path="pipelines" element={<ErrorBoundary><PipelinesSettingsPage /></ErrorBoundary>} />
+                                    <Route path="skills" element={<ErrorBoundary><SkillsSettingsPage /></ErrorBoundary>} />
+                                    <Route path="mcp" element={<ErrorBoundary><MCPSettingsPage /></ErrorBoundary>} />
+                                    <Route path="audit" element={<ErrorBoundary><AuditSettingsPage /></ErrorBoundary>} />
+                                    <Route path="import" element={<ErrorBoundary><ImportSettingsPage /></ErrorBoundary>} />
+                                    <Route path="export" element={<ErrorBoundary><ExportSettingsPage /></ErrorBoundary>} />
+                                </Route>
                             </Route>
                             <Route path="/" element={<Navigate to={ROUTES.ONBOARDING} replace />} />
                         </Routes>

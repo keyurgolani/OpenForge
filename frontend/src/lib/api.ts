@@ -371,6 +371,10 @@ export const logoutAuth = (): Promise<void> =>
 export const listProfiles = (params?: { skip?: number; limit?: number }): Promise<any> =>
     api.get('/profiles', { params }).then(r => r.data)
 export const getProfile = (id: string): Promise<any> => api.get(`/profiles/${id}`).then(r => r.data)
+export const resolveProfile = (id: string): Promise<any> => api.get(`/profiles/${id}/resolve`).then(r => r.data)
+export const validateProfile = (id: string): Promise<any> => api.get(`/profiles/${id}/validate`).then(r => r.data)
+export const compareProfiles = (leftId: string, rightId: string): Promise<any> =>
+    api.get(`/profiles/compare/${leftId}/${rightId}`).then(r => r.data)
 export const createProfile = (data: object): Promise<any> => api.post('/profiles', data).then(r => r.data)
 export const updateProfile = (id: string, data: object): Promise<any> =>
     api.patch(`/profiles/${id}`, data).then(r => r.data)

@@ -14,14 +14,13 @@ export default function RunsPage() {
   const { workspaceId = '' } = useParams<{ workspaceId: string }>()
   const { data, isLoading, error } = useRunsQuery({ workspaceId })
 
-  const runs = data?.runs ?? []
   const sortedRuns = useMemo(
-    () => [...runs].sort((left, right) => {
+    () => [...(data?.runs ?? [])].sort((left, right) => {
       const leftTime = left.started_at ? new Date(left.started_at).getTime() : 0
       const rightTime = right.started_at ? new Date(right.started_at).getTime() : 0
       return rightTime - leftTime
     }),
-    [runs],
+    [data],
   )
 
   if (isLoading) {

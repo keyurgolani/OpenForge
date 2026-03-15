@@ -15,6 +15,7 @@ import re
 from pathlib import Path
 
 import pytest
+from openforge.db.models import Base
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -397,3 +398,34 @@ class TestPhase4RetrievalGuardrails:
             f"Direct search_engine imports found outside retrieval boundaries: {offenders}. "
             "Route retrieval through openforge.domains.retrieval.service instead."
         )
+
+
+class TestLegacySchemaRemoval:
+    """Guardrails for removing legacy agent-centric schema from active architecture."""
+
+    def test_active_sqlalchemy_metadata_excludes_removed_agent_tables(self):
+        tables = set(Base.metadata.tables.keys())
+
+        for legacy_table in {"agent_definitions", "agent_schedules"}:
+            assert legacy_table not in tables, (
+                f"Legacy table {legacy_table!r} is still part of active SQLAlchemy metadata. "
+                "Phase 2 and Phase 7 require those agent-centric tables to be removed from the active architecture."
+            )
+
+    def test_initial_migration_no_longer_creates_removed_agent_tables(self):
+        migration = (
+            PROJECT_ROOT
+            / "backend"
+            / "openforge"
+            / "db"
+            / "migrations"
+            / "versions"
+            / "001_initial_schema.py"
+        )
+        content = migration.read_text(encoding="utf-8")
+
+        for legacy_table in {"agent_definitions", "agent_schedules", "continuous_targets"}:
+            assert legacy_table not in content, (
+                f"Legacy table {legacy_table!r} is still created in the initial migration. "
+                "The pre-release schema should match the final nouns, not preserve removed agent-era tables."
+            )

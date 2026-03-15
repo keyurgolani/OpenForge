@@ -89,7 +89,7 @@ export function useWorkspaceWebSocket(workspaceId: string, channel: 'agent' | 's
         ws.onerror = () => {
             ws.close()
         }
-    }, [workspaceId, channel, managerKey])
+    }, [workspaceId, channel])
 
     useEffect(() => {
         const manager = managerRef.current;

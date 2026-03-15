@@ -9,11 +9,17 @@ from fastapi import FastAPI
 from openforge.core.product_vocabulary import API_PREFIXES, DomainNoun
 
 from .artifacts.router import router as artifacts_router
+from .graph.router import router as graph_router
 from .missions.router import router as missions_router
 from .profiles.router import router as profiles_router
 from .runs.router import router as runs_router
 from .triggers.router import router as triggers_router
 from .workflows.router import router as workflows_router
+# Phase 7 profile building blocks
+from .capability_bundles.router import router as capability_bundles_router
+from .model_policies.router import router as model_policies_router
+from .memory_policies.router import router as memory_policies_router
+from .output_contracts.router import router as output_contracts_router
 
 
 def register_domain_routers(app: FastAPI) -> None:
@@ -65,4 +71,40 @@ def register_domain_routers(app: FastAPI) -> None:
         artifacts_router,
         prefix=API_PREFIXES[DomainNoun.ARTIFACT],
         tags=["artifacts"],
+    )
+
+    # Register graph domain
+    app.include_router(
+        graph_router,
+        prefix=API_PREFIXES[DomainNoun.GRAPH],
+        tags=["graph"],
+    )
+
+    # Phase 7 profile building blocks
+    # Register capability bundles domain
+    app.include_router(
+        capability_bundles_router,
+        prefix=API_PREFIXES[DomainNoun.CAPABILITY_BUNDLE],
+        tags=["capability-bundles"],
+    )
+
+    # Register model policies domain
+    app.include_router(
+        model_policies_router,
+        prefix=API_PREFIXES[DomainNoun.MODEL_POLICY],
+        tags=["model-policies"],
+    )
+
+    # Register memory policies domain
+    app.include_router(
+        memory_policies_router,
+        prefix=API_PREFIXES[DomainNoun.MEMORY_POLICY],
+        tags=["memory-policies"],
+    )
+
+    # Register output contracts domain
+    app.include_router(
+        output_contracts_router,
+        prefix=API_PREFIXES[DomainNoun.OUTPUT_CONTRACT],
+        tags=["output-contracts"],
     )

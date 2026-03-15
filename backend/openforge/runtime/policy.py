@@ -18,7 +18,7 @@ from openforge.domains.policies.evaluator import PolicyEvaluator, policy_evaluat
 from openforge.domains.policies.types import PolicyDecision, ToolRiskCategory
 
 if TYPE_CHECKING:
-    from openforge.runtime.transitional_agents import AgentDefinition
+    from openforge.runtime.profile_registry import ResolvedAgentProfile
 
 logger = logging.getLogger("openforge.runtime.policy")
 
@@ -44,7 +44,7 @@ class PolicyEngine:
         tool_id: str,
         risk_level: str,
         db: AsyncSession,
-        agent: AgentDefinition | None = None,
+        agent: "ResolvedAgentProfile" | None = None,
     ) -> str:
         policies = [
             {

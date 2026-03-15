@@ -27,14 +27,12 @@ def execute_agent_task(self, execution_id: str, **kwargs):
         loop.close()
 
 
-def _ensure_system_agents():
-    """Ensure system agents are registered in this process."""
-    from openforge.runtime.transitional_agents import (
-        agent_registry, WORKSPACE_AGENT, ROUTER_AGENT, COUNCIL_AGENT, OPTIMIZER_AGENT,
-    )
-    if not agent_registry.list_all():
-        for agent_def in [WORKSPACE_AGENT, ROUTER_AGENT, COUNCIL_AGENT, OPTIMIZER_AGENT]:
-            agent_registry.register_system_agent(agent_def)
+def _register_system_profiles():
+    """Ensure system profiles are registered in this process."""
+    from openforge.runtime.profile_registry import profile_registry
+
+    if not profile_registry.list_all():
+        profile_registry.register_system_profiles()
 
 
 async def _run_agent(execution_id: str, **kwargs):
@@ -42,15 +40,12 @@ async def _run_agent(execution_id: str, **kwargs):
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
     from openforge.config import get_settings
     from openforge.runtime.execution_engine import agent_engine
-    from openforge.runtime.transitional_agents import agent_registry
+    from openforge.runtime.profile_registry import profile_registry
 
-    _ensure_system_agents()
+    _register_system_profiles()
 
     agent_id = kwargs.get("agent_id", "workspace_agent")
-    agent = agent_registry.get(agent_id)
-    if not agent:
-        from openforge.runtime.transitional_agents import WORKSPACE_AGENT
-        agent = WORKSPACE_AGENT
+    agent = profile_registry.get(agent_id) or profile_registry.get_default()
 
     # Apply workspace overrides if provided
     if kwargs.get("agent_enabled") is not None:
@@ -71,6 +66,9 @@ async def _run_agent(execution_id: str, **kwargs):
     )
     try:
         async with WorkerSession() as db:
+            await profile_registry.ensure_system_profiles(db)
+            await profile_registry.load_profiles(db)
+            agent = profile_registry.get(agent_id) or profile_registry.get_default()
             await agent_engine.run(
                 execution_id=execution_id,
                 workspace_id=UUID(kwargs["workspace_id"]),

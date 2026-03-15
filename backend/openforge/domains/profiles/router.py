@@ -8,7 +8,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from openforge.db.postgres import get_db
 
-from .schemas import ProfileCreate, ProfileListResponse, ProfileResponse, ProfileUpdate
+from .schemas import (
+    ProfileComparisonResponse,
+    ProfileCreate,
+    ProfileListResponse,
+    ProfileResponse,
+    ProfileUpdate,
+    ProfileValidationResponse,
+    ResolvedProfileResponse,
+)
 from .service import ProfileService
 
 router = APIRouter()
@@ -43,6 +51,52 @@ async def get_profile(
             detail="Profile not found",
         )
     return profile
+
+
+@router.get("/{profile_id}/resolve", response_model=ResolvedProfileResponse)
+async def resolve_profile(
+    profile_id: UUID,
+    service: ProfileService = Depends(get_profile_service),
+):
+    """Resolve a profile into its effective bundles, policies, and runtime defaults."""
+    profile = await service.resolve_profile(profile_id)
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Profile not found",
+        )
+    return profile
+
+
+@router.get("/{profile_id}/validate", response_model=ProfileValidationResponse)
+async def validate_profile(
+    profile_id: UUID,
+    service: ProfileService = Depends(get_profile_service),
+):
+    """Validate whether a profile has all required modular building blocks attached."""
+    validation = await service.validate_profile_completeness(profile_id)
+    if not validation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Profile not found",
+        )
+    return validation
+
+
+@router.get("/compare/{left_profile_id}/{right_profile_id}", response_model=ProfileComparisonResponse)
+async def compare_profiles(
+    left_profile_id: UUID,
+    right_profile_id: UUID,
+    service: ProfileService = Depends(get_profile_service),
+):
+    """Compare two profiles field-by-field."""
+    comparison = await service.compare_profiles(left_profile_id, right_profile_id)
+    if not comparison:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="One or both profiles were not found",
+        )
+    return comparison
 
 
 @router.post("/", response_model=ProfileResponse, status_code=status.HTTP_201_CREATED)

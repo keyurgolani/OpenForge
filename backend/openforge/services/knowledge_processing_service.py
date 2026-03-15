@@ -123,7 +123,7 @@ class KnowledgeProcessingService:
         }
 
     async def _get_prompt_text(self, db: AsyncSession, prompt_id: str, **kwargs) -> str:
-        from openforge.core.prompt_catalogue import resolve_prompt_text
+        from openforge.domains.prompts.service import resolve_prompt_text
 
         return await resolve_prompt_text(db, prompt_id, **kwargs)
 
