@@ -260,6 +260,17 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Phase 3 prompt/policy seeding skipped: %s", e)
 
+    # Seed Phase 12 curated catalog (profiles, workflows, missions).
+    try:
+        from openforge.db.postgres import AsyncSessionLocal
+        from openforge.domains.catalog.seeder import seed_curated_catalog
+
+        async with AsyncSessionLocal() as db:
+            await seed_curated_catalog(db)
+        logger.info("Phase 12 curated catalog seeded.")
+    except Exception as e:
+        logger.warning("Phase 12 catalog seeding skipped: %s", e)
+
     # Enable agent mode on all existing workspaces (idempotent)
     try:
         from openforge.db.postgres import AsyncSessionLocal

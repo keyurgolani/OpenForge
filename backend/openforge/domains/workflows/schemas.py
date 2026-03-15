@@ -89,6 +89,11 @@ class WorkflowCreate(BaseModel):
     is_template: bool = False
     template_kind: str | None = Field(default=None, max_length=80)
     template_metadata: dict[str, Any] = Field(default_factory=dict)
+    tags: list[str] = Field(default_factory=list)
+    is_featured: bool = False
+    is_recommended: bool = False
+    sort_priority: int = 0
+    icon: str | None = Field(default=None, max_length=100)
     version: WorkflowVersionCreate
 
 
@@ -101,6 +106,11 @@ class WorkflowUpdate(BaseModel):
     is_template: bool | None = None
     template_kind: str | None = Field(default=None, max_length=80)
     template_metadata: dict[str, Any] | None = None
+    tags: list[str] | None = None
+    is_featured: bool | None = None
+    is_recommended: bool | None = None
+    sort_priority: int | None = None
+    icon: str | None = Field(default=None, max_length=100)
 
 
 class WorkflowTemplateCloneRequest(BaseModel):

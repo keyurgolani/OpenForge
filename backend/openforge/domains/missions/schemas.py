@@ -31,6 +31,13 @@ class MissionCreate(BaseModel):
     is_template: bool = Field(default=False)
     recommended_use_case: Optional[str] = Field(default=None)
     status: MissionStatus = Field(default=MissionStatus.DRAFT)
+    # Phase 12 catalog metadata
+    tags: list[str] = Field(default_factory=list)
+    catalog_metadata: dict[str, Any] = Field(default_factory=dict)
+    is_featured: bool = Field(default=False)
+    is_recommended: bool = Field(default=False)
+    sort_priority: int = Field(default=0)
+    icon: Optional[str] = Field(default=None, max_length=100)
 
 
 class MissionUpdate(BaseModel):
@@ -51,6 +58,12 @@ class MissionUpdate(BaseModel):
     is_template: Optional[bool] = Field(default=None)
     recommended_use_case: Optional[str] = Field(default=None)
     status: Optional[MissionStatus] = Field(default=None)
+    tags: Optional[list[str]] = Field(default=None)
+    catalog_metadata: Optional[dict[str, Any]] = Field(default=None)
+    is_featured: Optional[bool] = Field(default=None)
+    is_recommended: Optional[bool] = Field(default=None)
+    sort_priority: Optional[int] = Field(default=None)
+    icon: Optional[str] = Field(default=None, max_length=100)
 
 
 class MissionResponse(BaseModel):
@@ -75,6 +88,13 @@ class MissionResponse(BaseModel):
     is_template: bool
     recommended_use_case: Optional[str]
     status: MissionStatus
+    # Phase 12 catalog metadata
+    tags: list[str] = Field(default_factory=list)
+    catalog_metadata: dict[str, Any] = Field(default_factory=dict)
+    is_featured: bool = False
+    is_recommended: bool = False
+    sort_priority: int = 0
+    icon: Optional[str] = None
 
     # Health metadata
     last_run_at: Optional[datetime]
@@ -96,6 +116,13 @@ class MissionListResponse(BaseModel):
 
     missions: list[MissionResponse]
     total: int
+
+
+class MissionTemplateCloneRequest(BaseModel):
+    """Request body for cloning a mission template."""
+    workspace_id: UUID
+    name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    slug: Optional[str] = Field(default=None, min_length=1, max_length=100)
 
 
 class MissionHealthResponse(BaseModel):

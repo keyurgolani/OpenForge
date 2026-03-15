@@ -16,6 +16,8 @@ class DomainNoun(StrEnum):
     ARTIFACT = "artifact"
     KNOWLEDGE = "knowledge"
     GRAPH = "graph"
+    # Phase 12 curated catalog
+    CATALOG = "catalog"
     # Phase 7 profile building blocks
     CAPABILITY_BUNDLE = "capability_bundle"
     MODEL_POLICY = "model_policy"
@@ -32,6 +34,7 @@ DOMAIN_LABELS: dict[DomainNoun, str] = {
     DomainNoun.ARTIFACT: "Artifact",
     DomainNoun.KNOWLEDGE: "Knowledge",
     DomainNoun.GRAPH: "Graph",
+    DomainNoun.CATALOG: "Catalog",
     DomainNoun.CAPABILITY_BUNDLE: "Capability Bundle",
     DomainNoun.MODEL_POLICY: "Model Policy",
     DomainNoun.MEMORY_POLICY: "Memory Policy",
@@ -47,6 +50,7 @@ DOMAIN_LABELS_PLURAL: dict[DomainNoun, str] = {
     DomainNoun.ARTIFACT: "Artifacts",
     DomainNoun.KNOWLEDGE: "Knowledge",
     DomainNoun.GRAPH: "Graphs",
+    DomainNoun.CATALOG: "Catalog",
     DomainNoun.CAPABILITY_BUNDLE: "Capability Bundles",
     DomainNoun.MODEL_POLICY: "Model Policies",
     DomainNoun.MEMORY_POLICY: "Memory Policies",
@@ -62,6 +66,7 @@ DOMAIN_DESCRIPTIONS: dict[DomainNoun, str] = {
     DomainNoun.ARTIFACT: "Artifacts are persistent outputs produced by runs.",
     DomainNoun.KNOWLEDGE: "Knowledge is user-provided context and source material.",
     DomainNoun.GRAPH: "Graph represents the knowledge graph of entities and relationships.",
+    DomainNoun.CATALOG: "Catalog is the curated library of profiles, workflows, and missions.",
     DomainNoun.CAPABILITY_BUNDLE: "Capability bundles are composable collections of agent capabilities.",
     DomainNoun.MODEL_POLICY: "Model policies define LLM selection and usage constraints.",
     DomainNoun.MEMORY_POLICY: "Memory policies define context assembly and history management.",
@@ -70,7 +75,7 @@ DOMAIN_DESCRIPTIONS: dict[DomainNoun, str] = {
 
 ROUTE_SEGMENTS: dict[DomainNoun, str] = {
     noun: f"{noun.value}s"
-    if noun not in (DomainNoun.KNOWLEDGE, DomainNoun.GRAPH, DomainNoun.CAPABILITY_BUNDLE, DomainNoun.MODEL_POLICY, DomainNoun.MEMORY_POLICY, DomainNoun.OUTPUT_CONTRACT)
+    if noun not in (DomainNoun.KNOWLEDGE, DomainNoun.GRAPH, DomainNoun.CATALOG, DomainNoun.CAPABILITY_BUNDLE, DomainNoun.MODEL_POLICY, DomainNoun.MEMORY_POLICY, DomainNoun.OUTPUT_CONTRACT)
     else noun.value
     for noun in DomainNoun
 }

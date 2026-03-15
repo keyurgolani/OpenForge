@@ -79,6 +79,12 @@ export interface WorkflowDefinition {
   is_template: boolean;
   template_kind?: string | null;
   template_metadata: Record<string, unknown>;
+  // Phase 12 catalog metadata
+  tags: string[];
+  is_featured: boolean;
+  is_recommended: boolean;
+  sort_priority: number;
+  icon?: string | null;
   current_version?: WorkflowVersion | null;
   status: WorkflowStatus;
   created_at?: string | null;

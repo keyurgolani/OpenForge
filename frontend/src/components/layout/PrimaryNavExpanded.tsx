@@ -21,6 +21,7 @@ import {
   Pencil,
   Trash2,
   Zap,
+  BookOpen,
 } from 'lucide-react';
 import {
   ContextMenu,
@@ -78,6 +79,7 @@ interface PrimaryNavExpandedProps {
     missions: string;
     runs: string;
     artifacts: string;
+    catalog: string;
     settings: string;
   };
   onCreateWorkspace?: () => void;
@@ -365,6 +367,12 @@ export function PrimaryNavExpanded({
                   icon={<FileText className="w-4 h-4" />}
                   label="Artifacts"
                   isActive={isActive('/artifacts')}
+                />
+                <NavItem
+                  to={routes.catalog}
+                  icon={<BookOpen className="w-4 h-4" />}
+                  label="Catalog"
+                  isActive={isActive('/catalog')}
                 />
               </>
             )}

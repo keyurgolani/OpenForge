@@ -21,6 +21,12 @@ export interface AgentProfile {
   is_template: boolean;
   status: ProfileStatus;
   icon?: string;
+  // Phase 12 catalog metadata
+  tags: string[];
+  catalog_metadata: Record<string, unknown>;
+  is_featured: boolean;
+  is_recommended: boolean;
+  sort_priority: number;
   created_at?: string;
   updated_at?: string;
   created_by?: string;

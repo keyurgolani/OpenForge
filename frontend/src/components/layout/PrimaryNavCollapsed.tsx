@@ -14,6 +14,7 @@ import {
   FileText,
   Settings,
   Zap,
+  BookOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ConnectionStatus } from './ConnectionStatus';
@@ -32,6 +33,7 @@ interface PrimaryNavCollapsedProps {
     missions: string;
     runs: string;
     artifacts: string;
+    catalog: string;
     settings: string;
   };
   onExpand?: () => void;
@@ -138,6 +140,12 @@ export function PrimaryNavCollapsed({
               title="Artifacts"
               isActive={isActive('/artifacts')}
               icon={<FileText className="w-4 h-4" />}
+            />
+            <NavIcon
+              to={routes.catalog}
+              title="Catalog"
+              isActive={isActive('/catalog')}
+              icon={<BookOpen className="w-4 h-4" />}
             />
           </>
         )}

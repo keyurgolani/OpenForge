@@ -52,6 +52,7 @@ export const ROUTES = {
   RUN_DETAIL: `${WORKSPACE_PREFIX}/runs/:runId`,
   ARTIFACTS: `${WORKSPACE_PREFIX}/artifacts`,
   ARTIFACT_DETAIL: `${WORKSPACE_PREFIX}/artifacts/:artifactId`,
+  CATALOG: `${WORKSPACE_PREFIX}/catalog`,
 } as const;
 
 export function routeWithParams(
@@ -128,6 +129,10 @@ export function artifactsRoute(workspaceId: string, artifactId?: string): string
     return routeWithParams(ROUTES.ARTIFACT_DETAIL, { workspaceId, artifactId });
   }
   return routeWithParams(ROUTES.ARTIFACTS, { workspaceId });
+}
+
+export function catalogRoute(workspaceId: string): string {
+  return routeWithParams(ROUTES.CATALOG, { workspaceId });
 }
 
 export default ROUTES;

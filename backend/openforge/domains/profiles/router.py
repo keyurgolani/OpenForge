@@ -4,7 +4,7 @@ Profile domain API router.
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from openforge.db.postgres import get_db
 
@@ -13,6 +13,7 @@ from .schemas import (
     ProfileCreate,
     ProfileListResponse,
     ProfileResponse,
+    ProfileTemplateCloneRequest,
     ProfileUpdate,
     ProfileValidationResponse,
     ResolvedProfileResponse,
@@ -27,14 +28,82 @@ def get_profile_service(db=Depends(get_db)) -> ProfileService:
     return ProfileService(db)
 
 
+# ── Template / Catalog endpoints (must be before /{profile_id} to avoid route conflicts) ──
+
+
+@router.get("/templates", response_model=ProfileListResponse)
+async def list_profile_templates(
+    skip: int = 0,
+    limit: int = 100,
+    is_featured: bool | None = None,
+    tags: list[str] = Query(default=[]),
+    service: ProfileService = Depends(get_profile_service),
+):
+    """List curated profile templates available for cloning."""
+    profiles, total = await service.list_templates(
+        skip=skip,
+        limit=limit,
+        is_featured=is_featured or None,
+        tags=tags or None,
+    )
+    return {"profiles": profiles, "total": total}
+
+
+@router.get("/templates/{profile_id}", response_model=ProfileResponse)
+async def get_profile_template(
+    profile_id: UUID,
+    service: ProfileService = Depends(get_profile_service),
+):
+    """Get a single profile template by ID."""
+    template = await service.get_template(profile_id)
+    if not template:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Profile template not found",
+        )
+    return template
+
+
+@router.post("/templates/{profile_id}/clone", response_model=ProfileResponse, status_code=status.HTTP_201_CREATED)
+async def clone_profile_template(
+    profile_id: UUID,
+    body: ProfileTemplateCloneRequest,
+    service: ProfileService = Depends(get_profile_service),
+):
+    """Clone a profile template into a user-owned copy."""
+    cloned = await service.clone_template(profile_id, body.model_dump(exclude_unset=True))
+    if not cloned:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Profile template not found or cannot be cloned",
+        )
+    return cloned
+
+
+# ── Standard CRUD endpoints ──
+
+
 @router.get("/", response_model=ProfileListResponse)
 async def list_profiles(
     skip: int = 0,
     limit: int = 100,
+    is_system: bool | None = None,
+    is_template: bool | None = None,
+    is_featured: bool | None = None,
+    status_filter: str | None = Query(default=None, alias="status"),
+    tags: list[str] = Query(default=[]),
     service: ProfileService = Depends(get_profile_service),
 ):
     """List all profiles."""
-    profiles, total = await service.list_profiles(skip=skip, limit=limit)
+    profiles, total = await service.list_profiles(
+        skip=skip,
+        limit=limit,
+        is_system=is_system,
+        is_template=is_template,
+        is_featured=is_featured,
+        status=status_filter,
+        tags=tags or None,
+    )
     return {"profiles": profiles, "total": total}
 
 

@@ -26,14 +26,41 @@ class MissionService(CrudDomainService):
         limit: int = 100,
         workspace_id: Optional[UUID] = None,
         status: Optional[str] = None,
+        is_system: bool | None = None,
+        is_template: bool | None = None,
+        is_featured: bool | None = None,
+        tags: list[str] | None = None,
     ):
-        """List missions with optional workspace and status filters."""
-        filters: dict[str, Any] = {}
+        """List missions with optional filters."""
+        query = select(MissionDefinitionModel).order_by(
+            MissionDefinitionModel.sort_priority.desc(),
+            MissionDefinitionModel.updated_at.desc(),
+        )
+        count_query = select(func.count()).select_from(MissionDefinitionModel)
+
         if workspace_id is not None:
-            filters["workspace_id"] = workspace_id
+            query = query.where(MissionDefinitionModel.workspace_id == workspace_id)
+            count_query = count_query.where(MissionDefinitionModel.workspace_id == workspace_id)
         if status is not None:
-            filters["status"] = status
-        return await self.list_records(skip=skip, limit=limit, filters=filters or None)
+            query = query.where(MissionDefinitionModel.status == status)
+            count_query = count_query.where(MissionDefinitionModel.status == status)
+        if is_system is not None:
+            query = query.where(MissionDefinitionModel.is_system == is_system)
+            count_query = count_query.where(MissionDefinitionModel.is_system == is_system)
+        if is_template is not None:
+            query = query.where(MissionDefinitionModel.is_template == is_template)
+            count_query = count_query.where(MissionDefinitionModel.is_template == is_template)
+        if is_featured is not None:
+            query = query.where(MissionDefinitionModel.is_featured == is_featured)
+            count_query = count_query.where(MissionDefinitionModel.is_featured == is_featured)
+        if tags:
+            for tag in tags:
+                query = query.where(MissionDefinitionModel.tags.contains([tag]))
+                count_query = count_query.where(MissionDefinitionModel.tags.contains([tag]))
+
+        total = await self.db.scalar(count_query) or 0
+        rows = (await self.db.execute(query.offset(skip).limit(limit))).scalars().all()
+        return [self._serialize(row) for row in rows], int(total)
 
     async def get_mission(self, mission_id: UUID):
         """Get a single mission by ID."""
@@ -50,6 +77,65 @@ class MissionService(CrudDomainService):
     async def delete_mission(self, mission_id: UUID):
         """Delete a mission definition."""
         return await self.delete_record(mission_id)
+
+    # ── Template/Catalog operations ──
+
+    async def list_templates(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        tags: list[str] | None = None,
+        is_featured: bool | None = None,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """List mission templates (is_template=True)."""
+        return await self.list_missions(
+            skip=skip,
+            limit=limit,
+            is_template=True,
+            tags=tags,
+            is_featured=is_featured,
+        )
+
+    async def get_template(self, mission_id: UUID) -> dict[str, Any] | None:
+        """Get a single mission template."""
+        mission = await self.get_mission(mission_id)
+        if mission is None or not mission.get("is_template"):
+            return None
+        return mission
+
+    async def clone_template(self, mission_id: UUID, clone_data: dict[str, Any]) -> dict[str, Any] | None:
+        """Clone a mission template into a workspace-local mission."""
+        template = await self.get_template(mission_id)
+        if template is None:
+            return None
+
+        clone_payload = {
+            "workspace_id": clone_data["workspace_id"],
+            "name": clone_data.get("name") or template["name"],
+            "slug": clone_data.get("slug") or f"{template['slug']}-clone",
+            "description": template.get("description"),
+            "workflow_id": template["workflow_id"],
+            "workflow_version_id": template.get("workflow_version_id"),
+            "default_profile_ids": list(template.get("default_profile_ids") or []),
+            "default_trigger_ids": [],
+            "autonomy_mode": template.get("autonomy_mode", "supervised"),
+            "approval_policy_id": template.get("approval_policy_id"),
+            "budget_policy_id": template.get("budget_policy_id"),
+            "output_artifact_types": list(template.get("output_artifact_types") or []),
+            "is_system": False,
+            "is_template": False,
+            "recommended_use_case": template.get("recommended_use_case"),
+            "status": "draft",
+            "tags": list(template.get("tags") or []),
+            "icon": template.get("icon"),
+            "catalog_metadata": {
+                **(template.get("catalog_metadata") or {}),
+                "cloned_from_template": str(mission_id),
+            },
+        }
+        return await self.create_mission(clone_payload)
+
+    # ── Related queries ──
 
     async def list_missions_by_workflow(
         self,

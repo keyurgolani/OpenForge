@@ -117,6 +117,12 @@ class WorkflowDefinition(BaseModel):
     is_template: bool = False
     template_kind: str | None = None
     template_metadata: dict[str, Any] = Field(default_factory=dict)
+    # Phase 12 catalog metadata
+    tags: list[str] = Field(default_factory=list)
+    is_featured: bool = False
+    is_recommended: bool = False
+    sort_priority: int = 0
+    icon: str | None = None
     current_version: WorkflowVersion | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None

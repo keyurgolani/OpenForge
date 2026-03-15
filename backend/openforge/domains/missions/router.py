@@ -23,6 +23,7 @@ from .schemas import (
     MissionLaunchResponse,
     MissionListResponse,
     MissionResponse,
+    MissionTemplateCloneRequest,
     MissionUpdate,
 )
 from .service import MissionService
@@ -50,6 +51,58 @@ def get_health_computer(db=Depends(get_db)) -> MissionHealthComputer:
     return MissionHealthComputer(db)
 
 
+# ---------- Template / Catalog ----------
+
+
+@router.get("/templates", response_model=MissionListResponse)
+async def list_mission_templates(
+    skip: int = 0,
+    limit: int = 100,
+    is_featured: Optional[bool] = None,
+    tags: list[str] = Query(default=[]),
+    service: MissionService = Depends(get_mission_service),
+):
+    """List curated mission templates available for cloning."""
+    missions, total = await service.list_templates(
+        skip=skip,
+        limit=limit,
+        is_featured=is_featured or None,
+        tags=tags or None,
+    )
+    return {"missions": missions, "total": total}
+
+
+@router.get("/templates/{mission_id}", response_model=MissionResponse)
+async def get_mission_template(
+    mission_id: UUID,
+    service: MissionService = Depends(get_mission_service),
+):
+    """Get a single mission template by ID."""
+    template = await service.get_template(mission_id)
+    if not template:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Mission template not found",
+        )
+    return template
+
+
+@router.post("/templates/{mission_id}/clone", response_model=MissionResponse, status_code=status.HTTP_201_CREATED)
+async def clone_mission_template(
+    mission_id: UUID,
+    body: MissionTemplateCloneRequest,
+    service: MissionService = Depends(get_mission_service),
+):
+    """Clone a mission template into a workspace-local mission."""
+    cloned = await service.clone_template(mission_id, body.model_dump(exclude_unset=True))
+    if not cloned:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Mission template not found or cannot be cloned",
+        )
+    return cloned
+
+
 # ---------- CRUD ----------
 
 
@@ -59,6 +112,10 @@ async def list_missions(
     limit: int = 100,
     workspace_id: Optional[UUID] = Query(default=None),
     status_filter: Optional[str] = Query(default=None, alias="status"),
+    is_system: Optional[bool] = None,
+    is_template: Optional[bool] = None,
+    is_featured: Optional[bool] = None,
+    tags: list[str] = Query(default=[]),
     service: MissionService = Depends(get_mission_service),
 ):
     """List all missions with optional workspace and status filters."""
@@ -67,6 +124,10 @@ async def list_missions(
         limit=limit,
         workspace_id=workspace_id,
         status=status_filter,
+        is_system=is_system,
+        is_template=is_template,
+        is_featured=is_featured,
+        tags=tags or None,
     )
     return {"missions": missions, "total": total}
 

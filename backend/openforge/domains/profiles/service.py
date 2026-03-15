@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from openforge.db.models import (
     AgentProfileModel,
@@ -24,8 +24,42 @@ class ProfileService(CrudDomainService):
 
     model = AgentProfileModel
 
-    async def list_profiles(self, skip: int = 0, limit: int = 100):
-        return await self.list_records(skip=skip, limit=limit)
+    async def list_profiles(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        is_system: bool | None = None,
+        is_template: bool | None = None,
+        is_featured: bool | None = None,
+        tags: list[str] | None = None,
+        status: str | None = None,
+    ):
+        query = select(AgentProfileModel).order_by(
+            AgentProfileModel.sort_priority.desc(),
+            AgentProfileModel.updated_at.desc(),
+        )
+        count_query = select(func.count()).select_from(AgentProfileModel)
+
+        if is_system is not None:
+            query = query.where(AgentProfileModel.is_system == is_system)
+            count_query = count_query.where(AgentProfileModel.is_system == is_system)
+        if is_template is not None:
+            query = query.where(AgentProfileModel.is_template == is_template)
+            count_query = count_query.where(AgentProfileModel.is_template == is_template)
+        if is_featured is not None:
+            query = query.where(AgentProfileModel.is_featured == is_featured)
+            count_query = count_query.where(AgentProfileModel.is_featured == is_featured)
+        if status is not None:
+            query = query.where(AgentProfileModel.status == status)
+            count_query = count_query.where(AgentProfileModel.status == status)
+        if tags:
+            for tag in tags:
+                query = query.where(AgentProfileModel.tags.contains([tag]))
+                count_query = count_query.where(AgentProfileModel.tags.contains([tag]))
+
+        total = await self.db.scalar(count_query) or 0
+        rows = (await self.db.execute(query.offset(skip).limit(limit))).scalars().all()
+        return [self._serialize(row) for row in rows], int(total)
 
     async def get_profile(self, profile_id: UUID):
         return await self.get_record(profile_id)
@@ -42,6 +76,63 @@ class ProfileService(CrudDomainService):
 
     async def delete_profile(self, profile_id: UUID):
         return await self.delete_record(profile_id)
+
+    # ── Template/Catalog operations ──
+
+    async def list_templates(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        tags: list[str] | None = None,
+        is_featured: bool | None = None,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """List profile templates (is_template=True)."""
+        return await self.list_profiles(
+            skip=skip,
+            limit=limit,
+            is_template=True,
+            tags=tags,
+            is_featured=is_featured,
+        )
+
+    async def get_template(self, profile_id: UUID) -> dict[str, Any] | None:
+        """Get a single profile template."""
+        profile = await self.get_profile(profile_id)
+        if profile is None or not profile.get("is_template"):
+            return None
+        return profile
+
+    async def clone_template(self, profile_id: UUID, clone_data: dict[str, Any]) -> dict[str, Any] | None:
+        """Clone a template profile into a user-owned copy."""
+        template = await self.get_template(profile_id)
+        if template is None:
+            return None
+
+        clone_payload = {
+            "name": clone_data.get("name") or template["name"],
+            "slug": clone_data.get("slug") or f"{template['slug']}-clone",
+            "description": template.get("description"),
+            "version": "1.0.0",
+            "role": template.get("role", "assistant"),
+            "system_prompt_ref": template.get("system_prompt_ref"),
+            "model_policy_id": template.get("model_policy_id"),
+            "memory_policy_id": template.get("memory_policy_id"),
+            "safety_policy_id": template.get("safety_policy_id"),
+            "capability_bundle_ids": list(template.get("capability_bundle_ids") or []),
+            "output_contract_id": template.get("output_contract_id"),
+            "is_system": False,
+            "is_template": False,
+            "status": "draft",
+            "icon": template.get("icon"),
+            "tags": list(template.get("tags") or []),
+            "catalog_metadata": {
+                **(template.get("catalog_metadata") or {}),
+                "cloned_from_template": str(profile_id),
+            },
+        }
+        return await self.create_profile(clone_payload)
+
+    # ── Resolution & Validation ──
 
     async def resolve_profile(self, profile_id: UUID) -> ResolvedProfileResponse | None:
         profile = await self.db.get(AgentProfileModel, profile_id)

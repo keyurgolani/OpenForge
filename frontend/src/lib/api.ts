@@ -13,6 +13,7 @@ import type {
     ArtifactVersionCreate,
     ArtifactVersionsResponse,
 } from '@/types/artifacts'
+import type { CatalogListResponse, CatalogQueryParams, CatalogReadinessResponse } from '@/types/catalog'
 import type { Checkpoint, Run, RunCompositeDebug, RunLineage, RunStep, RuntimeEvent } from '@/types/runs'
 import type { WorkflowDefinition, WorkflowVersion } from '@/types/workflows'
 
@@ -512,5 +513,25 @@ export const addArtifactSink = (
     id: string,
     data: Pick<ArtifactSink, 'sink_type' | 'sink_state' | 'destination_ref' | 'sync_status' | 'metadata'>,
 ): Promise<ArtifactSink> => api.post(`/artifacts/${id}/sinks`, data).then(r => r.data)
+
+// Catalog
+export const listCatalog = (params?: CatalogQueryParams): Promise<CatalogListResponse> =>
+    api.get('/catalog', { params }).then(r => r.data)
+export const checkCatalogReadiness = (catalogType: string, itemId: string): Promise<CatalogReadinessResponse> =>
+    api.get(`/catalog/readiness/${catalogType}/${itemId}`).then(r => r.data)
+
+// Profile Templates
+export const listProfileTemplates = (params?: { skip?: number; limit?: number; is_featured?: boolean; tags?: string[] }): Promise<any> =>
+    api.get('/profiles/templates', { params }).then(r => r.data)
+export const getProfileTemplate = (id: string): Promise<any> => api.get(`/profiles/templates/${id}`).then(r => r.data)
+export const cloneProfileTemplate = (id: string, data: { name?: string; slug?: string }): Promise<any> =>
+    api.post(`/profiles/templates/${id}/clone`, data).then(r => r.data)
+
+// Mission Templates
+export const listMissionTemplates = (params?: { skip?: number; limit?: number; is_featured?: boolean; tags?: string[] }): Promise<any> =>
+    api.get('/missions/templates', { params }).then(r => r.data)
+export const getMissionTemplate = (id: string): Promise<any> => api.get(`/missions/templates/${id}`).then(r => r.data)
+export const cloneMissionTemplate = (id: string, data: { workspace_id: string; name?: string; slug?: string }): Promise<any> =>
+    api.post(`/missions/templates/${id}/clone`, data).then(r => r.data)
 
 export default api

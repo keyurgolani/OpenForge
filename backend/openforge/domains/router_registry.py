@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from openforge.core.product_vocabulary import API_PREFIXES, DomainNoun
 
 from .artifacts.router import router as artifacts_router
+from .catalog.router import router as catalog_router
 from .graph.router import router as graph_router
 from .missions.router import router as missions_router
 from .profiles.router import router as profiles_router
@@ -78,6 +79,13 @@ def register_domain_routers(app: FastAPI) -> None:
         graph_router,
         prefix=API_PREFIXES[DomainNoun.GRAPH],
         tags=["graph"],
+    )
+
+    # Phase 12 curated catalog
+    app.include_router(
+        catalog_router,
+        prefix=API_PREFIXES[DomainNoun.CATALOG],
+        tags=["catalog"],
     )
 
     # Phase 7 profile building blocks

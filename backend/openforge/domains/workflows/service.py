@@ -232,6 +232,11 @@ class WorkflowService:
             "is_template": getattr(definition, "is_template", False),
             "template_kind": getattr(definition, "template_kind", None),
             "template_metadata": getattr(definition, "template_metadata", {}) or {},
+            "tags": getattr(definition, "tags", []) or [],
+            "is_featured": getattr(definition, "is_featured", False),
+            "is_recommended": getattr(definition, "is_recommended", False),
+            "sort_priority": getattr(definition, "sort_priority", 0),
+            "icon": getattr(definition, "icon", None),
             "current_version": current_version,
             "created_at": getattr(definition, "created_at", None),
             "updated_at": getattr(definition, "updated_at", None),
@@ -296,6 +301,11 @@ class WorkflowService:
             is_template=workflow_data.get("is_template", False),
             template_kind=workflow_data.get("template_kind"),
             template_metadata=workflow_data.get("template_metadata", {}),
+            tags=workflow_data.get("tags", []),
+            is_featured=workflow_data.get("is_featured", False),
+            is_recommended=workflow_data.get("is_recommended", False),
+            sort_priority=workflow_data.get("sort_priority", 0),
+            icon=workflow_data.get("icon"),
             version=0,
             state_schema={},
             nodes=[],
@@ -324,7 +334,7 @@ class WorkflowService:
         definition = await self.db.get(WorkflowDefinitionModel, workflow_id)
         if definition is None:
             return None
-        for key in ("name", "slug", "description", "status", "is_system", "is_template", "template_kind", "template_metadata"):
+        for key in ("name", "slug", "description", "status", "is_system", "is_template", "template_kind", "template_metadata", "tags", "is_featured", "is_recommended", "sort_priority", "icon"):
             if key in workflow_data and workflow_data[key] is not None:
                 setattr(definition, key, getattr(workflow_data[key], "value", workflow_data[key]))
         await self.db.commit()

@@ -9,7 +9,7 @@ import { useUIStore } from '@/stores/uiStore'
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
 import { getShortcutDisplay } from '@/lib/keyboard'
 import { onQuickKnowledgeOpen, type QuickKnowledgeType } from '@/lib/quick-knowledge'
-import { artifactsRoute, chatRoute, knowledgeRoute, missionsRoute, profilesRoute, runsRoute, searchRoute, workspaceOverviewRoute, workflowsRoute } from '@/lib/routes'
+import { artifactsRoute, catalogRoute, chatRoute, knowledgeRoute, missionsRoute, profilesRoute, runsRoute, searchRoute, workspaceOverviewRoute, workflowsRoute } from '@/lib/routes'
 import CommandPalette from '@/components/shared/CommandPalette'
 import CreateDispatcher from '@/components/knowledge/create/CreateDispatcher'
 import KnowledgeTypeGrid from '@/components/knowledge/KnowledgeTypeGrid'
@@ -226,6 +226,12 @@ export default function AppShell() {
         description: 'Packaged autonomous work that assembles workflows, profiles, and triggers.',
       }
     }
+    if (location.pathname.includes('/catalog')) {
+      return {
+        title: 'Catalog',
+        description: 'Browse and clone pre-built profiles, workflows, and missions.',
+      }
+    }
     if (location.pathname.includes('/artifacts')) {
       return {
         title: 'Artifacts',
@@ -261,6 +267,7 @@ export default function AppShell() {
     missions: missionsRoute(workspaceId),
     runs: runsRoute(workspaceId),
     artifacts: artifactsRoute(workspaceId),
+    catalog: catalogRoute(workspaceId),
     settings: '/settings',
   }), [workspaceId])
 
@@ -275,6 +282,7 @@ export default function AppShell() {
   const isWorkflowsPage = location.pathname.includes('/workflows')
   const isMissionsPage = location.pathname.includes('/missions')
   const isArtifactsPage = location.pathname.includes('/artifacts')
+  const isCatalogPage = location.pathname.includes('/catalog')
   const isPrimarySurface = (
     isWorkspaceHome
     || isKnowledgeBoardPage
@@ -287,6 +295,7 @@ export default function AppShell() {
     || isWorkflowsPage
     || isMissionsPage
     || isArtifactsPage
+    || isCatalogPage
   )
 
   return (

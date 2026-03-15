@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class ProfileRole(str, Enum):
     """Roles that a profile can play."""
-    
+
     ASSISTANT = "assistant"  # General purpose assistant
     SPECIALIST = "specialist"  # Domain-specific expert
     WORKER = "worker"  # Background task worker
@@ -20,7 +20,7 @@ class ProfileRole(str, Enum):
 
 class ProfileStatus(str, Enum):
     """Status of a profile."""
-    
+
     DRAFT = "draft"
     ACTIVE = "active"
     ARCHIVED = "archived"
@@ -30,32 +30,8 @@ class ProfileStatus(str, Enum):
 class AgentProfile(BaseModel):
     """
     Agent Profile - a worker abstraction defining capabilities.
-    
-    An Agent Profile defines the capabilities, prompts, and behaviors of an AI worker.
-    It is NOT a standalone deployable product unit - it is used BY Missions.
-    
-    Attributes:
-        id: Unique identifier
-        name: Display name
-        slug: URL-friendly identifier
-        description: Human-readable description
-        role: The role this profile plays
-        system_prompt_ref: Reference to the system prompt template
-        model_policy_id: Reference to the model usage policy
-        memory_policy_id: Reference to the memory/context policy
-        safety_policy_id: Reference to the safety constraints policy
-        capability_bundle_ids: List of capability bundle references
-        output_contract_id: Reference to the expected output format
-        is_system: Whether this is a system-provided profile
-        is_template: Whether this profile can be used as a template
-        status: Current status
-        icon: Icon identifier for UI
-        created_at: Creation timestamp
-        updated_at: Last update timestamp
-        created_by: User who created this profile
-        updated_by: User who last updated this profile
     """
-    
+
     id: UUID = Field(...)
     name: str = Field(..., min_length=1, max_length=255)
     slug: str = Field(..., min_length=1, max_length=100)
@@ -72,7 +48,13 @@ class AgentProfile(BaseModel):
     is_template: bool = Field(default=False)
     status: ProfileStatus = Field(default=ProfileStatus.DRAFT)
     icon: Optional[str] = Field(default=None, max_length=100)
-    
+    # Phase 12 catalog metadata
+    tags: list[str] = Field(default_factory=list)
+    catalog_metadata: dict[str, Any] = Field(default_factory=dict)
+    is_featured: bool = Field(default=False)
+    is_recommended: bool = Field(default=False)
+    sort_priority: int = Field(default=0)
+
     created_at: Optional[datetime] = Field(default=None)
     updated_at: Optional[datetime] = Field(default=None)
     created_by: Optional[UUID] = Field(default=None)

@@ -26,7 +26,8 @@ export type DomainNoun =
   | 'trigger'
   | 'run'
   | 'artifact'
-  | 'knowledge';
+  | 'knowledge'
+  | 'catalog';
 
 export type DomainStatus =
   | 'draft'
@@ -93,6 +94,7 @@ export const DOMAIN_NOUNS = {
   RUN: 'run' as DomainNoun,
   ARTIFACT: 'artifact' as DomainNoun,
   KNOWLEDGE: 'knowledge' as DomainNoun,
+  CATALOG: 'catalog' as DomainNoun,
 };
 
 export const DOMAIN_STATUSES = {
@@ -158,6 +160,7 @@ export const DOMAIN_LABELS: Record<DomainNoun, string> = {
   run: 'Run',
   artifact: 'Artifact',
   knowledge: 'Knowledge',
+  catalog: 'Catalog',
 };
 
 export const DOMAIN_LABELS_PLURAL: Record<DomainNoun, string> = {
@@ -168,6 +171,7 @@ export const DOMAIN_LABELS_PLURAL: Record<DomainNoun, string> = {
   run: 'Runs',
   artifact: 'Artifacts',
   knowledge: 'Knowledge',
+  catalog: 'Catalog',
 };
 
 export const DOMAIN_DESCRIPTIONS: Record<DomainNoun, string> = {
@@ -178,6 +182,7 @@ export const DOMAIN_DESCRIPTIONS: Record<DomainNoun, string> = {
   run: 'Runs are execution instances of workflows or missions.',
   artifact: 'Artifacts are outputs produced by mission runs.',
   knowledge: 'Knowledge is user-provided context and data for AI processing.',
+  catalog: 'Browse and clone pre-built profiles, workflows, and missions.',
 };
 
 // =============================================================================
@@ -193,6 +198,7 @@ export const NAV_ITEMS = [
   { key: 'missions', label: 'Missions', route: '/missions' },
   { key: 'runs', label: 'Runs', route: '/runs' },
   { key: 'artifacts', label: 'Artifacts', route: '/artifacts' },
+  { key: 'catalog', label: 'Catalog', route: '/catalog' },
   { key: 'settings', label: 'Settings', route: '/settings' },
 ] as const;
 
@@ -210,6 +216,7 @@ export const ROUTE_KEYS = {
   MISSIONS: '/missions',
   RUNS: '/runs',
   ARTIFACTS: '/artifacts',
+  CATALOG: '/catalog',
   SETTINGS: '/settings',
 } as const;
 
@@ -225,6 +232,7 @@ export const ROUTE_SEGMENTS: Record<DomainNoun, string> = {
   run: 'runs',
   artifact: 'artifacts',
   knowledge: 'knowledge',
+  catalog: 'catalog',
 };
 
 export const API_PREFIXES: Record<DomainNoun, string> = {
@@ -235,6 +243,7 @@ export const API_PREFIXES: Record<DomainNoun, string> = {
   run: '/api/v1/runs',
   artifact: '/api/v1/artifacts',
   knowledge: '/api/v1/knowledge',
+  catalog: '/api/v1/catalog',
 };
 
 // =============================================================================
@@ -276,6 +285,11 @@ export const EMPTY_STATE_COPY: Record<DomainNoun, { title: string; description: 
     title: 'No knowledge yet',
     description: 'Add documents, notes, and other context for AI processing.',
     cta: 'Add Knowledge',
+  },
+  catalog: {
+    title: 'No catalog items yet',
+    description: 'Pre-built templates will appear here once published.',
+    cta: 'Browse Catalog',
   },
 };
 

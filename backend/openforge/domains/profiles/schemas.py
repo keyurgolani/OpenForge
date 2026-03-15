@@ -27,6 +27,11 @@ class ProfileCreate(BaseModel):
     is_template: bool = False
     status: ProfileStatus = Field(default=ProfileStatus.DRAFT)
     icon: Optional[str] = Field(default=None, max_length=100)
+    tags: list[str] = Field(default_factory=list)
+    catalog_metadata: dict[str, Any] = Field(default_factory=dict)
+    is_featured: bool = False
+    is_recommended: bool = False
+    sort_priority: int = 0
 
 
 class ProfileUpdate(BaseModel):
@@ -45,6 +50,11 @@ class ProfileUpdate(BaseModel):
     is_template: Optional[bool] = None
     status: Optional[ProfileStatus] = None
     icon: Optional[str] = Field(default=None, max_length=100)
+    tags: Optional[list[str]] = None
+    catalog_metadata: Optional[dict[str, Any]] = None
+    is_featured: Optional[bool] = None
+    is_recommended: Optional[bool] = None
+    sort_priority: Optional[int] = None
 
 
 class ProfileResponse(BaseModel):
@@ -64,6 +74,11 @@ class ProfileResponse(BaseModel):
     is_template: bool
     status: ProfileStatus
     icon: Optional[str]
+    tags: list[str] = Field(default_factory=list)
+    catalog_metadata: dict[str, Any] = Field(default_factory=dict)
+    is_featured: bool = False
+    is_recommended: bool = False
+    sort_priority: int = 0
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
     created_by: Optional[UUID]
@@ -75,6 +90,12 @@ class ProfileResponse(BaseModel):
 class ProfileListResponse(BaseModel):
     profiles: list[ProfileResponse]
     total: int
+
+
+class ProfileTemplateCloneRequest(BaseModel):
+    """Request body for cloning a profile template."""
+    name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    slug: Optional[str] = Field(default=None, min_length=1, max_length=100)
 
 
 class ResolvedProfileResponse(BaseModel):
