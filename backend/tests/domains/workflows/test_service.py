@@ -104,7 +104,7 @@ def _review_publish_version_payload() -> dict:
 
 
 @pytest.mark.asyncio
-async def test_create_workflow_creates_initial_version_nodes_edges_and_current_projection() -> None:
+async def test_create_workflow_creates_initial_version_nodes_edges_without_legacy_definition_projection() -> None:
     workspace_id = uuid4()
     db = FakeAsyncSession()
     service = WorkflowService(db)
@@ -127,8 +127,8 @@ async def test_create_workflow_creates_initial_version_nodes_edges_and_current_p
     assert workflow["current_version"]["entry_node"]["node_key"] == "review.prepare"
     assert len(workflow["current_version"]["nodes"]) == 4
     assert len(workflow["current_version"]["edges"]) == 3
-    assert workflow["nodes"][0]["node_key"] == "review.prepare"
-    assert workflow["edges"][0]["label"] == "Prepared"
+    for legacy_field in ("version", "entry_node", "state_schema", "nodes", "edges", "default_input_schema", "default_output_schema"):
+        assert legacy_field not in workflow
 
     created_versions = [obj for obj in db.added if isinstance(obj, WorkflowVersionModel)]
     created_nodes = [obj for obj in db.added if isinstance(obj, WorkflowNodeModel)]

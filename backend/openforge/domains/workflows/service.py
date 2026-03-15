@@ -233,13 +233,6 @@ class WorkflowService:
             "template_kind": getattr(definition, "template_kind", None),
             "template_metadata": getattr(definition, "template_metadata", {}) or {},
             "current_version": current_version,
-            "version": definition.version,
-            "entry_node": definition.entry_node,
-            "state_schema": definition.state_schema or {},
-            "nodes": definition.nodes or [],
-            "edges": definition.edges or [],
-            "default_input_schema": definition.default_input_schema or {},
-            "default_output_schema": definition.default_output_schema or {},
             "created_at": getattr(definition, "created_at", None),
             "updated_at": getattr(definition, "updated_at", None),
             "created_by": getattr(definition, "created_by", None),
@@ -325,8 +318,6 @@ class WorkflowService:
         await self.db.refresh(definition)
         response = await self._build_workflow_response(definition)
         response["current_version"] = version_data
-        response["nodes"] = version_data["nodes"]
-        response["edges"] = version_data["edges"]
         return response
 
     async def update_workflow(self, workflow_id: UUID, workflow_data: dict[str, Any]) -> dict[str, Any] | None:
@@ -508,9 +499,6 @@ class WorkflowService:
                 return None
             definition["current_version"] = version
             definition["current_version_id"] = version["id"]
-            definition["version"] = version["version_number"]
-            definition["nodes"] = version["nodes"]
-            definition["edges"] = version["edges"]
         return definition
 
     async def list_templates(

@@ -77,7 +77,7 @@ interface Conversation {
     title: string | null
     title_locked?: boolean
     is_archived?: boolean
-    is_subagent?: boolean
+    is_delegated?: boolean
     archived_at?: string | null
     message_count: number
     last_message_at: string | null
@@ -121,7 +121,7 @@ export default function WorkspaceAgentPage() {
     const composerShellRef = useRef<HTMLDivElement>(null)
     const [composerHeight, setComposerHeight] = useState(188)
     const [messagesViewportHeight, setMessagesViewportHeight] = useState(0)
-    const [activeChatRailSection, setActiveChatRailSection] = useState<'conversations' | 'subagent' | 'trash' | null>('conversations')
+    const [activeChatRailSection, setActiveChatRailSection] = useState<'conversations' | 'delegated' | 'trash' | null>('conversations')
     const shouldRestoreTextareaFocusRef = useRef(false)
     const suppressAutoSelectRef = useRef(false)
     const [stickToBottom, setStickToBottom] = useState(true)
@@ -167,9 +167,9 @@ export default function WorkspaceAgentPage() {
         queryFn: () => listConversations(workspaceId, { category: 'chats' }),
         enabled: !!workspaceId,
     })
-    const { data: subagentConversationsData = [] } = useQuery({
-        queryKey: ['conversations', workspaceId, 'subagent'],
-        queryFn: () => listConversations(workspaceId, { category: 'subagent' }),
+    const { data: delegatedConversationsData = [] } = useQuery({
+        queryKey: ['conversations', workspaceId, 'delegated'],
+        queryFn: () => listConversations(workspaceId, { category: 'delegated' }),
         enabled: !!workspaceId,
     })
     const { data: trashedConversationsData = [] } = useQuery({
@@ -178,8 +178,8 @@ export default function WorkspaceAgentPage() {
         enabled: !!workspaceId,
     })
     const conversationsWithArchived = useMemo(
-        () => [...(conversations as Conversation[]), ...(subagentConversationsData as Conversation[]), ...(trashedConversationsData as Conversation[])],
-        [conversations, subagentConversationsData, trashedConversationsData]
+        () => [...(conversations as Conversation[]), ...(delegatedConversationsData as Conversation[]), ...(trashedConversationsData as Conversation[])],
+        [conversations, delegatedConversationsData, trashedConversationsData]
     )
 
     const { data: conversationData } = useQuery({
@@ -214,7 +214,7 @@ export default function WorkspaceAgentPage() {
         [conversationData],
     )
     const activeConversations = conversations as Conversation[]
-    const subagentConversations = subagentConversationsData as Conversation[]
+    const delegatedConversations = delegatedConversationsData as Conversation[]
     const trashedConversations = trashedConversationsData as Conversation[]
     const [resolvedKnowledgeTitles, setResolvedKnowledgeTitles] = useState<Map<string, { title: string; knowledgeType: string; workspaceId?: string; workspaceName?: string }>>(new Map())
     const fetchingKnowledgeIds = useRef<Set<string>>(new Set())
@@ -482,8 +482,8 @@ export default function WorkspaceAgentPage() {
             .reduce((sum, entry) => sum + (entry.content?.length ?? 0), 0)
     }, [streamingTimeline])
 
-    // Track nested timeline content length for scroll updates during subagent execution
-    const subagentLiveContentLength = useMemo(() => {
+    // Track nested timeline content length for scroll updates during delegated execution
+    const delegatedLiveContentLength = useMemo(() => {
         return streamingTimeline.reduce((sum, entry) => {
             if (entry.type === 'tool_call' && entry.nested_timeline) {
                 return sum + entry.nested_timeline.length
@@ -497,7 +497,7 @@ export default function WorkspaceAgentPage() {
         const container = messagesContainerRef.current
         if (!container) return
         container.scrollTo({ top: container.scrollHeight, behavior: isStreaming ? 'auto' : 'smooth' })
-    }, [messages.length, streamingContent, streamingTimeline.length, subagentLiveContentLength, isStreaming, stickToBottom])
+    }, [messages.length, streamingContent, streamingTimeline.length, delegatedLiveContentLength, isStreaming, stickToBottom])
 
     useEffect(() => {
         if (!stickToBottomRef.current) return
@@ -692,7 +692,7 @@ export default function WorkspaceAgentPage() {
         stickToBottom,
         streamingTimeline.length,
         streamingThinkingContentLength,
-        subagentLiveContentLength,
+        delegatedLiveContentLength,
         streamingContent,
         ensureExpandedBlockVisible,
     ])
@@ -782,7 +782,7 @@ export default function WorkspaceAgentPage() {
         suppressAutoSelectRef.current = false
         setActiveChatRailSection('conversations')
         qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
-        qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'subagent'] }); qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'trash'] })
+        qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'delegated'] }); qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'trash'] })
         scheduleComposerFocus(40)
         setActiveCid(conv.id)
         navigate(chatRoute(workspaceId, conv.id))
@@ -791,7 +791,7 @@ export default function WorkspaceAgentPage() {
     const handleDeleteConv = async (cid: string) => {
         await deleteConversation(workspaceId, cid)
         qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
-        qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'subagent'] }); qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'trash'] })
+        qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'delegated'] }); qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'trash'] })
         if (activeCid === cid) {
             suppressAutoSelectRef.current = true
             setActiveCid(null)
@@ -803,7 +803,7 @@ export default function WorkspaceAgentPage() {
         try {
             await updateConversation(workspaceId, cid, { is_archived: false })
             qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
-            qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'subagent'] }); qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'trash'] })
+            qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'delegated'] }); qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'trash'] })
             qc.invalidateQueries({ queryKey: ['conversation', cid] })
             if (activeCid === cid) {
                 setActiveChatRailSection('conversations')
@@ -818,7 +818,7 @@ export default function WorkspaceAgentPage() {
         try {
             await permanentlyDeleteConversation(workspaceId, cid)
             qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
-            qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'subagent'] }); qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'trash'] })
+            qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'delegated'] }); qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'trash'] })
             qc.removeQueries({ queryKey: ['conversation', cid], exact: true })
             if (activeCid === cid) {
                 suppressAutoSelectRef.current = true
@@ -833,15 +833,15 @@ export default function WorkspaceAgentPage() {
 
     const invalidateAllConvQueries = () => {
         qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
-        qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'subagent'] })
+        qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'delegated'] })
         qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'trash'] })
     }
 
-    const handleBulkTrash = async (category: 'chats' | 'subagent') => {
+    const handleBulkTrash = async (category: 'chats' | 'delegated') => {
         await bulkTrashConversations(workspaceId, category)
         invalidateAllConvQueries()
         if (activeCid) {
-            const affected = category === 'subagent' ? subagentConversations : activeConversations
+            const affected = category === 'delegated' ? delegatedConversations : activeConversations
             if (affected.some(c => c.id === activeCid)) {
                 suppressAutoSelectRef.current = true
                 setActiveCid(null)
@@ -962,7 +962,7 @@ export default function WorkspaceAgentPage() {
             suppressAutoSelectRef.current = false
             setActiveChatRailSection('conversations')
             qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
-            qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'subagent'] }); qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'trash'] })
+            qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'delegated'] }); qc.invalidateQueries({ queryKey: ['conversations', workspaceId, 'trash'] })
             setActiveCid(conv.id)
             navigate(chatRoute(workspaceId, conv.id))
         }
@@ -1148,11 +1148,11 @@ export default function WorkspaceAgentPage() {
         return Math.max(180, Math.floor(messagesViewportHeight * 0.5))
     }, [messagesViewportHeight])
     const isConversationsSectionExpanded = activeChatRailSection === 'conversations'
-    const isSubagentSectionExpanded = activeChatRailSection === 'subagent'
+    const isDelegatedSectionExpanded = activeChatRailSection === 'delegated'
     const isTrashSectionExpanded = activeChatRailSection === 'trash'
     const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
     const confirmBulkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-    const toggleChatRailSection = (section: 'conversations' | 'subagent' | 'trash') => {
+    const toggleChatRailSection = (section: 'conversations' | 'delegated' | 'trash') => {
         setActiveChatRailSection(prev => (prev === section ? null : section))
     }
     const handleStreamingBubbleScroll = (event: React.UIEvent<HTMLDivElement>) => {
@@ -1573,11 +1573,11 @@ export default function WorkspaceAgentPage() {
                                         <MessageSquare className="w-4 h-4 text-accent" />
                                         <h3 className="font-semibold text-sm tracking-tight">Chat Threads</h3>
                                     </div>
-                                    <p className="text-xs text-muted-foreground/90">Chats, subagent threads, and trash.</p>
+                                    <p className="text-xs text-muted-foreground/90">Chats, delegated threads, and trash.</p>
                                 </div>
                                 <div className="flex items-center gap-1.5">
                                     <div className="flex-shrink-0 rounded-full border border-border/70 bg-muted/60 px-2.5 py-1 text-[11px] font-medium text-foreground/80">
-                                        {activeConversations.length + subagentConversations.length + trashedConversations.length}
+                                        {activeConversations.length + delegatedConversations.length + trashedConversations.length}
                                     </div>
                                     <button
                                         type="button"
@@ -1659,55 +1659,55 @@ export default function WorkspaceAgentPage() {
                                 )}
                             </section>
 
-                            {/* ── Subagent section ── */}
+                            {/* ── Delegated section ── */}
                             <section
-                                className={`rounded-xl border px-2.5 py-2 transition-colors ${isSubagentSectionExpanded ? 'flex min-h-0 flex-1 flex-col border-accent/35 bg-card/50' : 'flex-shrink-0 border-border/55 bg-card/22'}`}
+                                className={`rounded-xl border px-2.5 py-2 transition-colors ${isDelegatedSectionExpanded ? 'flex min-h-0 flex-1 flex-col border-accent/35 bg-card/50' : 'flex-shrink-0 border-border/55 bg-card/22'}`}
                             >
                                 <button
                                     type="button"
-                                    onClick={() => toggleChatRailSection('subagent')}
+                                    onClick={() => toggleChatRailSection('delegated')}
                                     className="w-full flex items-center justify-between gap-3 py-0.5 text-left"
-                                    aria-label={`${isSubagentSectionExpanded ? 'Collapse' : 'Expand'} Subagent`}
+                                    aria-label={`${isDelegatedSectionExpanded ? 'Collapse' : 'Expand'} Delegated`}
                                 >
                                     <div className="flex items-center gap-2.5 min-w-0">
-                                        <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isSubagentSectionExpanded ? 'rotate-90' : ''}`} />
+                                        <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isDelegatedSectionExpanded ? 'rotate-90' : ''}`} />
                                         <div className="w-6 h-6 rounded-md flex items-center justify-center text-violet-400 bg-violet-400/10 border border-violet-400/25">
                                             <Bot className="w-3.5 h-3.5" />
                                         </div>
                                         <div className="min-w-0">
-                                            <div className="text-sm font-semibold text-foreground truncate">Subagent</div>
+                                            <div className="text-sm font-semibold text-foreground truncate">Delegated</div>
                                             <div className="text-xs text-muted-foreground/90 leading-5">
-                                                {subagentConversations.length} thread{subagentConversations.length === 1 ? '' : 's'}
+                                                {delegatedConversations.length} thread{delegatedConversations.length === 1 ? '' : 's'}
                                             </div>
                                         </div>
                                     </div>
                                     <span className="text-[11px] font-semibold text-foreground/70 rounded-full border border-border/60 bg-muted/60 px-2 py-0.5">
-                                        {subagentConversations.length}
+                                        {delegatedConversations.length}
                                     </span>
                                 </button>
 
-                                {isSubagentSectionExpanded && (
+                                {isDelegatedSectionExpanded && (
                                     <div className="mt-2 min-h-0 flex-1 flex flex-col">
-                                        {subagentConversations.length > 0 && (
+                                        {delegatedConversations.length > 0 && (
                                             <div className="flex items-center justify-end mb-2">
                                                 <button
                                                     type="button"
-                                                    onClick={() => void handleBulkTrash('subagent')}
+                                                    onClick={() => void handleBulkTrash('delegated')}
                                                     className="flex items-center gap-1 px-2 py-1 text-[11px] text-muted-foreground hover:text-red-400 rounded-md border border-border/50 hover:border-red-500/30 transition-colors"
-                                                    title="Trash all subagent threads"
+                                                    title="Trash all delegated threads"
                                                 >
                                                     <Trash className="w-3 h-3" /> Trash All
                                                 </button>
                                             </div>
                                         )}
                                         <div className="min-h-0 flex-1 overflow-y-auto space-y-1.5 pr-1">
-                                            {subagentConversations.length === 0 ? (
-                                                <p className="text-xs text-muted-foreground text-center py-8 px-4">No subagent threads.</p>
+                                            {delegatedConversations.length === 0 ? (
+                                                <p className="text-xs text-muted-foreground text-center py-8 px-4">No delegated threads.</p>
                                             ) : (
-                                                subagentConversations.map(c => (
+                                                delegatedConversations.map(c => (
                                                     <ConversationRow
                                                         key={c.id}
-                                                        conv={{ ...c, title: (c.title ?? '').replace(/^\[subagent\]\s*/i, '') || 'Subagent Task' }}
+                                                        conv={{ ...c, title: (c.title ?? '').replace(/^\[delegated\]\s*/i, '') || 'Delegated Task' }}
                                                         active={activeCid === c.id}
                                                         workspaceId={workspaceId}
                                                         onSelect={() => handleSelectConversation(c.id)}

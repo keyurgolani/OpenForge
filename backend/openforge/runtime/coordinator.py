@@ -49,6 +49,11 @@ class RuntimeCoordinator:
         checkpoint_store: CheckpointStore | None = None,
         event_publisher: EventPublisher | None = None,
         executor_registry=None,
+        profile_registry=None,
+        llm_service=None,
+        llm_gateway=None,
+        policy_engine=None,
+        rate_limiter=None,
     ):
         self.db = db
         self.workflow_service = workflow_service
@@ -59,6 +64,11 @@ class RuntimeCoordinator:
         self.executor_registry = executor_registry or build_default_registry(
             artifact_service=artifact_service,
             approval_service=approval_service,
+            profile_registry=profile_registry,
+            llm_service=llm_service,
+            llm_gateway=llm_gateway,
+            policy_engine=policy_engine,
+            rate_limiter=rate_limiter,
         )
 
     async def execute_workflow(
@@ -185,7 +195,8 @@ class RuntimeCoordinator:
                 return
 
             node = graph.nodes[current_node_id]
-            transition_run(run, "running")
+            # Re-assert running on each step; skip validation when already running
+            transition_run(run, "running", validate=(run.status != "running"))
             run.current_node_id = current_node_id
 
             step = RunStepModel(

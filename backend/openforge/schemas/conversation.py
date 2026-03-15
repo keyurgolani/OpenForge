@@ -44,8 +44,8 @@ class ConversationResponse(BaseModel):
     is_pinned: bool = False
     is_archived: bool = False
     archived_at: Optional[datetime] = None
-    is_subagent: bool = False
-    subagent_agent_id: Optional[str] = None
+    is_delegated: bool = False
+    delegated_profile_id: Optional[str] = None
     message_count: int = 0
     last_message_at: Optional[datetime] = None
     last_message_preview: Optional[str] = None

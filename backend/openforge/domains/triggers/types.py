@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from openforge.domains.common.enums import TriggerType
 
@@ -61,10 +61,9 @@ class TriggerDefinition(BaseModel):
     is_enabled: bool = Field(default=True)
     status: TriggerStatus = Field(default=TriggerStatus.DRAFT)
 
+    model_config = ConfigDict(from_attributes=True)
+
     created_at: Optional[str] = Field(default=None)
     updated_at: Optional[str] = Field(default=None)
     created_by: Optional[UUID] = Field(default=None)
     updated_by: Optional[UUID] = Field(default=None)
-
-    class Config:
-        from_attributes = True

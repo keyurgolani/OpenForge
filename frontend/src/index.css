@@ -869,8 +869,8 @@
     --card-bg: hsla(38, 92%, 50%, 0.06);
   }
 
-  /* subagent  — purple */
-  .chat-workflow-step--subagent {
+  /* delegated  — purple */
+  .chat-workflow-step--delegated {
     --toggle-border: hsla(271, 91%, 65%, 0.35);
     --toggle-border-hover: hsla(271, 91%, 65%, 0.55);
     --toggle-bg: hsla(271, 91%, 65%, 0.12);

@@ -87,7 +87,7 @@ def _format_timeline_entry_txt(entry: dict, indent: str = "  ") -> list[str]:
             if note:
                 lines.append(f"{indent}    Guidance: {note}")
 
-        # Nested subagent timeline
+        # Nested delegated timeline
         nested = entry.get("nested_timeline") or []
         for sub_entry in nested:
             lines.extend(_format_timeline_entry_txt(sub_entry, indent + "    "))
@@ -193,10 +193,10 @@ def _format_timeline_entry_md(entry: dict, depth: int = 0) -> list[str]:
                 lines.append(f"{prefix}> *Guidance:* {note}")
             lines.append("")
 
-        # Nested subagent timeline
+        # Nested delegated timeline
         nested = entry.get("nested_timeline") or []
         if nested:
-            lines.append(f"{prefix}> *Subagent timeline:*")
+            lines.append(f"{prefix}> *Delegated timeline:*")
             lines.append("")
             for sub_entry in nested:
                 lines.extend(_format_timeline_entry_md(sub_entry, depth + 1))
@@ -208,7 +208,7 @@ def _format_timeline_entry_md(entry: dict, depth: int = 0) -> list[str]:
 async def list_conversations(
     workspace_id: UUID,
     include_archived: bool = False,
-    category: str = Query("chats", regex="^(chats|subagent|trash)$"),
+    category: str = Query("chats", pattern="^(chats|delegated|trash)$"),
     db: AsyncSession = Depends(get_db),
 ):
     return await conversation_service.list_conversations(
@@ -228,7 +228,7 @@ async def create_conversation(
 @router.post("/{workspace_id}/conversations/bulk/trash")
 async def bulk_trash_conversations(
     workspace_id: UUID,
-    category: str = Query("chats", regex="^(chats|subagent)$"),
+    category: str = Query("chats", pattern="^(chats|delegated)$"),
     db: AsyncSession = Depends(get_db),
 ):
     count = await conversation_service.trash_all_conversations(db, workspace_id, category)
@@ -312,7 +312,7 @@ async def permanently_delete_conversation(
 async def export_conversation(
     workspace_id: UUID,
     conversation_id: UUID,
-    format: str = Query("json", regex="^(json|markdown|txt)$"),
+    format: str = Query("json", pattern="^(json|markdown|txt)$"),
     include_archived: bool = Query(False),
     db: AsyncSession = Depends(get_db),
 ):

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi import FastAPI
@@ -166,6 +167,8 @@ def test_workflow_templates_endpoint_returns_phase10_template_shape() -> None:
     assert payload["total"] == 1
     assert payload["workflows"][0]["template_kind"] == "composite_pattern"
     assert payload["workflows"][0]["template_metadata"]["pattern"] == "map_reduce_research"
+    for legacy_field in ("version", "entry_node", "state_schema", "nodes", "edges", "default_input_schema", "default_output_schema"):
+        assert legacy_field not in payload["workflows"][0]
 
 
 def test_clone_template_endpoint_returns_workspace_workflow() -> None:
@@ -183,6 +186,8 @@ def test_clone_template_endpoint_returns_workspace_workflow() -> None:
     assert payload["workspace_id"] == workspace_id
     assert payload["is_template"] is False
     assert payload["name"] == "Research clone"
+    for legacy_field in ("version", "entry_node", "state_schema", "nodes", "edges", "default_input_schema", "default_output_schema"):
+        assert legacy_field not in payload
 
 
 def test_run_composite_debug_endpoint_returns_branch_and_merge_info() -> None:
@@ -195,3 +200,10 @@ def test_run_composite_debug_endpoint_returns_branch_and_merge_info() -> None:
     payload = response.json()
     assert payload["branch_groups"][0]["join_group_id"] == "research-branches"
     assert payload["merge_outcomes"][0]["strategy"] == "concat_field"
+
+
+def test_legacy_runtime_delegation_route_is_not_publicly_registered() -> None:
+    router_source = Path(__file__).resolve().parents[2] / "openforge" / "api" / "router.py"
+    source_text = router_source.read_text(encoding="utf-8")
+
+    assert "include_router(runtime_api.router" not in source_text

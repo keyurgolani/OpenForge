@@ -137,22 +137,22 @@ export default function WorkflowsPage() {
               <div className="mt-4 grid gap-3 text-xs text-muted-foreground/85 sm:grid-cols-3">
                 <div className="rounded-xl border border-border/60 bg-background/35 px-3 py-2">
                   <p className="uppercase tracking-[0.12em] text-muted-foreground/70">Version</p>
-                  <p className="mt-1 text-sm font-medium text-foreground">{workflow.version}</p>
+                  <p className="mt-1 text-sm font-medium text-foreground">{workflow.current_version?.version_number ?? 'Not versioned'}</p>
                 </div>
                 <div className="rounded-xl border border-border/60 bg-background/35 px-3 py-2">
                   <p className="uppercase tracking-[0.12em] text-muted-foreground/70">Nodes</p>
-                  <p className="mt-1 text-sm font-medium text-foreground">{workflow.current_version?.nodes.length ?? workflow.nodes?.length ?? 0}</p>
+                  <p className="mt-1 text-sm font-medium text-foreground">{workflow.current_version?.nodes.length ?? 0}</p>
                 </div>
                 <div className="rounded-xl border border-border/60 bg-background/35 px-3 py-2">
                   <p className="uppercase tracking-[0.12em] text-muted-foreground/70">Edges</p>
-                  <p className="mt-1 text-sm font-medium text-foreground">{workflow.current_version?.edges.length ?? workflow.edges?.length ?? 0}</p>
+                  <p className="mt-1 text-sm font-medium text-foreground">{workflow.current_version?.edges.length ?? 0}</p>
                 </div>
               </div>
               <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/35 px-3 py-3 text-sm">
                 <div className="min-w-0">
                   <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Entry node</p>
                   <p className="mt-1 truncate font-medium text-foreground">
-                    {workflow.current_version?.entry_node?.node_key ?? workflow.entry_node ?? 'No entry node'}
+                    {workflow.current_version?.entry_node?.node_key ?? 'No entry node'}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground/80">
                     Updated {formatRelativeTime(workflow.updated_at)}

@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from openforge.domains.common.enums import ExecutionMode
 
@@ -61,10 +61,9 @@ class MissionDefinition(BaseModel):
     output_artifact_types: list[str] = Field(default_factory=list)
     status: MissionStatus = Field(default=MissionStatus.DRAFT)
 
+    model_config = ConfigDict(from_attributes=True)
+
     created_at: Optional[str] = Field(default=None)
     updated_at: Optional[str] = Field(default=None)
     created_by: Optional[UUID] = Field(default=None)
     updated_by: Optional[UUID] = Field(default=None)
-
-    class Config:
-        from_attributes = True

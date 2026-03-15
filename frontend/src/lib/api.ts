@@ -142,7 +142,7 @@ export const visualSearch = (wid: string, file: File, limit?: number): Promise<a
 // ── Conversations ──
 export const listConversations = (
     wid: string,
-    params?: { include_archived?: boolean; category?: 'chats' | 'subagent' | 'trash' },
+    params?: { include_archived?: boolean; category?: 'chats' | 'delegated' | 'trash' },
 ): Promise<any> => api.get(`/workspaces/${wid}/conversations`, { params }).then(r => r.data)
 export const createConversation = (wid: string, data?: object): Promise<any> =>
     api.post(`/workspaces/${wid}/conversations`, data ?? {}).then(r => r.data)
@@ -154,7 +154,7 @@ export const deleteConversation = (wid: string, cid: string) =>
     api.delete(`/workspaces/${wid}/conversations/${cid}`)
 export const permanentlyDeleteConversation = (wid: string, cid: string) =>
     api.delete(`/workspaces/${wid}/conversations/${cid}/permanent`)
-export const bulkTrashConversations = (wid: string, category: 'chats' | 'subagent' = 'chats') =>
+export const bulkTrashConversations = (wid: string, category: 'chats' | 'delegated' = 'chats') =>
     api.post(`/workspaces/${wid}/conversations/bulk/trash`, null, { params: { category } }).then(r => r.data)
 export const bulkRestoreConversations = (wid: string) =>
     api.post(`/workspaces/${wid}/conversations/bulk/restore`).then(r => r.data)

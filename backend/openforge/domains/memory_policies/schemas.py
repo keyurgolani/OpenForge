@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from .types import MemoryPolicy, HistoryStrategy
 
 
@@ -35,6 +35,9 @@ class MemoryPolicyUpdate(BaseModel):
 
 class MemoryPolicyResponse(BaseModel):
     """Schema for memory policy API responses."""
+
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     name: str
     slug: str
@@ -50,9 +53,6 @@ class MemoryPolicyResponse(BaseModel):
     updated_at: Optional[datetime]
     created_by: Optional[UUID]
     updated_by: Optional[UUID]
-
-    class Config:
-        from_attributes = True
 
 
 class MemoryPolicyListResponse(BaseModel):

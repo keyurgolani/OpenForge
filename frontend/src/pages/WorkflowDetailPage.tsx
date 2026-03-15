@@ -126,8 +126,8 @@ export default function WorkflowDetailPage() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {[
           { label: 'Workflow status', value: <StatusBadge status={workflow.status} />, icon: <Waypoints className="h-4 w-4" /> },
-          { label: 'Current version', value: <span className="text-foreground">v{workflow.current_version?.version_number ?? workflow.version}</span>, icon: <GitBranch className="h-4 w-4" /> },
-          { label: 'Entry node', value: <span className="text-foreground">{workflow.current_version?.entry_node?.node_key ?? workflow.entry_node ?? 'None'}</span>, icon: <PlayCircle className="h-4 w-4" /> },
+          { label: 'Current version', value: <span className="text-foreground">{workflow.current_version?.version_number ? `v${workflow.current_version.version_number}` : 'No active version'}</span>, icon: <GitBranch className="h-4 w-4" /> },
+          { label: 'Entry node', value: <span className="text-foreground">{workflow.current_version?.entry_node?.node_key ?? 'None'}</span>, icon: <PlayCircle className="h-4 w-4" /> },
           { label: 'Topology', value: <span className="text-foreground">{activeVersion?.nodes.length ?? 0} nodes / {activeVersion?.edges.length ?? 0} edges</span>, icon: <Route className="h-4 w-4" /> },
           { label: 'Composite nodes', value: <span className="text-foreground">{compositeNodes.length}</span>, icon: <Shapes className="h-4 w-4" /> },
         ].map((item) => (

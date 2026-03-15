@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from .types import ModelPolicy
 
 
@@ -39,6 +39,9 @@ class ModelPolicyUpdate(BaseModel):
 
 class ModelPolicyResponse(BaseModel):
     """Schema for model policy API responses."""
+
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     name: str
     slug: str
@@ -56,9 +59,6 @@ class ModelPolicyResponse(BaseModel):
     updated_at: Optional[datetime]
     created_by: Optional[UUID]
     updated_by: Optional[UUID]
-
-    class Config:
-        from_attributes = True
 
 
 class ModelPolicyListResponse(BaseModel):

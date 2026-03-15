@@ -33,9 +33,21 @@ class NodeExecutorRegistry:
         return executor
 
 
-def build_default_registry(*, artifact_service, approval_service) -> NodeExecutorRegistry:
+def build_default_registry(
+    *,
+    artifact_service,
+    approval_service,
+    profile_registry=None,
+    llm_service=None,
+    llm_gateway=None,
+    policy_engine=None,
+    rate_limiter=None,
+) -> NodeExecutorRegistry:
     registry = NodeExecutorRegistry()
-    registry.register("tool", ToolNodeExecutor())
+    registry.register(
+        "tool",
+        ToolNodeExecutor(policy_engine=policy_engine, rate_limiter=rate_limiter),
+    )
     registry.register("router", RouterNodeExecutor())
     registry.register("approval", ApprovalNodeExecutor(approval_service))
     registry.register("artifact", ArtifactNodeExecutor(artifact_service))
@@ -43,8 +55,19 @@ def build_default_registry(*, artifact_service, approval_service) -> NodeExecuto
     registry.register("handoff", HandoffNodeExecutor())
     registry.register("fanout", FanoutNodeExecutor())
     registry.register("subworkflow", SubworkflowNodeExecutor())
-    registry.register("llm", LLMNodeExecutor())
-    registry.register("transform", ToolNodeExecutor())
+    registry.register(
+        "llm",
+        LLMNodeExecutor(
+            profile_registry=profile_registry,
+            llm_service=llm_service,
+            llm_gateway=llm_gateway,
+            policy_engine=policy_engine,
+        ),
+    )
+    registry.register(
+        "transform",
+        ToolNodeExecutor(policy_engine=policy_engine, rate_limiter=rate_limiter),
+    )
     registry.register("join", JoinNodeExecutor())
     registry.register("reduce", ReduceNodeExecutor())
     return registry

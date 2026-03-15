@@ -12,7 +12,7 @@ from openforge.schemas.conversation import (
 )
 from openforge.services.config_service import config_service
 from openforge.services.attachment_pipeline import resolve_attachment_pipeline, get_extractor
-from openforge.utils.chat_title import (
+from openforge.common.text import (
     build_running_title_summary,
     derive_chat_title,
     has_chat_topic_shift,
@@ -105,8 +105,8 @@ def _conv_to_response(conv: Conversation, last_preview: str | None = None) -> Co
         is_pinned=conv.is_pinned,
         is_archived=conv.is_archived,
         archived_at=conv.archived_at,
-        is_subagent=conv.is_subagent,
-        subagent_agent_id=conv.subagent_agent_id,
+        is_delegated=conv.is_subagent,
+        delegated_profile_id=conv.subagent_agent_id,
         message_count=conv.message_count,
         last_message_at=conv.last_message_at,
         last_message_preview=last_preview,
@@ -191,7 +191,7 @@ class ConversationService:
     ) -> list[ConversationResponse]:
         await self.purge_expired_archived_conversations(db, workspace_id=workspace_id)
         query = select(Conversation).where(Conversation.workspace_id == workspace_id)
-        if category == "subagent":
+        if category == "delegated":
             query = query.where(
                 Conversation.is_subagent == True,  # noqa: E712
                 Conversation.is_archived == False,  # noqa: E712
@@ -205,7 +205,7 @@ class ConversationService:
         elif include_archived:
             pass  # return everything
         else:
-            # Default "chats": active non-subagent conversations
+            # Default "chats": active non-delegated conversations
             query = query.where(Conversation.is_subagent == False, Conversation.is_archived == False)  # noqa: E712
         query = query.order_by(Conversation.last_message_at.desc().nullslast(), Conversation.created_at.desc())
         result = await db.execute(query)
@@ -317,8 +317,8 @@ class ConversationService:
         # Remove chat embeddings from Qdrant so deleted conversations no
         # longer surface as RAG context in future chats.
         try:
+            from openforge.common.config import get_settings
             from openforge.db.qdrant_client import get_qdrant
-            from openforge.config import get_settings
             from qdrant_client import models as qdrant_models
             client = get_qdrant()
             settings = get_settings()
@@ -349,7 +349,7 @@ class ConversationService:
             Conversation.workspace_id == workspace_id,
             Conversation.is_archived == False,  # noqa: E712
         )
-        if category == "subagent":
+        if category == "delegated":
             query = query.where(
                 Conversation.is_subagent == True,  # noqa: E712
                 or_(
@@ -409,8 +409,8 @@ class ConversationService:
         await db.commit()
         # Clean up Qdrant embeddings
         try:
+            from openforge.common.config import get_settings
             from openforge.db.qdrant_client import get_qdrant
-            from openforge.config import get_settings
             from qdrant_client import models as qdrant_models
             client = get_qdrant()
             settings = get_settings()

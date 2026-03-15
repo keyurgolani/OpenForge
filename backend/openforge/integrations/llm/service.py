@@ -21,7 +21,7 @@ from openforge.schemas.llm import (
     ModelInfo,
     ConnectionTestResult,
 )
-from openforge.utils.crypto import encrypt_value, decrypt_value
+from openforge.common.crypto import decrypt_value, encrypt_value
 from openforge.core.llm_gateway import llm_gateway
 
 logger = logging.getLogger("openforge.integrations.llm")

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import redis.asyncio as aioredis
-from openforge.config import get_settings
+from openforge.common.config import get_settings
 
 _redis: aioredis.Redis | None = None
 

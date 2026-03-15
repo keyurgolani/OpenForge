@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from openforge.db.models import MCPServer, MCPToolOverride
-from openforge.utils.crypto import encrypt_value, decrypt_value
+from openforge.common.crypto import decrypt_value, encrypt_value
 
 logger = logging.getLogger("openforge.mcp_service")
 

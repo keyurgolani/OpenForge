@@ -2,6 +2,8 @@
 Phase 1 vocabulary and route registration tests.
 """
 
+from pathlib import Path
+
 from fastapi import FastAPI
 
 from openforge.core.product_vocabulary import (
@@ -85,3 +87,20 @@ def test_mission_and_profile_descriptions_match_phase1_language():
     assert "autonomous" in mission_description
     assert "worker" in profile_description
     assert "capabilities" in profile_description
+
+
+def test_public_chat_and_delegation_surfaces_do_not_use_subagent_term():
+    """Active public surfaces should use delegation language instead of subagent terminology."""
+    project_root = Path(__file__).resolve().parents[3]
+    public_surface_files = [
+        project_root / "backend" / "openforge" / "schemas" / "conversation.py",
+        project_root / "backend" / "openforge" / "api" / "conversations.py",
+        project_root / "frontend" / "src" / "lib" / "api.ts",
+        project_root / "frontend" / "src" / "pages" / "WorkspaceAgentPage.tsx",
+        project_root / "frontend" / "src" / "hooks" / "useStreamingChat.ts",
+        project_root / "frontend" / "src" / "components" / "shared" / "TimelineBadge.tsx",
+    ]
+
+    for surface_file in public_surface_files:
+        content = surface_file.read_text(encoding="utf-8").lower()
+        assert "subagent" not in content, f"Legacy subagent terminology leaked into public surface: {surface_file}"

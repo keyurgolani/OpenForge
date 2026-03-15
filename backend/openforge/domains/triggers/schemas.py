@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from openforge.domains.common.enums import TriggerType
 from openforge.domains.triggers.types import TriggerStatus, TriggerTargetType
@@ -41,6 +41,8 @@ class TriggerUpdate(BaseModel):
 class TriggerResponse(BaseModel):
     """Schema for trigger response."""
 
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     name: str
     trigger_type: TriggerType
@@ -54,9 +56,6 @@ class TriggerResponse(BaseModel):
     updated_at: Optional[datetime]
     created_by: Optional[UUID]
     updated_by: Optional[UUID]
-
-    class Config:
-        from_attributes = True
 
 
 class TriggerListResponse(BaseModel):

@@ -104,7 +104,7 @@ class WorkflowVersion(BaseModel):
 
 
 class WorkflowDefinition(BaseModel):
-    """Top-level workflow definition and current executable projection."""
+    """Top-level workflow definition and current active version reference."""
 
     id: UUID
     workspace_id: UUID | None = None
@@ -118,13 +118,6 @@ class WorkflowDefinition(BaseModel):
     template_kind: str | None = None
     template_metadata: dict[str, Any] = Field(default_factory=dict)
     current_version: WorkflowVersion | None = None
-    version: int = Field(default=1, ge=1)
-    entry_node: str | None = None
-    state_schema: dict[str, Any] = Field(default_factory=dict)
-    nodes: list[WorkflowNode] = Field(default_factory=list)
-    edges: list[WorkflowEdge] = Field(default_factory=list)
-    default_input_schema: dict[str, Any] = Field(default_factory=dict)
-    default_output_schema: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime | None = None
     updated_at: datetime | None = None
     created_by: UUID | None = None

@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Any, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class KnowledgeType(str, Enum):
@@ -59,10 +59,9 @@ class Knowledge(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     status: KnowledgeStatus = Field(default=KnowledgeStatus.ACTIVE)
 
+    model_config = ConfigDict(from_attributes=True)
+
     created_at: Optional[str] = Field(default=None)
     updated_at: Optional[str] = Field(default=None)
     created_by: Optional[UUID] = Field(default=None)
     updated_by: Optional[UUID] = Field(default=None)
-
-    class Config:
-        from_attributes = True

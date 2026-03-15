@@ -19,7 +19,6 @@ from openforge.api import search
 from openforge.api import visual_search
 from openforge.api import tasks
 from openforge.api import attachments
-from openforge.api import runtime as runtime_api
 from openforge.api import mcp as mcp_api
 from openforge.api import export as export_api
 from openforge.api import models as models_api
@@ -44,7 +43,6 @@ api_router.include_router(search.router, prefix="/workspaces", tags=["search"])
 api_router.include_router(visual_search.router, prefix="/workspaces", tags=["visual-search"])
 api_router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 api_router.include_router(attachments.router, prefix="/attachments", tags=["attachments"])
-api_router.include_router(runtime_api.router, prefix="/runtime", tags=["runtime"])
 api_router.include_router(mcp_api.router, prefix="/mcp", tags=["mcp"])
 api_router.include_router(export_api.router, prefix="/export", tags=["export"])
 api_router.include_router(models_api.router, prefix="/models", tags=["models"])

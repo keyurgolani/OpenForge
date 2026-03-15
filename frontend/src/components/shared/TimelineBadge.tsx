@@ -2,7 +2,7 @@ import { type ReactNode, type RefObject } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 
 export interface TimelineBadgeProps {
-    /** Timeline step type — drives CSS color theming (e.g. 'thinking', 'tool', 'hitl', 'subagent') */
+    /** Timeline step type — drives CSS color theming (e.g. 'thinking', 'tool', 'hitl', 'delegation') */
     type: string
     /** Whether the detail panel is currently open */
     open: boolean

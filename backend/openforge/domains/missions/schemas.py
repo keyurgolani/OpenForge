@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from openforge.domains.common.enums import ExecutionMode
 from openforge.domains.missions.types import MissionStatus
@@ -47,6 +47,8 @@ class MissionUpdate(BaseModel):
 class MissionResponse(BaseModel):
     """Schema for mission response."""
 
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     name: str
     slug: str
@@ -63,9 +65,6 @@ class MissionResponse(BaseModel):
     updated_at: Optional[datetime]
     created_by: Optional[UUID]
     updated_by: Optional[UUID]
-
-    class Config:
-        from_attributes = True
 
 
 class MissionListResponse(BaseModel):

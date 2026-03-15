@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TimestampMixin(BaseModel):
@@ -44,7 +44,6 @@ class BaseEntity(AuditMixin, SoftDeleteMixin):
     - Soft delete support (is_deleted, deleted_at, deleted_by)
     """
     
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID = Field(default_factory=uuid4)
-    
-    class Config:
-        from_attributes = True

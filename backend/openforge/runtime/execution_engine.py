@@ -801,7 +801,7 @@ class AgentExecutionEngine:
 
         conversation = Conversation(
             workspace_id=workspace_id,
-            title=f"[subagent] {instruction[:80]}",
+            title=f"[delegated] {instruction[:80]}",
             is_subagent=True,
             subagent_agent_id=target_agent.id,
         )
@@ -1155,7 +1155,7 @@ class AgentExecutionEngine:
                         "error": None,
                         "duration_ms": None,
                         "nested_timeline": None,
-                        "subagent_conversation_id": None,
+                        "delegated_conversation_id": None,
                     }
                     timeline.append(timeline_entry)
                     tool_entry_idx = len(timeline) - 1
@@ -1331,15 +1331,15 @@ class AgentExecutionEngine:
                         timeline[tool_entry_idx]["success"] = True
                         timeline[tool_entry_idx]["output"] = nested_response
                         timeline[tool_entry_idx]["nested_timeline"] = nested_timeline
-                        timeline[tool_entry_idx]["subagent_conversation_id"] = nested_conversation_id
+                        timeline[tool_entry_idx]["delegated_conversation_id"] = nested_conversation_id
                         timeline[tool_entry_idx]["duration_ms"] = duration_ms
                         response_payload["output"] = nested_response
                         response_payload["nested_timeline"] = nested_timeline
-                        response_payload["subagent_conversation_id"] = nested_conversation_id
+                        response_payload["delegated_conversation_id"] = nested_conversation_id
                         result_content = (
-                            f"Subagent completed. Response:\n\n{nested_response}"
+                            f"Delegated task completed. Response:\n\n{nested_response}"
                             if nested_response
-                            else "Subagent completed with no text response."
+                            else "Delegated task completed with no text response."
                         )
                         if arguments.get("agent_id") == "optimizer_agent" and nested_response:
                             await self._publish(

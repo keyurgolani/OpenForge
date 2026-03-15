@@ -50,7 +50,7 @@ export interface TimelineToolCall {
     error?: string | null
     duration_ms?: number | null
     nested_timeline?: TimelineEntry[] | null
-    subagent_conversation_id?: string | null
+    delegated_conversation_id?: string | null
 }
 
 export interface TimelinePromptOptimized {
@@ -142,7 +142,7 @@ function applyEventToTimeline(timeline: TimelineEntry[], eventType: string, even
                 error: null,
                 duration_ms: null,
                 nested_timeline: null,
-                subagent_conversation_id: null,
+                delegated_conversation_id: null,
             })
             break
         }
@@ -184,7 +184,7 @@ function applyEventToTimeline(timeline: TimelineEntry[], eventType: string, even
             break
         }
         case 'agent_tool_call_result': {
-            const d = eventData as { call_id: string; tool_name: string; success: boolean; output?: unknown; error?: string; duration_ms?: number; nested_timeline?: TimelineEntry[]; subagent_conversation_id?: string }
+            const d = eventData as { call_id: string; tool_name: string; success: boolean; output?: unknown; error?: string; duration_ms?: number; nested_timeline?: TimelineEntry[]; delegated_conversation_id?: string }
             for (let i = updated.length - 1; i >= 0; i--) {
                 const entry = updated[i]
                 if (entry.type === 'tool_call' && entry.call_id === d.call_id) {
@@ -195,7 +195,7 @@ function applyEventToTimeline(timeline: TimelineEntry[], eventType: string, even
                         error: d.error ?? null,
                         duration_ms: d.duration_ms ?? null,
                         nested_timeline: d.nested_timeline ?? null,
-                        subagent_conversation_id: d.subagent_conversation_id ?? null,
+                        delegated_conversation_id: d.delegated_conversation_id ?? null,
                     }
                     break
                 }
@@ -425,7 +425,7 @@ export function useStreamingChat(conversationId: string | null) {
                 })
             }),
             on('agent_tool_call_result', (msg) => {
-                const m = msg as { conversation_id: string; data: { call_id: string; tool_name: string; success: boolean; output?: unknown; error?: string; duration_ms?: number; nested_timeline?: TimelineEntry[]; subagent_conversation_id?: string } }
+                const m = msg as { conversation_id: string; data: { call_id: string; tool_name: string; success: boolean; output?: unknown; error?: string; duration_ms?: number; nested_timeline?: TimelineEntry[]; delegated_conversation_id?: string } }
                 if (m.conversation_id !== conversationId) return
                 setTimeline(prev => {
                     const updated = applyEventToTimeline(prev, 'agent_tool_call_result', m.data)

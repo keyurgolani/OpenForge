@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from openforge.db.models import Config
 from openforge.schemas.settings import ConfigItem, ConfigUpdate
-from openforge.utils.crypto import decrypt_value, encrypt_value
+from openforge.common.crypto import decrypt_value, encrypt_value
 from typing import Any, Optional
 from datetime import datetime, timezone
 import logging
