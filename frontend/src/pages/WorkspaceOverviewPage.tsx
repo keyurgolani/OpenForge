@@ -52,7 +52,7 @@ export default function WorkspaceOverviewPage() {
 
   const profilesQuery = useProfilesQuery(6)
   const workflowsQuery = useWorkflowsQuery({ workspaceId, limit: 6 })
-  const missionsQuery = useMissionsQuery(6)
+  const missionsQuery = useMissionsQuery({ workspaceId, limit: 6 })
   const runsQuery = useRunsQuery({ workspaceId, limit: 6 })
   const artifactsQuery = useArtifactsQuery({ workspaceId, limit: 6 })
   const knowledgeQuery = useKnowledgeSummaryQuery(workspaceId, 6)

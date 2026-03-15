@@ -21,6 +21,7 @@ const ProfileDetailPage = lazy(() => import('./pages/ProfileDetailPage'))
 const WorkflowsPage = lazy(() => import('./pages/WorkflowsPage'))
 const WorkflowDetailPage = lazy(() => import('./pages/WorkflowDetailPage'))
 const MissionsPage = lazy(() => import('./pages/MissionsPage'))
+const MissionDetailPage = lazy(() => import('./pages/MissionDetailPage'))
 const RunsPage = lazy(() => import('./pages/RunsPage'))
 const RunDetailPage = lazy(() => import('./pages/RunDetailPage'))
 const ArtifactsPage = lazy(() => import('./pages/ArtifactsPage'))
@@ -190,6 +191,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                 <Route path="missions" element={
                                     <ErrorBoundary>
                                         <MissionsPage />
+                                    </ErrorBoundary>
+                                } />
+                                <Route path="missions/:missionId" element={
+                                    <ErrorBoundary>
+                                        <MissionDetailPage />
                                     </ErrorBoundary>
                                 } />
                                 <Route path="runs" element={

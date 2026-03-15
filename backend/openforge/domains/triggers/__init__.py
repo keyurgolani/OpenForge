@@ -4,13 +4,23 @@ Triggers domain package.
 Trigger Definitions - automation rules that initiate mission execution.
 """
 
+from .event_dispatch import TriggerEventDispatcher
+from .router import router
+from .scheduler import TriggerScheduler, trigger_scheduler
+from .schemas import (
+    TriggerCreate,
+    TriggerDiagnosticsResponse,
+    TriggerFireRecord,
+    TriggerListResponse,
+    TriggerResponse,
+    TriggerUpdate,
+)
+from .service import TriggerService
 from .types import (
     TriggerDefinition,
     TriggerStatus,
     TriggerTargetType,
 )
-from .schemas import TriggerCreate, TriggerListResponse, TriggerResponse, TriggerUpdate
-from .router import router
 
 __all__ = [
     "TriggerDefinition",
@@ -20,5 +30,11 @@ __all__ = [
     "TriggerUpdate",
     "TriggerResponse",
     "TriggerListResponse",
+    "TriggerFireRecord",
+    "TriggerDiagnosticsResponse",
+    "TriggerService",
+    "TriggerScheduler",
+    "trigger_scheduler",
+    "TriggerEventDispatcher",
     "router",
 ]

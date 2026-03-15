@@ -44,11 +44,22 @@ class ExecutionMode(str, Enum):
 
 class TriggerType(str, Enum):
     """Types of triggers for automation."""
-    
-    SCHEDULE = "schedule"  # Time-based trigger (cron expression)
-    EVENT = "event"  # Internal event-based trigger
-    WEBHOOK = "webhook"  # External webhook trigger
+
     MANUAL = "manual"  # Manually triggered
+    CRON = "cron"  # Cron-based scheduled trigger
+    INTERVAL = "interval"  # Fixed-interval recurring trigger
+    EVENT = "event"  # Internal event-based trigger
+    HEARTBEAT = "heartbeat"  # Periodic heartbeat for objective-loop execution
+    WEBHOOK = "webhook"  # External webhook trigger
+
+
+class MissionHealthStatus(str, Enum):
+    """Health status for mission health computation."""
+
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    FAILING = "failing"
+    UNKNOWN = "unknown"
 
 
 class ArtifactType(str, Enum):

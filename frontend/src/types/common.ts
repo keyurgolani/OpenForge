@@ -16,7 +16,7 @@ export type ExecutionStatus =
   | 'paused'
   | 'timeout'
   | 'ready';
-export type TriggerType = 'schedule' | 'event' | 'webhook' | 'manual';
+export type TriggerType = 'manual' | 'cron' | 'interval' | 'event' | 'heartbeat' | 'webhook';
 export type ArtifactType =
   | 'note'
   | 'summary'

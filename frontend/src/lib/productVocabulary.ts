@@ -38,7 +38,8 @@ export type DomainStatus =
   | 'completed'
   | 'failed'
   | 'cancelled'
-  | 'paused';
+  | 'paused'
+  | 'disabled';
 
 export type ExecutionMode =
   | 'autonomous'
@@ -47,10 +48,12 @@ export type ExecutionMode =
   | 'manual';
 
 export type TriggerType =
-  | 'schedule'
+  | 'manual'
+  | 'cron'
+  | 'interval'
   | 'event'
-  | 'webhook'
-  | 'manual';
+  | 'heartbeat'
+  | 'webhook';
 
 export type ArtifactType =
   | 'note'
@@ -103,6 +106,7 @@ export const DOMAIN_STATUSES = {
   FAILED: 'failed' as DomainStatus,
   CANCELLED: 'cancelled' as DomainStatus,
   PAUSED: 'paused' as DomainStatus,
+  DISABLED: 'disabled' as DomainStatus,
 };
 
 export const EXECUTION_MODES = {
@@ -113,10 +117,12 @@ export const EXECUTION_MODES = {
 };
 
 export const TRIGGER_TYPES = {
-  SCHEDULE: 'schedule' as TriggerType,
-  EVENT: 'event' as TriggerType,
-  WEBHOOK: 'webhook' as TriggerType,
   MANUAL: 'manual' as TriggerType,
+  CRON: 'cron' as TriggerType,
+  INTERVAL: 'interval' as TriggerType,
+  EVENT: 'event' as TriggerType,
+  HEARTBEAT: 'heartbeat' as TriggerType,
+  WEBHOOK: 'webhook' as TriggerType,
 };
 
 export const ARTIFACT_TYPES = {

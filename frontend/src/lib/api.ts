@@ -423,13 +423,29 @@ export const updateWorkflow = (id: string, data: object): Promise<WorkflowDefini
 export const deleteWorkflow = (id: string): Promise<void> => api.delete(`/workflows/${id}`)
 
 // Missions
-export const listMissions = (params?: { skip?: number; limit?: number }): Promise<any> =>
+export const listMissions = (params?: {
+    skip?: number
+    limit?: number
+    workspace_id?: string
+    status?: string
+    is_system?: boolean
+    is_template?: boolean
+}): Promise<any> =>
     api.get('/missions', { params }).then(r => r.data)
 export const getMission = (id: string): Promise<any> => api.get(`/missions/${id}`).then(r => r.data)
 export const createMission = (data: object): Promise<any> => api.post('/missions', data).then(r => r.data)
 export const updateMission = (id: string, data: object): Promise<any> =>
     api.patch(`/missions/${id}`, data).then(r => r.data)
 export const deleteMission = (id: string): Promise<void> => api.delete(`/missions/${id}`)
+export const launchMission = (id: string, data?: object): Promise<any> => api.post(`/missions/${id}/launch`, data ?? {}).then(r => r.data)
+export const pauseMission = (id: string): Promise<any> => api.post(`/missions/${id}/pause`).then(r => r.data)
+export const resumeMission = (id: string): Promise<any> => api.post(`/missions/${id}/resume`).then(r => r.data)
+export const disableMission = (id: string): Promise<any> => api.post(`/missions/${id}/disable`).then(r => r.data)
+export const activateMission = (id: string): Promise<any> => api.post(`/missions/${id}/activate`).then(r => r.data)
+export const getMissionHealth = (id: string): Promise<any> => api.get(`/missions/${id}/health`).then(r => r.data)
+export const getMissionRuns = (id: string, params?: { limit?: number }): Promise<any> => api.get(`/missions/${id}/runs`, { params }).then(r => r.data)
+export const getMissionArtifacts = (id: string, params?: { limit?: number }): Promise<any> => api.get(`/missions/${id}/artifacts`, { params }).then(r => r.data)
+export const getMissionDiagnostics = (id: string): Promise<any> => api.get(`/missions/${id}/diagnostics`).then(r => r.data)
 
 // Triggers
 export const listTriggers = (params?: { skip?: number; limit?: number }): Promise<any> =>
@@ -439,6 +455,10 @@ export const createTrigger = (data: object): Promise<any> => api.post('/triggers
 export const updateTrigger = (id: string, data: object): Promise<any> =>
     api.patch(`/triggers/${id}`, data).then(r => r.data)
 export const deleteTrigger = (id: string): Promise<void> => api.delete(`/triggers/${id}`)
+export const enableTrigger = (id: string): Promise<any> => api.post(`/triggers/${id}/enable`).then(r => r.data)
+export const disableTrigger = (id: string): Promise<any> => api.post(`/triggers/${id}/disable`).then(r => r.data)
+export const getTriggerFireHistory = (id: string, params?: { limit?: number }): Promise<any> => api.get(`/triggers/${id}/fire-history`, { params }).then(r => r.data)
+export const getTriggerDiagnostics = (id: string): Promise<any> => api.get(`/triggers/${id}/diagnostics`).then(r => r.data)
 
 // Runs
 export const listRuns = (params?: {

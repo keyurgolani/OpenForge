@@ -2,10 +2,8 @@
 Runtime launching module.
 
 This module provides the launch boundary for missions and triggers.
-It centralizes scheduling and execution setup logic that was previously
-scattered across API modules, workers, startup hooks, and old services.
-
-Future phases will expand this into full mission/trigger launch behavior.
+It delegates to MissionLauncher for mission launches and coordinates
+trigger-to-mission launch resolution.
 """
 
 from typing import Any, Optional
@@ -13,37 +11,44 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from openforge.domains.missions.launcher import MissionLauncher
+
 
 class LaunchService:
     """Service for launching missions and triggers."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
+        self._mission_launcher = MissionLauncher(db)
 
     async def launch_mission(
         self,
         mission_id: UUID,
         workspace_id: UUID,
         parameters: Optional[dict[str, Any]] = None,
+        trigger_id: Optional[UUID] = None,
+        trigger_type: Optional[str] = None,
     ) -> dict[str, Any]:
         """
-        Launch a mission.
+        Launch a mission through the MissionLauncher.
 
         Args:
             mission_id: ID of the mission to launch
             workspace_id: ID of the workspace
             parameters: Optional parameters for the mission
+            trigger_id: ID of the trigger that initiated the launch
+            trigger_type: Type of the trigger
 
         Returns:
             Launch result with run_id and status
         """
-        # TODO: Implement mission launch logic
-        # This will be expanded in future phases
-        return {
-            "run_id": None,
-            "status": "pending",
-            "message": "Mission launch not yet implemented",
-        }
+        return await self._mission_launcher.launch_mission(
+            mission_id=mission_id,
+            workspace_id=workspace_id,
+            parameters=parameters,
+            trigger_id=trigger_id,
+            trigger_type=trigger_type,
+        )
 
     async def launch_trigger(
         self,
@@ -52,7 +57,7 @@ class LaunchService:
         context: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         """
-        Launch a trigger.
+        Resolve a trigger's target and launch the associated mission.
 
         Args:
             trigger_id: ID of the trigger to launch
@@ -62,37 +67,36 @@ class LaunchService:
         Returns:
             Launch result with run_id and status
         """
-        # TODO: Implement trigger launch logic
-        # This will be expanded in future phases
+        from openforge.db.models import TriggerDefinitionModel
+
+        trigger = await self.db.get(TriggerDefinitionModel, trigger_id)
+        if trigger is None:
+            return {
+                "run_id": None,
+                "status": "failed",
+                "message": f"Trigger {trigger_id} not found",
+            }
+
+        if not trigger.is_enabled:
+            return {
+                "run_id": None,
+                "status": "blocked",
+                "message": "Trigger is disabled",
+            }
+
+        if trigger.target_type == "mission":
+            return await self.launch_mission(
+                mission_id=trigger.target_id,
+                workspace_id=workspace_id,
+                parameters=context,
+                trigger_id=trigger_id,
+                trigger_type=trigger.trigger_type,
+            )
+
         return {
             "run_id": None,
-            "status": "pending",
-            "message": "Trigger launch not yet implemented",
-        }
-
-    async def schedule_trigger(
-        self,
-        trigger_id: UUID,
-        workspace_id: UUID,
-        schedule_expression: str,
-    ) -> dict[str, Any]:
-        """
-        Schedule a trigger for future execution.
-
-        Args:
-            trigger_id: ID of the trigger to schedule
-            workspace_id: ID of the workspace
-            schedule_expression: Cron expression for scheduling
-
-        Returns:
-            Schedule result with schedule_id and status
-        """
-        # TODO: Implement trigger scheduling logic
-        # This will be expanded in future phases
-        return {
-            "schedule_id": None,
-            "status": "pending",
-            "message": "Trigger scheduling not yet implemented",
+            "status": "unsupported",
+            "message": f"Unsupported trigger target type: {trigger.target_type}",
         }
 
     async def cancel_launch(
@@ -101,7 +105,7 @@ class LaunchService:
         workspace_id: UUID,
     ) -> dict[str, Any]:
         """
-        Cancel a running launch.
+        Cancel a running launch by transitioning the run to cancelled.
 
         Args:
             run_id: ID of the run to cancel
@@ -110,9 +114,15 @@ class LaunchService:
         Returns:
             Cancellation result with status
         """
-        # TODO: Implement launch cancellation logic
-        # This will be expanded in future phases
-        return {
-            "status": "cancelled",
-            "message": "Launch cancellation not yet implemented",
-        }
+        from openforge.db.models import RunModel
+
+        run = await self.db.get(RunModel, run_id)
+        if run is None:
+            return {"status": "not_found", "message": f"Run {run_id} not found"}
+
+        if run.status in ("completed", "failed", "cancelled"):
+            return {"status": run.status, "message": "Run already in terminal state"}
+
+        run.status = "cancelled"
+        await self.db.commit()
+        return {"status": "cancelled", "message": "Run cancelled successfully"}

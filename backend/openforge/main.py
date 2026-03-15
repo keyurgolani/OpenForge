@@ -9,6 +9,7 @@ from pathlib import Path
 
 from openforge.common.config import get_settings
 from openforge.services.task_scheduler import task_scheduler
+from openforge.domains.triggers.scheduler import trigger_scheduler
 
 settings = get_settings()
 
@@ -284,6 +285,7 @@ async def lifespan(app: FastAPI):
 
     logger.info("OpenForge ready.")
     await task_scheduler.start()
+    await trigger_scheduler.start()
     yield
 
     logger.info("OpenForge shutting down...")
@@ -293,6 +295,7 @@ async def lifespan(app: FastAPI):
             await relay_task
         except asyncio.CancelledError:
             pass
+    await trigger_scheduler.stop()
     await task_scheduler.stop()
     try:
         from openforge.db.redis_client import close_redis
