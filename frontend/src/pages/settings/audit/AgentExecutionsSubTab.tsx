@@ -64,7 +64,7 @@ export function AgentExecutionsSubTab() {
                     <option value="failed">Failed</option>
                     <option value="cancelled">Cancelled</option>
                     <option value="queued">Queued</option>
-                    <option value="paused_hitl">Awaiting HITL</option>
+                    <option value="paused_hitl">Awaiting Approval</option>
                 </select>
                 <select className="input text-xs py-1 px-2.5 w-auto min-w-[140px]" value={agentFilter} onChange={e => { setAgentFilter(e.target.value); setPage(0) }}>
                     <option value="">All agents</option>

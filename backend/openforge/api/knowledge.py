@@ -10,6 +10,8 @@ import logging
 import re
 from openforge.db.postgres import get_db
 from openforge.services.knowledge_service import knowledge_service
+from openforge.runtime.input_preparation import build_context_block, prepare_llm_messages
+from openforge.runtime.trust_boundaries import ContentSourceType
 from openforge.schemas.knowledge import (
     KnowledgeCreate, KnowledgeUpdate, KnowledgeResponse, KnowledgeListItem, KnowledgeListParams, KnowledgeTagsUpdate
 )
@@ -93,6 +95,40 @@ async def _workspace_prompt_vars(db: AsyncSession, workspace_id: UUID) -> dict[s
         "workspace_name": workspace.name if workspace else "",
         "workspace_description": workspace.description if workspace else "",
     }
+
+
+def _knowledge_source_type(knowledge_record) -> ContentSourceType:
+    if getattr(knowledge_record, "url", None):
+        return ContentSourceType.WEB_CONTENT
+    if getattr(knowledge_record, "file_path", None):
+        return ContentSourceType.FILE_CONTENT
+    return ContentSourceType.RETRIEVED_KNOWLEDGE
+
+
+def _prepare_knowledge_messages(
+    *,
+    system_instruction: str,
+    knowledge_record,
+    content: str,
+    conversation_messages: list[dict] | None = None,
+    transformation_path: list[str] | None = None,
+) -> list[dict]:
+    context_blocks = []
+    if content.strip():
+        context_blocks.append(
+            build_context_block(
+                label="knowledge_content",
+                content=content,
+                source_type=_knowledge_source_type(knowledge_record),
+                source_id=str(knowledge_record.id),
+                transformation_path=transformation_path,
+            )
+        )
+    return prepare_llm_messages(
+        system_instruction=system_instruction,
+        conversation_messages=conversation_messages,
+        context_blocks=context_blocks,
+    ).messages
 
 
 @router.get("/{workspace_id}/knowledge", response_model=dict)
@@ -217,16 +253,17 @@ async def summarize_knowledge(
         prompt = await resolve_prompt_text(
             db,
             "summarize_knowledge",
-            knowledge_content=knowledge_record.content[:8000],
             knowledge_title=normalize_knowledge_title(knowledge_record.title) or "Untitled",
             knowledge_type=knowledge_record.type,
             tags=tags_str,
             **(await _workspace_prompt_vars(db, workspace_id)),
         )
         summary = await llm_gateway.chat(
-            messages=[
-                {"role": "system", "content": prompt},
-            ],
+            messages=_prepare_knowledge_messages(
+                system_instruction=prompt,
+                knowledge_record=knowledge_record,
+                content=(knowledge_record.content or "")[:8000],
+            ),
             provider_name=provider_name, api_key=api_key, model=model, base_url=base_url,
         )
         knowledge_record.ai_summary = summary
@@ -286,16 +323,17 @@ async def extract_insights(
         prompt = await resolve_prompt_text(
             db,
             "extract_insights",
-            knowledge_content=knowledge_record.content[:8000],
             knowledge_title=normalize_knowledge_title(knowledge_record.title) or "Untitled",
             tags=tags_str,
             **(await _workspace_prompt_vars(db, workspace_id)),
         )
 
         response = await llm_gateway.chat(
-            messages=[
-                {"role": "system", "content": prompt},
-            ],
+            messages=_prepare_knowledge_messages(
+                system_instruction=prompt,
+                knowledge_record=knowledge_record,
+                content=(knowledge_record.content or "")[:8000],
+            ),
             provider_name=provider_name, api_key=api_key, model=model, base_url=base_url,
         )
 
@@ -367,16 +405,17 @@ async def generate_title(
         prompt = await resolve_prompt_text(
             db,
             "generate_title",
-            knowledge_content=knowledge_record.content[:2000],
             **(await _workspace_prompt_vars(db, workspace_id)),
         )
         system_prompt = await resolve_prompt_text(db, "knowledge_title_system")
 
         title_response = await llm_gateway.chat(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt},
-            ],
+            messages=_prepare_knowledge_messages(
+                system_instruction=system_prompt,
+                knowledge_record=knowledge_record,
+                content=(knowledge_record.content or "")[:2000],
+                conversation_messages=[{"role": "user", "content": prompt}],
+            ),
             provider_name=provider_name, api_key=api_key, model=model, base_url=base_url, max_tokens=30,
         )
 

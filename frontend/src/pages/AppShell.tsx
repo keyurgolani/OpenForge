@@ -120,7 +120,7 @@ export default function AppShell() {
         refetchInterval: 5000,
     })
 
-    // ── HITL notification state ────────────────────────────────────────────────
+    // ── Approval notification state ────────────────────────────────────────────
     const [hitlShadeOpen, setHitlShadeOpen] = useState(false)
     const [hitlNotes, setHitlNotes] = useState<Record<string, string>>({})
     const [hitlProcessing, setHitlProcessing] = useState<Set<string>>(new Set())
@@ -1034,7 +1034,7 @@ export default function AppShell() {
                     </div>
                     )}
 
-                    {/* HITL notification — only visible when requests are pending */}
+                    {/* Approval notification — only visible when requests are pending */}
                     <AnimatePresence>
                     {hitlPendingCount > 0 && (
                     <motion.div
@@ -1049,7 +1049,7 @@ export default function AppShell() {
                             type="button"
                             onClick={() => setHitlShadeOpen(prev => !prev)}
                             className="relative p-2 rounded-lg border transition-colors border-amber-400/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"
-                            aria-label={`${hitlPendingCount} pending HITL approvals`}
+                            aria-label={`${hitlPendingCount} pending approval requests`}
                             title={`${hitlPendingCount} pending approval${hitlPendingCount > 1 ? 's' : ''}`}
                         >
                             <ShieldAlert className="w-4 h-4" />
@@ -1281,7 +1281,7 @@ export default function AppShell() {
                 </div>
             </div>
 
-            {/* HITL FAB rendered globally in main.tsx */}
+            {/* Approval FAB rendered globally in main.tsx */}
 
             <ConfirmModal
                 isOpen={deleteModalOpen}

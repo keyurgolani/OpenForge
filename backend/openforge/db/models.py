@@ -664,3 +664,182 @@ class ArtifactModel(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
     created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
     updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+
+class PromptDefinitionModel(Base):
+    """Managed prompt definition with the active template snapshot."""
+    __tablename__ = "prompt_definitions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    prompt_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    template: Mapped[str] = mapped_column(Text, nullable=False)
+    template_format: Mapped[str] = mapped_column(String(50), nullable=False, default="format_string")
+    variable_schema: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    fallback_behavior: Mapped[str] = mapped_column(String(50), nullable=False, default="error")
+    owner_type: Mapped[str] = mapped_column(String(50), nullable=False, default="system")
+    owner_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_template: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+
+class PromptVersionModel(Base):
+    """Historical snapshot of a managed prompt definition."""
+    __tablename__ = "prompt_versions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    prompt_definition_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("prompt_definitions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    template: Mapped[str] = mapped_column(Text, nullable=False)
+    template_format: Mapped[str] = mapped_column(String(50), nullable=False, default="format_string")
+    variable_schema: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("prompt_definition_id", "version", name="uq_prompt_versions_definition_version"),
+    )
+
+
+class PromptUsageLogModel(Base):
+    """Audit trail for managed prompt rendering and use."""
+    __tablename__ = "prompt_usage_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    prompt_definition_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("prompt_definitions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    prompt_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("prompt_versions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    owner_type: Mapped[str] = mapped_column(String(50), nullable=False, default="system")
+    owner_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    render_context: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    variable_keys: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    rendered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    success: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    error_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
+
+class ToolPolicyModel(Base):
+    """Structured tool access policy."""
+    __tablename__ = "tool_policies"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    scope_type: Mapped[str] = mapped_column(String(50), nullable=False, default="system")
+    scope_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    default_action: Mapped[str] = mapped_column(String(50), nullable=False, default="allow")
+    rules: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    rate_limits: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    allowed_tools: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    blocked_tools: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    approval_required_tools: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+
+class SafetyPolicyModel(Base):
+    """Safety defaults that describe trust and untrusted-content behavior."""
+    __tablename__ = "safety_policies"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    scope_type: Mapped[str] = mapped_column(String(50), nullable=False, default="system")
+    scope_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    rules: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+
+class ApprovalPolicyModel(Base):
+    """Approval defaults and escalation rules."""
+    __tablename__ = "approval_policies"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    scope_type: Mapped[str] = mapped_column(String(50), nullable=False, default="system")
+    scope_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    default_action: Mapped[str] = mapped_column(String(50), nullable=False, default="requires_approval")
+    rules: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+
+class PolicyRuleEntryModel(Base):
+    """Normalised policy rule rows for later expansion and diagnostics."""
+    __tablename__ = "policy_rule_entries"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    policy_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    policy_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    rule_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    rule_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    tool_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    risk_category: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    action: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+
+
+class ApprovalRequestModel(Base):
+    """Durable approval request record."""
+    __tablename__ = "approval_requests"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    request_type: Mapped[str] = mapped_column(String(50), nullable=False, default="tool_invocation")
+    scope_type: Mapped[str] = mapped_column(String(50), nullable=False, default="workspace")
+    scope_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    source_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("runs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    requested_action: Mapped[str] = mapped_column(Text, nullable=False)
+    tool_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    reason_code: Mapped[str] = mapped_column(String(100), nullable=False)
+    reason_text: Mapped[str] = mapped_column(Text, nullable=False)
+    risk_category: Mapped[str] = mapped_column(String(100), nullable=False)
+    payload_preview: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    matched_policy_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    matched_rule_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    resolution_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("idx_approval_requests_status", "status", "requested_at"),
+    )

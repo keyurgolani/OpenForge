@@ -44,7 +44,7 @@ function AuditTab() {
                         : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
                         }`}
                 >
-                    <ShieldAlert className="w-4 h-4" /> HITL History
+                    <ShieldAlert className="w-4 h-4" /> Approval History
                 </button>
                 <button
                     onClick={() => setSubTab('logs')}

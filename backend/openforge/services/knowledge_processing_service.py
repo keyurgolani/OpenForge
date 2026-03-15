@@ -15,6 +15,8 @@ from openforge.db.models import Knowledge, KnowledgeTag, Workspace
 from openforge.db.qdrant_client import get_qdrant
 from openforge.schemas.knowledge import KnowledgeCreate, KnowledgeUpdate, KnowledgeResponse, KnowledgeListItem, KnowledgeListParams
 from openforge.config import get_settings
+from openforge.runtime.input_preparation import build_context_block, prepare_llm_messages
+from openforge.runtime.trust_boundaries import ContentSourceType
 from openforge.utils.text import count_words, normalize_word_count, truncate_text
 from openforge.utils.knowledge_title_generation import derive_knowledge_title
 from openforge.utils.title import normalize_knowledge_title
@@ -124,6 +126,39 @@ class KnowledgeProcessingService:
         from openforge.core.prompt_catalogue import resolve_prompt_text
 
         return await resolve_prompt_text(db, prompt_id, **kwargs)
+
+    def _knowledge_source_type(self, knowledge_record: Knowledge) -> ContentSourceType:
+        if knowledge_record.url:
+            return ContentSourceType.WEB_CONTENT
+        if knowledge_record.file_path:
+            return ContentSourceType.FILE_CONTENT
+        return ContentSourceType.RETRIEVED_KNOWLEDGE
+
+    def _prepare_knowledge_messages(
+        self,
+        *,
+        system_instruction: str,
+        knowledge_record: Knowledge,
+        content: str,
+        conversation_messages: list[dict] | None = None,
+        transformation_path: list[str] | None = None,
+    ) -> list[dict]:
+        context_blocks = []
+        if content.strip():
+            context_blocks.append(
+                build_context_block(
+                    label="knowledge_content",
+                    content=content,
+                    source_type=self._knowledge_source_type(knowledge_record),
+                    source_id=str(knowledge_record.id),
+                    transformation_path=transformation_path,
+                )
+            )
+        return prepare_llm_messages(
+            system_instruction=system_instruction,
+            conversation_messages=conversation_messages,
+            context_blocks=context_blocks,
+        ).messages
 
     async def _finalize_task_log(
         self,
@@ -295,18 +330,16 @@ class KnowledgeProcessingService:
                 title_prompt = await self._get_prompt_text(
                     db,
                     "generate_title",
-                    knowledge_content=knowledge_record.content[:2000],
                     workspace_name=workspace_name,
                     workspace_description=workspace_description,
                 )
                 title_response = await llm_gateway.chat(
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": await self._get_prompt_text(db, "knowledge_title_system"),
-                        },
-                        {"role": "user", "content": title_prompt},
-                    ],
+                    messages=self._prepare_knowledge_messages(
+                        system_instruction=await self._get_prompt_text(db, "knowledge_title_system"),
+                        knowledge_record=knowledge_record,
+                        content=(knowledge_record.content or "")[:2000],
+                        conversation_messages=[{"role": "user", "content": title_prompt}],
+                    ),
                     provider_name=provider_name,
                     api_key=api_key,
                     model=model,
@@ -325,16 +358,17 @@ class KnowledgeProcessingService:
                 insights_prompt = await self._get_prompt_text(
                     db,
                     "extract_insights",
-                    knowledge_content=knowledge_record.content[:8000],
                     knowledge_title=normalize_knowledge_title(knowledge_record.title) or "Untitled",
                     tags=tags_str,
                     workspace_name=workspace_name,
                     workspace_description=workspace_description,
                 )
                 insights_response = await llm_gateway.chat(
-                    messages=[
-                        {"role": "system", "content": insights_prompt},
-                    ],
+                    messages=self._prepare_knowledge_messages(
+                        system_instruction=insights_prompt,
+                        knowledge_record=knowledge_record,
+                        content=(knowledge_record.content or "")[:8000],
+                    ),
                     provider_name=provider_name,
                     api_key=api_key,
                     model=model,
@@ -351,7 +385,6 @@ class KnowledgeProcessingService:
                 summary_prompt = await self._get_prompt_text(
                     db,
                     "summarize_knowledge",
-                    knowledge_content=knowledge_record.content[:8000],
                     knowledge_title=normalize_knowledge_title(knowledge_record.title) or "Untitled",
                     knowledge_type=knowledge_record.type,
                     tags=tags_str,
@@ -359,9 +392,11 @@ class KnowledgeProcessingService:
                     workspace_description=workspace_description,
                 )
                 summary = await llm_gateway.chat(
-                    messages=[
-                        {"role": "system", "content": summary_prompt},
-                    ],
+                    messages=self._prepare_knowledge_messages(
+                        system_instruction=summary_prompt,
+                        knowledge_record=knowledge_record,
+                        content=(knowledge_record.content or "")[:8000],
+                    ),
                     provider_name=provider_name,
                     api_key=api_key,
                     model=model,
@@ -758,6 +793,10 @@ class KnowledgeProcessingService:
                 from openforge.services.llm_service import llm_service
                 async with AsyncSessionLocal() as db:
                     provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
+                    result = await db.execute(select(Knowledge).where(Knowledge.id == knowledge_id))
+                    knowledge_record = result.scalar_one_or_none()
+                    if knowledge_record is None:
+                        return
                     workspace = await db.get(Workspace, workspace_id)
                     workspace_name = workspace.name if workspace else ""
                     workspace_description = workspace.description if workspace else ""
@@ -765,20 +804,19 @@ class KnowledgeProcessingService:
                     title_prompt = await self._get_prompt_text(
                         db,
                         "generate_title",
-                        knowledge_content=content[:2000],
                         workspace_name=workspace_name,
                         workspace_description=workspace_description,
                     )
                     generated = await llm_gateway.chat(
-                        messages=[
-                            {"role": "system", "content": title_system_prompt},
-                            {"role": "user", "content": title_prompt},
-                        ],
+                        messages=self._prepare_knowledge_messages(
+                            system_instruction=title_system_prompt,
+                            knowledge_record=knowledge_record,
+                            content=content[:2000],
+                            conversation_messages=[{"role": "user", "content": title_prompt}],
+                        ),
                         provider_name=provider_name, api_key=api_key, model=model, base_url=base_url, max_tokens=30,
                     )
 
-                    result = await db.execute(select(Knowledge).where(Knowledge.id == knowledge_id))
-                    knowledge_record = result.scalar_one_or_none()
                     normalized = derive_knowledge_title(generated, content)
                     if knowledge_record and normalized:
                         knowledge_record.ai_title = normalized

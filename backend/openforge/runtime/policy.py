@@ -1,8 +1,7 @@
 """
 Policy Engine
 
-Evaluates whether a tool call should be auto-approved, require HITL, or be blocked.
-Evaluation chain: agent override → global ToolPermission table → risk-level defaults.
+Compatibility wrapper over the Phase 3 policy evaluator.
 """
 
 from __future__ import annotations
@@ -14,7 +13,9 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from openforge.db.models import ToolPermission
+from openforge.db.models import ToolPolicyModel
+from openforge.domains.policies.evaluator import PolicyEvaluator, policy_evaluator
+from openforge.domains.policies.types import PolicyDecision, ToolRiskCategory
 
 if TYPE_CHECKING:
     from openforge.legacy.agent_definition import AgentDefinition
@@ -24,21 +25,19 @@ logger = logging.getLogger("openforge.runtime.policy")
 
 class PolicyEngine:
     """
-    Evaluates whether a tool call should be auto-approved, require HITL, or be blocked.
-
-    Evaluation chain: agent override → global ToolPermission table → risk-level defaults.
+    Backward-compatible adapter that maps Phase 3 decisions to the legacy
+    `"approve"`, `"hitl_required"`, and `"blocked"` return values.
     """
 
-    REQUIRE_HITL = {"high", "critical"}
-
     def evaluate(self, tool_id: str, risk_level: str) -> str:
-        """
-        Synchronous evaluation using only risk level (backward compat).
-        Returns 'approve' or 'hitl_required'.
-        """
-        if risk_level in self.REQUIRE_HITL:
-            return "hitl_required"
-        return "approve"
+        result = policy_evaluator.evaluate_tool_access(
+            tool_name=tool_id,
+            risk_category=_coerce_legacy_risk(risk_level),
+            policies=[],
+            scope_context={},
+            run_id="legacy-sync",
+        )
+        return _legacy_decision(result.decision)
 
     async def evaluate_async(
         self,
@@ -47,47 +46,72 @@ class PolicyEngine:
         db: AsyncSession,
         agent: AgentDefinition | None = None,
     ) -> str:
-        """
-        Async evaluation that checks agent overrides, then ToolPermission overrides,
-        then falls back to risk-level defaults.
-        Returns 'approve', 'hitl_required', or 'blocked'.
-        """
-        # 1. Check agent-specific override
-        if agent and agent.tool_overrides:
-            if tool_id in agent.tool_overrides:
-                perm = agent.tool_overrides[tool_id]
-                if perm == "blocked":
-                    return "blocked"
-                if perm == "hitl":
-                    return "hitl_required"
-                if perm == "allowed":
-                    return "approve"
+        policies = [
+            {
+                "id": str(row.id),
+                "scope_type": row.scope_type,
+                "scope_id": row.scope_id,
+                "default_action": row.default_action,
+                "rules": row.rules or [],
+                "rate_limits": row.rate_limits or {},
+                "allowed_tools": row.allowed_tools or [],
+                "blocked_tools": row.blocked_tools or [],
+                "approval_required_tools": row.approval_required_tools or [],
+                "status": row.status,
+            }
+            for row in (
+                await db.execute(select(ToolPolicyModel).where(ToolPolicyModel.status == "active"))
+            ).scalars().all()
+        ]
 
-        # 2. Check global tool_permissions table
-        try:
-            result = await db.execute(
-                select(ToolPermission).where(ToolPermission.tool_id == tool_id)
+        if agent and getattr(agent, "tool_overrides", None):
+            policies.insert(
+                0,
+                {
+                    "id": "legacy-agent-override",
+                    "scope_type": "profile",
+                    "scope_id": getattr(agent, "id", None),
+                    "default_action": "allow",
+                    "rules": [],
+                    "rate_limits": {},
+                    "allowed_tools": [tool for tool, decision in agent.tool_overrides.items() if decision == "allowed"],
+                    "blocked_tools": [tool for tool, decision in agent.tool_overrides.items() if decision == "blocked"],
+                    "approval_required_tools": [tool for tool, decision in agent.tool_overrides.items() if decision == "hitl"],
+                    "status": "active",
+                },
             )
-            perm_row = result.scalar_one_or_none()
 
-            if perm_row and perm_row.permission != "default":
-                if perm_row.permission == "blocked":
-                    return "blocked"
-                elif perm_row.permission == "hitl":
-                    return "hitl_required"
-                elif perm_row.permission == "allowed":
-                    return "approve"
-        except Exception as e:
-            logger.warning("Failed to check tool permission for %s: %s", tool_id, e)
-
-        # 3. Fall back to risk-level defaults
-        if risk_level in self.REQUIRE_HITL:
-            return "hitl_required"
-        return "approve"
+        result = policy_evaluator.evaluate_tool_access(
+            tool_name=tool_id,
+            risk_category=_coerce_legacy_risk(risk_level),
+            policies=policies,
+            scope_context={"profile_id": getattr(agent, "id", None)},
+            run_id=getattr(agent, "id", None) or "legacy-async",
+        )
+        return _legacy_decision(result.decision)
 
 
 # Singleton instance
 policy_engine = PolicyEngine()
+
+
+def _coerce_legacy_risk(value: str) -> ToolRiskCategory:
+    normalized = (value or "").strip().lower()
+    if normalized in {"critical", "destructive"}:
+        return ToolRiskCategory.DESTRUCTIVE
+    if normalized in {"high", "external_mutation"}:
+        return ToolRiskCategory.EXTERNAL_MUTATION
+    if normalized in {"medium", "local_mutation"}:
+        return ToolRiskCategory.LOCAL_MUTATION
+    return ToolRiskCategory.READ_ONLY
+
+
+def _legacy_decision(decision: PolicyDecision) -> str:
+    if decision is PolicyDecision.DENY:
+        return "blocked"
+    if decision is PolicyDecision.REQUIRES_APPROVAL:
+        return "hitl_required"
+    return "approve"
 
 
 class ToolCallRateLimiter:

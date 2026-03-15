@@ -17,6 +17,9 @@ from pathlib import Path
 from typing import Optional
 from uuid import UUID
 
+from openforge.runtime.input_preparation import build_context_block, prepare_llm_messages
+from openforge.runtime.trust_boundaries import ContentSourceType
+
 logger = logging.getLogger("openforge.processors.audio")
 
 _whisper_models: dict = {}
@@ -141,7 +144,7 @@ class AudioProcessor:
         if result["transcript"] and db_session:
             try:
                 result["ai_title"] = await self._generate_title(
-                    result["transcript"], workspace_id, db_session
+                    result["transcript"], knowledge_id, workspace_id, db_session
                 )
             except Exception as e:
                 logger.warning("AI title generation failed for %s: %s", knowledge_id, e)
@@ -349,7 +352,7 @@ class AudioProcessor:
         return "base"
 
     async def _generate_title(
-        self, transcript: str, workspace_id: UUID, db_session
+        self, transcript: str, knowledge_id: UUID, workspace_id: UUID, db_session
     ) -> Optional[str]:
         """Generate AI title from transcript text."""
         from openforge.core.llm_gateway import llm_gateway
@@ -363,13 +366,21 @@ class AudioProcessor:
         prompt = await resolve_prompt_text(
             db_session,
             "audio_title_generation",
-            transcript=transcript[:2000],
         )
 
         title = await llm_gateway.chat(
-            messages=[
-                {"role": "system", "content": prompt},
-            ],
+            messages=prepare_llm_messages(
+                system_instruction=prompt,
+                context_blocks=[
+                    build_context_block(
+                        label="audio_transcript",
+                        content=transcript[:2000],
+                        source_type=ContentSourceType.FILE_CONTENT,
+                        source_id=str(knowledge_id),
+                        transformation_path=["speech_to_text"],
+                    )
+                ] if transcript.strip() else [],
+            ).messages,
             provider_name=provider_name,
             api_key=api_key,
             model=model,

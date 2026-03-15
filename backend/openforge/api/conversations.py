@@ -72,14 +72,14 @@ def _format_timeline_entry_txt(entry: dict, indent: str = "  ") -> list[str]:
             filename = att.get("filename", "unnamed")
             lines.append(f"{indent}  {filename} ({status})")
 
-    # Handle inline HITL on tool_call entries
+    # Handle inline approvals on tool_call entries
     if t == "tool_call":
         hitl = entry.get("hitl")
         if hitl:
             hitl_status = hitl.get("status", "pending")
             risk = hitl.get("risk_level", "")
             summary = hitl.get("action_summary", "")
-            lines.append(f"{indent}  [HITL] risk: {risk}, {hitl_status}")
+            lines.append(f"{indent}  [APPROVAL] risk: {risk}, {hitl_status}")
             if summary:
                 lines.append(f"{indent}    {summary}")
             note = hitl.get("resolution_note")
@@ -176,7 +176,7 @@ def _format_timeline_entry_md(entry: dict, depth: int = 0) -> list[str]:
             lines.append(f"{prefix}> {att_icon} `{filename}`")
         lines.append("")
 
-    # Handle inline HITL on tool_call entries
+    # Handle inline approvals on tool_call entries
     if t == "tool_call":
         hitl = entry.get("hitl")
         if hitl:
@@ -184,7 +184,7 @@ def _format_timeline_entry_md(entry: dict, depth: int = 0) -> list[str]:
             risk = hitl.get("risk_level", "")
             summary = hitl.get("action_summary", "")
             hitl_icon = "✅" if hitl_status == "approved" else ("🚫" if hitl_status == "denied" else "⏳")
-            lines.append(f"{prefix}> {hitl_icon} **HITL:** risk: {risk}, {hitl_status}")
+            lines.append(f"{prefix}> {hitl_icon} **Approval:** risk: {risk}, {hitl_status}")
             if summary:
                 lines.append(f"{prefix}> {summary}")
             note = hitl.get("resolution_note")

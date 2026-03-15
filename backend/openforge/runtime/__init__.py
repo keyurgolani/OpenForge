@@ -20,7 +20,12 @@ from .checkpoint_store import CheckpointStore
 from .state_store import StateStore
 from .hitl import HITLService, hitl_service
 from .policy import PolicyEngine, policy_engine, ToolCallRateLimiter
-from .execution_engine import AgentExecutionEngine, agent_engine
+
+try:
+    from .execution_engine import AgentExecutionEngine, agent_engine
+except ModuleNotFoundError:  # pragma: no cover - compatibility for partially extracted runtimes
+    AgentExecutionEngine = None
+    agent_engine = None
 
 __all__ = [
     "RuntimeCoordinator",

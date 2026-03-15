@@ -20,9 +20,9 @@ from openforge.api import tasks
 from openforge.api import attachments
 from openforge.api import mcp as mcp_api
 from openforge.api import export as export_api
-from openforge.api import hitl as hitl_api
-from openforge.api import tool_permissions as tool_permissions_api
 from openforge.api import models as models_api
+from openforge.domains.policies.router import router as policies_router
+from openforge.domains.prompts.router import router as prompts_router
 
 # Domain routers (new architecture)
 api_router = APIRouter(prefix="/api/v1")
@@ -41,8 +41,8 @@ api_router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 api_router.include_router(attachments.router, prefix="/attachments", tags=["attachments"])
 api_router.include_router(mcp_api.router, prefix="/mcp", tags=["mcp"])
 api_router.include_router(export_api.router, prefix="/export", tags=["export"])
-api_router.include_router(hitl_api.router, prefix="/hitl", tags=["hitl"])
-api_router.include_router(tool_permissions_api.router, prefix="/tools", tags=["tool-permissions"])
 api_router.include_router(models_api.router, prefix="/models", tags=["models"])
+api_router.include_router(prompts_router, prefix="/prompts", tags=["prompts"])
+api_router.include_router(policies_router, prefix="/policies", tags=["policies"])
 
 # Domain routes (new architecture)

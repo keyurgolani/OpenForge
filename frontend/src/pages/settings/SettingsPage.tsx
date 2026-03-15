@@ -9,15 +9,15 @@ import type { SettingsTab } from './types'
 import { toSettingsTab } from './constants'
 import WorkspacesSettings from './WorkspacesTab'
 import LLMSettings from './LLMSettingsTab'
-import PromptsTab from './PromptsTab'
 import JobsTab from './JobsTab'
 import SkillsTab from './SkillsTab'
-import ToolsTab from './ToolsTab'
 import MCPTab from './MCPTab'
-import HITLDashboardTab from './HITLDashboardTab'
 import AuditTab from './AuditTab'
 import ExportTab from './ExportTab'
 import ImportTab from './ImportTab'
+import PromptsPage from '../PromptsPage'
+import PoliciesPage from '../PoliciesPage'
+import ApprovalsPage from '../ApprovalsPage'
 
 export default function SettingsPage() {
     const [searchParams, setSearchParams] = useSearchParams()
@@ -55,11 +55,11 @@ export default function SettingsPage() {
         { id: 'workspaces', label: 'Workspaces', Icon: FolderOpen },
         { id: 'llm', label: 'AI Models', Icon: Bot },
         { id: 'prompts', label: 'Prompts', Icon: Sliders },
+        { id: 'policies', label: 'Policies', Icon: Settings2 },
+        { id: 'approvals', label: 'Approvals', Icon: ShieldAlert },
         { id: 'jobs', label: 'Pipelines', Icon: Timer },
         { id: 'skills', label: 'Skills', Icon: Wrench },
-        { id: 'tools', label: 'Native Tools', Icon: Settings2 },
         { id: 'mcp', label: 'MCP', Icon: Layers },
-        { id: 'hitl', label: 'HITL', Icon: ShieldAlert },
         { id: 'audit', label: 'Audit', Icon: History },
         { id: 'import', label: 'Import', Icon: Upload },
         { id: 'export', label: 'Export', Icon: Download },
@@ -121,19 +121,21 @@ export default function SettingsPage() {
                     </div>
                 )}
                 {activeTab === 'llm' && <LLMSettings />}
-                {activeTab === 'prompts' && <PromptsTab />}
+                {activeTab === 'prompts' && (
+                    <div className="flex-1 min-h-0 overflow-y-auto"><PromptsPage /></div>
+                )}
+                {activeTab === 'policies' && (
+                    <div className="flex-1 min-h-0 overflow-y-auto"><PoliciesPage /></div>
+                )}
+                {activeTab === 'approvals' && (
+                    <div className="flex-1 min-h-0 overflow-y-auto"><ApprovalsPage /></div>
+                )}
                 {activeTab === 'jobs' && <JobsTab />}
                 {activeTab === 'skills' && (
                     <div className="flex-1 min-h-0 overflow-y-auto"><SkillsTab /></div>
                 )}
-                {activeTab === 'tools' && (
-                    <div className="flex-1 min-h-0 overflow-y-auto"><ToolsTab /></div>
-                )}
                 {activeTab === 'mcp' && (
                     <div className="flex-1 min-h-0 overflow-y-auto"><MCPTab /></div>
-                )}
-                {activeTab === 'hitl' && (
-                    <div className="flex-1 min-h-0 overflow-y-auto"><HITLDashboardTab /></div>
                 )}
                 {activeTab === 'audit' && <AuditTab />}
                 {activeTab === 'import' && (

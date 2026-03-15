@@ -162,9 +162,22 @@ export const searchKnowledge = (wid: string, q: string, params?: object): Promis
     api.get(`/workspaces/${wid}/search`, { params: { q, ...params } }).then(r => r.data)
 
 // ── Prompts ──
-export const listPrompts = (): Promise<any> => api.get('/prompts').then(r => r.data)
+export const listManagedPrompts = (params?: { limit?: number; skip?: number }): Promise<any> =>
+    api.get('/prompts', { params }).then(r => r.data)
+export const getManagedPrompt = (id: string): Promise<any> => api.get(`/prompts/${id}`).then(r => r.data)
+export const updateManagedPrompt = (id: string, data: object): Promise<any> =>
+    api.patch(`/prompts/${id}`, data).then(r => r.data)
+export const listPromptVersions = (id: string): Promise<any> =>
+    api.get(`/prompts/${id}/versions`).then(r => r.data)
+export const previewManagedPrompt = (
+    id: string,
+    data: { version?: number | null; variables: Record<string, unknown> },
+): Promise<any> => api.post(`/prompts/${id}/preview`, data).then(r => r.data)
+
+// Backward-compatible prompt helpers
+export const listPrompts = (): Promise<any> => listManagedPrompts()
 export const updatePrompt = (id: string, data: { override: string | null }): Promise<any> =>
-    api.put(`/prompts/${id}`, data).then(r => r.data)
+    updateManagedPrompt(id, { template: data.override ?? '' })
 
 // ── Tasks / Scheduling ──
 export const listSchedules = (): Promise<any> => api.get('/tasks/schedules').then(r => r.data)
@@ -210,16 +223,61 @@ export const exportAllData = (): Promise<Blob> =>
 export const exportWorkspaceData = (workspaceId: string): Promise<Blob> =>
     api.get(`/export/workspace/${workspaceId}`, { responseType: 'blob' }).then(r => r.data)
 
-// ── HITL ─────────────────────────────────────────────────────────────────────
-export const listPendingHITL = (params?: { workspace_id?: string }): Promise<any> =>
-    api.get('/hitl/pending', { params }).then(r => r.data)
-export const countPendingHITL = (): Promise<any> => api.get('/hitl/pending/count').then(r => r.data)
-export const getHITLHistory = (params?: { workspace_id?: string; limit?: number }): Promise<any> =>
-    api.get('/hitl/history', { params }).then(r => r.data)
+// ── Policies / Approvals ────────────────────────────────────────────────────
+export const listPolicies = (params?: { limit?: number; skip?: number }): Promise<any> =>
+    api.get('/policies', { params }).then(r => r.data)
+export const getPolicy = (id: string): Promise<any> => api.get(`/policies/${id}`).then(r => r.data)
+export const updateToolPolicy = (id: string, data: object): Promise<any> =>
+    api.patch(`/policies/tool/${id}`, data).then(r => r.data)
+export const simulatePolicy = (data: object): Promise<any> =>
+    api.post('/policies/simulate', data).then(r => r.data)
+export const listApprovalRequests = (params?: { status?: string; limit?: number; offset?: number }): Promise<any> =>
+    api.get('/policies/approvals', { params }).then(r => r.data)
+export const getApprovalRequest = (id: string): Promise<any> =>
+    api.get(`/policies/approvals/${id}`).then(r => r.data)
+export const approveApprovalRequest = (id: string, note?: string): Promise<any> =>
+    api.post(`/policies/approvals/${id}/approve`, { resolution_note: note }).then(r => r.data)
+export const denyApprovalRequest = (id: string, note?: string): Promise<any> =>
+    api.post(`/policies/approvals/${id}/deny`, { resolution_note: note }).then(r => r.data)
+
+// Backward-compatible approval helpers for existing shell surfaces
+function toLegacyHitl(approval: any) {
+    return {
+        id: approval.id,
+        workspace_id: approval.scope_id ?? '',
+        conversation_id: approval.payload_preview?.conversation_id ?? '',
+        tool_id: approval.tool_name ?? approval.requested_action,
+        tool_input: approval.payload_preview?.tool_input ?? approval.payload_preview ?? {},
+        action_summary: approval.reason_text ?? approval.requested_action,
+        risk_level: approval.risk_category,
+        agent_id: approval.payload_preview?.agent_id ?? null,
+        status: approval.status,
+        resolution_note: approval.resolution_note ?? null,
+        created_at: approval.requested_at,
+        resolved_at: approval.resolved_at ?? null,
+    }
+}
+
+export const listPendingHITL = async (params?: { workspace_id?: string }): Promise<any> => {
+    const payload = await listApprovalRequests({ status: 'pending', limit: 200 })
+    const approvals = (payload.approvals ?? []).map(toLegacyHitl)
+    if (!params?.workspace_id) return approvals
+    return approvals.filter((approval: any) => approval.workspace_id === params.workspace_id)
+}
+export const countPendingHITL = async (): Promise<any> => {
+    const payload = await listApprovalRequests({ status: 'pending', limit: 200 })
+    return { pending: payload.total ?? (payload.approvals ?? []).length }
+}
+export const getHITLHistory = async (params?: { workspace_id?: string; limit?: number }): Promise<any> => {
+    const payload = await listApprovalRequests({ status: '', limit: params?.limit ?? 200 })
+    const approvals = (payload.approvals ?? []).filter((approval: any) => approval.status !== 'pending').map(toLegacyHitl)
+    if (!params?.workspace_id) return approvals
+    return approvals.filter((approval: any) => approval.workspace_id === params.workspace_id)
+}
 export const approveHITL = (hitlId: string, note?: string): Promise<any> =>
-    api.post(`/hitl/${hitlId}/approve`, { resolution_note: note }).then(r => r.data)
+    approveApprovalRequest(hitlId, note).then(toLegacyHitl)
 export const denyHITL = (hitlId: string, note?: string): Promise<any> =>
-    api.post(`/hitl/${hitlId}/deny`, { resolution_note: note }).then(r => r.data)
+    denyApprovalRequest(hitlId, note).then(toLegacyHitl)
 
 // ── Agents ───────────────────────────────────────────────────────────────────
 export const listAgents = (): Promise<any> => api.get('/agents/').then(r => r.data)
@@ -265,12 +323,46 @@ export const getExecution = (wid: string, eid: string): Promise<any> =>
 export const getExecutionById = (eid: string): Promise<any> =>
     api.get(`/agents/executions/${eid}`).then(r => r.data)
 
-// ── Tool Permissions ─────────────────────────────────────────────────────────
-export const listToolPermissions = (): Promise<any> => api.get('/tools/permissions').then(r => r.data)
-export const getToolPermission = (toolId: string): Promise<any> =>
-    api.get(`/tools/${toolId}/permission`).then(r => r.data)
-export const setToolPermission = (toolId: string, permission: string): Promise<any> =>
-    api.put(`/tools/${toolId}/permission`, { permission }).then(r => r.data)
+// ── Legacy Tool Permission Helpers ──────────────────────────────────────────
+export const listToolPermissions = async (): Promise<any> => {
+    const payload = await listPolicies({ limit: 200 })
+    const toolPolicies = (payload.policies ?? []).filter((policy: any) => policy.policy_kind === 'tool')
+    if (toolPolicies.length === 0) return []
+    const systemPolicy = toolPolicies[0]
+    return [
+        ...(systemPolicy.allowed_tools ?? []).map((toolId: string) => ({ tool_id: toolId, permission: 'allowed' })),
+        ...(systemPolicy.approval_required_tools ?? []).map((toolId: string) => ({ tool_id: toolId, permission: 'hitl' })),
+        ...(systemPolicy.blocked_tools ?? []).map((toolId: string) => ({ tool_id: toolId, permission: 'blocked' })),
+    ]
+}
+export const getToolPermission = async (toolId: string): Promise<any> => {
+    const permissions = await listToolPermissions()
+    return permissions.find((entry: any) => entry.tool_id === toolId) ?? null
+}
+export const setToolPermission = async (toolId: string, permission: string): Promise<any> => {
+    const payload = await listPolicies({ limit: 200 })
+    const toolPolicies = (payload.policies ?? []).filter((policy: any) => policy.policy_kind === 'tool')
+    const systemPolicy = toolPolicies[0]
+    if (!systemPolicy) throw new Error('No tool policy available')
+
+    const allowedTools = new Set<string>(systemPolicy.allowed_tools ?? [])
+    const blockedTools = new Set<string>(systemPolicy.blocked_tools ?? [])
+    const approvalTools = new Set<string>(systemPolicy.approval_required_tools ?? [])
+
+    allowedTools.delete(toolId)
+    blockedTools.delete(toolId)
+    approvalTools.delete(toolId)
+
+    if (permission === 'allowed') allowedTools.add(toolId)
+    if (permission === 'blocked') blockedTools.add(toolId)
+    if (permission === 'hitl') approvalTools.add(toolId)
+
+    return updateToolPolicy(systemPolicy.id, {
+        allowed_tools: Array.from(allowedTools),
+        blocked_tools: Array.from(blockedTools),
+        approval_required_tools: Array.from(approvalTools),
+    })
+}
 
 // ── MCP Servers ───────────────────────────────────────────────────────────────
 export const listMCPServers = (): Promise<any> => api.get('/mcp/servers').then(r => r.data)

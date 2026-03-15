@@ -1,0 +1,124 @@
+"""Policy and approval API router."""
+
+from __future__ import annotations
+
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from openforge.db.postgres import get_db
+
+from .approval_service import ApprovalService
+from .schemas import (
+    ApprovalListResponse,
+    ApprovalRequestResponse,
+    ApprovalResolutionRequest,
+    PolicyListResponse,
+    PolicyResponse,
+    PolicySimulationRequest,
+    PolicySimulationResponse,
+    ToolPolicyUpdate,
+)
+from .service import PolicyService
+
+router = APIRouter()
+
+
+def get_policy_service(db=Depends(get_db)) -> PolicyService:
+    return PolicyService(db)
+
+
+def get_approval_service(db=Depends(get_db)) -> ApprovalService:
+    return ApprovalService(db)
+
+
+@router.post("/simulate", response_model=PolicySimulationResponse)
+async def simulate_policy(
+    body: PolicySimulationRequest,
+    service: PolicyService = Depends(get_policy_service),
+):
+    return await service.simulate_tool_decision(
+        tool_name=body.tool_name,
+        risk_category=body.risk_category,
+        scope_context=body.scope_context,
+        run_id=body.run_id,
+    )
+
+
+@router.get("/approvals", response_model=ApprovalListResponse)
+async def list_approvals(
+    status: str | None = "pending",
+    limit: int = 100,
+    offset: int = 0,
+    service: ApprovalService = Depends(get_approval_service),
+):
+    approvals = await service.list_approval_requests(status=status, limit=limit, offset=offset)
+    return {"approvals": approvals, "total": len(approvals)}
+
+
+@router.get("/approvals/{approval_id}", response_model=ApprovalRequestResponse)
+async def get_approval(
+    approval_id: UUID,
+    service: ApprovalService = Depends(get_approval_service),
+):
+    approval = await service.get_request(approval_id)
+    if approval is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Approval request not found")
+    return approval
+
+
+@router.post("/approvals/{approval_id}/approve", response_model=ApprovalRequestResponse)
+async def approve_request(
+    approval_id: UUID,
+    body: ApprovalResolutionRequest,
+    service: ApprovalService = Depends(get_approval_service),
+):
+    approval = await service.approve_request(approval_id, note=body.resolution_note)
+    if approval is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Approval request not found or already resolved")
+    return approval
+
+
+@router.post("/approvals/{approval_id}/deny", response_model=ApprovalRequestResponse)
+async def deny_request(
+    approval_id: UUID,
+    body: ApprovalResolutionRequest,
+    service: ApprovalService = Depends(get_approval_service),
+):
+    approval = await service.deny_request(approval_id, note=body.resolution_note)
+    if approval is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Approval request not found or already resolved")
+    return approval
+
+
+@router.get("/", response_model=PolicyListResponse)
+async def list_policies(
+    skip: int = 0,
+    limit: int = 100,
+    service: PolicyService = Depends(get_policy_service),
+):
+    policies, total = await service.list_policies(skip=skip, limit=limit)
+    return {"policies": policies, "total": total}
+
+
+@router.get("/{policy_id}", response_model=PolicyResponse)
+async def get_policy(
+    policy_id: UUID,
+    service: PolicyService = Depends(get_policy_service),
+):
+    policy = await service.get_policy(policy_id)
+    if policy is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Policy not found")
+    return policy
+
+
+@router.patch("/tool/{policy_id}", response_model=PolicyResponse)
+async def update_tool_policy(
+    policy_id: UUID,
+    body: ToolPolicyUpdate,
+    service: PolicyService = Depends(get_policy_service),
+):
+    policy = await service.update_tool_policy(policy_id, body.model_dump(exclude_unset=True))
+    if policy is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tool policy not found")
+    return policy

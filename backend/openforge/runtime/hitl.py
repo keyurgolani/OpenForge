@@ -17,7 +17,7 @@ from uuid import UUID
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from openforge.db.models import HITLRequest
+from openforge.db.models import ApprovalRequestModel
 
 logger = logging.getLogger("openforge.runtime.hitl")
 
@@ -49,15 +49,22 @@ class HITLService:
         action_summary: str,
         risk_level: str,
         agent_id: str | None = None,
-    ) -> HITLRequest:
-        req = HITLRequest(
-            workspace_id=workspace_id,
-            conversation_id=conversation_id,
-            tool_id=tool_id,
-            tool_input=tool_input,
-            action_summary=action_summary,
-            risk_level=risk_level,
-            agent_id=agent_id,
+    ) -> ApprovalRequestModel:
+        req = ApprovalRequestModel(
+            request_type="tool_invocation",
+            scope_type="workspace",
+            scope_id=str(workspace_id),
+            source_run_id=None,
+            requested_action=action_summary,
+            tool_name=tool_id,
+            reason_code="tool_requires_approval",
+            reason_text=action_summary,
+            risk_category=risk_level,
+            payload_preview={
+                "conversation_id": str(conversation_id),
+                "tool_input": tool_input,
+                "agent_id": agent_id,
+            },
         )
         db.add(req)
         await db.commit()
@@ -188,8 +195,8 @@ class HITLService:
 
     async def approve(
         self, db: AsyncSession, hitl_id: UUID, note: Optional[str] = None
-    ) -> Optional[HITLRequest]:
-        result = await db.execute(select(HITLRequest).where(HITLRequest.id == hitl_id))
+    ) -> Optional[ApprovalRequestModel]:
+        result = await db.execute(select(ApprovalRequestModel).where(ApprovalRequestModel.id == hitl_id))
         req = result.scalar_one_or_none()
         if not req or req.status != "pending":
             return None
@@ -206,8 +213,8 @@ class HITLService:
 
     async def deny(
         self, db: AsyncSession, hitl_id: UUID, note: Optional[str] = None
-    ) -> Optional[HITLRequest]:
-        result = await db.execute(select(HITLRequest).where(HITLRequest.id == hitl_id))
+    ) -> Optional[ApprovalRequestModel]:
+        result = await db.execute(select(ApprovalRequestModel).where(ApprovalRequestModel.id == hitl_id))
         req = result.scalar_one_or_none()
         if not req or req.status != "pending":
             return None
@@ -224,20 +231,20 @@ class HITLService:
 
     async def list_pending(
         self, db: AsyncSession, workspace_id: Optional[UUID] = None
-    ) -> list[HITLRequest]:
-        q = select(HITLRequest).where(HITLRequest.status == "pending")
+    ) -> list[ApprovalRequestModel]:
+        q = select(ApprovalRequestModel).where(ApprovalRequestModel.status == "pending")
         if workspace_id:
-            q = q.where(HITLRequest.workspace_id == workspace_id)
-        q = q.order_by(HITLRequest.created_at.desc())
+            q = q.where(ApprovalRequestModel.scope_id == str(workspace_id))
+        q = q.order_by(ApprovalRequestModel.requested_at.desc())
         result = await db.execute(q)
         return list(result.scalars().all())
 
     async def count_pending(
         self, db: AsyncSession, workspace_id: Optional[UUID] = None
     ) -> int:
-        q = select(func.count()).select_from(HITLRequest).where(HITLRequest.status == "pending")
+        q = select(func.count()).select_from(ApprovalRequestModel).where(ApprovalRequestModel.status == "pending")
         if workspace_id:
-            q = q.where(HITLRequest.workspace_id == workspace_id)
+            q = q.where(ApprovalRequestModel.scope_id == str(workspace_id))
         result = await db.execute(q)
         return result.scalar() or 0
 
@@ -247,11 +254,11 @@ class HITLService:
         workspace_id: Optional[UUID] = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> list[HITLRequest]:
-        q = select(HITLRequest).where(HITLRequest.status != "pending")
+    ) -> list[ApprovalRequestModel]:
+        q = select(ApprovalRequestModel).where(ApprovalRequestModel.status != "pending")
         if workspace_id:
-            q = q.where(HITLRequest.workspace_id == workspace_id)
-        q = q.order_by(HITLRequest.created_at.desc()).limit(limit).offset(offset)
+            q = q.where(ApprovalRequestModel.scope_id == str(workspace_id))
+        q = q.order_by(ApprovalRequestModel.requested_at.desc()).limit(limit).offset(offset)
         result = await db.execute(q)
         return list(result.scalars().all())
 

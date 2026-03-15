@@ -23,7 +23,7 @@ export function HITLHistorySubTab() {
     return (
         <div className="space-y-3">
             <div className="flex items-center justify-between gap-3">
-                <h3 className="font-semibold text-sm">Resolved HITL Requests</h3>
+                <h3 className="font-semibold text-sm">Resolved Approval Requests</h3>
                 <WorkspaceFilterSelect value={filterWorkspace} onChange={setFilterWorkspace} />
             </div>
             {isLoading && (
@@ -35,7 +35,7 @@ export function HITLHistorySubTab() {
             {!isLoading && history.length === 0 && (
                 <div className="text-center py-16 text-muted-foreground glass-card rounded-xl">
                     <History className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                    <p className="text-sm">No HITL history yet.</p>
+                    <p className="text-sm">No approval history yet.</p>
                 </div>
             )}
 

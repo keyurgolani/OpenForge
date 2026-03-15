@@ -204,7 +204,7 @@ export const LOG_LEVEL_CLASS: Record<LogLevel, string> = {
 export const PERMISSION_OPTIONS = [
     { value: 'default', label: 'Default', active: 'text-muted-foreground bg-muted/30 ring-1 ring-border/50', inactive: 'text-muted-foreground/40' },
     { value: 'allowed', label: 'Allowed', active: 'text-emerald-400 bg-emerald-500/10 ring-1 ring-emerald-500/30', inactive: 'text-muted-foreground/40' },
-    { value: 'hitl', label: 'HITL', active: 'text-amber-400 bg-amber-500/10 ring-1 ring-amber-500/30', inactive: 'text-muted-foreground/40' },
+    { value: 'hitl', label: 'Approval', active: 'text-amber-400 bg-amber-500/10 ring-1 ring-amber-500/30', inactive: 'text-muted-foreground/40' },
     { value: 'blocked', label: 'Blocked', active: 'text-red-400 bg-red-500/10 ring-1 ring-red-500/30', inactive: 'text-muted-foreground/40' },
 ] as const
 
@@ -223,9 +223,15 @@ export const EMPTY_MCP_FORM = {
 }
 
 // ── Settings tabs ───────────────────────────────────────────────────────────
-export const SETTINGS_TABS: SettingsTab[] = ['workspaces', 'agents', 'llm', 'prompts', 'jobs', 'skills', 'tools', 'mcp', 'hitl', 'audit', 'export', 'import']
+export const SETTINGS_TABS: SettingsTab[] = ['workspaces', 'llm', 'prompts', 'policies', 'approvals', 'jobs', 'skills', 'mcp', 'audit', 'export', 'import']
 
 export const toSettingsTab = (value: string | null): SettingsTab => {
-    const normalized = value === 'schedules' ? 'jobs' : value
+    const normalized = value === 'schedules'
+        ? 'jobs'
+        : value === 'tools'
+            ? 'policies'
+            : value === 'hitl'
+                ? 'approvals'
+                : value
     return SETTINGS_TABS.includes(normalized as SettingsTab) ? (normalized as SettingsTab) : 'workspaces'
 }
