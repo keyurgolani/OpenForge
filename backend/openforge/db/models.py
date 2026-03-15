@@ -1619,3 +1619,177 @@ class OutputContractModel(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
     created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
     updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+
+# =============================================================================
+# Phase 13: Observability & Evaluation Models
+# =============================================================================
+
+
+class UsageRecordModel(Base):
+    """Tracks token/cost/resource usage at run and step granularity."""
+    __tablename__ = "usage_records"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    step_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("run_steps.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    workflow_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    mission_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    profile_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    record_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    model_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    provider_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    tool_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    reasoning_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    total_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    estimated_cost_usd: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    latency_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    request_count: Mapped[int] = mapped_column(Integer, default=1)
+    success: Mapped[bool] = mapped_column(Boolean, default=True)
+    error_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+    __table_args__ = (
+        Index("idx_usage_records_run_created", "run_id", "created_at"),
+        Index("idx_usage_records_ws_type_created", "workspace_id", "record_type", "created_at"),
+        Index(
+            "idx_usage_records_mission_created", "mission_id", "created_at",
+            postgresql_where="mission_id IS NOT NULL",
+        ),
+    )
+
+
+class FailureEventModel(Base):
+    """Structured failure recording with taxonomy classification."""
+    __tablename__ = "failure_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    run_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("runs.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    step_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("run_steps.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    workflow_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    mission_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    trigger_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    failure_class: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    error_code: Mapped[str] = mapped_column(String(100), nullable=False)
+    severity: Mapped[str] = mapped_column(String(20), nullable=False, default="error")
+    retryability: Mapped[str] = mapped_column(String(20), nullable=False, default="not_retryable")
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    detail_json: Mapped[dict] = mapped_column("detail", JSONB, default=dict)
+    affected_node_key: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    related_policy_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    related_approval_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    resolved: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+    __table_args__ = (
+        Index("idx_failure_events_ws_class_created", "workspace_id", "failure_class", "created_at"),
+        Index("idx_failure_events_run_created", "run_id", "created_at"),
+        Index(
+            "idx_failure_events_mission_created", "mission_id", "created_at",
+            postgresql_where="mission_id IS NOT NULL",
+        ),
+    )
+
+
+class EvaluationScenarioModel(Base):
+    """Golden task / benchmark scenario definition."""
+    __tablename__ = "evaluation_scenarios"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    suite_name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    scenario_type: Mapped[str] = mapped_column(String(50), nullable=False, default="golden_task")
+    input_payload: Mapped[dict] = mapped_column(JSONB, default=dict)
+    expected_behaviors: Mapped[list] = mapped_column(JSONB, default=list)
+    expected_output_constraints: Mapped[dict] = mapped_column(JSONB, default=dict)
+    workflow_template_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    profile_template_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    mission_template_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    evaluation_metrics: Mapped[list] = mapped_column(JSONB, default=list)
+    tags: Mapped[list] = mapped_column(JSONB, default=list)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+
+
+class EvaluationRunModel(Base):
+    """A specific execution of evaluation scenarios."""
+    __tablename__ = "evaluation_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    suite_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
+    scenario_count: Mapped[int] = mapped_column(Integer, default=0)
+    passed_count: Mapped[int] = mapped_column(Integer, default=0)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0)
+    skipped_count: Mapped[int] = mapped_column(Integer, default=0)
+    total_cost_usd: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    total_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    baseline_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+
+
+class EvaluationResultModel(Base):
+    """Individual scenario result within an evaluation run."""
+    __tablename__ = "evaluation_results"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    evaluation_run_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("evaluation_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    scenario_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("evaluation_scenarios.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    run_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("runs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
+    metrics_json: Mapped[dict] = mapped_column("metrics", JSONB, default=dict)
+    threshold_results_json: Mapped[dict] = mapped_column("threshold_results", JSONB, default=dict)
+    output_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    comparison_baseline_json: Mapped[dict] = mapped_column("comparison_baseline", JSONB, default=dict)
+    artifacts_produced: Mapped[list] = mapped_column(JSONB, default=list)
+    cost_usd: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    tokens_used: Mapped[int] = mapped_column(Integer, default=0)
+    duration_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+
+
+class EvaluationBaselineModel(Base):
+    """Baseline metric snapshots for regression detection."""
+    __tablename__ = "evaluation_baselines"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    suite_name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source_evaluation_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("evaluation_runs.id", ondelete="SET NULL"), nullable=True
+    )
+    metrics_snapshot_json: Mapped[dict] = mapped_column("metrics_snapshot", JSONB, default=dict)
+    thresholds_json: Mapped[dict] = mapped_column("thresholds", JSONB, default=dict)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)

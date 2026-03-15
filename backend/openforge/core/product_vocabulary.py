@@ -23,6 +23,9 @@ class DomainNoun(StrEnum):
     MODEL_POLICY = "model_policy"
     MEMORY_POLICY = "memory_policy"
     OUTPUT_CONTRACT = "output_contract"
+    # Phase 13 observability and evaluation
+    OBSERVABILITY = "observability"
+    EVALUATION = "evaluation"
 
 
 DOMAIN_LABELS: dict[DomainNoun, str] = {
@@ -39,6 +42,8 @@ DOMAIN_LABELS: dict[DomainNoun, str] = {
     DomainNoun.MODEL_POLICY: "Model Policy",
     DomainNoun.MEMORY_POLICY: "Memory Policy",
     DomainNoun.OUTPUT_CONTRACT: "Output Contract",
+    DomainNoun.OBSERVABILITY: "Observability",
+    DomainNoun.EVALUATION: "Evaluation",
 }
 
 DOMAIN_LABELS_PLURAL: dict[DomainNoun, str] = {
@@ -55,6 +60,8 @@ DOMAIN_LABELS_PLURAL: dict[DomainNoun, str] = {
     DomainNoun.MODEL_POLICY: "Model Policies",
     DomainNoun.MEMORY_POLICY: "Memory Policies",
     DomainNoun.OUTPUT_CONTRACT: "Output Contracts",
+    DomainNoun.OBSERVABILITY: "Observability",
+    DomainNoun.EVALUATION: "Evaluation",
 }
 
 DOMAIN_DESCRIPTIONS: dict[DomainNoun, str] = {
@@ -71,11 +78,13 @@ DOMAIN_DESCRIPTIONS: dict[DomainNoun, str] = {
     DomainNoun.MODEL_POLICY: "Model policies define LLM selection and usage constraints.",
     DomainNoun.MEMORY_POLICY: "Memory policies define context assembly and history management.",
     DomainNoun.OUTPUT_CONTRACT: "Output contracts define expected output format and behavior.",
+    DomainNoun.OBSERVABILITY: "Observability surfaces usage, cost, failure, and telemetry data.",
+    DomainNoun.EVALUATION: "Evaluation runs benchmark scenarios and tracks quality baselines.",
 }
 
 ROUTE_SEGMENTS: dict[DomainNoun, str] = {
     noun: f"{noun.value}s"
-    if noun not in (DomainNoun.KNOWLEDGE, DomainNoun.GRAPH, DomainNoun.CATALOG, DomainNoun.CAPABILITY_BUNDLE, DomainNoun.MODEL_POLICY, DomainNoun.MEMORY_POLICY, DomainNoun.OUTPUT_CONTRACT)
+    if noun not in (DomainNoun.KNOWLEDGE, DomainNoun.GRAPH, DomainNoun.CATALOG, DomainNoun.CAPABILITY_BUNDLE, DomainNoun.MODEL_POLICY, DomainNoun.MEMORY_POLICY, DomainNoun.OUTPUT_CONTRACT, DomainNoun.OBSERVABILITY, DomainNoun.EVALUATION)
     else noun.value
     for noun in DomainNoun
 }

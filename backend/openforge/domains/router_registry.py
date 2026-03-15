@@ -21,6 +21,9 @@ from .capability_bundles.router import router as capability_bundles_router
 from .model_policies.router import router as model_policies_router
 from .memory_policies.router import router as memory_policies_router
 from .output_contracts.router import router as output_contracts_router
+# Phase 13 observability and evaluation
+from .observability.router import router as observability_router
+from .evaluation.router import router as evaluation_router
 
 
 def register_domain_routers(app: FastAPI) -> None:
@@ -115,4 +118,17 @@ def register_domain_routers(app: FastAPI) -> None:
         output_contracts_router,
         prefix=API_PREFIXES[DomainNoun.OUTPUT_CONTRACT],
         tags=["output-contracts"],
+    )
+
+    # Phase 13 observability and evaluation
+    app.include_router(
+        observability_router,
+        prefix=API_PREFIXES[DomainNoun.OBSERVABILITY],
+        tags=["observability"],
+    )
+
+    app.include_router(
+        evaluation_router,
+        prefix=API_PREFIXES[DomainNoun.EVALUATION],
+        tags=["evaluation"],
     )

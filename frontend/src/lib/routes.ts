@@ -53,6 +53,7 @@ export const ROUTES = {
   ARTIFACTS: `${WORKSPACE_PREFIX}/artifacts`,
   ARTIFACT_DETAIL: `${WORKSPACE_PREFIX}/artifacts/:artifactId`,
   CATALOG: `${WORKSPACE_PREFIX}/catalog`,
+  OPERATOR: `${WORKSPACE_PREFIX}/operator`,
 } as const;
 
 export function routeWithParams(
@@ -133,6 +134,10 @@ export function artifactsRoute(workspaceId: string, artifactId?: string): string
 
 export function catalogRoute(workspaceId: string): string {
   return routeWithParams(ROUTES.CATALOG, { workspaceId });
+}
+
+export function operatorRoute(workspaceId: string): string {
+  return routeWithParams(ROUTES.OPERATOR, { workspaceId });
 }
 
 export default ROUTES;
