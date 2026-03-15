@@ -287,8 +287,18 @@ class ProfileService(CrudDomainService):
             "differences": differences,
         }
 
+    def _serialize(self, instance: Any) -> dict[str, Any]:
+        data = super()._serialize(instance)
+        if isinstance(instance, AgentProfileModel):
+            data["tags"] = data.get("tags") or []
+            data["catalog_metadata"] = data.get("catalog_metadata") or {}
+            data["is_featured"] = bool(data.get("is_featured", False))
+            data["is_recommended"] = bool(data.get("is_recommended", False))
+            data["sort_priority"] = int(data.get("sort_priority") or 0)
+        return data
+
     def _serialize_model(self, instance: Any) -> dict[str, Any]:
-        return super()._serialize(instance)
+        return self._serialize(instance)
 
     def _dedupe_list(self, values) -> list[str]:
         ordered: list[str] = []

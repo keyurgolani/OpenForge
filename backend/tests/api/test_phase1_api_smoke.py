@@ -18,7 +18,16 @@ from openforge.domains.workflows.router import get_workflow_service
 
 
 class StubCrudService:
-    async def list_profiles(self, skip: int = 0, limit: int = 100):
+    async def list_profiles(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        is_system=None,
+        is_template=None,
+        is_featured=None,
+        status=None,
+        tags=None,
+    ):
         return [], 0
 
     async def get_profile(self, _identifier):
@@ -48,7 +57,17 @@ class StubCrudService:
     async def delete_workflow(self, _identifier):
         return True
 
-    async def list_missions(self, skip: int = 0, limit: int = 100):
+    async def list_missions(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        workspace_id=None,
+        status=None,
+        is_system=None,
+        is_template=None,
+        is_featured=None,
+        tags=None,
+    ):
         return [], 0
 
     async def get_mission(self, _identifier):
@@ -63,7 +82,16 @@ class StubCrudService:
     async def delete_mission(self, _identifier):
         return True
 
-    async def list_triggers(self, skip: int = 0, limit: int = 100):
+    async def list_triggers(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        workspace_id=None,
+        target_type=None,
+        target_id=None,
+        trigger_type=None,
+        is_enabled=None,
+    ):
         return [], 0
 
     async def get_trigger(self, _identifier):

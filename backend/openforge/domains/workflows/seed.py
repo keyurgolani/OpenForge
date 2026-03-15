@@ -58,6 +58,19 @@ def get_seed_workflow_blueprints(workspace_id: UUID | None = None) -> list[dict[
 
     resolved_workspace_id = workspace_id or DEFAULT_SEED_WORKSPACE_ID
 
+    def _decorate_blueprints(blueprints: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        decorated: list[dict[str, Any]] = []
+        for blueprint in blueprints:
+            workflow = blueprint.get("workflow", {})
+            decorated.append(
+                {
+                    **blueprint,
+                    "name": workflow.get("name"),
+                    "description": workflow.get("description"),
+                }
+            )
+        return decorated
+
     # ── 1. Review and Publish ────────────────────────────────────────────
     review_workflow_id = _seed_uuid("review-and-publish/workflow")
     review_node_id = _seed_uuid("review-and-publish/review.prepare")
@@ -137,7 +150,7 @@ def get_seed_workflow_blueprints(workspace_id: UUID | None = None) -> list[dict[
     wd_artifact_id = _seed_uuid("workspace-discovery/artifact.emit")
     wd_terminal_id = _seed_uuid("workspace-discovery/terminal.done")
 
-    return [
+    return _decorate_blueprints([
         # ─────────────────────────────────────────────────────────────────
         # 1. Review and Publish
         # ─────────────────────────────────────────────────────────────────
@@ -1384,13 +1397,21 @@ def get_seed_workflow_blueprints(workspace_id: UUID | None = None) -> list[dict[
                 },
             },
         },
-    ]
+    ])
 
 
 async def seed_example_workflows(service: WorkflowSeeder, workspace_id: UUID | None = None) -> list[dict[str, Any]]:
-    """Seed deterministic workflow definitions through the workflow service."""
+    """Seed the foundational Phase 9 workflow set through the workflow service."""
 
     created_workflows: list[dict[str, Any]] = []
+    foundational_slugs = {
+        "review-and-publish",
+        "plan-execute-review",
+        "map-reduce-research",
+        "reviewer-council-reduce",
+    }
     for blueprint in get_seed_workflow_blueprints(workspace_id):
+        if blueprint["slug"] not in foundational_slugs:
+            continue
         created_workflows.append(await service.create_workflow(blueprint["workflow"]))
     return created_workflows

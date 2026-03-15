@@ -5,9 +5,17 @@ Knowledge - user-provided context and data for AI processing.
 """
 
 from .models import KnowledgeModel
-from .router import router
-from .schemas import KnowledgeCreate, KnowledgeListResponse, KnowledgeResponse, KnowledgeUpdate
-from .service import KnowledgeService
+from .router import global_router, router
+from .schemas import (
+    KnowledgeCreate,
+    KnowledgeListItem,
+    KnowledgeListParams,
+    KnowledgeListResponse,
+    KnowledgeResponse,
+    KnowledgeTagsUpdate,
+    KnowledgeUpdate,
+)
+from .service import KnowledgeService, knowledge_service
 from .types import Knowledge, KnowledgeStatus, KnowledgeType
 
 __all__ = [
@@ -16,9 +24,14 @@ __all__ = [
     "KnowledgeType",
     "KnowledgeModel",
     "KnowledgeCreate",
+    "KnowledgeListItem",
+    "KnowledgeListParams",
     "KnowledgeUpdate",
+    "KnowledgeTagsUpdate",
     "KnowledgeResponse",
     "KnowledgeListResponse",
     "KnowledgeService",
+    "global_router",
+    "knowledge_service",
     "router",
 ]

@@ -57,7 +57,20 @@ def get_seed_mission_blueprints(
 
     ws = workspace_id or DEFAULT_SEED_WORKSPACE_ID
 
-    return [
+    def _decorate_blueprints(blueprints: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        decorated: list[dict[str, Any]] = []
+        for blueprint in blueprints:
+            mission = blueprint.get("mission", {})
+            decorated.append(
+                {
+                    **blueprint,
+                    "name": mission.get("name"),
+                    "description": mission.get("description"),
+                }
+            )
+        return decorated
+
+    return _decorate_blueprints([
         # ------------------------------------------------------------------ 1
         {
             "slug": "daily-research-digest",
@@ -633,7 +646,7 @@ def get_seed_mission_blueprints(
                 "requires_approval_review": False,
             },
         },
-    ]
+    ])
 
 
 # ---------------------------------------------------------------------------

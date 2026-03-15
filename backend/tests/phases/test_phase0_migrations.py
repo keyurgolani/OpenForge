@@ -17,6 +17,9 @@ EXPECTED_MIGRATIONS = [
     "007_phase8_artifact_unification.py",
     "008_phase9_workflow_runtime.py",
     "009_phase10_composite_workflows.py",
+    "010_phase11_missions_triggers.py",
+    "011_phase12_catalog_metadata.py",
+    "012_phase13_observability_evaluation.py",
 ]
 
 

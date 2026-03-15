@@ -11,8 +11,13 @@ from openforge.core.product_vocabulary import API_PREFIXES, DomainNoun
 from .artifacts.router import router as artifacts_router
 from .catalog.router import router as catalog_router
 from .graph.router import router as graph_router
+from .knowledge.router import global_router as knowledge_global_router
+from .knowledge.router import router as knowledge_router
 from .missions.router import router as missions_router
+from .policies.router import router as policies_router
 from .profiles.router import router as profiles_router
+from .prompts.router import router as prompts_router
+from .retrieval.router import router as retrieval_router
 from .runs.router import router as runs_router
 from .triggers.router import router as triggers_router
 from .workflows.router import router as workflows_router
@@ -77,6 +82,19 @@ def register_domain_routers(app: FastAPI) -> None:
         tags=["artifacts"],
     )
 
+    # Register knowledge domain under the existing workspace-scoped surface and
+    # its global resolve endpoints.
+    app.include_router(
+        knowledge_router,
+        prefix="/api/v1/workspaces",
+        tags=["knowledge"],
+    )
+    app.include_router(
+        knowledge_global_router,
+        prefix="/api/v1",
+        tags=["knowledge"],
+    )
+
     # Register graph domain
     app.include_router(
         graph_router,
@@ -118,6 +136,23 @@ def register_domain_routers(app: FastAPI) -> None:
         output_contracts_router,
         prefix=API_PREFIXES[DomainNoun.OUTPUT_CONTRACT],
         tags=["output-contracts"],
+    )
+
+    # Domain-owned builder and trust surfaces
+    app.include_router(
+        prompts_router,
+        prefix="/api/v1/prompts",
+        tags=["prompts"],
+    )
+    app.include_router(
+        policies_router,
+        prefix="/api/v1/policies",
+        tags=["policies"],
+    )
+    app.include_router(
+        retrieval_router,
+        prefix="/api/v1/retrieval",
+        tags=["retrieval"],
     )
 
     # Phase 13 observability and evaluation

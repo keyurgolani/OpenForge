@@ -1,13 +1,20 @@
-"""
-Knowledge domain router skeleton.
+"""Knowledge domain router.
 
-This router exists so the knowledge domain package matches the final package
-shape from Phase 1, but the active knowledge HTTP surface remains in
-``openforge.api.knowledge`` for transitional continuity.
+The knowledge HTTP surface still reuses the proven implementation from the
+existing API modules, but ownership now lives under the knowledge domain so
+future work can target `openforge.domains.knowledge.*` directly.
 """
 
 from fastapi import APIRouter
 
-router = APIRouter()
+from openforge.api import knowledge as knowledge_api
+from openforge.api import knowledge_upload as knowledge_upload_api
 
-__all__ = ["router"]
+router = APIRouter()
+global_router = APIRouter()
+
+router.include_router(knowledge_api.router)
+router.include_router(knowledge_upload_api.router)
+global_router.include_router(knowledge_api.knowledge_global_router)
+
+__all__ = ["global_router", "router"]

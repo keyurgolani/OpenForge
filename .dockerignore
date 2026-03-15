@@ -14,8 +14,18 @@ __pycache__/
 *.pyo
 *.pyd
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 *.egg-info/
 .eggs/
+*.coverage
+htmlcov/
+
+# Local environments
+.venv/
+venv/
+**/.venv/
+**/venv/
 
 # Environment
 .env
@@ -27,6 +37,8 @@ data/
 
 # Pre-built static assets (built in Docker stage 1)
 static/
+frontend/dist/
+frontend/.vite/
 
 # Dev docs
 sdlc/
