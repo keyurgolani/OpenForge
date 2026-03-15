@@ -159,7 +159,7 @@ export default function ProfilesPage() {
           title={emptyCopy.title}
           description={emptyCopy.description}
           actionLabel={emptyCopy.cta}
-          actionHint="Creation flows now target the canonical profiles API and detail builder."
+          actionHint="Profiles define reusable specialist workers with specific capabilities, policies, and output contracts."
           icon={<Sparkles className="h-5 w-5" />}
         />
       ) : (
@@ -195,7 +195,7 @@ export default function ProfilesPage() {
                   to={profilesRoute(workspaceId as string, profile.id)}
                   className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-background/35 px-3 py-2 text-sm text-muted-foreground transition hover:text-foreground"
                 >
-                  Inspect Builder
+                  View Details
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </div>

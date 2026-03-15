@@ -94,7 +94,7 @@ export default function WorkspaceOverviewPage() {
     <div className="space-y-6 p-6">
       <PageHeader
         title="Workspace"
-        description="A quick operational view of the domain surfaces that shape this workspace: knowledge, chat, reusable profiles, orchestration, live runs, and persisted artifacts."
+        description="An overview of your workspace: knowledge, conversations, profiles, workflows, runs, and artifacts."
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -189,7 +189,7 @@ export default function WorkspaceOverviewPage() {
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-foreground">What to do next</h2>
-              <p className="text-sm text-muted-foreground/90">The Phase 1 and 2 surfaces now have clear destinations.</p>
+              <p className="text-sm text-muted-foreground/90">Explore your workspace surfaces below.</p>
             </div>
             <Link className="text-sm text-accent transition-colors hover:text-accent/80" to={chatRoute(workspaceId)}>
               Open chat

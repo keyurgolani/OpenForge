@@ -405,24 +405,24 @@ class GraphExtractionService:
         try:
             parsed = json.loads(content)
             return parsed if isinstance(parsed, list) else None
-        except json.JSONDecodeError:
-            pass
+        except json.JSONDecodeError as e:
+            logger.warning("Graph extraction step failed: %s", e)
 
         json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", content)
         if json_match:
             try:
                 parsed = json.loads(json_match.group(1))
                 return parsed if isinstance(parsed, list) else None
-            except json.JSONDecodeError:
-                pass
+            except json.JSONDecodeError as e:
+                logger.warning("Graph extraction step failed: %s", e)
 
         array_match = re.search(r"\[[\s\S]*\]", content)
         if array_match:
             try:
                 parsed = json.loads(array_match.group())
                 return parsed if isinstance(parsed, list) else None
-            except json.JSONDecodeError:
-                pass
+            except json.JSONDecodeError as e:
+                logger.warning("Graph extraction step failed: %s", e)
 
         return None
 

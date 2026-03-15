@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 from uuid import UUID
 
@@ -12,6 +13,8 @@ from openforge.db.models import PromptDefinitionModel, PromptUsageLogModel, Prom
 
 from .rendering import PromptRenderError, render_prompt_version, select_prompt_version
 from .seed import SEED_PROMPTS
+
+logger = logging.getLogger(__name__)
 
 
 class PromptService:
@@ -127,8 +130,8 @@ class PromptService:
         clause = PromptDefinitionModel.slug == str(prompt_lookup)
         try:
             clause = or_(PromptDefinitionModel.slug == str(prompt_lookup), PromptDefinitionModel.id == UUID(str(prompt_lookup)))
-        except ValueError:
-            pass
+        except ValueError as e:
+            logger.warning("Prompt lookup UUID parse failed, falling back to slug-only query: %s", e)
         return (await self.db.execute(select(PromptDefinitionModel).where(clause))).scalar_one_or_none()
 
     async def _record_usage(

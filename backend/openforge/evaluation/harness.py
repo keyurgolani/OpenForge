@@ -7,6 +7,7 @@ from typing import Any
 from uuid import UUID
 
 from openforge.common.time import utc_now
+from openforge.evaluation.runners import get_suite_runner
 
 logger = logging.getLogger("openforge.evaluation.harness")
 
@@ -111,11 +112,32 @@ class EvaluationHarness:
         """Execute a single evaluation scenario and record the result."""
         start = utc_now()
 
-        # For now, create a placeholder result. Full workflow execution integration
-        # will be added when the evaluation runner connects to the runtime coordinator.
-        metrics: dict[str, Any] = {}
+        # Invoke the appropriate suite runner for this scenario
+        suite_name = scenario.get("suite_name", "base")
+        runner = get_suite_runner(suite_name)
+        runner_result = await runner.evaluate(scenario, workspace_id=workspace_id)
+
+        execution_status = runner_result.get("status", "completed")
+        runner_metrics = runner_result.get("metrics", {})
+        runner_duration_ms = runner_result.get("duration_ms", 0)
+        runner_error = runner_result.get("error_message")
+
+        # Merge runner metrics into the evaluation metrics
+        metrics: dict[str, Any] = {
+            "execution_status": execution_status,
+            "runner_duration_ms": runner_duration_ms,
+            **runner_metrics,
+        }
+        if runner_error:
+            metrics["runner_error"] = runner_error
+
         threshold_results: dict[str, Any] = {}
-        status = "passed"
+
+        # If the runner itself failed, mark the scenario as failed
+        if execution_status == "failed":
+            status = "failed"
+        else:
+            status = "passed"
 
         # Check each evaluation metric against thresholds
         for metric_def in scenario.get("evaluation_metrics", []):
@@ -143,5 +165,6 @@ class EvaluationHarness:
             metrics=metrics,
             threshold_results=threshold_results,
             duration_ms=duration_ms,
+            error_message=runner_error,
         )
         return result

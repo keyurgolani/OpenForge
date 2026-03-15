@@ -109,7 +109,7 @@ export default function ArtifactsPage() {
 
       <Section
         title="Artifact Browser"
-        description="Phase 8 keeps outputs unified on the existing artifact surface instead of reviving target-specific UI."
+        description="All durable outputs are unified through the artifact system with full versioning and lineage tracking."
       >
         <ArtifactFilters
           search={search}
@@ -200,7 +200,7 @@ export default function ArtifactsPage() {
               <div className="rounded-2xl border border-accent/20 bg-accent/8 p-4 text-sm text-muted-foreground/90">
                 <div className="mb-2 flex items-center gap-2 text-accent">
                   <Sparkles className="h-4 w-4" />
-                  <span className="font-medium">Phase 8 intent</span>
+                  <span className="font-medium">Artifact System</span>
                 </div>
                 Manual creation is lightweight on purpose. Material edits happen later through explicit versions on the detail page.
               </div>
@@ -227,7 +227,7 @@ export default function ArtifactsPage() {
             ? 'Try broadening the search or reset one of the filters.'
             : 'Artifacts produced by runs, missions, or manual drafting will appear here.'}
           actionLabel={hasFilters ? 'Clear Filters' : 'New Artifact'}
-          actionHint={hasFilters ? 'Phase 8 filtering is active on type, status, visibility, and text search.' : 'Start with a note, plan, or target artifact and evolve it through versions.'}
+          actionHint={hasFilters ? 'Filter artifacts by type, status, visibility, and text search.' : 'Start with a note, plan, or target artifact and evolve it through versions.'}
           icon={<FileOutput className="h-5 w-5" />}
         />
       ) : (

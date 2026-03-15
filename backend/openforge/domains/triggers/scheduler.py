@@ -50,7 +50,9 @@ class TriggerScheduler:
         try:
             await self._loop_task
         except asyncio.CancelledError:
-            pass
+            logger.debug("Trigger scheduler task cancelled during stop.")
+        except Exception as e:
+            logger.warning("Trigger scheduler operation failed: %s", e)
         finally:
             self._loop_task = None
         logger.info("Trigger scheduler stopped.")

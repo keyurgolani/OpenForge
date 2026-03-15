@@ -111,7 +111,7 @@ export default function WorkflowDetailPage() {
     <div className="space-y-6 p-6">
       <PageHeader
         title={workflow.name}
-        description="Inspect the active runtime definition, compare version snapshots, and review node and edge structure without dropping back to the legacy monolith."
+        description="Inspect the active runtime definition, compare version snapshots, and review node and edge structure with full version history and graph visualization."
         actions={(
           <Link
             to={workflowsRoute(workspaceId)}
@@ -216,7 +216,7 @@ export default function WorkflowDetailPage() {
           </Section>
         </Section>
 
-        <Section title="Schemas" description="Phase 9 keeps state, input, and output contracts visible for builders and operators.">
+        <Section title="Schemas" description="State, input, and output contracts are visible for builders and operators.">
           <div className="grid gap-4">
             {[
               { title: 'State schema', description: 'Persisted runtime state shape for the selected version.', payload: activeVersion?.state_schema ?? {} },
@@ -239,7 +239,7 @@ export default function WorkflowDetailPage() {
         </Section>
       </div>
 
-      <Section title="Composite orchestration" description="Phase 10 surfaces composite patterns directly in the workflow definition.">
+      <Section title="Composite orchestration" description="Composite patterns are defined directly in the workflow definition.">
         <div className="grid gap-4 md:grid-cols-3">
           <Card glass>
             <CardHeader>

@@ -137,7 +137,7 @@ export default function MissionsPage() {
           title={emptyCopy.title}
           description={emptyCopy.description}
           actionLabel={emptyCopy.cta}
-          actionHint="Mission packaging now has a destination even before the full runtime arrives."
+          actionHint="Missions package workflows for scheduled, event-driven, or continuous autonomous execution with safety policies."
           icon={<Rocket className="h-5 w-5" />}
         />
       ) : (
@@ -220,7 +220,7 @@ export default function MissionsPage() {
                   to={missionsRoute(workspaceId, mission.id)}
                   className="inline-flex h-10 items-center gap-2 rounded-xl border border-border/60 bg-background/50 px-3 text-sm text-foreground transition hover:border-accent/35 hover:text-accent"
                 >
-                  Inspect mission
+                  View Details
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </div>

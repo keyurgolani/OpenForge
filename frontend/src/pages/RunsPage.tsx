@@ -108,7 +108,7 @@ export default function RunsPage() {
           title={emptyCopy.title}
           description={emptyCopy.description}
           actionLabel={emptyCopy.cta}
-          actionHint="Run detail UX can evolve later without going back to the legacy executions list."
+          actionHint="Runs track every workflow and mission execution with full step lineage, checkpoints, and artifact outputs."
           icon={<Boxes className="h-5 w-5" />}
         />
       ) : (

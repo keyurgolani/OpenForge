@@ -108,7 +108,7 @@ export default function PromptManagementPanel() {
           <div className="space-y-1">
             <h2 className="text-sm font-semibold text-foreground">Managed Prompts</h2>
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Phase 3 turns prompts into versioned resources with explicit owners, validated variables, and previewable rendering.
+              Prompts are versioned resources with explicit owners, validated variables, and previewable rendering.
             </p>
           </div>
         </div>

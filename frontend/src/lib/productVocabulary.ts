@@ -175,7 +175,7 @@ export const DOMAIN_LABELS_PLURAL: Record<DomainNoun, string> = {
 };
 
 export const DOMAIN_DESCRIPTIONS: Record<DomainNoun, string> = {
-  profile: 'Agent profiles define the capabilities, prompts, and behaviors of AI workers.',
+  profile: 'Profiles define the capabilities, prompts, and behaviors of specialist AI workers.',
   workflow: 'Workflows are composable execution graphs that define how tasks are performed.',
   mission: 'Missions are packaged autonomous units that combine workflows, profiles, and triggers.',
   trigger: 'Triggers define when and how missions are automatically executed.',
@@ -253,7 +253,7 @@ export const API_PREFIXES: Record<DomainNoun, string> = {
 export const EMPTY_STATE_COPY: Record<DomainNoun, { title: string; description: string; cta: string }> = {
   profile: {
     title: 'No profiles yet',
-    description: 'Create your first agent profile to define capabilities and behaviors.',
+    description: 'Create your first profile to define specialist capabilities and behaviors.',
     cta: 'Create Profile',
   },
   workflow: {
@@ -363,7 +363,7 @@ export const SETTINGS_LABELS: Record<SettingsSection, string> = {
 export const SETTINGS_DESCRIPTIONS: Record<SettingsSection, string> = {
   workspaces: 'Manage workspaces and their configurations.',
   models: 'Configure AI model providers and model assignments.',
-  prompts: 'Manage prompt templates for agent profiles.',
+  prompts: 'Manage prompt templates for profiles.',
   policies: 'Define execution policies and guardrails.',
   approvals: 'Review and approve pending human-in-the-loop items.',
   pipelines: 'Configure data processing pipelines.',

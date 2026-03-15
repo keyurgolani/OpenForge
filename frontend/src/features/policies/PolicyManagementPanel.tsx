@@ -229,7 +229,7 @@ export default function PolicyManagementPanel() {
                     {!editable && (
                       <div className="space-y-3">
                         <div className="rounded-xl border border-border/40 bg-background/20 px-4 py-4 text-sm text-muted-foreground">
-                          This policy kind is visible for inspection in Phase 3. Editing is currently focused on tool policies because that is where enforcement, approval routing, and rate limits are active.
+                          This policy kind is available for inspection. Editing is currently focused on tool policies where enforcement, approval routing, and rate limits are active.
                         </div>
                         {selectedPolicy.rules && selectedPolicy.rules.length > 0 && (
                           <div>

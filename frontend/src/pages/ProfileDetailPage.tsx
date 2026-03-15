@@ -130,7 +130,7 @@ export default function ProfileDetailPage() {
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.9fr)]">
         <Section
           title="Profile Identity"
-          description="Phase 7 profiles should stay focused on role, prompts, and modular references rather than workflow orchestration."
+          description="Profiles stay focused on role, prompts, and modular references rather than workflow orchestration."
         >
           <Card glass padding="lg">
             <CardContent className="grid gap-4 md:grid-cols-2">
@@ -270,7 +270,7 @@ export default function ProfileDetailPage() {
 
         <Section
           title="Validation"
-          description="Phase 7 requires profiles to be complete reusable workers, not partial mega-configs."
+          description="Profiles should be complete reusable workers, not partial mega-configs."
         >
           <Card glass className={validation?.is_complete ? 'border-emerald-500/25' : 'border-amber-500/30'}>
             <CardHeader>
