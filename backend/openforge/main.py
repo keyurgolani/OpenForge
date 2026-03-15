@@ -236,7 +236,7 @@ async def lifespan(app: FastAPI):
     # Register system agents and load custom agents
     try:
         from openforge.db.postgres import AsyncSessionLocal
-        from openforge.core.agent_registry import (
+        from openforge.runtime.transitional_agents import (
             agent_registry, WORKSPACE_AGENT, ROUTER_AGENT, COUNCIL_AGENT, OPTIMIZER_AGENT,
         )
 
@@ -280,7 +280,7 @@ async def lifespan(app: FastAPI):
     # Start Redis agent relay (bridges Celery worker events to WebSocket)
     relay_task = None
     try:
-        from openforge.services.agent_relay import start_agent_relay
+        from openforge.runtime.stream_events import start_agent_relay
         relay_task = asyncio.create_task(start_agent_relay())
         logger.info("Agent relay started.")
     except Exception as e:

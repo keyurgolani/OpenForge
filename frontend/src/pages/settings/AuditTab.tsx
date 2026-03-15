@@ -1,11 +1,10 @@
 import { useState } from 'react'
-import { History, Zap, Wrench, ShieldAlert, Terminal } from 'lucide-react'
-import { AgentExecutionsSubTab } from './audit/AgentExecutionsSubTab'
+import { History, Wrench, ShieldAlert, Terminal } from 'lucide-react'
 import { HITLHistorySubTab, JobHistorySubTab, ToolCallLogsSubTab } from './audit/HistorySubTabs'
 import { ContainerLogsSubTab } from './audit/ContainerLogsSubTab'
 
 function AuditTab() {
-    const [subTab, setSubTab] = useState<'history' | 'agent-executions' | 'tool-calls' | 'hitl' | 'logs'>('history')
+    const [subTab, setSubTab] = useState<'history' | 'tool-calls' | 'hitl' | 'logs'>('history')
 
     return (
         <div className="flex-1 min-h-0 flex flex-col gap-6">
@@ -18,15 +17,6 @@ function AuditTab() {
                         }`}
                 >
                     <History className="w-4 h-4" /> Job History
-                </button>
-                <button
-                    onClick={() => setSubTab('agent-executions')}
-                    className={`flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-300 whitespace-nowrap ${subTab === 'agent-executions'
-                        ? 'bg-accent/20 text-accent ring-1 ring-accent/30'
-                        : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
-                        }`}
-                >
-                    <Zap className="w-4 h-4" /> Agent Executions
                 </button>
                 <button
                     onClick={() => setSubTab('tool-calls')}
@@ -59,7 +49,6 @@ function AuditTab() {
 
             <div className="min-h-0 flex-1 overflow-y-auto">
                 {subTab === 'history' && <JobHistorySubTab />}
-                {subTab === 'agent-executions' && <AgentExecutionsSubTab />}
                 {subTab === 'tool-calls' && <ToolCallLogsSubTab />}
                 {subTab === 'hitl' && <HITLHistorySubTab />}
                 {subTab === 'logs' && <ContainerLogsSubTab />}

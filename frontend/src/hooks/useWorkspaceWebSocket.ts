@@ -17,16 +17,15 @@ function getOrCreateManager(key: string) {
     return managers.get(key)!
 }
 
-export function useWorkspaceWebSocket(workspaceId: string, channel?: 'agent' | 'system'): WsManager {
-    const managerKey = `${workspaceId}:${channel || 'legacy'}`
+export function useWorkspaceWebSocket(workspaceId: string, channel: 'agent' | 'system'): WsManager {
+    const managerKey = `${workspaceId}:${channel}`
     const managerRef = useRef(getOrCreateManager(managerKey))
     const [isConnected, setIsConnected] = useState(managerRef.current.isConnected)
 
     const connect = useCallback(() => {
         const manager = managerRef.current
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-        const channelSuffix = channel ? `/${channel}` : ''
-        const wsUrl = `${protocol}//${window.location.host}/ws/workspace/${workspaceId}${channelSuffix}`
+        const wsUrl = `${protocol}//${window.location.host}/ws/workspace/${workspaceId}/${channel}`
 
         if (manager.ws && (manager.ws.readyState === WebSocket.OPEN || manager.ws.readyState === WebSocket.CONNECTING)) {
             return

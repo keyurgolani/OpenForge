@@ -32,12 +32,6 @@ export const ROUTES = {
   RUN_DETAIL: `${WORKSPACE_PREFIX}/runs/:runId`,
   ARTIFACTS: `${WORKSPACE_PREFIX}/artifacts`,
   ARTIFACT_DETAIL: `${WORKSPACE_PREFIX}/artifacts/:artifactId`,
-
-  // Transitional compatibility routes kept out of the primary IA.
-  LEGACY_AGENT: `${WORKSPACE_PREFIX}/agent`,
-  LEGACY_AGENT_CONVERSATION: `${WORKSPACE_PREFIX}/agent/:conversationId`,
-  LEGACY_EXECUTIONS: '/executions',
-  LEGACY_EXECUTION_DETAIL: '/executions/:executionId',
 } as const;
 
 export function routeWithParams(

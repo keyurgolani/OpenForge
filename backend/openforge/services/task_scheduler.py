@@ -148,7 +148,7 @@ class TaskScheduler:
         try:
             from croniter import croniter
             from openforge.db.models import AgentSchedule
-            from openforge.core.agent_registry import agent_registry
+            from openforge.runtime.transitional_agents import agent_registry
 
             async with AsyncSessionLocal() as db:
                 result = await db.execute(
@@ -220,7 +220,7 @@ class TaskScheduler:
                                 logger.warning("Celery dispatch for schedule '%s' failed: %s", schedule.name, e)
                         else:
                             import asyncio
-                            from openforge.services.agent_execution_engine import agent_engine
+                            from openforge.runtime.execution_engine import agent_engine
 
                             _wid = schedule.workspace_id
                             _cid = conv.id

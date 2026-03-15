@@ -172,12 +172,29 @@ class TestImportRules:
             "from openforge.api import agents",
             "from openforge.api import agent_schedules",
             "from openforge.api import targets",
+            "from openforge.api import agent",
         ]
 
         for forbidden in forbidden_imports:
             assert forbidden not in content, (
                 f"Legacy import found in router.py: {forbidden}"
             )
+
+        assert 'prefix="/agent"' not in content, (
+            "Public /agent router mount should stay removed; runtime delegation belongs under runtime-owned routes."
+        )
+
+    def test_workspace_websockets_use_explicit_channels_only(self):
+        """The runtime should not expose the pre-separation bare workspace socket."""
+        websocket_file = BACKEND_ROOT / "api" / "websocket.py"
+        if not websocket_file.exists():
+            pytest.skip("websocket.py not found")
+
+        content = websocket_file.read_text(encoding="utf-8")
+
+        assert '@ws_router.websocket("/ws/workspace/{workspace_id}")' not in content
+        assert '@ws_router.websocket("/ws/workspace/{workspace_id}/agent")' in content
+        assert '@ws_router.websocket("/ws/workspace/{workspace_id}/system")' in content
 
     def test_domain_routers_are_registered_through_router_registry(self):
         """Domain routers should be mounted through the dedicated registry in main.py."""

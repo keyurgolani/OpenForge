@@ -98,7 +98,7 @@ export default function AppShell() {
     const [deleteModalOpen, setDeleteModalOpen] = useState(false)
     const [conversationToDelete, setConversationToDelete] = useState<{ id: string; title: string | null } | null>(null)
     const [deleteLoading, setDeleteLoading] = useState(false)
-    const { isConnected, on } = useWorkspaceWebSocket(workspaceId)
+    const { isConnected, on } = useWorkspaceWebSocket(workspaceId, 'system')
     const { setCommandPaletteOpen } = useUIStore()
     const qc = useQueryClient()
 
@@ -213,15 +213,15 @@ export default function AppShell() {
     const isKnowledgeBoardPage = location.pathname === knowledgeRoute(workspaceId)
     const isSearchPage = location.pathname.includes('/search')
     const isSettingsPage = location.pathname.includes('/settings')
-    const isWorkspaceAgentPage = location.pathname.includes('/chat') || location.pathname.includes('/agent')
+    const isWorkspaceAgentPage = location.pathname.includes('/chat')
     const isKnowledgePage = location.pathname.includes('/knowledge/')
-    const isRunsPage = location.pathname.includes('/runs') || location.pathname.includes('/executions')
+    const isRunsPage = location.pathname.includes('/runs')
     const isProfilesPage = location.pathname.includes('/profiles')
     const isWorkflowsPage = location.pathname.includes('/workflows')
     const isMissionsPage = location.pathname.includes('/missions')
     const isArtifactsPage = location.pathname.includes('/artifacts')
     const currentSectionMeta = useMemo(() => {
-        if (location.pathname.includes('/chat') || location.pathname.includes('/agent')) {
+        if (location.pathname.includes('/chat')) {
             return {
                 title: 'Chat',
                 description: 'Ask questions, review context, and manage conversations.',
@@ -239,22 +239,10 @@ export default function AppShell() {
                 description: 'Manage workspace configuration, providers, and defaults.',
             }
         }
-        if (location.pathname.match(/\/executions\/.+/)) {
-            return {
-                title: 'Legacy Execution Detail',
-                description: 'Transitional execution monitoring retained outside the primary IA.',
-            }
-        }
         if (location.pathname.includes('/runs')) {
             return {
                 title: 'Runs',
                 description: 'Durable execution records and current run activity.',
-            }
-        }
-        if (location.pathname.includes('/executions')) {
-            return {
-                title: 'Legacy Executions',
-                description: 'Compatibility surface for the transitional execution monitor.',
             }
         }
         if (location.pathname.includes('/profiles')) {
@@ -444,7 +432,7 @@ export default function AppShell() {
         try {
             await deleteConversation(workspaceId, conversationId)
             qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
-            if (location.pathname.includes(`/chat/${conversationId}`) || location.pathname.includes(`/agent/${conversationId}`)) {
+            if (location.pathname.includes(`/chat/${conversationId}`)) {
                 navigate(chatRoute(workspaceId))
             }
         } catch (error) {
@@ -459,7 +447,7 @@ export default function AppShell() {
             await deleteConversation(workspaceId, conversationToDelete.id)
             await permanentlyDeleteConversation(workspaceId, conversationToDelete.id)
             qc.invalidateQueries({ queryKey: ['conversations', workspaceId] })
-            if (location.pathname.includes(`/chat/${conversationToDelete.id}`) || location.pathname.includes(`/agent/${conversationToDelete.id}`)) {
+            if (location.pathname.includes(`/chat/${conversationToDelete.id}`)) {
                 navigate(chatRoute(workspaceId))
             }
         } catch (error) {
@@ -575,7 +563,7 @@ export default function AppShell() {
                                                                         ? location.pathname.slice(prefix.length)
                                                                         : ''
                                                                     // Drop knowledge-specific IDs and conversation IDs since they're workspace-specific
-                                                                    const keepPath = subPath.startsWith('/chat/') || subPath.startsWith('/agent/') ? '/chat'
+                                                                    const keepPath = subPath.startsWith('/chat/') ? '/chat'
                                                                         : subPath.startsWith('/knowledge/') ? '/knowledge'
                                                                         : subPath
                                                                     navigate(`/w/${workspace.id}${keepPath}`)
@@ -630,7 +618,7 @@ export default function AppShell() {
                                         {/* Chat with expandable recent conversations */}
                                         <div className="flex flex-col flex-1 min-h-0">
                                             <div className="flex items-center">
-                                                <Link to={chatRoute(workspaceId)} className={`sidebar-item flex-1 ${isActive('/chat') || isActive('/agent') ? 'active' : ''}`}>
+                                                <Link to={chatRoute(workspaceId)} className={`sidebar-item flex-1 ${isActive('/chat') ? 'active' : ''}`}>
                                                     <MessageSquare className="w-4 h-4" /> Chat
                                                 </Link>
                                                 {recentConversations.length > 0 && (
@@ -661,7 +649,7 @@ export default function AppShell() {
                                                         <ContextMenu key={c.id}>
                                                             <ContextMenuTrigger asChild>
                                                                 {isRenaming ? (
-                                                                    <div className={`sidebar-item text-xs ${isActive(`/chat/${c.id}`) || isActive(`/agent/${c.id}`) ? 'active' : ''}`}>
+                                                                    <div className={`sidebar-item text-xs ${isActive(`/chat/${c.id}`) ? 'active' : ''}`}>
                                                                         <MessageSquare className="w-3 h-3" />
                                                                         <input
                                                                             ref={conversationRenameInputRef}
@@ -684,7 +672,7 @@ export default function AppShell() {
                                                                         />
                                                                     </div>
                                                                 ) : (
-                                                                    <Link to={chatRoute(workspaceId, c.id)} className={`sidebar-item text-xs ${isActive(`/chat/${c.id}`) || isActive(`/agent/${c.id}`) ? 'active' : ''}`}>
+                                                                    <Link to={chatRoute(workspaceId, c.id)} className={`sidebar-item text-xs ${isActive(`/chat/${c.id}`) ? 'active' : ''}`}>
                                                                         <MessageSquare className="w-3 h-3" />
                                                                         <span className="truncate">{c.title ?? 'New Chat'}</span>
                                                                     </Link>
@@ -760,11 +748,7 @@ export default function AppShell() {
                         <div className="h-1/2 flex flex-col glass-card overflow-hidden" style={{ boxShadow: 'none' }}>
                             <div className="flex-1 min-h-0 flex flex-col px-4 pt-3 pb-2">
                                 <nav className="flex flex-col flex-1 min-h-0 gap-1">
-                                    {isAgnosticPage ? (
-                                        <Link to="/executions" className={`sidebar-item flex-shrink-0 ${location.pathname.includes('/executions') ? 'active' : ''}`}>
-                                            <Activity className="w-4 h-4" /> Legacy Executions
-                                        </Link>
-                                    ) : (
+                                    {!isAgnosticPage && (
                                         <>
                                             <Link to={profilesRoute(workspaceId)} className={`sidebar-item flex-shrink-0 ${isProfilesPage ? 'active' : ''}`}>
                                                 <Bot className="w-4 h-4" /> Profiles
@@ -901,7 +885,7 @@ export default function AppShell() {
                                     <Link
                                         to={chatRoute(workspaceId)}
                                         title="Chat"
-                                        className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isActive('/chat') || isActive('/agent') ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
+                                        className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${isActive('/chat') ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
                                     >
                                         <MessageSquare className="w-4 h-4" />
                                     </Link>
@@ -912,15 +896,7 @@ export default function AppShell() {
 
                         {/* Bottom half: workspace-agnostic */}
                         <div className="h-1/2 flex flex-col items-center py-3 gap-1 glass-card" style={{ boxShadow: 'none' }}>
-                            {isAgnosticPage ? (
-                                <Link
-                                    to="/executions"
-                                    title="Legacy Executions"
-                                    className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${location.pathname.includes('/executions') ? 'bg-accent/15 text-accent' : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
-                                >
-                                    <Activity className="w-4 h-4" />
-                                </Link>
-                            ) : (
+                            {!isAgnosticPage && (
                                 <>
                                     <Link
                                         to={profilesRoute(workspaceId)}

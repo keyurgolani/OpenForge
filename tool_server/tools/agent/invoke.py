@@ -86,7 +86,7 @@ class InvokeAgentTool(BaseTool):
         try:
             async with httpx.AsyncClient(timeout=300.0) as client:
                 resp = await client.post(
-                    f"{context.main_app_url}/api/v1/agent/invoke",
+                    f"{context.main_app_url}/api/v1/runtime/delegations/invoke",
                     json=payload,
                 )
                 resp.raise_for_status()

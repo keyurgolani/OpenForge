@@ -1,7 +1,7 @@
 """
 Policy Engine
 
-Compatibility wrapper over the Phase 3 policy evaluator.
+Transitional runtime wrapper over the Phase 3 policy evaluator.
 """
 
 from __future__ import annotations
@@ -18,26 +18,26 @@ from openforge.domains.policies.evaluator import PolicyEvaluator, policy_evaluat
 from openforge.domains.policies.types import PolicyDecision, ToolRiskCategory
 
 if TYPE_CHECKING:
-    from openforge.legacy.agent_definition import AgentDefinition
+    from openforge.runtime.transitional_agents import AgentDefinition
 
 logger = logging.getLogger("openforge.runtime.policy")
 
 
 class PolicyEngine:
     """
-    Backward-compatible adapter that maps Phase 3 decisions to the legacy
-    `"approve"`, `"hitl_required"`, and `"blocked"` return values.
+    Transitional adapter that maps Phase 3 decisions to the runtime's
+    `"approve"`, `"hitl_required"`, and `"blocked"` labels.
     """
 
     def evaluate(self, tool_id: str, risk_level: str) -> str:
         result = policy_evaluator.evaluate_tool_access(
             tool_name=tool_id,
-            risk_category=_coerce_legacy_risk(risk_level),
+            risk_category=_coerce_runtime_risk(risk_level),
             policies=[],
             scope_context={},
-            run_id="legacy-sync",
+            run_id="runtime-sync",
         )
-        return _legacy_decision(result.decision)
+        return _decision_label(result.decision)
 
     async def evaluate_async(
         self,
@@ -68,7 +68,7 @@ class PolicyEngine:
             policies.insert(
                 0,
                 {
-                    "id": "legacy-agent-override",
+                    "id": "profile-tool-override",
                     "scope_type": "profile",
                     "scope_id": getattr(agent, "id", None),
                     "default_action": "allow",
@@ -83,19 +83,19 @@ class PolicyEngine:
 
         result = policy_evaluator.evaluate_tool_access(
             tool_name=tool_id,
-            risk_category=_coerce_legacy_risk(risk_level),
+            risk_category=_coerce_runtime_risk(risk_level),
             policies=policies,
             scope_context={"profile_id": getattr(agent, "id", None)},
-            run_id=getattr(agent, "id", None) or "legacy-async",
+            run_id=getattr(agent, "id", None) or "runtime-async",
         )
-        return _legacy_decision(result.decision)
+        return _decision_label(result.decision)
 
 
 # Singleton instance
 policy_engine = PolicyEngine()
 
 
-def _coerce_legacy_risk(value: str) -> ToolRiskCategory:
+def _coerce_runtime_risk(value: str) -> ToolRiskCategory:
     normalized = (value or "").strip().lower()
     if normalized in {"critical", "destructive"}:
         return ToolRiskCategory.DESTRUCTIVE
@@ -106,7 +106,7 @@ def _coerce_legacy_risk(value: str) -> ToolRiskCategory:
     return ToolRiskCategory.READ_ONLY
 
 
-def _legacy_decision(decision: PolicyDecision) -> str:
+def _decision_label(decision: PolicyDecision) -> str:
     if decision is PolicyDecision.DENY:
         return "blocked"
     if decision is PolicyDecision.REQUIRES_APPROVAL:

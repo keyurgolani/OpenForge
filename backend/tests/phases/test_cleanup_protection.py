@@ -204,7 +204,8 @@ class TestFrontendFileOrganization:
         for segment in ['path="knowledge"', 'path="chat"', 'path="profiles"', 'path="workflows"', 'path="missions"', 'path="runs"', 'path="artifacts"']:
             assert segment in content, f"Expected route segment missing from main.tsx: {segment}"
 
-        assert "LegacyChatRedirect" in content
+        assert 'path="agent"' not in content
+        assert '/executions' not in content
 
     def test_app_shell_primary_navigation_uses_final_labels(self):
         """AppShell should use the final IA labels rather than the legacy agent/execution framing."""
@@ -215,6 +216,24 @@ class TestFrontendFileOrganization:
 
         assert "Workspace Agent" not in app_shell
         assert "Agent Executions" not in app_shell
+        assert "Legacy Executions" not in app_shell
+
+    def test_workspace_websocket_hook_requires_explicit_channels(self):
+        """Frontend should connect through the separated agent/system channels only."""
+        hook_file = FRONTEND_ROOT / "hooks" / "useWorkspaceWebSocket.ts"
+        content = hook_file.read_text(encoding="utf-8")
+
+        assert "channel?: 'agent' | 'system'" not in content
+        assert "channel: 'agent' | 'system'" in content
+        assert "/ws/workspace/${workspaceId}/${channel}" in content
+        assert ":legacy" not in content
+
+    def test_no_tracked_legacy_runtime_package(self):
+        """Phase 2 cleanup should not preserve an empty legacy compatibility package."""
+        legacy_init = BACKEND_ROOT / "legacy" / "__init__.py"
+        assert not legacy_init.exists(), (
+            "backend/openforge/legacy/__init__.py should stay deleted unless a real quarantine module is reintroduced."
+        )
 
 
 class TestServiceOwnership:

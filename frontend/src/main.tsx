@@ -1,13 +1,13 @@
 import React, { Suspense, lazy, useState, useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter, Route, Routes, Navigate, useParams } from 'react-router-dom'
+import { BrowserRouter, Route, Routes, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ToastProvider, useToast } from '@/components/shared/ToastProvider'
 import ErrorBoundary from '@/components/shared/ErrorBoundary'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import SpatialBackdrop from '@/components/shared/SpatialBackdrop'
 import api, { checkAuth } from '@/lib/api'
-import ROUTES, { chatRoute } from '@/lib/routes'
+import ROUTES from '@/lib/routes'
 import { ThemeProvider } from '@/components/theme-provider'
 import LoginPage from '@/pages/LoginPage'
 import './index.css'
@@ -25,8 +25,6 @@ const EditorDispatcher = lazy(() => import('./components/knowledge/editors/Edito
 const WorkspaceAgentPage = lazy(() => import('./pages/WorkspaceAgentPage'))
 const SearchPage = lazy(() => import('./pages/SearchPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
-const ExecutionListPage = lazy(() => import('./pages/ExecutionListPage'))
-const ExecutionMonitorPage = lazy(() => import('./pages/ExecutionMonitorPage'))
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -99,11 +97,6 @@ function AxiosInterceptorSetup() {
     return null
 }
 
-function LegacyChatRedirect() {
-    const { workspaceId = '', conversationId } = useParams<{ workspaceId: string; conversationId?: string }>()
-    return <Navigate to={chatRoute(workspaceId, conversationId)} replace />
-}
-
 ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
         <QueryClientProvider client={queryClient}>
@@ -150,8 +143,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                         <WorkspaceAgentPage />
                                     </ErrorBoundary>
                                 } />
-                                <Route path="agent" element={<LegacyChatRedirect />} />
-                                <Route path="agent/:conversationId" element={<LegacyChatRedirect />} />
                                 <Route path="profiles" element={
                                     <ErrorBoundary>
                                         <ProfilesPage />
@@ -188,16 +179,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                     <AppShell />
                                 </ErrorBoundary>
                             }>
-                                <Route path={ROUTES.LEGACY_EXECUTIONS} element={
-                                    <ErrorBoundary>
-                                        <ExecutionListPage />
-                                    </ErrorBoundary>
-                                } />
-                                <Route path={ROUTES.LEGACY_EXECUTION_DETAIL} element={
-                                    <ErrorBoundary>
-                                        <ExecutionMonitorPage />
-                                    </ErrorBoundary>
-                                } />
                                 <Route path={ROUTES.SETTINGS} element={
                                     <ErrorBoundary>
                                         <SettingsPage />

@@ -1,0 +1,82 @@
+"""Onboarding state management for the common/config boundary."""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+from fastapi import HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from openforge.db.models import Onboarding
+from openforge.schemas.settings import OnboardingState
+
+_STEP_ORDER = (
+    "welcome",
+    "providers_setup",
+    "models_setup",
+    "workspace_create",
+    "automation_preferences",
+    "complete",
+)
+
+_VALID_TRANSITIONS = {
+    "welcome": {"providers_setup"},
+    "providers_setup": {"models_setup"},
+    "models_setup": {"workspace_create"},
+    "workspace_create": {"automation_preferences"},
+    "automation_preferences": {"complete"},
+    "complete": set(),
+}
+
+
+class OnboardingService:
+    async def get_state(self, db: AsyncSession) -> OnboardingState:
+        state = await self._get_or_create_state(db)
+        return self._serialize(state)
+
+    async def advance_step(self, db: AsyncSession, step: str) -> OnboardingState:
+        normalized_step = step.strip()
+        if normalized_step not in _STEP_ORDER:
+            raise HTTPException(status_code=400, detail=f"Unknown onboarding step: {step}")
+
+        state = await self._get_or_create_state(db)
+        if state.is_complete and normalized_step == "complete":
+            return self._serialize(state)
+
+        current_step = state.current_step or "welcome"
+        if normalized_step != current_step and normalized_step not in _VALID_TRANSITIONS.get(current_step, set()):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid onboarding transition from '{current_step}' to '{normalized_step}'",
+            )
+
+        state.current_step = normalized_step
+        if normalized_step == "complete":
+            state.is_complete = True
+            state.completed_at = datetime.now(timezone.utc)
+
+        await db.commit()
+        await db.refresh(state)
+        return self._serialize(state)
+
+    async def _get_or_create_state(self, db: AsyncSession) -> Onboarding:
+        result = await db.execute(select(Onboarding).where(Onboarding.id == 1))
+        state = result.scalar_one_or_none()
+        if state is None:
+            state = Onboarding(id=1, is_complete=False, current_step="welcome")
+            db.add(state)
+            await db.commit()
+            await db.refresh(state)
+        return state
+
+    @staticmethod
+    def _serialize(state: Onboarding) -> OnboardingState:
+        return OnboardingState(
+            is_complete=state.is_complete,
+            current_step=state.current_step,
+            completed_at=state.completed_at.isoformat() if state.completed_at else None,
+        )
+
+
+onboarding_service = OnboardingService()

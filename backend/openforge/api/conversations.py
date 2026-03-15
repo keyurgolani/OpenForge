@@ -6,6 +6,7 @@ from typing import Optional
 import json
 from datetime import datetime
 from openforge.db.postgres import get_db
+from openforge.runtime.execution_engine import agent_engine
 from openforge.services.conversation_service import conversation_service
 from openforge.schemas.conversation import (
     ConversationCreate, ConversationUpdate,
@@ -271,6 +272,14 @@ async def get_conversation(
         workspace_id=workspace_id,
         include_archived=include_archived,
     )
+
+
+@router.get("/{workspace_id}/conversations/{conversation_id}/stream-state")
+async def get_conversation_stream_state(
+    workspace_id: UUID,
+    conversation_id: UUID,
+):
+    return await agent_engine.get_stream_state(workspace_id, conversation_id)
 
 
 @router.put("/{workspace_id}/conversations/{conversation_id}", response_model=ConversationResponse)

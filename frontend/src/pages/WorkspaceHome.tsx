@@ -104,7 +104,7 @@ export default function WorkspaceHome() {
     const [intelligenceIds, setIntelligenceIds] = useState<Set<string>>(new Set())
 
     // Listen for background AI title/intelligence updates and refresh the grid
-    const { on } = useWorkspaceWebSocket(workspaceId)
+    const { on } = useWorkspaceWebSocket(workspaceId, 'system')
     useEffect(() => {
         if (!workspaceId) return
         return on('knowledge_updated', (msg: Record<string, unknown>) => {

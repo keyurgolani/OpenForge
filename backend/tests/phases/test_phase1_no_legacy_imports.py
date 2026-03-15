@@ -11,8 +11,14 @@ DOMAINS_ROOT = PROJECT_ROOT / "openforge" / "domains"
 LEGACY_PATHS = {
     "openforge.core.agent_definition",
     "openforge.core.agent_registry",
+    "openforge.services.agent_execution_engine",
+    "openforge.services.agent_relay",
+    "openforge.services.onboarding_service",
     "openforge.services.target_service",
     "openforge.api.agent_schedules",
+    "openforge.api.agent",
+    "openforge.api.hitl",
+    "openforge.api.tool_permissions",
 }
 
 
@@ -61,3 +67,19 @@ def test_active_code_does_not_use_backend_openforge_import_root():
             )
 
     assert not violations, "\n".join(violations)
+
+
+def test_active_backend_code_does_not_import_deleted_phase2_modules():
+    """Active backend code should not depend on deleted compatibility modules."""
+    violations: list[str] = []
+
+    for py_file in (PROJECT_ROOT / "openforge").rglob("*.py"):
+        if "legacy" in py_file.parts:
+            continue
+
+        imports = get_imports(py_file)
+        for legacy in LEGACY_PATHS:
+            if any(imp == legacy or imp.startswith(f"{legacy}.") for imp in imports):
+                violations.append(f"{py_file.relative_to(PROJECT_ROOT)} imports {legacy}")
+
+    assert not violations, "\n".join(sorted(violations))

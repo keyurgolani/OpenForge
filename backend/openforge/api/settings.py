@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
+from openforge.common.config.onboarding import onboarding_service
 from openforge.db.postgres import get_db
 from openforge.services.config_service import config_service
-from openforge.services.onboarding_service import onboarding_service
 from openforge.schemas.settings import ConfigItem, ConfigUpdate, OnboardingState, OnboardingStepAdvance
 
 router = APIRouter()

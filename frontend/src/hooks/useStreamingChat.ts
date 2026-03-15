@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useWorkspaceWebSocket } from './useWorkspaceWebSocket'
 import { useQueryClient } from '@tanstack/react-query'
-import { getConversationStreamState, listExecutions } from '@/lib/api'
+import { getConversationStreamState } from '@/lib/api'
 
 interface AttachmentProcessed {
     id: string
@@ -537,29 +537,6 @@ export function useStreamingChat(conversationId: string | null) {
                         send({ type: 'chat_stream_resume', conversation_id: conversationId })
                     }
                     if (resumePopulatedRef.current) return
-                    if (attempt < MAX_ATTEMPTS) {
-                        pollTimer = setTimeout(tryResume, 2000)
-                    }
-                    return
-                }
-            } catch {
-                // fall through
-            }
-
-            try {
-                const execs = await listExecutions(workspaceId)
-                if (cancelled || resumePopulatedRef.current) return
-                const match = Array.isArray(execs)
-                    ? execs.find((e: { conversation_id: string; status: string }) =>
-                        e.conversation_id === conversationId &&
-                        (e.status === 'running' || e.status === 'paused_hitl' || e.status === 'queued'))
-                    : null
-                if (match) {
-                    setIsStreaming(true)
-                    setLastError(null)
-                    if (isConnected) {
-                        send({ type: 'chat_stream_resume', conversation_id: conversationId })
-                    }
                     if (attempt < MAX_ATTEMPTS) {
                         pollTimer = setTimeout(tryResume, 2000)
                     }

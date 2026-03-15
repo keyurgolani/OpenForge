@@ -289,49 +289,8 @@ export const approveHITL = (hitlId: string, note?: string): Promise<any> =>
 export const denyHITL = (hitlId: string, note?: string): Promise<any> =>
     denyApprovalRequest(hitlId, note).then(toLegacyHitl)
 
-// ── Agents ───────────────────────────────────────────────────────────────────
-export const listAgents = (): Promise<any> => api.get('/agents/').then(r => r.data)
-export const getAgent = (id: string): Promise<any> => api.get(`/agents/${id}`).then(r => r.data)
-export const updateAgent = (id: string, data: object): Promise<any> =>
-    api.put(`/agents/${id}`, data).then(r => r.data)
-export const getWorkspaceAgent = (wid: string): Promise<any> =>
-    api.get(`/agents/workspace/${wid}/agent`).then(r => r.data)
-export const setWorkspaceAgent = (wid: string, agentId: string): Promise<any> =>
-    api.put(`/agents/workspace/${wid}/agent`, { agent_id: agentId }).then(r => r.data)
-
-// ── Agent Triggers ──────────────────────────────────────────────────────────
-export const triggerAgent = (agentId: string, data: { instruction: string; workspace_id: string }): Promise<any> =>
-    api.post(`/agents/${agentId}/trigger`, data).then(r => r.data)
-
-// ── Agent Schedules ─────────────────────────────────────────────────────────
-export const listAgentSchedules = (wid: string): Promise<any> =>
-    api.get(`/workspaces/${wid}/agent-schedules`).then(r => r.data)
-export const createAgentSchedule = (wid: string, data: object): Promise<any> =>
-    api.post(`/workspaces/${wid}/agent-schedules`, data).then(r => r.data)
-export const updateAgentSchedule = (wid: string, id: string, data: object): Promise<any> =>
-    api.put(`/workspaces/${wid}/agent-schedules/${id}`, data).then(r => r.data)
-export const deleteAgentSchedule = (wid: string, id: string): Promise<any> =>
-    api.delete(`/workspaces/${wid}/agent-schedules/${id}`).then(r => r.data)
-
-// ── Continuous Targets ──────────────────────────────────────────────────────
-export const listTargets = (wid: string): Promise<any> =>
-    api.get(`/workspaces/${wid}/targets`).then(r => r.data)
-export const updateTarget = (wid: string, name: string, data: object): Promise<any> =>
-    api.post(`/workspaces/${wid}/targets/${encodeURIComponent(name)}/update`, data).then(r => r.data)
-
-// ── Agent Executions ─────────────────────────────────────────────────────────
-export const listAllExecutions = (params?: object): Promise<any> =>
-    api.get('/agents/executions', { params }).then(r => r.data)
-export const listAllExecutionsPaginated = (params?: object): Promise<any> =>
-    api.get('/agents/executions/paginated', { params }).then(r => r.data)
-export const listExecutions = (wid: string, params?: object): Promise<any> =>
-    api.get(`/agents/workspace/${wid}/executions`, { params }).then(r => r.data)
 export const getConversationStreamState = (wid: string, cid: string): Promise<any> =>
-    api.get(`/agents/workspace/${wid}/conversations/${cid}/stream-state`).then(r => r.data)
-export const getExecution = (wid: string, eid: string): Promise<any> =>
-    api.get(`/agents/workspace/${wid}/executions/${eid}`).then(r => r.data)
-export const getExecutionById = (eid: string): Promise<any> =>
-    api.get(`/agents/executions/${eid}`).then(r => r.data)
+    api.get(`/workspaces/${wid}/conversations/${cid}/stream-state`).then(r => r.data)
 
 // ── Legacy Tool Permission Helpers ──────────────────────────────────────────
 export const listToolPermissions = async (): Promise<any> => {

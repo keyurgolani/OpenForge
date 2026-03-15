@@ -1,7 +1,7 @@
 """Phase 1 Domain Tables
 
 Revision ID: 002_phase1_domains
-Revises: 001_initial_schema
+Revises: 001
 Create Date: 2024-03-14
 
 This migration creates the new domain tables for the Phase 1 architecture reset.
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = '002_phase1_domains'
-down_revision = '001_initial_schema'
+down_revision = '001'
 branch_labels = None
 depends_on = None
 

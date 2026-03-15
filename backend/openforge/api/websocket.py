@@ -8,7 +8,6 @@ logger = logging.getLogger("openforge.ws")
 # Channel constants
 CHANNEL_AGENT = "agent"
 CHANNEL_SYSTEM = "system"
-CHANNEL_LEGACY = "legacy"
 
 # Event types that belong to the agent channel
 AGENT_EVENT_TYPES = frozenset({
@@ -36,18 +35,15 @@ class WorkspaceConnectionManager:
     Channels:
         - "agent"  : agent streaming (chat, tool calls, thinking, etc.)
         - "system" : knowledge processing, HITL events, system notifications
-        - "legacy" : the original ws/workspace/{id} endpoint (receives everything)
     """
 
     def __init__(self):
         # workspace_id -> channel -> [WebSocket]
         self.active_connections: Dict[str, Dict[str, list[WebSocket]]] = {}
-        # execution_id -> [WebSocket]  (for non-workspace agent connections)
-        self.execution_connections: Dict[str, list[WebSocket]] = {}
         # settings connections (no workspace scope)
         self.settings_connections: list[WebSocket] = []
 
-    async def connect(self, websocket: WebSocket, workspace_id: str, channel: str = CHANNEL_LEGACY):
+    async def connect(self, websocket: WebSocket, workspace_id: str, channel: str):
         """Connect a WebSocket to a workspace on a specific channel."""
         await websocket.accept()
         if workspace_id not in self.active_connections:
@@ -61,7 +57,7 @@ class WorkspaceConnectionManager:
             f"Total connections: {total}"
         )
 
-    def disconnect(self, websocket: WebSocket, workspace_id: str, channel: str = CHANNEL_LEGACY):
+    def disconnect(self, websocket: WebSocket, workspace_id: str, channel: str):
         """Disconnect a WebSocket from a workspace channel."""
         if workspace_id in self.active_connections:
             ch_conns = self.active_connections[workspace_id].get(channel, [])
@@ -74,25 +70,6 @@ class WorkspaceConnectionManager:
             if not self.active_connections[workspace_id]:
                 del self.active_connections[workspace_id]
         logger.info(f"WebSocket disconnected for workspace {workspace_id} channel={channel}")
-
-    async def connect_execution(self, websocket: WebSocket, execution_id: str):
-        """Connect a WebSocket for a specific agent execution (non-workspace)."""
-        await websocket.accept()
-        if execution_id not in self.execution_connections:
-            self.execution_connections[execution_id] = []
-        self.execution_connections[execution_id].append(websocket)
-        logger.info(f"WebSocket connected for execution {execution_id}")
-
-    def disconnect_execution(self, websocket: WebSocket, execution_id: str):
-        """Disconnect a WebSocket from an execution."""
-        if execution_id in self.execution_connections:
-            try:
-                self.execution_connections[execution_id].remove(websocket)
-            except ValueError:
-                pass
-            if not self.execution_connections[execution_id]:
-                del self.execution_connections[execution_id]
-        logger.info(f"WebSocket disconnected for execution {execution_id}")
 
     async def connect_settings(self, websocket: WebSocket):
         """Connect a WebSocket for settings/system status."""
@@ -108,23 +85,18 @@ class WorkspaceConnectionManager:
             pass
         logger.info(f"Settings WebSocket disconnected. Total: {len(self.settings_connections)}")
 
-    async def send_to_workspace(self, workspace_id: str, message: dict):
-        """Send a message to ALL connections for a workspace (all channels).
-
-        This is the backward-compatible method: every caller that used to call
-        send_to_workspace will continue to reach all clients regardless of
-        which channel they connected on.
-        """
+    async def _send_to_channels(self, workspace_id: str, channels: set[str], message: dict):
         if workspace_id not in self.active_connections:
             return
+
         dead_by_channel: Dict[str, list[WebSocket]] = {}
-        for channel, conns in self.active_connections[workspace_id].items():
+        for channel in channels:
+            conns = self.active_connections[workspace_id].get(channel, [])
             for conn in conns:
                 try:
                     await conn.send_json(message)
                 except Exception:
                     dead_by_channel.setdefault(channel, []).append(conn)
-        # Clean up dead connections
         for channel, dead in dead_by_channel.items():
             ch_conns = self.active_connections.get(workspace_id, {}).get(channel, [])
             for conn in dead:
@@ -133,49 +105,31 @@ class WorkspaceConnectionManager:
                 except ValueError:
                     pass
 
-    async def send_to_workspace_channel(self, workspace_id: str, channel: str, message: dict):
-        """Send a message to a SPECIFIC channel for a workspace.
-
-        Also sends to legacy connections so old clients receive everything.
-        """
+    async def send_to_workspace(self, workspace_id: str, message: dict):
+        """Route a workspace event to the appropriate channel."""
         if workspace_id not in self.active_connections:
             return
-        # Determine which channels to send to
-        channels_to_send = {channel}
-        if channel != CHANNEL_LEGACY:
-            channels_to_send.add(CHANNEL_LEGACY)
-
-        dead_by_channel: Dict[str, list[WebSocket]] = {}
-        for ch in channels_to_send:
-            conns = self.active_connections[workspace_id].get(ch, [])
-            for conn in conns:
-                try:
-                    await conn.send_json(message)
-                except Exception:
-                    dead_by_channel.setdefault(ch, []).append(conn)
-        for ch, dead in dead_by_channel.items():
-            ch_conns = self.active_connections.get(workspace_id, {}).get(ch, [])
-            for conn in dead:
-                try:
-                    ch_conns.remove(conn)
-                except ValueError:
-                    pass
-
-    async def send_to_execution(self, execution_id: str, message: dict):
-        """Send a message to all connections watching a specific execution."""
-        if execution_id not in self.execution_connections:
+        event_type = str(message.get("type", ""))
+        if event_type in AGENT_EVENT_TYPES:
+            await self._send_to_channels(workspace_id, {CHANNEL_AGENT}, message)
             return
-        dead = []
-        for conn in self.execution_connections[execution_id]:
-            try:
-                await conn.send_json(message)
-            except Exception:
-                dead.append(conn)
-        for conn in dead:
-            try:
-                self.execution_connections[execution_id].remove(conn)
-            except ValueError:
-                pass
+        if event_type in SYSTEM_EVENT_TYPES:
+            await self._send_to_channels(workspace_id, {CHANNEL_SYSTEM}, message)
+            return
+
+        logger.warning(
+            "Workspace event %r has no channel mapping; broadcasting to all workspace channels",
+            event_type,
+        )
+        await self._send_to_channels(
+            workspace_id,
+            set(self.active_connections[workspace_id].keys()),
+            message,
+        )
+
+    async def send_to_workspace_channel(self, workspace_id: str, channel: str, message: dict):
+        """Send a message to a specific workspace channel."""
+        await self._send_to_channels(workspace_id, {channel}, message)
 
     async def send_to_settings(self, message: dict):
         """Send a message to all settings connections."""
@@ -284,7 +238,7 @@ async def _handle_chat_message(websocket: WebSocket, workspace_id: str, data: di
             _use_celery = False
 
     if not _use_celery:
-        from openforge.services.agent_execution_engine import agent_engine
+        from openforge.runtime.execution_engine import agent_engine
 
         async def _run_agent():
             async with AsyncSessionLocal() as db:
@@ -308,7 +262,7 @@ async def _handle_chat_message(websocket: WebSocket, workspace_id: str, data: di
 async def _handle_chat_stream_resume(websocket: WebSocket, workspace_id: str, data: dict):
     """Process a chat_stream_resume from any workspace-scoped endpoint."""
     from uuid import UUID
-    from openforge.services.agent_execution_engine import agent_engine
+    from openforge.runtime.execution_engine import agent_engine
 
     conversation_id = data.get("conversation_id")
     target_conversation_id = None
@@ -338,7 +292,7 @@ async def _handle_chat_cancel(data: dict):
         return
 
     from uuid import UUID
-    from openforge.services.agent_execution_engine import agent_engine
+    from openforge.runtime.execution_engine import agent_engine
     try:
         agent_engine.cancel(UUID(conversation_id))
     except Exception:
@@ -382,62 +336,7 @@ async def _handle_chat_cancel(data: dict):
         pass
 
 
-# ── 1. Legacy endpoint: ws/workspace/{workspace_id} ──
-# Backward-compatible: handles ALL message types, receives ALL events.
-
-@ws_router.websocket("/ws/workspace/{workspace_id}")
-async def workspace_websocket(websocket: WebSocket, workspace_id: str):
-    if not await _ws_auth_check(websocket):
-        return
-    await ws_manager.connect(websocket, workspace_id, CHANNEL_LEGACY)
-    try:
-        while True:
-            data = await websocket.receive_json()
-            msg_type = data.get("type")
-
-            if msg_type == "chat_message":
-                await _handle_chat_message(websocket, workspace_id, data)
-
-            elif msg_type == "chat_stream_resume":
-                await _handle_chat_stream_resume(websocket, workspace_id, data)
-
-            elif msg_type == "chat_cancel":
-                await _handle_chat_cancel(data)
-
-            elif msg_type == "ping":
-                await ws_manager.send_to_connection(websocket, {"type": "pong"})
-
-            elif msg_type == "stream_logs":
-                import asyncio
-                from openforge.services.docker_service import docker_service
-
-                task = asyncio.create_task(docker_service.stream_logs(websocket, ws_manager))
-                if not hasattr(websocket, "log_tasks"):
-                    websocket.log_tasks = []
-                websocket.log_tasks.append(task)
-
-            elif msg_type == "stop_logs":
-                if hasattr(websocket, "log_tasks"):
-                    for task in websocket.log_tasks:
-                        task.cancel()
-                    websocket.log_tasks = []
-
-            else:
-                await ws_manager.send_to_connection(websocket, {
-                    "type": "error",
-                    "detail": f"Unknown message type: {msg_type}"
-                })
-
-    except WebSocketDisconnect:
-        _cleanup_log_tasks(websocket)
-        ws_manager.disconnect(websocket, workspace_id, CHANNEL_LEGACY)
-    except Exception as e:
-        logger.error(f"WebSocket error for workspace {workspace_id}: {e}")
-        _cleanup_log_tasks(websocket)
-        ws_manager.disconnect(websocket, workspace_id, CHANNEL_LEGACY)
-
-
-# ── 2. Agent channel: ws/workspace/{workspace_id}/agent ──
+# ── 1. Agent channel: ws/workspace/{workspace_id}/agent ──
 # Handles chat_message, chat_stream_resume, chat_cancel, ping.
 # Receives agent-related events only.
 
@@ -476,7 +375,7 @@ async def workspace_agent_websocket(websocket: WebSocket, workspace_id: str):
         ws_manager.disconnect(websocket, workspace_id, CHANNEL_AGENT)
 
 
-# ── 3. System channel: ws/workspace/{workspace_id}/system ──
+# ── 2. System channel: ws/workspace/{workspace_id}/system ──
 # Receives knowledge_updated, hitl_resolved, and other system events.
 # Accepts ping only.
 
@@ -506,37 +405,7 @@ async def workspace_system_websocket(websocket: WebSocket, workspace_id: str):
         ws_manager.disconnect(websocket, workspace_id, CHANNEL_SYSTEM)
 
 
-# ── 4. Execution channel: ws/agent/{execution_id} ──
-# Non-workspace agent executions (e.g., Agents page).
-# Receives agent events for a specific execution. Accepts ping only.
-
-@ws_router.websocket("/ws/agent/{execution_id}")
-async def agent_execution_websocket(websocket: WebSocket, execution_id: str):
-    if not await _ws_auth_check(websocket):
-        return
-    await ws_manager.connect_execution(websocket, execution_id)
-    try:
-        while True:
-            data = await websocket.receive_json()
-            msg_type = data.get("type")
-
-            if msg_type == "ping":
-                await ws_manager.send_to_connection(websocket, {"type": "pong"})
-
-            else:
-                await ws_manager.send_to_connection(websocket, {
-                    "type": "error",
-                    "detail": f"Unknown message type for agent execution channel: {msg_type}"
-                })
-
-    except WebSocketDisconnect:
-        ws_manager.disconnect_execution(websocket, execution_id)
-    except Exception as e:
-        logger.error(f"WebSocket error for execution {execution_id}: {e}")
-        ws_manager.disconnect_execution(websocket, execution_id)
-
-
-# ── 5. Settings channel: ws/settings ──
+# ── 3. Settings channel: ws/settings ──
 # Handles stream_logs, stop_logs, ping.
 # Receives model downloads and system status events.
 
@@ -599,7 +468,7 @@ async def _dispatch_celery_agent(
     from uuid import UUID
     from openforge.db.postgres import AsyncSessionLocal
     from openforge.db.models import AgentExecution
-    from openforge.core.agent_registry import agent_registry
+    from openforge.runtime.transitional_agents import agent_registry
 
     execution_id = str(_uuid.uuid4())
 

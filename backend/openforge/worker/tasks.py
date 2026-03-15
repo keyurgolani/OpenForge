@@ -29,7 +29,7 @@ def execute_agent_task(self, execution_id: str, **kwargs):
 
 def _ensure_system_agents():
     """Ensure system agents are registered in this process."""
-    from openforge.core.agent_registry import (
+    from openforge.runtime.transitional_agents import (
         agent_registry, WORKSPACE_AGENT, ROUTER_AGENT, COUNCIL_AGENT, OPTIMIZER_AGENT,
     )
     if not agent_registry.list_all():
@@ -41,15 +41,15 @@ async def _run_agent(execution_id: str, **kwargs):
     """Async wrapper that sets up DB session and runs the engine."""
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
     from openforge.config import get_settings
-    from openforge.services.agent_execution_engine import agent_engine
-    from openforge.core.agent_registry import agent_registry
+    from openforge.runtime.execution_engine import agent_engine
+    from openforge.runtime.transitional_agents import agent_registry
 
     _ensure_system_agents()
 
     agent_id = kwargs.get("agent_id", "workspace_agent")
     agent = agent_registry.get(agent_id)
     if not agent:
-        from openforge.core.agent_registry import WORKSPACE_AGENT
+        from openforge.runtime.transitional_agents import WORKSPACE_AGENT
         agent = WORKSPACE_AGENT
 
     # Apply workspace overrides if provided
