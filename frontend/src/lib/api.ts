@@ -1,5 +1,19 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import axios from 'axios'
+import type {
+    Artifact,
+    ArtifactCreate,
+    ArtifactDiff,
+    ArtifactLineage,
+    ArtifactQueryParams,
+    ArtifactsResponse,
+    ArtifactSink,
+    ArtifactSinksResponse,
+    ArtifactUpdate,
+    ArtifactVersion,
+    ArtifactVersionCreate,
+    ArtifactVersionsResponse,
+} from '@/types/artifacts'
 
 const api = axios.create({
     baseURL: '/api/v1',
@@ -416,12 +430,34 @@ export const updateRun = (id: string, data: object): Promise<any> =>
     api.patch(`/runs/${id}`, data).then(r => r.data)
 
 // Artifacts
-export const listArtifacts = (params?: { skip?: number; limit?: number; workspace_id?: string }): Promise<any> =>
+export const listArtifacts = (params?: ArtifactQueryParams): Promise<ArtifactsResponse> =>
     api.get('/artifacts', { params }).then(r => r.data)
-export const getArtifact = (id: string): Promise<any> => api.get(`/artifacts/${id}`).then(r => r.data)
-export const createArtifact = (data: object): Promise<any> => api.post('/artifacts', data).then(r => r.data)
-export const updateArtifact = (id: string, data: object): Promise<any> =>
+export const getArtifact = (id: string): Promise<Artifact> => api.get(`/artifacts/${id}`).then(r => r.data)
+export const createArtifact = (data: ArtifactCreate): Promise<Artifact> => api.post('/artifacts', data).then(r => r.data)
+export const updateArtifact = (id: string, data: ArtifactUpdate): Promise<Artifact> =>
     api.patch(`/artifacts/${id}`, data).then(r => r.data)
 export const deleteArtifact = (id: string): Promise<void> => api.delete(`/artifacts/${id}`)
+export const listArtifactVersions = (id: string): Promise<ArtifactVersionsResponse> =>
+    api.get(`/artifacts/${id}/versions`).then(r => r.data)
+export const createArtifactVersion = (id: string, data: ArtifactVersionCreate): Promise<Artifact> =>
+    api.post(`/artifacts/${id}/versions`, data).then(r => r.data)
+export const getArtifactVersion = (artifactId: string, versionId: string): Promise<ArtifactVersion> =>
+    api.get(`/artifacts/${artifactId}/versions/${versionId}`).then(r => r.data)
+export const getArtifactVersionDiff = (
+    artifactId: string,
+    versionId: string,
+    compareToVersionId: string,
+): Promise<ArtifactDiff> =>
+    api.get(`/artifacts/${artifactId}/versions/${versionId}/diff`, { params: { compare_to_version_id: compareToVersionId } }).then(r => r.data)
+export const promoteArtifactVersion = (artifactId: string, versionId: string): Promise<Artifact> =>
+    api.post(`/artifacts/${artifactId}/versions/${versionId}/promote`).then(r => r.data)
+export const getArtifactLineage = (id: string): Promise<ArtifactLineage> =>
+    api.get(`/artifacts/${id}/lineage`).then(r => r.data)
+export const listArtifactSinks = (id: string): Promise<ArtifactSinksResponse> =>
+    api.get(`/artifacts/${id}/sinks`).then(r => r.data)
+export const addArtifactSink = (
+    id: string,
+    data: Pick<ArtifactSink, 'sink_type' | 'sink_state' | 'destination_ref' | 'sync_status' | 'metadata'>,
+): Promise<ArtifactSink> => api.post(`/artifacts/${id}/sinks`, data).then(r => r.data)
 
 export default api

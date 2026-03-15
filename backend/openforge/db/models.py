@@ -599,17 +599,112 @@ class ArtifactModel(Base):
     artifact_type: Mapped[str] = mapped_column(String(50), nullable=False)
     workspace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     source_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    source_workflow_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     source_mission_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    source_profile_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     content: Mapped[dict] = mapped_column(JSONB, default=dict)
     metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
     status: Mapped[str] = mapped_column(String(50), default="draft")
+    visibility: Mapped[str] = mapped_column(String(50), nullable=False, default="workspace")
+    creation_mode: Mapped[str] = mapped_column(String(50), nullable=False, default="user_created")
+    current_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
+    created_by_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    created_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    tags_json: Mapped[list] = mapped_column("tags", JSONB, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
     created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
     updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+    __table_args__ = (
+        Index("idx_artifacts_workspace_status", "workspace_id", "status"),
+        Index("idx_artifacts_workspace_type", "workspace_id", "artifact_type"),
+        Index("idx_artifacts_workspace_visibility", "workspace_id", "visibility"),
+    )
+
+
+class ArtifactVersionModel(Base):
+    """Historical content version for an artifact."""
+    __tablename__ = "artifact_versions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    artifact_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("artifacts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    content_type: Mapped[str] = mapped_column(String(100), nullable=False, default="structured_payload")
+    content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    structured_payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    change_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    source_evidence_packet_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="draft")
+    created_by_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    created_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+
+    __table_args__ = (
+        UniqueConstraint("artifact_id", "version_number", name="uq_artifact_versions_artifact_version"),
+    )
+
+
+class ArtifactLinkModel(Base):
+    """Lineage relationship between an artifact and another product object."""
+    __tablename__ = "artifact_links"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    artifact_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("artifacts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    version_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("artifact_versions.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    link_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    target_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    label: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+
+    __table_args__ = (
+        Index("idx_artifact_links_artifact_link_type", "artifact_id", "link_type"),
+        Index("idx_artifact_links_target", "target_type", "target_id"),
+    )
+
+
+class ArtifactSinkModel(Base):
+    """Sink or destination state for artifact publication/export."""
+    __tablename__ = "artifact_sinks"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    artifact_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("artifacts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    sink_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    sink_state: Mapped[str] = mapped_column(String(50), nullable=False, default="configured")
+    destination_ref: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    sync_status: Mapped[str] = mapped_column(String(50), nullable=False, default="not_published")
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    last_synced_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
 
 
 class PromptDefinitionModel(Base):

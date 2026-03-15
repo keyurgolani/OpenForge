@@ -50,13 +50,23 @@ class TriggerType(str, Enum):
 
 class ArtifactType(str, Enum):
     """Types of artifacts that can be produced."""
-    
-    DOCUMENT = "document"
+
+    NOTE = "note"
+    SUMMARY = "summary"
     REPORT = "report"
+    PLAN = "plan"
+    TARGET = "target"
+    EVIDENCE_PACKET_REF = "evidence_packet_ref"
+    RESEARCH_BRIEF = "research_brief"
+    DATASET = "dataset"
+    ALERT = "alert"
+    EXPERIMENT_RESULT = "experiment_result"
+    NOTIFICATION_DRAFT = "notification_draft"
+    GENERIC_DOCUMENT = "generic_document"
+    DOCUMENT = "document"
     CODE = "code"
     DATA = "data"
     IMAGE = "image"
-    SUMMARY = "summary"
     INSIGHT = "insight"
     OTHER = "other"
 

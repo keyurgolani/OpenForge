@@ -14,6 +14,7 @@ EXPECTED_MIGRATIONS = [
     "004_phase4_retrieval_reset.py",
     "005_phase5_graph_foundation.py",
     "006_phase7_profile_core.py",
+    "007_phase8_artifact_unification.py",
 ]
 
 

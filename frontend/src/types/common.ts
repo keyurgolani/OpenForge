@@ -5,5 +5,23 @@
 export type ExecutionMode = 'autonomous' | 'supervised' | 'interactive' | 'manual';
 export type ExecutionStatus = 'pending' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'paused' | 'timeout';
 export type TriggerType = 'schedule' | 'event' | 'webhook' | 'manual';
-export type ArtifactType = 'document' | 'report' | 'code' | 'data' | 'image' | 'summary' | 'insight' | 'other';
+export type ArtifactType =
+  | 'note'
+  | 'summary'
+  | 'report'
+  | 'plan'
+  | 'target'
+  | 'evidence_packet_ref'
+  | 'research_brief'
+  | 'dataset'
+  | 'alert'
+  | 'experiment_result'
+  | 'notification_draft'
+  | 'generic_document'
+  | 'document'
+  | 'code'
+  | 'data'
+  | 'image'
+  | 'insight'
+  | 'other';
 export type Visibility = 'private' | 'workspace' | 'organization' | 'public';

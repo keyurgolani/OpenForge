@@ -22,6 +22,7 @@ const WorkflowsPage = lazy(() => import('./pages/WorkflowsPage'))
 const MissionsPage = lazy(() => import('./pages/MissionsPage'))
 const RunsPage = lazy(() => import('./pages/RunsPage'))
 const ArtifactsPage = lazy(() => import('./pages/ArtifactsPage'))
+const ArtifactDetailPage = lazy(() => import('./pages/ArtifactDetailPage'))
 const EditorDispatcher = lazy(() => import('./components/knowledge/editors/EditorDispatcher'))
 const WorkspaceAgentPage = lazy(() => import('./pages/WorkspaceAgentPage'))
 const SearchPage = lazy(() => import('./pages/SearchPage'))
@@ -192,6 +193,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                 <Route path="artifacts" element={
                                     <ErrorBoundary>
                                         <ArtifactsPage />
+                                    </ErrorBoundary>
+                                } />
+                                <Route path="artifacts/:artifactId" element={
+                                    <ErrorBoundary>
+                                        <ArtifactDetailPage />
                                     </ErrorBoundary>
                                 } />
                                 <Route path="search" element={

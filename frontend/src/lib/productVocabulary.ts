@@ -53,8 +53,18 @@ export type TriggerType =
   | 'manual';
 
 export type ArtifactType =
+  | 'note'
   | 'document'
   | 'report'
+  | 'plan'
+  | 'target'
+  | 'evidence_packet_ref'
+  | 'research_brief'
+  | 'dataset'
+  | 'alert'
+  | 'experiment_result'
+  | 'notification_draft'
+  | 'generic_document'
   | 'code'
   | 'data'
   | 'image'
@@ -110,8 +120,18 @@ export const TRIGGER_TYPES = {
 };
 
 export const ARTIFACT_TYPES = {
+  NOTE: 'note' as ArtifactType,
   DOCUMENT: 'document' as ArtifactType,
   REPORT: 'report' as ArtifactType,
+  PLAN: 'plan' as ArtifactType,
+  TARGET: 'target' as ArtifactType,
+  EVIDENCE_PACKET_REF: 'evidence_packet_ref' as ArtifactType,
+  RESEARCH_BRIEF: 'research_brief' as ArtifactType,
+  DATASET: 'dataset' as ArtifactType,
+  ALERT: 'alert' as ArtifactType,
+  EXPERIMENT_RESULT: 'experiment_result' as ArtifactType,
+  NOTIFICATION_DRAFT: 'notification_draft' as ArtifactType,
+  GENERIC_DOCUMENT: 'generic_document' as ArtifactType,
   CODE: 'code' as ArtifactType,
   DATA: 'data' as ArtifactType,
   IMAGE: 'image' as ArtifactType,

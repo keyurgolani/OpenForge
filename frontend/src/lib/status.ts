@@ -37,7 +37,11 @@ export type TriggerStatus =
   | 'deleted'
   | 'paused'
   | 'disabled'
-  | 'published';
+  | 'published'
+  | 'superseded'
+  | 'synced'
+  | 'pending_sync'
+  | 'failed_sync';
 
 /**
  * Check if a status indicates a terminal state
@@ -87,6 +91,10 @@ export function getStatusLabel(status: string): string {
     paused: 'Paused',
     disabled: 'Disabled',
     published: 'Published',
+    superseded: 'Superseded',
+    synced: 'Synced',
+    pending_sync: 'Pending Sync',
+    failed_sync: 'Failed Sync',
     timeout: 'Timeout',
   };
   return labels[status] || status;
@@ -117,6 +125,10 @@ export function getStatusColor(status: ExecutionStatus | KnowledgeStatus | Trigg
     paused: 'warning',
     disabled: 'default',
     published: 'success',
+    superseded: 'warning',
+    synced: 'success',
+    pending_sync: 'info',
+    failed_sync: 'error',
     timeout: 'error',
   };
   return colorMap[status] || 'default';
