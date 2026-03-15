@@ -1,8 +1,8 @@
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { startTransition, useState, useMemo, useRef, useEffect } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import type { ReactElement } from 'react'
-import { searchKnowledge } from '@/lib/api'
+import { buildEvidencePacket, retrievalRead, retrievalSearch } from '@/lib/api'
 import { chatRoute } from '@/lib/routes'
 import { Search, Loader2, FileText, Bookmark, Code2, Zap, ExternalLink, Copy, SearchX, MessageSquare, Image as ImageIcon, Music, FileType2, Table, Presentation } from 'lucide-react'
 import PreviewDispatcher from '@/components/knowledge/preview/PreviewDispatcher'
@@ -11,6 +11,13 @@ import {
 } from '@/components/ui/context-menu'
 import MarkdownIt from 'markdown-it'
 import VisualSearchTab from '@/components/search/VisualSearchTab'
+import EvidencePacketPanel from '@/features/retrieval/EvidencePacketPanel'
+import type {
+    EvidencePacketResponse,
+    RetrievalReadResult,
+    RetrievalSearchResponse,
+    RetrievalSearchResult,
+} from '@/features/retrieval/types'
 
 const mdPreview = new MarkdownIt({ html: false, linkify: false, typographer: true, breaks: true })
 mdPreview.renderer.rules.link_open = () => ''
@@ -46,21 +53,9 @@ const TYPE_META: Record<string, { label: string; color: string }> = {
 
 const KNOWLEDGE_TYPES = ['', 'note', 'fleeting', 'bookmark', 'gist', 'image', 'audio', 'pdf', 'document', 'sheet', 'slides']
 
-interface SearchResult {
-    knowledge_id: string | null
-    conversation_id?: string | null
-    title: string
-    knowledge_type: string
-    chunk_text: string
-    header_path: string
-    tags: string[]
-    score: number
-    highlighted_text: string
-}
-
 type CardItem =
-    | { kind: 'chat'; key: string; chunks: SearchResult[]; topScore: number }
-    | { kind: 'knowledge'; key: string; chunks: SearchResult[]; topScore: number }
+    | { kind: 'chat'; key: string; chunks: RetrievalSearchResult[]; topScore: number }
+    | { kind: 'knowledge'; key: string; chunks: RetrievalSearchResult[]; topScore: number }
 
 function renderSearchMarkdown(text: string) {
     return { __html: mdPreview.render(text || '') }
@@ -74,6 +69,11 @@ export default function SearchPage() {
     const [typeFilter, setTypeFilter] = useState('')
     const [modalKnowledgeId, setModalKnowledgeId] = useState<string | null>(null)
     const [searchTab, setSearchTab] = useState<'text' | 'visual'>('text')
+    const [activeTraceResult, setActiveTraceResult] = useState<RetrievalSearchResult | null>(null)
+    const [activeReadResult, setActiveReadResult] = useState<RetrievalReadResult | null>(null)
+    const [activeEvidencePacket, setActiveEvidencePacket] = useState<EvidencePacketResponse | null>(null)
+    const [traceLoading, setTraceLoading] = useState(false)
+    const [buildingEvidence, setBuildingEvidence] = useState(false)
     const searchLayoutRef = useRef<HTMLDivElement | null>(null)
 
     const [debouncedQuery, setDebouncedQuery] = useState(query)
@@ -92,25 +92,90 @@ export default function SearchPage() {
         return () => { if (timerRef.current) clearTimeout(timerRef.current) }
     }, [])
 
-    const { data, isFetching } = useQuery({
-        queryKey: ['search', workspaceId, debouncedQuery, typeFilter],
-        queryFn: () => searchKnowledge(workspaceId, debouncedQuery, { knowledge_type: typeFilter || undefined, limit: 30 }),
+    const { data, isFetching } = useQuery<RetrievalSearchResponse>({
+        queryKey: ['retrieval-search', workspaceId, debouncedQuery, typeFilter],
+        queryFn: () => retrievalSearch({
+            workspace_id: workspaceId,
+            query_text: debouncedQuery,
+            knowledge_type: typeFilter || undefined,
+            limit: 30,
+            include_parent_context: true,
+            deduplicate_sources: true,
+        }),
         enabled: !!debouncedQuery.trim() && !!workspaceId,
     })
 
-    const results: SearchResult[] = data?.results ?? []
+    const queryRecord = data?.query ?? null
+    const results: RetrievalSearchResult[] = data?.results ?? []
+
+    useEffect(() => {
+        startTransition(() => {
+            setActiveTraceResult(null)
+            setActiveReadResult(null)
+            setActiveEvidencePacket(null)
+        })
+    }, [queryRecord?.id])
+
+    const readTrace = async (result: RetrievalSearchResult) => {
+        if (!queryRecord) return
+        setTraceLoading(true)
+        setActiveTraceResult(result)
+        try {
+            const payload = await retrievalRead({
+                query_id: queryRecord.id,
+                result_ids: [result.id],
+                include_parent_context: true,
+                selection_reason_codes: ['user_selected'],
+            })
+            startTransition(() => {
+                setActiveReadResult(payload.results?.[0] ?? null)
+                setActiveEvidencePacket(null)
+            })
+        } finally {
+            setTraceLoading(false)
+        }
+    }
+
+    const handleBuildEvidence = async () => {
+        if (!queryRecord || !activeReadResult) return
+        setBuildingEvidence(true)
+        try {
+            const packet = await buildEvidencePacket({
+                workspace_id: workspaceId,
+                query_id: queryRecord.id,
+                items: [{
+                    source_type: activeReadResult.source_type,
+                    source_id: activeReadResult.source_id,
+                    title: activeReadResult.title,
+                    excerpt: activeReadResult.excerpt,
+                    parent_excerpt: activeReadResult.parent_excerpt,
+                    selection_reason_codes: activeReadResult.selection_reason_codes,
+                    citation: activeReadResult.citation,
+                    metadata: activeReadResult.metadata,
+                }],
+                summary: `Evidence for ${activeReadResult.title}`,
+            })
+            startTransition(() => {
+                setActiveEvidencePacket(packet)
+            })
+        } finally {
+            setBuildingEvidence(false)
+        }
+    }
 
     // Flatten all results into a single sorted list of cards
     const cards = useMemo<CardItem[]>(() => {
-        const chatMap: Record<string, SearchResult[]> = {}
-        const knowledgeMap: Record<string, SearchResult[]> = {}
+        const chatMap: Record<string, RetrievalSearchResult[]> = {}
+        const knowledgeMap: Record<string, RetrievalSearchResult[]> = {}
         for (const r of results) {
-            if (r.knowledge_type === 'chat') {
-                const key = r.conversation_id ?? ''
+            const conversationId = typeof r.metadata?.conversation_id === 'string' ? r.metadata.conversation_id : null
+            const knowledgeId = typeof r.metadata?.knowledge_id === 'string' ? r.metadata.knowledge_id : null
+            if (r.knowledge_type === 'chat' || r.source_type === 'conversation') {
+                const key = conversationId ?? r.source_id
                 if (!chatMap[key]) chatMap[key] = []
                 chatMap[key].push(r)
             } else {
-                const key = r.knowledge_id ?? ''
+                const key = knowledgeId ?? r.source_id
                 if (!knowledgeMap[key]) knowledgeMap[key] = []
                 knowledgeMap[key].push(r)
             }
@@ -127,6 +192,9 @@ export default function SearchPage() {
         ]
         return all.sort((a, b) => b.topScore - a.topScore)
     }, [results])
+
+    const getResultTags = (result: RetrievalSearchResult) =>
+        Array.isArray(result.metadata?.tags) ? result.metadata.tags as string[] : []
 
     return (
         <div className="h-full w-full p-6 lg:p-7">
@@ -184,7 +252,8 @@ export default function SearchPage() {
                     ))}
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+                <div className="min-h-0 flex-1 grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+                    <div className="min-h-0 overflow-y-auto pr-1">
                     {/* Empty state – no query */}
                     {!debouncedQuery.trim() && (
                         <div className="flex h-full min-h-[240px] items-center justify-center text-center">
@@ -214,14 +283,26 @@ export default function SearchPage() {
                     {/* Masonry results grid */}
                     {cards.length > 0 && (
                         <div className="space-y-3">
-                            <p className="text-xs text-muted-foreground">{results.length} result{results.length !== 1 ? 's' : ''}</p>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-xs text-muted-foreground">{results.length} result{results.length !== 1 ? 's' : ''}</p>
+                                {queryRecord && (
+                                    <span className="rounded-full border border-border/60 bg-muted/30 px-2 py-1 text-[11px] text-muted-foreground">
+                                        Query {queryRecord.id.slice(0, 8)} · {queryRecord.search_strategy}
+                                    </span>
+                                )}
+                            </div>
                             <div className="columns-1 sm:columns-2 xl:columns-3 gap-4">
                                 {cards.map(card =>
                                     card.kind === 'chat' ? (
                                         <div key={card.key} className="break-inside-avoid mb-4">
                                             <div
                                                 className="glass-card-hover rounded-2xl p-4 cursor-pointer animate-fade-in space-y-3"
-                                                onClick={() => card.chunks[0]?.conversation_id && navigate(chatRoute(workspaceId, card.chunks[0].conversation_id))}
+                                                onClick={() => {
+                                                    const conversationId = typeof card.chunks[0]?.metadata?.conversation_id === 'string'
+                                                        ? card.chunks[0].metadata.conversation_id
+                                                        : card.chunks[0]?.source_id
+                                                    if (conversationId) navigate(chatRoute(workspaceId, conversationId))
+                                                }}
                                             >
                                                 <div className="flex items-start justify-between gap-3">
                                                     <div className="min-w-0 space-y-2">
@@ -238,13 +319,24 @@ export default function SearchPage() {
                                                     <ExternalLink className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
                                                 </div>
                                                 <div className="text-xs text-foreground/80 leading-relaxed line-clamp-5 whitespace-pre-wrap">
-                                                    {card.chunks[0]?.highlighted_text || card.chunks[0]?.chunk_text}
+                                                    {card.chunks[0]?.excerpt}
                                                 </div>
-                                                <div className="flex items-center gap-1.5 pt-1">
+                                                <div className="flex items-center justify-between gap-3 pt-1">
                                                     <div className="w-16 h-1 bg-border rounded overflow-hidden">
                                                         <div className="h-full bg-accent rounded" style={{ width: `${Math.round(card.topScore * 100)}%` }} />
                                                     </div>
-                                                    <span className="text-[11px] text-muted-foreground">{Math.round(card.topScore * 100)}%</span>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[11px] text-muted-foreground">{Math.round(card.topScore * 100)}%</span>
+                                                        <button
+                                                            className="rounded-lg border border-border/60 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+                                                            onClick={(event) => {
+                                                                event.stopPropagation()
+                                                                void readTrace(card.chunks[0])
+                                                            }}
+                                                        >
+                                                            Trace
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -258,7 +350,7 @@ export default function SearchPage() {
                                                     >
                                                         {(() => {
                                                             const first = card.chunks[0]
-                                                            const typeKey = first.knowledge_type in TYPE_META ? first.knowledge_type : 'note'
+                                                            const typeKey = first.knowledge_type && first.knowledge_type in TYPE_META ? first.knowledge_type : 'note'
                                                             const typeMeta = TYPE_META[typeKey]
                                                             const typeIcon = TYPE_ICONS[typeKey] ?? TYPE_ICONS.note
                                                             return (
@@ -285,7 +377,7 @@ export default function SearchPage() {
                                                                             )}
                                                                             <div
                                                                                 className="markdown-content text-xs text-foreground/80 leading-relaxed line-clamp-5 [&_p]:mb-1 [&_h1]:text-sm [&_h2]:text-sm [&_h3]:text-sm [&_pre]:text-[11px] [&_code]:text-[11px]"
-                                                                                dangerouslySetInnerHTML={renderSearchMarkdown(chunk.chunk_text || chunk.highlighted_text)}
+                                                                                dangerouslySetInnerHTML={renderSearchMarkdown(chunk.excerpt)}
                                                                             />
                                                                             <div className="flex items-center gap-2 pt-0.5 flex-wrap">
                                                                                 <div className="flex items-center gap-1.5">
@@ -294,12 +386,26 @@ export default function SearchPage() {
                                                                                     </div>
                                                                                     <span className="text-[11px] text-muted-foreground">{Math.round(chunk.score * 100)}%</span>
                                                                                 </div>
-                                                                                {chunk.tags.slice(0, 3).map(t => (
+                                                                                {getResultTags(chunk).slice(0, 3).map(t => (
                                                                                     <span key={t} className="chip-muted text-[11px]">{t}</span>
                                                                                 ))}
                                                                             </div>
                                                                         </div>
                                                                     ))}
+                                                                    <div className="flex items-center justify-between gap-3 border-t border-border/40 pt-3">
+                                                                        <p className="text-[11px] text-muted-foreground">
+                                                                            #{card.chunks[0]?.rank_position ?? 1} · {card.chunks[0]?.strategy ?? 'hybrid'}
+                                                                        </p>
+                                                                        <button
+                                                                            className="rounded-lg border border-border/60 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+                                                                            onClick={(event) => {
+                                                                                event.stopPropagation()
+                                                                                void readTrace(card.chunks[0])
+                                                                            }}
+                                                                        >
+                                                                            Trace
+                                                                        </button>
+                                                                    </div>
                                                                 </>
                                                             )
                                                         })()}
@@ -310,7 +416,7 @@ export default function SearchPage() {
                                                 <ContextMenuItem onClick={() => navigate(`/w/${workspaceId}/knowledge/${card.key}`)} className="gap-2">
                                                     <ExternalLink className="w-4 h-4" /> Open Knowledge
                                                 </ContextMenuItem>
-                                                <ContextMenuItem onClick={() => navigator.clipboard.writeText(card.chunks[0]?.title || card.chunks[0]?.chunk_text || '')} className="gap-2">
+                                                <ContextMenuItem onClick={() => navigator.clipboard.writeText(card.chunks[0]?.title || card.chunks[0]?.excerpt || '')} className="gap-2">
                                                     <Copy className="w-4 h-4" /> Copy Title
                                                 </ContextMenuItem>
                                             </ContextMenuContent>
@@ -320,6 +426,19 @@ export default function SearchPage() {
                             </div>
                         </div>
                     )}
+                    </div>
+
+                    <div className="min-h-0 lg:overflow-y-auto">
+                        <EvidencePacketPanel
+                            query={queryRecord}
+                            activeResult={activeTraceResult}
+                            readResult={activeReadResult}
+                            evidence={activeEvidencePacket}
+                            loading={traceLoading}
+                            buildingEvidence={buildingEvidence}
+                            onBuildEvidence={() => { void handleBuildEvidence() }}
+                        />
+                    </div>
                 </div>
             </>)}
             </div>

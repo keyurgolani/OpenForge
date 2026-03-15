@@ -843,3 +843,146 @@ class ApprovalRequestModel(Base):
     __table_args__ = (
         Index("idx_approval_requests_status", "status", "requested_at"),
     )
+
+
+class RetrievalQueryModel(Base):
+    """Top-level record for an explicit retrieval search request."""
+    __tablename__ = "retrieval_queries"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    conversation_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    run_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("runs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    query_text: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_query: Mapped[str] = mapped_column(Text, nullable=False)
+    search_strategy: Mapped[str] = mapped_column(String(100), nullable=False, default="hybrid_rrf")
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="completed")
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+
+
+class RetrievalSearchResultModel(Base):
+    """Candidate or selected result returned by a retrieval query."""
+    __tablename__ = "retrieval_search_results"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    query_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("retrieval_queries.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    source_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    knowledge_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    excerpt: Mapped[str] = mapped_column(Text, nullable=False)
+    header_path: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    parent_excerpt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    rank_position: Mapped[int] = mapped_column(Integer, nullable=False)
+    strategy: Mapped[str] = mapped_column(String(100), nullable=False, default="hybrid_rrf")
+    result_status: Mapped[str] = mapped_column(String(50), nullable=False, default="candidate")
+    opened: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    selected: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    summary_status: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    selection_reason_codes: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    trust_metadata: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+
+    __table_args__ = (
+        Index("idx_retrieval_search_results_source", "source_type", "source_id"),
+        Index("idx_retrieval_search_results_status", "query_id", "result_status"),
+    )
+
+
+class EvidencePacketModel(Base):
+    """Durable evidence packet assembled from explicit reads."""
+    __tablename__ = "evidence_packets"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    query_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("retrieval_queries.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    conversation_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    run_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("runs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    packet_status: Mapped[str] = mapped_column(String(50), nullable=False, default="ready")
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    item_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    items_json: Mapped[list] = mapped_column("items", JSONB, nullable=False, default=list)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+
+
+class ConversationSummaryModel(Base):
+    """Persisted conversation memory summary snapshots."""
+    __tablename__ = "conversation_summaries"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    run_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("runs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    summary_type: Mapped[str] = mapped_column(String(50), nullable=False, default="conversation_memory")
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    threshold_message_count: Mapped[int] = mapped_column(Integer, nullable=False, default=20)
+    keep_recent_messages: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    recent_messages_json: Mapped[list] = mapped_column("recent_messages", JSONB, nullable=False, default=list)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+
+    __table_args__ = (
+        UniqueConstraint("conversation_id", "version", name="uq_conversation_summaries_conversation_version"),
+    )
+
+
+class ToolOutputSummaryModel(Base):
+    """Summarized or truncated tool output used for prompt-safe context."""
+    __tablename__ = "tool_output_summaries"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    conversation_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    run_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("runs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    tool_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    call_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    summary_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    handling_mode: Mapped[str] = mapped_column(String(50), nullable=False, default="inline")
+    raw_char_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    raw_token_estimate: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    preview: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)

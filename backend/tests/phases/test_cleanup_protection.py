@@ -352,3 +352,29 @@ class TestConfigurationCentralization:
                         f"Integration file {py_file} has {count} os.getenv() calls. "
                         f"Use get_settings() from openforge.common.config instead."
                     )
+
+
+class TestPhase4RetrievalGuardrails:
+    """Guardrails that keep Phase 4 retrieval behavior explicit."""
+
+    def test_context_assembler_has_no_dead_rag_results_path(self):
+        context_assembler = (BACKEND_ROOT / "core" / "context_assembler.py").read_text(encoding="utf-8")
+        assert "rag_results" not in context_assembler
+
+    def test_retrieval_search_engine_import_is_confined_to_allowed_boundaries(self):
+        allowed = {
+            BACKEND_ROOT / "api" / "search.py",
+            BACKEND_ROOT / "domains" / "retrieval" / "service.py",
+            PROJECT_ROOT / "backend" / "tests" / "api" / "test_api_integration.py",
+        }
+
+        offenders = []
+        for py_file in get_all_python_files(BACKEND_ROOT):
+            content = py_file.read_text(encoding="utf-8")
+            if "from openforge.core.search_engine import search_engine" in content and py_file not in allowed:
+                offenders.append(py_file)
+
+        assert not offenders, (
+            f"Direct search_engine imports found outside retrieval boundaries: {offenders}. "
+            "Route retrieval through openforge.domains.retrieval.service instead."
+        )

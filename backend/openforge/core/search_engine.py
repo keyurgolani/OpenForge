@@ -202,6 +202,11 @@ class SearchEngine:
             "tags": payload.get("tags", []),
             "score": hit.score,
             "created_at": payload.get("created_at", ""),
+            "chunk_type": payload.get("chunk_type"),
+            "char_start": payload.get("char_start"),
+            "char_end": payload.get("char_end"),
+            "token_count": payload.get("token_count"),
+            "parent_token_count": payload.get("parent_token_count"),
         }
         if include_parent:
             result["parent_chunk_text"] = payload.get("parent_chunk_text") or None

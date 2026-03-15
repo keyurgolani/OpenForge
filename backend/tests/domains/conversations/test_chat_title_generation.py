@@ -48,6 +48,12 @@ def test_fallback_chat_title_strips_request_framing() -> None:
     assert result == "A long long story about wizard kingdoms"
 
 
+def test_fallback_chat_title_drops_trailing_filler_words_after_truncation() -> None:
+    msg = "Tell me a long long story about dragons and kingdoms"
+    result = fallback_chat_title(msg, max_words=7)
+    assert result == "A long long story about dragons"
+
+
 def test_is_low_signal_chat_turn_for_acknowledgements() -> None:
     assert is_low_signal_chat_turn("continue")
     assert is_low_signal_chat_turn("Thanks!")

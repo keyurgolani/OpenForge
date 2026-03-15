@@ -15,9 +15,9 @@ def test_resolve_attachment_pipeline_accepts_text_extensions_without_content_typ
     assert resolve_attachment_pipeline(content_type="application/octet-stream", filename="data.csv") == "text"
 
 
-def test_resolve_attachment_pipeline_marks_future_types_as_deferred() -> None:
-    assert resolve_attachment_pipeline(content_type="application/pdf", filename="doc.pdf") == "deferred"
-    assert resolve_attachment_pipeline(content_type="image/png", filename="image.png") == "deferred"
+def test_resolve_attachment_pipeline_routes_supported_rich_media_to_specialized_extractors() -> None:
+    assert resolve_attachment_pipeline(content_type="application/pdf", filename="doc.pdf") == "pdf"
+    assert resolve_attachment_pipeline(content_type="image/png", filename="image.png") == "image"
 
 
 def test_extract_http_urls_dedupes_and_strips_trailing_punctuation() -> None:

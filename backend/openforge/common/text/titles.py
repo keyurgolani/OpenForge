@@ -88,6 +88,8 @@ _LOW_SIGNAL_CHAT_TOKENS = {
     "lot", "please", "thx", "ty", "mate", "buddy", "team", "agent", "assistant",
 }
 
+_TITLE_TRAILING_FILLER_TOKENS = {"and", "or", "to", "for", "with", "of", "the", "a", "an"}
+
 _REQUEST_PREFIX_PATTERNS = (
     re.compile(r"^(?:please\s+)?tell\s+me\s+", re.IGNORECASE),
     re.compile(r"^(?:please\s+)?(?:can|could|would|will)\s+you\s+", re.IGNORECASE),
@@ -248,6 +250,11 @@ def fallback_chat_title(first_message: str, max_words: int = 7, max_length: int 
 
     words = text.split(" ")
     truncated = " ".join(words[:max_words]).strip()
+    while truncated:
+        last_word = truncated.split(" ")[-1].lower()
+        if last_word not in _TITLE_TRAILING_FILLER_TOKENS:
+            break
+        truncated = " ".join(truncated.split(" ")[:-1]).strip()
     return truncated[:max_length] if truncated else None
 
 

@@ -160,6 +160,16 @@ export const exportConversation = (
 // ── Search ──
 export const searchKnowledge = (wid: string, q: string, params?: object): Promise<any> =>
     api.get(`/workspaces/${wid}/search`, { params: { q, ...params } }).then(r => r.data)
+export const retrievalSearch = (data: object): Promise<any> =>
+    api.post('/retrieval/search', data).then(r => r.data)
+export const retrievalRead = (data: object): Promise<any> =>
+    api.post('/retrieval/read', data).then(r => r.data)
+export const buildEvidencePacket = (data: object): Promise<any> =>
+    api.post('/retrieval/evidence', data).then(r => r.data)
+export const getRetrievalQuery = (queryId: string): Promise<any> =>
+    api.get(`/retrieval/queries/${queryId}`).then(r => r.data)
+export const getConversationSummary = (conversationId: string): Promise<any> =>
+    api.get(`/retrieval/conversations/${conversationId}/summary`).then(r => r.data)
 
 // ── Prompts ──
 export const listManagedPrompts = (params?: { limit?: number; skip?: number }): Promise<any> =>

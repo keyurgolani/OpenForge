@@ -23,6 +23,7 @@ from openforge.api import export as export_api
 from openforge.api import models as models_api
 from openforge.domains.policies.router import router as policies_router
 from openforge.domains.prompts.router import router as prompts_router
+from openforge.domains.retrieval.router import router as retrieval_router
 
 # Domain routers (new architecture)
 api_router = APIRouter(prefix="/api/v1")
@@ -44,5 +45,6 @@ api_router.include_router(export_api.router, prefix="/export", tags=["export"])
 api_router.include_router(models_api.router, prefix="/models", tags=["models"])
 api_router.include_router(prompts_router, prefix="/prompts", tags=["prompts"])
 api_router.include_router(policies_router, prefix="/policies", tags=["policies"])
+api_router.include_router(retrieval_router, prefix="/retrieval", tags=["retrieval"])
 
 # Domain routes (new architecture)

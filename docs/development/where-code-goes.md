@@ -88,6 +88,15 @@ domains/
 # 5. NOT import infrastructure or runtime, or legacy
 ```
 
+### Retrieval Rule
+
+Phase 4 adds a special rule for retrieval-related work:
+
+- new retrieval logic goes in `backend/openforge/domains/retrieval/`
+- public search/read/evidence flows must use the retrieval service boundary
+- do not append workspace documents or large tool outputs directly into prompts
+- if retrieved content is used later, prefer passing an evidence packet or conversation summary rather than raw body text
+
 ### `backend/openforge/runtime/`
 
 Execution engine and workflow orchestest.

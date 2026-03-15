@@ -594,9 +594,9 @@ class LLMGateway:
                     except Exception:
                         continue
 
+                    thinking = self._extract_ollama_chunk_thinking(chunk)
+                    content = self._extract_ollama_chunk_text(chunk)
                     msg = chunk.get("message") or {}
-                    thinking = msg.get("thinking") or ""
-                    content = msg.get("content") or ""
                     tool_calls = msg.get("tool_calls") or []
 
                     if thinking:
@@ -700,6 +700,35 @@ class LLMGateway:
         # Strip trailing /v1 so we can append /api/chat or /api/tags ourselves
         base = (base_url or "http://localhost:11434").rstrip("/")
         return base[:-3] if base.endswith("/v1") else base
+
+    def _normalize_ollama_base_url(self, base_url: str | None) -> str:
+        return self._resolve_base_url("ollama", base_url) or "http://localhost:11434"
+
+    @staticmethod
+    def _extract_ollama_chunk_text(chunk: dict) -> str:
+        response_text = chunk.get("response")
+        if isinstance(response_text, str) and response_text:
+            return response_text
+
+        message = chunk.get("message")
+        if isinstance(message, dict):
+            content = message.get("content")
+            if isinstance(content, str):
+                return content
+        return ""
+
+    @staticmethod
+    def _extract_ollama_chunk_thinking(chunk: dict) -> str:
+        thinking = chunk.get("thinking")
+        if isinstance(thinking, str) and thinking:
+            return thinking
+
+        message = chunk.get("message")
+        if isinstance(message, dict):
+            nested_thinking = message.get("thinking")
+            if isinstance(nested_thinking, str):
+                return nested_thinking
+        return ""
 
     def _normalize_content(self, content) -> str:
         if content is None:

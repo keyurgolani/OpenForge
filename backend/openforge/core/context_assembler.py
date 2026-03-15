@@ -18,47 +18,22 @@ class ContextAssembler:
         self,
         system_prompt: str,
         conversation_messages: list[dict],
-        rag_results: list[dict] | None = None,
         max_context_tokens: int = 16000,
-        extra_context: str | None = None,
+        explicit_context: str | None = None,
     ) -> list[dict]:
         """Returns assembled messages list for LLM call."""
         history_budget = int(max_context_tokens * 0.70)
 
         # Build full system prompt
         full_system = system_prompt
-        if extra_context:
-            full_system += extra_context
+        if explicit_context:
+            full_system += explicit_context
 
         # Build conversation history within budget
         messages = [{"role": "system", "content": full_system}]
         history = self._truncate_history(conversation_messages, history_budget)
         messages.extend(history)
         return messages
-
-    def _build_rag_context(self, rag_results: list[dict], budget_tokens: int) -> str:
-        if not rag_results:
-            return ""
-
-        # Sort by score descending
-        sorted_results = sorted(rag_results, key=lambda x: x.get("score", 0), reverse=True)
-        parts = []
-        used_tokens = 0
-
-        for r in sorted_results:
-            header = f'[From: "{r["title"]}"'
-            if r.get("header_path"):
-                header += f' (section: {r["header_path"]})'
-            header += "]"
-            entry = f"{header}\n{r['chunk_text']}"
-            entry_tokens = llm_gateway.count_tokens(entry)
-
-            if used_tokens + entry_tokens > budget_tokens:
-                break
-            parts.append(entry)
-            used_tokens += entry_tokens
-
-        return "\n\n".join(parts) if parts else ""
 
     def _truncate_history(self, messages: list[dict], budget_tokens: int) -> list[dict]:
         if not messages:
