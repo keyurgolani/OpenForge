@@ -12,6 +12,7 @@ import {
   Bot,
   Sliders,
   Settings2,
+  Hammer,
   ShieldAlert,
   Timer,
   Wrench,
@@ -19,6 +20,7 @@ import {
   History,
   Upload,
   Download,
+  Package,
 } from 'lucide-react';
 import { SETTINGS_LABELS, SETTINGS_DESCRIPTIONS, type SettingsSection } from '@/lib/productVocabulary';
 
@@ -39,15 +41,6 @@ const SETTINGS_NAV: SettingsNavItem[] = [
     id: 'models',
     route: '/settings/models',
     icon: Bot,
-    children: [
-      { id: 'providers', route: '/settings/models/providers', label: 'Providers' },
-      { id: 'reasoning', route: '/settings/models/reasoning', label: 'Reasoning' },
-      { id: 'vision', route: '/settings/models/vision', label: 'Vision' },
-      { id: 'embedding', route: '/settings/models/embedding', label: 'Embedding' },
-      { id: 'audio', route: '/settings/models/audio', label: 'Audio' },
-      { id: 'clip', route: '/settings/models/clip', label: 'CLIP' },
-      { id: 'pdf', route: '/settings/models/pdf', label: 'PDF' },
-    ],
   },
   {
     id: 'prompts',
@@ -58,6 +51,16 @@ const SETTINGS_NAV: SettingsNavItem[] = [
     id: 'policies',
     route: '/settings/policies',
     icon: Settings2,
+  },
+  {
+    id: 'tools',
+    route: '/settings/tools',
+    icon: Hammer,
+  },
+  {
+    id: 'bundles',
+    route: '/settings/bundles',
+    icon: Package,
   },
   {
     id: 'approvals',

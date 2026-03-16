@@ -167,7 +167,9 @@ class InstallSkillTool(BaseTool):
                 combined = f"{out}\n{err}" if out else err
 
             if proc.returncode != 0:
-                return ToolResult(success=False, error=combined or f"Exit code {proc.returncode}")
+                skill_label = f" ({', '.join(skill_names)})" if skill_names else ""
+                fallback = f"Failed to install skills from '{source}'{skill_label}. The source may not exist or the skill name may be incorrect."
+                return ToolResult(success=False, error=combined or fallback)
 
             # Move skills out of the CLI's .claude/skills staging dir into skills_dir
             _promote_cli_skills(Path(skills_root), Path(settings.skills_dir))

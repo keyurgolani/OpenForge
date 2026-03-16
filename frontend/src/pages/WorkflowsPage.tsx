@@ -1,13 +1,16 @@
 import { useState } from 'react'
-import { ArrowRight, Boxes, Filter, GitBranch, Layers3, Workflow } from 'lucide-react'
-import { Link, useParams } from 'react-router-dom'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { ArrowRight, Boxes, Filter, GitBranch, Layers3, Sparkles, Workflow } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
 
 import EmptyState from '@/components/shared/EmptyState'
 import ErrorState from '@/components/shared/ErrorState'
 import LoadingState from '@/components/shared/LoadingState'
+import MutationButton from '@/components/shared/MutationButton'
 import PageHeader from '@/components/shared/PageHeader'
 import StatusBadge from '@/components/shared/StatusBadge'
 import { useWorkflowsQuery } from '@/features/workflows'
+import { createWorkflow } from '@/lib/api'
 import { formatRelativeTime } from '@/lib/formatters'
 import { EMPTY_STATE_COPY, getDescription, getLabel } from '@/lib/productVocabulary'
 import { workflowsRoute } from '@/lib/routes'
@@ -16,16 +19,42 @@ import type { WorkflowStatus } from '@/types/workflows'
 type SystemFilter = 'all' | 'system' | 'workspace'
 type TemplateFilter = 'all' | 'template' | 'custom'
 
+type WorkflowComposerState = {
+  name: string
+  description: string
+}
+
+const EMPTY_COMPOSER: WorkflowComposerState = {
+  name: '',
+  description: '',
+}
+
 export default function WorkflowsPage() {
-  const { workspaceId = '' } = useParams<{ workspaceId: string }>()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [statusFilter, setStatusFilter] = useState<'all' | WorkflowStatus>('all')
   const [systemFilter, setSystemFilter] = useState<SystemFilter>('all')
   const [templateFilter, setTemplateFilter] = useState<TemplateFilter>('all')
+  const [composer, setComposer] = useState<WorkflowComposerState>(EMPTY_COMPOSER)
+  const [isComposerOpen, setIsComposerOpen] = useState(false)
   const { data, isLoading, error } = useWorkflowsQuery({
-    workspaceId,
     status: statusFilter === 'all' ? undefined : statusFilter,
     isSystem: systemFilter === 'all' ? undefined : systemFilter === 'system',
     isTemplate: templateFilter === 'all' ? undefined : templateFilter === 'template',
+  })
+
+  const createMutation = useMutation({
+    mutationFn: async () => createWorkflow({
+      name: composer.name,
+      description: composer.description || null,
+      status: 'draft',
+    }),
+    onSuccess: async (createdWorkflow) => {
+      setComposer(EMPTY_COMPOSER)
+      setIsComposerOpen(false)
+      await queryClient.invalidateQueries({ queryKey: ['workflows'] })
+      navigate(workflowsRoute(createdWorkflow.id))
+    },
   })
 
   if (isLoading) {
@@ -48,8 +77,58 @@ export default function WorkflowsPage() {
       <PageHeader
         title={getLabel('workflow', true)}
         description={getDescription('workflow')}
-        actions={<span className="text-sm text-muted-foreground/90">{data?.total ?? 0} visible</span>}
+        actions={(
+          <MutationButton
+            isPending={false}
+            variant="secondary"
+            icon={<Sparkles className="h-4 w-4" />}
+            onClick={() => setIsComposerOpen((current) => !current)}
+          >
+            {isComposerOpen ? 'Close Builder' : 'New Workflow'}
+          </MutationButton>
+        )}
       />
+
+      {isComposerOpen ? (
+        <section className="rounded-3xl border border-border/60 bg-card/35 p-5">
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">Workflow Builder</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Create a new workflow definition. You can add nodes, edges, and version details on the detail page.
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="space-y-2 text-sm">
+              <span className="text-muted-foreground">Name</span>
+              <input
+                className="input w-full"
+                value={composer.name}
+                onChange={(event) => setComposer((current) => ({ ...current, name: event.target.value }))}
+              />
+            </label>
+            <label className="space-y-2 text-sm md:col-span-2">
+              <span className="text-muted-foreground">Description</span>
+              <textarea
+                className="input min-h-28 w-full py-3"
+                value={composer.description}
+                onChange={(event) => setComposer((current) => ({ ...current, description: event.target.value }))}
+              />
+            </label>
+          </div>
+          <div className="mt-4 flex justify-end">
+            <MutationButton
+              isPending={createMutation.isPending}
+              isSuccess={createMutation.isSuccess}
+              isError={createMutation.isError}
+              onClick={() => createMutation.mutate()}
+            >
+              Create Draft Workflow
+            </MutationButton>
+          </div>
+        </section>
+      ) : null}
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_320px]">
         <div className="rounded-2xl border border-border/60 bg-card/30 p-5">
@@ -159,7 +238,7 @@ export default function WorkflowsPage() {
                   </p>
                 </div>
                 <Link
-                  to={workflowsRoute(workspaceId, workflow.id)}
+                  to={workflowsRoute(workflow.id)}
                   className="inline-flex h-10 items-center gap-2 rounded-xl border border-border/60 bg-background/50 px-3 text-sm text-foreground transition hover:border-accent/35 hover:text-accent"
                 >
                   View Details

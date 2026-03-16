@@ -30,7 +30,7 @@ def get_run_service(db=Depends(get_db)) -> RunService:
     return RunService(db)
 
 
-@router.get("/", response_model=RunListResponse)
+@router.get("", response_model=RunListResponse)
 async def list_runs(
     skip: int = 0,
     limit: int = 100,
@@ -58,7 +58,7 @@ async def get_run(run_id: UUID, service: RunService = Depends(get_run_service)):
     return run
 
 
-@router.post("/", response_model=RunResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=RunResponse, status_code=status.HTTP_201_CREATED)
 async def create_run(body: RunCreate, service: RunService = Depends(get_run_service)):
     return await service.create_run(body.model_dump())
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Save, ShieldAlert, Trash2 } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
@@ -11,7 +11,15 @@ import PageHeader from '@/components/shared/PageHeader'
 import Section from '@/components/shared/Section'
 import StatusBadge from '@/components/shared/StatusBadge'
 import { useProfileQuery, useProfileValidationQuery, useResolvedProfileQuery } from '@/features/profiles'
-import { deleteProfile, updateProfile } from '@/lib/api'
+import {
+  deleteProfile,
+  updateProfile,
+  listCapabilityBundles,
+  listModelPolicies,
+  listMemoryPolicies,
+  listSafetyPolicies,
+  listOutputContracts,
+} from '@/lib/api'
 import { profilesRoute } from '@/lib/routes'
 
 type DraftState = {
@@ -21,6 +29,11 @@ type DraftState = {
   role: string
   system_prompt_ref: string
   status: string
+  model_policy_id: string
+  memory_policy_id: string
+  safety_policy_id: string
+  output_contract_id: string
+  capability_bundle_ids: string[]
 }
 
 const EMPTY_DRAFT: DraftState = {
@@ -30,16 +43,34 @@ const EMPTY_DRAFT: DraftState = {
   role: 'assistant',
   system_prompt_ref: '',
   status: 'draft',
+  model_policy_id: '',
+  memory_policy_id: '',
+  safety_policy_id: '',
+  output_contract_id: '',
+  capability_bundle_ids: [],
 }
 
 export default function ProfileDetailPage() {
-  const { workspaceId, profileId } = useParams<{ workspaceId: string; profileId: string }>()
+  const { profileId } = useParams<{ profileId: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { data: profile, isLoading, error } = useProfileQuery(profileId)
   const { data: resolved } = useResolvedProfileQuery(profileId)
   const { data: validation } = useProfileValidationQuery(profileId)
   const [draft, setDraft] = useState<DraftState>(EMPTY_DRAFT)
+
+  // Fetch building-block options
+  const { data: bundlesData } = useQuery({ queryKey: ['capability-bundles'], queryFn: listCapabilityBundles })
+  const { data: modelPoliciesData } = useQuery({ queryKey: ['model-policies'], queryFn: listModelPolicies })
+  const { data: memoryPoliciesData } = useQuery({ queryKey: ['memory-policies'], queryFn: listMemoryPolicies })
+  const { data: safetyPoliciesData } = useQuery({ queryKey: ['safety-policies'], queryFn: listSafetyPolicies })
+  const { data: outputContractsData } = useQuery({ queryKey: ['output-contracts'], queryFn: listOutputContracts })
+
+  const bundles = bundlesData?.capability_bundles ?? bundlesData?.bundles ?? []
+  const modelPolicies = modelPoliciesData?.model_policies ?? modelPoliciesData?.policies ?? []
+  const memoryPolicies = memoryPoliciesData?.memory_policies ?? memoryPoliciesData?.policies ?? []
+  const safetyPolicies = safetyPoliciesData?.policies ?? []
+  const outputContracts = outputContractsData?.output_contracts ?? outputContractsData?.contracts ?? []
 
   useEffect(() => {
     if (!profile) {
@@ -52,6 +83,11 @@ export default function ProfileDetailPage() {
       role: profile.role,
       system_prompt_ref: profile.system_prompt_ref ?? '',
       status: profile.status,
+      model_policy_id: profile.model_policy_id ?? '',
+      memory_policy_id: profile.memory_policy_id ?? '',
+      safety_policy_id: profile.safety_policy_id ?? '',
+      output_contract_id: profile.output_contract_id ?? '',
+      capability_bundle_ids: profile.capability_bundle_ids ?? [],
     })
   }, [profile])
 
@@ -63,6 +99,11 @@ export default function ProfileDetailPage() {
       role: draft.role,
       system_prompt_ref: draft.system_prompt_ref || null,
       status: draft.status,
+      model_policy_id: draft.model_policy_id || null,
+      memory_policy_id: draft.memory_policy_id || null,
+      safety_policy_id: draft.safety_policy_id || null,
+      output_contract_id: draft.output_contract_id || null,
+      capability_bundle_ids: draft.capability_bundle_ids,
     }),
     onSuccess: async () => {
       await Promise.all([
@@ -78,7 +119,7 @@ export default function ProfileDetailPage() {
     mutationFn: async () => deleteProfile(profileId as string),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['profiles'] })
-      navigate(profilesRoute(workspaceId as string))
+      navigate(profilesRoute())
     },
   })
 
@@ -100,7 +141,7 @@ export default function ProfileDetailPage() {
         actions={(
           <div className="flex flex-wrap items-center gap-2">
             <Link
-              to={profilesRoute(workspaceId as string)}
+              to={profilesRoute()}
               className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -193,6 +234,97 @@ export default function ProfileDetailPage() {
                   onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
                 />
               </label>
+            </CardContent>
+          </Card>
+
+          <Card glass padding="lg">
+            <CardHeader>
+              <CardTitle as="h2">Architecture References</CardTitle>
+              <CardDescription>Attach modular building blocks to complete the profile.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2">
+              <label className="space-y-2 text-sm">
+                <span className="text-muted-foreground">Model Policy</span>
+                <select
+                  className="input w-full"
+                  value={draft.model_policy_id}
+                  onChange={(e) => setDraft((c) => ({ ...c, model_policy_id: e.target.value }))}
+                >
+                  <option value="">None</option>
+                  {modelPolicies.map((p: any) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-2 text-sm">
+                <span className="text-muted-foreground">Memory Policy</span>
+                <select
+                  className="input w-full"
+                  value={draft.memory_policy_id}
+                  onChange={(e) => setDraft((c) => ({ ...c, memory_policy_id: e.target.value }))}
+                >
+                  <option value="">None</option>
+                  {memoryPolicies.map((p: any) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-2 text-sm">
+                <span className="text-muted-foreground">Safety Policy</span>
+                <select
+                  className="input w-full"
+                  value={draft.safety_policy_id}
+                  onChange={(e) => setDraft((c) => ({ ...c, safety_policy_id: e.target.value }))}
+                >
+                  <option value="">None</option>
+                  {safetyPolicies.map((p: any) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-2 text-sm">
+                <span className="text-muted-foreground">Output Contract</span>
+                <select
+                  className="input w-full"
+                  value={draft.output_contract_id}
+                  onChange={(e) => setDraft((c) => ({ ...c, output_contract_id: e.target.value }))}
+                >
+                  <option value="">None</option>
+                  {outputContracts.map((c: any) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="space-y-2 text-sm md:col-span-2">
+                <span className="text-muted-foreground">Capability Bundles</span>
+                <div className="space-y-1.5 rounded-xl border border-border/50 bg-background/35 p-3">
+                  {bundles.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No capability bundles available.</p>
+                  ) : (
+                    bundles.map((b: any) => (
+                      <label key={b.id} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="accent-accent"
+                          checked={draft.capability_bundle_ids.includes(b.id)}
+                          onChange={(e) => {
+                            setDraft((c) => ({
+                              ...c,
+                              capability_bundle_ids: e.target.checked
+                                ? [...c.capability_bundle_ids, b.id]
+                                : c.capability_bundle_ids.filter((id) => id !== b.id),
+                            }))
+                          }}
+                        />
+                        <span className="text-foreground">{b.name}</span>
+                        {b.description && (
+                          <span className="text-xs text-muted-foreground/70 truncate">— {b.description}</span>
+                        )}
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
             </CardContent>
           </Card>
 

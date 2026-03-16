@@ -67,7 +67,7 @@ export function groupRunsByJoinGroup(runs: Run[]): Array<{ joinGroupId: string; 
 }
 
 export default function RunDetailPage() {
-  const { workspaceId = '', runId = '' } = useParams<{ workspaceId: string; runId: string }>()
+  const { runId = '' } = useParams<{ runId: string }>()
   const { data: run, isLoading, error } = useRunQuery(runId)
   const { data: stepsData } = useRunStepsQuery(runId)
   const { data: lineage } = useRunLineageQuery(runId)
@@ -113,7 +113,7 @@ export default function RunDetailPage() {
         actions={(
           <div className="flex flex-wrap items-center gap-2">
             <Link
-              to={runsRoute(workspaceId)}
+              to={runsRoute()}
               className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -121,7 +121,7 @@ export default function RunDetailPage() {
             </Link>
             {run.workflow_id ? (
               <Link
-                to={workflowsRoute(workspaceId, run.workflow_id)}
+                to={workflowsRoute(run.workflow_id)}
                 className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
               >
                 <GitBranch className="h-4 w-4" />
@@ -306,7 +306,7 @@ export default function RunDetailPage() {
                   <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Parent run</p>
                   <p className="mt-1 text-foreground">
                     {lineage?.parent_run ? (
-                      <Link className="transition hover:text-accent" to={runsRoute(workspaceId, lineage.parent_run.id)}>
+                      <Link className="transition hover:text-accent" to={runsRoute(lineage.parent_run.id)}>
                         {truncateText(lineage.parent_run.id, 18)}
                       </Link>
                     ) : 'This run is a root run.'}
@@ -319,7 +319,7 @@ export default function RunDetailPage() {
                       <p className="text-muted-foreground/80">No child runs have been spawned.</p>
                     ) : childRuns.map((childRun) => (
                       <div key={childRun.id} className="flex items-center justify-between gap-3 rounded-lg border border-border/50 bg-background/50 px-3 py-2">
-                        <Link className="transition hover:text-accent" to={runsRoute(workspaceId, childRun.id)}>
+                        <Link className="transition hover:text-accent" to={runsRoute(childRun.id)}>
                           {truncateText(childRun.id, 18)}
                         </Link>
                         <StatusBadge status={childRun.status} />
@@ -465,7 +465,7 @@ export default function RunDetailPage() {
                   <Link
                     key={artifactId}
                     className="flex items-center gap-2 rounded-xl border border-border/60 bg-background/35 px-3 py-2 transition hover:border-accent/35 hover:text-accent"
-                    to={artifactsRoute(workspaceId, artifactId)}
+                    to={artifactsRoute(artifactId)}
                   >
                     <FileOutput className="h-4 w-4" />
                     {truncateText(artifactId, 20)}

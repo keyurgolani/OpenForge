@@ -103,16 +103,32 @@ class MissionService(CrudDomainService):
             return None
         return mission
 
+    async def _unique_slug(self, base_slug: str) -> str:
+        """Return a slug guaranteed to be unique by appending a numeric suffix."""
+        candidate = base_slug
+        suffix = 0
+        while True:
+            exists = await self.db.scalar(
+                select(MissionDefinitionModel.id).where(MissionDefinitionModel.slug == candidate).limit(1)
+            )
+            if exists is None:
+                return candidate
+            suffix += 1
+            candidate = f"{base_slug}-{suffix}"
+
     async def clone_template(self, mission_id: UUID, clone_data: dict[str, Any]) -> dict[str, Any] | None:
         """Clone a mission template into a workspace-local mission."""
         template = await self.get_template(mission_id)
         if template is None:
             return None
 
+        desired_slug = clone_data.get("slug") or f"{template['slug']}-clone"
+        unique_slug = await self._unique_slug(desired_slug)
+
         clone_payload = {
             "workspace_id": clone_data["workspace_id"],
             "name": clone_data.get("name") or template["name"],
-            "slug": clone_data.get("slug") or f"{template['slug']}-clone",
+            "slug": unique_slug,
             "description": template.get("description"),
             "workflow_id": template["workflow_id"],
             "workflow_version_id": template.get("workflow_version_id"),

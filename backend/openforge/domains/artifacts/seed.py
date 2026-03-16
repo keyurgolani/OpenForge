@@ -19,7 +19,7 @@ from .types import (
 )
 
 SEED_NAMESPACE = uuid5(NAMESPACE_URL, "https://openforge.dev/phase8/artifacts")
-DEFAULT_SEED_WORKSPACE_ID = uuid5(SEED_NAMESPACE, "workspace")
+DEFAULT_SEED_WORKSPACE_ID = None  # Artifacts are workspace-agnostic in seed data
 
 
 class ArtifactSeeder(Protocol):

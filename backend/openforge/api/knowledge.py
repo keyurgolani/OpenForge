@@ -93,7 +93,7 @@ async def _workspace_prompt_vars(db: AsyncSession, workspace_id: UUID) -> dict[s
     workspace = await db.get(Workspace, workspace_id)
     return {
         "workspace_name": workspace.name if workspace else "",
-        "workspace_description": workspace.description if workspace else "",
+        "workspace_description": (workspace.description or "") if workspace else "",
     }
 
 
@@ -555,7 +555,7 @@ async def import_bookmarks(
             skipped += 1
             continue
 
-        title = (bookmark.title or "").strip() or url
+        title = ((bookmark.title or "").strip() or url)[:500]
         content = bookmark.note or bookmark.description or ""
         has_initial_content = bool(content.strip())
 

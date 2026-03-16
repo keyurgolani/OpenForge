@@ -83,7 +83,7 @@ async def clone_profile_template(
 # ── Standard CRUD endpoints ──
 
 
-@router.get("/", response_model=ProfileListResponse)
+@router.get("", response_model=ProfileListResponse)
 async def list_profiles(
     skip: int = 0,
     limit: int = 100,
@@ -168,7 +168,7 @@ async def compare_profiles(
     return comparison
 
 
-@router.post("/", response_model=ProfileResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ProfileResponse, status_code=status.HTTP_201_CREATED)
 async def create_profile(
     profile_data: ProfileCreate,
     service: ProfileService = Depends(get_profile_service),

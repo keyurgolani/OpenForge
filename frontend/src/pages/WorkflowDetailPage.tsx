@@ -59,7 +59,7 @@ export function getCompositeNodeFacts(node: WorkflowNode | null): Array<{ label:
 }
 
 export default function WorkflowDetailPage() {
-  const { workspaceId = '', workflowId = '' } = useParams<{ workspaceId: string; workflowId: string }>()
+  const { workflowId = '' } = useParams<{ workflowId: string }>()
   const { data: workflow, isLoading, error } = useWorkflowQuery(workflowId)
   const { data: versionsData } = useWorkflowVersionsQuery(workflowId)
   const versions = useMemo(() => versionsData?.versions ?? [], [versionsData])
@@ -114,7 +114,7 @@ export default function WorkflowDetailPage() {
         description="Inspect the active runtime definition, compare version snapshots, and review node and edge structure with full version history and graph visualization."
         actions={(
           <Link
-            to={workflowsRoute(workspaceId)}
+            to={workflowsRoute()}
             className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" />

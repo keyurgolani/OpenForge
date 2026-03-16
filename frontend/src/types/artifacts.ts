@@ -114,7 +114,7 @@ export interface ArtifactDiff {
 
 export interface ArtifactCreate {
   artifact_type: ArtifactType
-  workspace_id: string
+  workspace_id?: string
   title: string
   summary?: string
   status?: ArtifactStatus

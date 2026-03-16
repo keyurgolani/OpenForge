@@ -21,7 +21,6 @@ import type {
 } from '@/types/artifacts'
 
 interface ArtifactQueryOptions {
-  workspaceId?: string
   limit?: number
   q?: string
   artifactType?: ArtifactQueryParams['artifact_type']
@@ -34,7 +33,6 @@ interface ArtifactQueryOptions {
 }
 
 export function useArtifactsQuery({
-  workspaceId,
   limit = 100,
   q,
   artifactType,
@@ -46,9 +44,8 @@ export function useArtifactsQuery({
   createdByType,
 }: ArtifactQueryOptions = {}) {
   return useQuery<ArtifactsResponse>({
-    queryKey: ['artifacts', workspaceId ?? 'all', limit, q ?? '', artifactType ?? 'all', status ?? 'all', visibility ?? 'all', sourceRunId ?? 'all', sourceWorkflowId ?? 'all', sourceMissionId ?? 'all', createdByType ?? 'all'],
+    queryKey: ['artifacts', limit, q ?? '', artifactType ?? 'all', status ?? 'all', visibility ?? 'all', sourceRunId ?? 'all', sourceWorkflowId ?? 'all', sourceMissionId ?? 'all', createdByType ?? 'all'],
     queryFn: () => listArtifacts({
-      workspace_id: workspaceId,
       limit,
       q,
       artifact_type: artifactType,
@@ -59,7 +56,6 @@ export function useArtifactsQuery({
       source_mission_id: sourceMissionId,
       created_by_type: createdByType,
     }),
-    enabled: workspaceId !== '',
   })
 }
 

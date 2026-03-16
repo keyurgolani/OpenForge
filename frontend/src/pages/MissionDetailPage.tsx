@@ -22,7 +22,7 @@ import { formatDateTime, formatRelativeTime } from '@/lib/formatters'
 import { missionsRoute } from '@/lib/routes'
 
 export default function MissionDetailPage() {
-  const { workspaceId = '', missionId = '' } = useParams<{ workspaceId: string; missionId: string }>()
+  const { missionId = '' } = useParams<{ missionId: string }>()
   const { data: mission, isLoading, error } = useMissionQuery(missionId)
   const { data: health } = useMissionHealthQuery(missionId)
   const { data: runsData } = useMissionRunsQuery(missionId, 10)
@@ -52,7 +52,7 @@ export default function MissionDetailPage() {
         description="Inspect mission configuration, health, triggers, recent runs, and lifecycle controls."
         actions={(
           <Link
-            to={missionsRoute(workspaceId)}
+            to={missionsRoute()}
             className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" />

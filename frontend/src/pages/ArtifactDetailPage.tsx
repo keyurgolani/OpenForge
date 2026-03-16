@@ -50,7 +50,7 @@ type VersionDraft = {
 }
 
 export default function ArtifactDetailPage() {
-  const { workspaceId = '', artifactId = '' } = useParams<{ workspaceId: string; artifactId: string }>()
+  const { artifactId = '' } = useParams<{ artifactId: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -149,7 +149,7 @@ export default function ArtifactDetailPage() {
     mutationFn: async () => deleteArtifact(artifactId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['artifacts'] })
-      navigate(artifactsRoute(workspaceId))
+      navigate(artifactsRoute())
     },
   })
 
@@ -223,7 +223,7 @@ export default function ArtifactDetailPage() {
         actions={(
           <div className="flex flex-wrap items-center gap-2">
             <Link
-              to={artifactsRoute(workspaceId)}
+              to={artifactsRoute()}
               className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -511,7 +511,7 @@ export default function ArtifactDetailPage() {
             </CardContent>
           </Card>
 
-          <ArtifactLineagePanel workspaceId={workspaceId} lineage={lineage} />
+          <ArtifactLineagePanel lineage={lineage} />
         </div>
       </div>
     </div>

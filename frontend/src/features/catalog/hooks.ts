@@ -45,7 +45,7 @@ export function useCloneProfileTemplate() {
 export function useCloneMissionTemplate() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ templateId, data }: { templateId: string; data: { workspace_id: string; name?: string; slug?: string } }) =>
+    mutationFn: ({ templateId, data }: { templateId: string; data: { workspace_id?: string; name?: string; slug?: string } }) =>
       cloneMissionTemplate(templateId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['missions'] })
@@ -56,7 +56,7 @@ export function useCloneMissionTemplate() {
 export function useCloneWorkflowTemplate() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ templateId, data }: { templateId: string; data: { workspace_id: string; name?: string; slug?: string } }) =>
+    mutationFn: ({ templateId, data }: { templateId: string; data: { workspace_id?: string; name?: string; slug?: string } }) =>
       cloneWorkflowTemplate(templateId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workflows'] })

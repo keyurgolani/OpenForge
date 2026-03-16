@@ -302,7 +302,7 @@ export default function WorkspaceHome() {
     }, [knowledgeItems, masonryColumnCount])
 
     return (
-        <div className="w-full p-6 lg:p-7" onClick={closeAllMenus}>
+        <div className="w-full min-w-0 p-6 lg:p-7" onClick={closeAllMenus}>
             <div data-openforge-knowledge-sheet-anchor="1" className="min-w-0 space-y-5">
                 <section className="relative z-30 px-1">
                     <div className="flex flex-wrap items-center gap-2.5">
@@ -416,7 +416,7 @@ export default function WorkspaceHome() {
                     </div>
                 </section>
 
-                <div ref={knowledgeLayoutRef} className="w-full">
+                <div ref={knowledgeLayoutRef} className="w-full min-w-0 overflow-hidden">
                     {/* Loading skeletons */}
                     {isLoading && (
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
@@ -684,7 +684,6 @@ function KnowledgeCard({
                     className={`relative glass-card-hover rounded-2xl p-4 cursor-pointer group animate-fade-in flex flex-col transition-all overflow-hidden ${isSelected ? 'ring-2 ring-accent/70 border-accent/60 shadow-lg shadow-accent/10' : 'border-border/70 hover:border-accent/30'}`}
                     style={{
                         animationDelay: `${Math.min(index * 25, 200)}ms`,
-                        minWidth: `${minWidthPx}px`,
                         maxHeight: `${maxHeightPx}px`,
                     }}
                     onClick={onClick}

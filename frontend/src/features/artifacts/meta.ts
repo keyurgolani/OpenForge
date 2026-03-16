@@ -78,20 +78,20 @@ export function getArtifactSourceChips(artifact: Artifact): string[] {
   return chips
 }
 
-export function getArtifactLinkHref(workspaceId: string, link: ArtifactLink): string | null {
+export function getArtifactLinkHref(link: ArtifactLink): string | null {
   switch (link.target_type) {
     case 'artifact':
-      return `/w/${workspaceId}/artifacts/${link.target_id}`
+      return `/artifacts/${link.target_id}`
     case 'knowledge':
-      return `/w/${workspaceId}/knowledge/${link.target_id}`
+      return `/knowledge/${link.target_id}`
     case 'run':
-      return `/w/${workspaceId}/runs`
+      return `/runs`
     case 'mission':
-      return `/w/${workspaceId}/missions`
+      return `/missions`
     case 'workflow':
-      return `/w/${workspaceId}/workflows`
+      return `/workflows`
     case 'profile':
-      return `/w/${workspaceId}/profiles/${link.target_id}`
+      return `/profiles/${link.target_id}`
     default:
       return null
   }

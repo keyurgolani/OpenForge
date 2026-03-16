@@ -167,8 +167,8 @@ export function PrimaryNavExpanded({
 
   return (
     <div className={cn('h-full flex flex-col gap-3', className)}>
-      {/* Top half: workspace context */}
-      <div className="h-1/2 flex flex-col glass-card overflow-hidden" style={{ boxShadow: 'none' }}>
+      {/* Top section: workspace context */}
+      <div className={cn(isAgnosticPage ? 'flex-1' : 'h-1/2', 'flex flex-col glass-card overflow-hidden')} style={{ boxShadow: 'none' }}>
         {isAgnosticPage ? (
           <AgnosticWorkspaceList
             workspaces={workspaces}
@@ -281,103 +281,99 @@ export function PrimaryNavExpanded({
         )}
       </div>
 
-      {/* Bottom half: workspace-agnostic navigation */}
+      {/* Bottom section: global and workspace-scoped navigation */}
       <div className="h-1/2 flex flex-col glass-card overflow-hidden" style={{ boxShadow: 'none' }}>
-        <div className="flex-1 min-h-0 flex flex-col px-4 pt-3 pb-2">
-          <nav className="flex flex-col flex-1 min-h-0 gap-1">
-            {!isAgnosticPage && (
-              <>
-                <NavItem
-                  to={routes.profiles}
-                  icon={<Bot className="w-4 h-4" />}
-                  label="Profiles"
-                  isActive={isActive('/profiles')}
-                />
-                <NavItem
-                  to={routes.workflows}
-                  icon={<Folder className="w-4 h-4" />}
-                  label="Workflows"
-                  isActive={isActive('/workflows')}
-                />
-                <NavItem
-                  to={routes.missions}
-                  icon={<Zap className="w-4 h-4" />}
-                  label="Missions"
-                  isActive={isActive('/missions')}
-                />
+          <div className="flex-1 min-h-0 flex flex-col px-4 pt-3 pb-2">
+            <nav className="flex flex-col flex-1 min-h-0 gap-1">
+              <NavItem
+                to={routes.profiles}
+                icon={<Bot className="w-4 h-4" />}
+                label="Profiles"
+                isActive={isActive('/profiles')}
+              />
+              <NavItem
+                to={routes.workflows}
+                icon={<Folder className="w-4 h-4" />}
+                label="Workflows"
+                isActive={isActive('/workflows')}
+              />
+              <NavItem
+                to={routes.missions}
+                icon={<Zap className="w-4 h-4" />}
+                label="Missions"
+                isActive={isActive('/missions')}
+              />
 
-                {/* Runs with expandable active runs */}
-                <div className="flex flex-col flex-1 min-h-0">
-                  <div className="flex items-center">
-                    <Link
-                      to={routes.runs}
-                      className={cn(
-                        'sidebar-item flex-1',
-                        isActive('/runs') ? 'active' : ''
-                      )}
-                    >
-                      <Activity className="w-4 h-4" /> Runs
-                    </Link>
-                    {ongoingRuns.length > 0 && (
-                      <button
-                        className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors flex-shrink-0"
-                        onClick={() => setRunsSublistOpen((p) => !p)}
-                      >
-                        {runsSublistOpen ? (
-                          <ChevronDown className="w-3 h-3" />
-                        ) : (
-                          <ChevronRight className="w-3 h-3" />
-                        )}
-                      </button>
+              {/* Runs with expandable active runs */}
+              <div className="flex flex-col flex-1 min-h-0">
+                <div className="flex items-center">
+                  <Link
+                    to={routes.runs}
+                    className={cn(
+                      'sidebar-item flex-1',
+                      isActive('/runs') ? 'active' : ''
                     )}
-                  </div>
-
-                  {runsSublistOpen && ongoingRuns.length > 0 && (
-                    <SubList label="Active Runs">
-                      {ongoingRuns.map((run) => (
-                        <Link
-                          key={run.id}
-                          to={routes.runs}
-                          className={cn(
-                            'sidebar-item text-xs',
-                            isActive('/runs') ? 'active' : ''
-                          )}
-                        >
-                          <Activity className="w-3 h-3" />
-                          <span className="truncate">
-                            {run.run_type} {run.id.slice(0, 8)}
-                          </span>
-                          {run.status === 'running' && (
-                            <span className="relative flex h-1.5 w-1.5 ml-auto flex-shrink-0">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
-                            </span>
-                          )}
-                          {run.status === 'paused' && (
-                            <span className="flex h-1.5 w-1.5 rounded-full bg-amber-400 ml-auto flex-shrink-0" />
-                          )}
-                        </Link>
-                      ))}
-                    </SubList>
+                  >
+                    <Activity className="w-4 h-4" /> Runs
+                  </Link>
+                  {ongoingRuns.length > 0 && (
+                    <button
+                      className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors flex-shrink-0"
+                      onClick={() => setRunsSublistOpen((p) => !p)}
+                    >
+                      {runsSublistOpen ? (
+                        <ChevronDown className="w-3 h-3" />
+                      ) : (
+                        <ChevronRight className="w-3 h-3" />
+                      )}
+                    </button>
                   )}
                 </div>
 
-                <NavItem
-                  to={routes.artifacts}
-                  icon={<FileText className="w-4 h-4" />}
-                  label="Artifacts"
-                  isActive={isActive('/artifacts')}
-                />
-                <NavItem
-                  to={routes.catalog}
-                  icon={<BookOpen className="w-4 h-4" />}
-                  label="Catalog"
-                  isActive={isActive('/catalog')}
-                />
-              </>
-            )}
-          </nav>
-        </div>
+                {runsSublistOpen && ongoingRuns.length > 0 && (
+                  <SubList label="Active Runs">
+                    {ongoingRuns.map((run) => (
+                      <Link
+                        key={run.id}
+                        to={routes.runs}
+                        className={cn(
+                          'sidebar-item text-xs',
+                          isActive('/runs') ? 'active' : ''
+                        )}
+                      >
+                        <Activity className="w-3 h-3" />
+                        <span className="truncate">
+                          {run.run_type} {run.id.slice(0, 8)}
+                        </span>
+                        {run.status === 'running' && (
+                          <span className="relative flex h-1.5 w-1.5 ml-auto flex-shrink-0">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
+                          </span>
+                        )}
+                        {run.status === 'paused' && (
+                          <span className="flex h-1.5 w-1.5 rounded-full bg-amber-400 ml-auto flex-shrink-0" />
+                        )}
+                      </Link>
+                    ))}
+                  </SubList>
+                )}
+              </div>
+
+              <NavItem
+                to={routes.artifacts}
+                icon={<FileText className="w-4 h-4" />}
+                label="Artifacts"
+                isActive={isActive('/artifacts')}
+              />
+              <NavItem
+                to={routes.catalog}
+                icon={<BookOpen className="w-4 h-4" />}
+                label="Catalog"
+                isActive={isActive('/catalog')}
+              />
+            </nav>
+          </div>
 
         {/* Settings */}
         <div className="flex-shrink-0 border-t border-border/60">

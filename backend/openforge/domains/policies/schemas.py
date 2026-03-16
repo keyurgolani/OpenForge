@@ -3,12 +3,42 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from .types import ApprovalRequestStatus, ApprovalRequestType, PolicyDecision, PolicyScopeType, PolicyStatus, ToolRiskCategory
+
+
+class SafetyPolicyCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    scope_type: str = Field(default="system")
+    scope_id: Optional[str] = Field(default=None, max_length=255)
+    rules: list = Field(default_factory=list)
+
+
+class ToolPolicyCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    scope_type: str = Field(default="system")
+    scope_id: Optional[str] = Field(default=None, max_length=255)
+    default_action: str = Field(default="allow")
+    allowed_tools: list[str] = Field(default_factory=list)
+    blocked_tools: list[str] = Field(default_factory=list)
+    approval_required_tools: list[str] = Field(default_factory=list)
+    rules: list = Field(default_factory=list)
+    rate_limits: dict = Field(default_factory=dict)
+
+
+class SafetyPolicyUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    scope_type: Optional[str] = None
+    scope_id: Optional[str] = None
+    rules: Optional[list] = None
+    status: Optional[str] = None
 
 
 class ToolPolicyUpdate(BaseModel):

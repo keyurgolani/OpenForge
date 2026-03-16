@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .types import KnowledgeScope, RetrievalStrategy
+from .types import KnowledgeScope
 
 
 class CapabilityBundleCreate(BaseModel):
@@ -19,8 +19,8 @@ class CapabilityBundleCreate(BaseModel):
     allowed_tool_categories: Optional[list[str]] = Field(default=None)
     blocked_tool_ids: list[str] = Field(default_factory=list)
     tool_overrides: dict[str, str] = Field(default_factory=dict)
-    max_tool_calls_per_minute: int = Field(default=30, ge=30)
-    max_tool_calls_per_execution: int = Field(default=200, ge=200)
+    max_tool_calls_per_minute: int = Field(default=30, ge=1)
+    max_tool_calls_per_execution: int = Field(default=200, ge=1)
     # Skill capabilities
     skill_ids: list[str] = Field(default_factory=list)
     # Retrieval capabilities
@@ -28,7 +28,6 @@ class CapabilityBundleCreate(BaseModel):
     retrieval_limit: int = Field(default=5, ge=1, le=100)
     retrieval_score_threshold: float = Field(default=0.35, ge=0.0, le=1.0)
     knowledge_scope: KnowledgeScope = Field(default=KnowledgeScope.WORKSPACE)
-    retrieval_strategy: RetrievalStrategy = Field(default=RetrievalStrategy.HYBRID_RRF)
 
 
 class CapabilityBundleUpdate(BaseModel):
@@ -47,7 +46,6 @@ class CapabilityBundleUpdate(BaseModel):
     retrieval_limit: Optional[int] = Field(default=None, ge=1, le=100)
     retrieval_score_threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     knowledge_scope: Optional[KnowledgeScope] = None
-    retrieval_strategy: Optional[RetrievalStrategy] = None
     is_system: Optional[bool] = None
     status: Optional[str] = None
 
@@ -72,7 +70,6 @@ class CapabilityBundleResponse(BaseModel):
     retrieval_limit: int
     retrieval_score_threshold: float
     knowledge_scope: KnowledgeScope
-    retrieval_strategy: RetrievalStrategy
     is_system: bool
     status: str
     created_at: Optional[datetime]

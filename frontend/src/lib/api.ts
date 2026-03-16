@@ -90,6 +90,8 @@ export const getWorkspace = (id: string): Promise<any> => api.get(`/workspaces/$
 export const updateWorkspace = (id: string, data: object): Promise<any> =>
     api.put(`/workspaces/${id}`, data).then(r => r.data)
 export const deleteWorkspace = (id: string) => api.delete(`/workspaces/${id}`)
+export const mergeWorkspaces = (targetId: string, sourceId: string, deleteSource = true): Promise<any> =>
+    api.post(`/workspaces/${targetId}/merge`, { source_workspace_id: sourceId, delete_source: deleteSource }).then(r => r.data)
 
 // ── Knowledge ──
 export const listKnowledge = (wid: string, params?: object): Promise<any> =>
@@ -253,8 +255,12 @@ export const exportWorkspaceData = (workspaceId: string): Promise<Blob> =>
 export const listPolicies = (params?: { limit?: number; skip?: number }): Promise<any> =>
     api.get('/policies', { params }).then(r => r.data)
 export const getPolicy = (id: string): Promise<any> => api.get(`/policies/${id}`).then(r => r.data)
+export const createToolPolicy = (data: object): Promise<any> =>
+    api.post('/policies/tool', data).then(r => r.data)
 export const updateToolPolicy = (id: string, data: object): Promise<any> =>
     api.patch(`/policies/tool/${id}`, data).then(r => r.data)
+export const deleteToolPolicy = (id: string): Promise<void> =>
+    api.delete(`/policies/tool/${id}`)
 export const simulatePolicy = (data: object): Promise<any> =>
     api.post('/policies/simulate', data).then(r => r.data)
 export const listApprovalRequests = (params?: { status?: string; limit?: number; offset?: number }): Promise<any> =>
@@ -396,6 +402,63 @@ export const updateProfile = (id: string, data: object): Promise<any> =>
     api.patch(`/profiles/${id}`, data).then(r => r.data)
 export const deleteProfile = (id: string): Promise<void> => api.delete(`/profiles/${id}`)
 
+// Profile building blocks
+export const listCapabilityBundles = (): Promise<any> => api.get('/capability_bundle').then(r => r.data)
+export const getCapabilityBundle = (id: string): Promise<any> =>
+    api.get(`/capability_bundle/${id}`).then(r => r.data)
+export const createCapabilityBundle = (data: object): Promise<any> =>
+    api.post('/capability_bundle', data).then(r => r.data)
+export const updateCapabilityBundle = (id: string, data: object): Promise<any> =>
+    api.patch(`/capability_bundle/${id}`, data).then(r => r.data)
+export const deleteCapabilityBundle = (id: string): Promise<void> =>
+    api.delete(`/capability_bundle/${id}`)
+export const listModelPolicies = (): Promise<any> => api.get('/model_policy').then(r => r.data)
+export const listMemoryPolicies = (): Promise<any> => api.get('/memory_policy').then(r => r.data)
+export const listOutputContracts = (): Promise<any> => api.get('/output_contract').then(r => r.data)
+export const listSafetyPolicies = (): Promise<any> =>
+    api.get('/policies').then(r => {
+        const all = r.data?.policies ?? r.data ?? []
+        return { policies: all.filter((p: any) => p.policy_kind === 'safety'), total: 0 }
+    })
+
+// Model Policy CRUD
+export const getModelPolicy = (id: string): Promise<any> =>
+    api.get(`/model_policy/${id}`).then(r => r.data)
+export const createModelPolicy = (data: object): Promise<any> =>
+    api.post('/model_policy', data).then(r => r.data)
+export const updateModelPolicy = (id: string, data: object): Promise<any> =>
+    api.patch(`/model_policy/${id}`, data).then(r => r.data)
+export const deleteModelPolicy = (id: string): Promise<void> =>
+    api.delete(`/model_policy/${id}`)
+
+// Memory Policy CRUD
+export const getMemoryPolicy = (id: string): Promise<any> =>
+    api.get(`/memory_policy/${id}`).then(r => r.data)
+export const createMemoryPolicy = (data: object): Promise<any> =>
+    api.post('/memory_policy', data).then(r => r.data)
+export const updateMemoryPolicy = (id: string, data: object): Promise<any> =>
+    api.patch(`/memory_policy/${id}`, data).then(r => r.data)
+export const deleteMemoryPolicy = (id: string): Promise<void> =>
+    api.delete(`/memory_policy/${id}`)
+
+// Output Contract CRUD
+export const getOutputContract = (id: string): Promise<any> =>
+    api.get(`/output_contract/${id}`).then(r => r.data)
+export const createOutputContract = (data: object): Promise<any> =>
+    api.post('/output_contract', data).then(r => r.data)
+export const updateOutputContract = (id: string, data: object): Promise<any> =>
+    api.patch(`/output_contract/${id}`, data).then(r => r.data)
+export const deleteOutputContract = (id: string): Promise<void> =>
+    api.delete(`/output_contract/${id}`)
+
+// Safety Policy CRUD
+export const createSafetyPolicy = (data: object): Promise<any> =>
+    api.post('/policies/safety', data).then(r => r.data)
+export const updateSafetyPolicy = (id: string, data: object): Promise<any> =>
+    api.patch(`/policies/safety/${id}`, data).then(r => r.data)
+export const deleteSafetyPolicy = (id: string): Promise<void> =>
+    api.delete(`/policies/safety/${id}`)
+
 // Workflows
 export const listWorkflows = (params?: {
     skip?: number
@@ -412,7 +475,7 @@ export const listWorkflowTemplates = (params?: { limit?: number; skip?: number; 
 export const getWorkflowTemplate = (id: string): Promise<WorkflowDefinition> => api.get(`/workflows/templates/${id}`).then(r => r.data)
 export const cloneWorkflowTemplate = (
     id: string,
-    data: { workspace_id: string; name?: string; slug?: string },
+    data: { workspace_id?: string; name?: string; slug?: string },
 ): Promise<WorkflowDefinition> => api.post(`/workflows/templates/${id}/clone`, data).then(r => r.data)
 export const listWorkflowVersions = (workflowId: string): Promise<{ versions: WorkflowVersion[]; total: number }> =>
     api.get(`/workflows/${workflowId}/versions`).then(r => r.data)
@@ -531,7 +594,7 @@ export const cloneProfileTemplate = (id: string, data: { name?: string; slug?: s
 export const listMissionTemplates = (params?: { skip?: number; limit?: number; is_featured?: boolean; tags?: string[] }): Promise<any> =>
     api.get('/missions/templates', { params }).then(r => r.data)
 export const getMissionTemplate = (id: string): Promise<any> => api.get(`/missions/templates/${id}`).then(r => r.data)
-export const cloneMissionTemplate = (id: string, data: { workspace_id: string; name?: string; slug?: string }): Promise<any> =>
+export const cloneMissionTemplate = (id: string, data: { workspace_id?: string; name?: string; slug?: string }): Promise<any> =>
     api.post(`/missions/templates/${id}/clone`, data).then(r => r.data)
 
 export default api

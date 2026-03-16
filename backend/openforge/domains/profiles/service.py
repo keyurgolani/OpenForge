@@ -102,15 +102,31 @@ class ProfileService(CrudDomainService):
             return None
         return profile
 
+    async def _unique_slug(self, base_slug: str) -> str:
+        """Return a slug guaranteed to be unique by appending a numeric suffix."""
+        candidate = base_slug
+        suffix = 0
+        while True:
+            exists = await self.db.scalar(
+                select(AgentProfileModel.id).where(AgentProfileModel.slug == candidate).limit(1)
+            )
+            if exists is None:
+                return candidate
+            suffix += 1
+            candidate = f"{base_slug}-{suffix}"
+
     async def clone_template(self, profile_id: UUID, clone_data: dict[str, Any]) -> dict[str, Any] | None:
         """Clone a template profile into a user-owned copy."""
         template = await self.get_template(profile_id)
         if template is None:
             return None
 
+        desired_slug = clone_data.get("slug") or f"{template['slug']}-clone"
+        unique_slug = await self._unique_slug(desired_slug)
+
         clone_payload = {
             "name": clone_data.get("name") or template["name"],
-            "slug": clone_data.get("slug") or f"{template['slug']}-clone",
+            "slug": unique_slug,
             "description": template.get("description"),
             "version": "1.0.0",
             "role": template.get("role", "assistant"),
@@ -153,13 +169,21 @@ class ProfileService(CrudDomainService):
         safety_policy = await self.db.get(SafetyPolicyModel, profile.safety_policy_id) if profile.safety_policy_id else None
         output_contract = await self.db.get(OutputContractModel, profile.output_contract_id) if profile.output_contract_id else None
 
-        effective_allowed_categories = sorted(
-            {
-                category
-                for bundle in capability_bundles
-                for category in (bundle.allowed_tool_categories or [])
-            }
-        ) or None
+        has_unrestricted = any(
+            bundle.allowed_tool_categories is None
+            for bundle in capability_bundles
+            if bundle.tools_enabled
+        )
+        if has_unrestricted:
+            effective_allowed_categories = None
+        else:
+            effective_allowed_categories = sorted(
+                {
+                    category
+                    for bundle in capability_bundles
+                    for category in (bundle.allowed_tool_categories or [])
+                }
+            ) or None
         effective_blocked_tool_ids = self._dedupe_list(
             tool_id
             for bundle in capability_bundles

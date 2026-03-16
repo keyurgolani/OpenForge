@@ -10,7 +10,6 @@ interface RunsResponse {
 }
 
 interface RunQueryOptions {
-  workspaceId?: string
   limit?: number
   status?: ExecutionStatus
   runType?: RunType
@@ -31,11 +30,10 @@ interface RunEventsResponse {
   total: number
 }
 
-export function useRunsQuery({ workspaceId, limit = 100, status, runType }: RunQueryOptions = {}) {
+export function useRunsQuery({ limit = 100, status, runType }: RunQueryOptions = {}) {
   return useQuery<RunsResponse>({
-    queryKey: ['runs', workspaceId ?? 'all', limit, status ?? 'all', runType ?? 'all'],
-    queryFn: () => listRuns({ workspace_id: workspaceId, limit, status, run_type: runType }),
-    enabled: workspaceId !== '',
+    queryKey: ['runs', limit, status ?? 'all', runType ?? 'all'],
+    queryFn: () => listRuns({ limit, status, run_type: runType }),
   })
 }
 

@@ -1,8 +1,9 @@
 /**
  * Canonical frontend route definitions.
  *
- * These helpers keep the workspace IA aligned with the final product nouns:
- * Workspace, Knowledge, Chat, Profiles, Workflows, Missions, Runs, Artifacts.
+ * Workspace-specific pages (Knowledge, Chat, Search) live under /w/:workspaceId.
+ * Domain entities (Profiles, Workflows, Missions, Runs, Artifacts, Catalog) are
+ * workspace-agnostic and live at the top level.
  */
 
 const WORKSPACE_PREFIX = '/w/:workspaceId';
@@ -26,6 +27,7 @@ export const ROUTES = {
   SETTINGS_POLICIES: '/settings/policies',
   SETTINGS_APPROVALS: '/settings/approvals',
   SETTINGS_PIPELINES: '/settings/pipelines',
+  SETTINGS_BUNDLES: '/settings/bundles',
   SETTINGS_SKILLS: '/settings/skills',
   SETTINGS_MCP: '/settings/mcp',
   SETTINGS_AUDIT: '/settings/audit',
@@ -35,6 +37,7 @@ export const ROUTES = {
   SETTINGS_PROVIDERS: '/settings/models/providers',
   SETTINGS_TOOLS: '/settings/skills',
 
+  // Workspace-scoped routes
   WORKSPACE: WORKSPACE_PREFIX,
   WORKSPACE_OVERVIEW: WORKSPACE_PREFIX,
   KNOWLEDGE: `${WORKSPACE_PREFIX}/knowledge`,
@@ -42,18 +45,20 @@ export const ROUTES = {
   CHAT: `${WORKSPACE_PREFIX}/chat`,
   CHAT_CONVERSATION: `${WORKSPACE_PREFIX}/chat/:conversationId`,
   SEARCH: `${WORKSPACE_PREFIX}/search`,
-  PROFILES: `${WORKSPACE_PREFIX}/profiles`,
-  PROFILE_DETAIL: `${WORKSPACE_PREFIX}/profiles/:profileId`,
-  WORKFLOWS: `${WORKSPACE_PREFIX}/workflows`,
-  WORKFLOW_DETAIL: `${WORKSPACE_PREFIX}/workflows/:workflowId`,
-  MISSIONS: `${WORKSPACE_PREFIX}/missions`,
-  MISSION_DETAIL: `${WORKSPACE_PREFIX}/missions/:missionId`,
-  RUNS: `${WORKSPACE_PREFIX}/runs`,
-  RUN_DETAIL: `${WORKSPACE_PREFIX}/runs/:runId`,
-  ARTIFACTS: `${WORKSPACE_PREFIX}/artifacts`,
-  ARTIFACT_DETAIL: `${WORKSPACE_PREFIX}/artifacts/:artifactId`,
-  CATALOG: `${WORKSPACE_PREFIX}/catalog`,
   OPERATOR: `${WORKSPACE_PREFIX}/operator`,
+
+  // Domain entity routes (workspace-agnostic)
+  PROFILES: '/profiles',
+  PROFILE_DETAIL: '/profiles/:profileId',
+  WORKFLOWS: '/workflows',
+  WORKFLOW_DETAIL: '/workflows/:workflowId',
+  MISSIONS: '/missions',
+  MISSION_DETAIL: '/missions/:missionId',
+  RUNS: '/runs',
+  RUN_DETAIL: '/runs/:runId',
+  ARTIFACTS: '/artifacts',
+  ARTIFACT_DETAIL: '/artifacts/:artifactId',
+  CATALOG: '/catalog',
 } as const;
 
 export function routeWithParams(
@@ -97,43 +102,43 @@ export function searchRoute(workspaceId: string): string {
   return routeWithParams(ROUTES.SEARCH, { workspaceId });
 }
 
-export function profilesRoute(workspaceId: string, profileId?: string): string {
+export function profilesRoute(profileId?: string): string {
   if (profileId) {
-    return routeWithParams(ROUTES.PROFILE_DETAIL, { workspaceId, profileId });
+    return routeWithParams(ROUTES.PROFILE_DETAIL, { profileId });
   }
-  return routeWithParams(ROUTES.PROFILES, { workspaceId });
+  return ROUTES.PROFILES;
 }
 
-export function workflowsRoute(workspaceId: string, workflowId?: string): string {
+export function workflowsRoute(workflowId?: string): string {
   if (workflowId) {
-    return routeWithParams(ROUTES.WORKFLOW_DETAIL, { workspaceId, workflowId });
+    return routeWithParams(ROUTES.WORKFLOW_DETAIL, { workflowId });
   }
-  return routeWithParams(ROUTES.WORKFLOWS, { workspaceId });
+  return ROUTES.WORKFLOWS;
 }
 
-export function missionsRoute(workspaceId: string, missionId?: string): string {
+export function missionsRoute(missionId?: string): string {
   if (missionId) {
-    return routeWithParams(ROUTES.MISSION_DETAIL, { workspaceId, missionId });
+    return routeWithParams(ROUTES.MISSION_DETAIL, { missionId });
   }
-  return routeWithParams(ROUTES.MISSIONS, { workspaceId });
+  return ROUTES.MISSIONS;
 }
 
-export function runsRoute(workspaceId: string, runId?: string): string {
+export function runsRoute(runId?: string): string {
   if (runId) {
-    return routeWithParams(ROUTES.RUN_DETAIL, { workspaceId, runId });
+    return routeWithParams(ROUTES.RUN_DETAIL, { runId });
   }
-  return routeWithParams(ROUTES.RUNS, { workspaceId });
+  return ROUTES.RUNS;
 }
 
-export function artifactsRoute(workspaceId: string, artifactId?: string): string {
+export function artifactsRoute(artifactId?: string): string {
   if (artifactId) {
-    return routeWithParams(ROUTES.ARTIFACT_DETAIL, { workspaceId, artifactId });
+    return routeWithParams(ROUTES.ARTIFACT_DETAIL, { artifactId });
   }
-  return routeWithParams(ROUTES.ARTIFACTS, { workspaceId });
+  return ROUTES.ARTIFACTS;
 }
 
-export function catalogRoute(workspaceId: string): string {
-  return routeWithParams(ROUTES.CATALOG, { workspaceId });
+export function catalogRoute(): string {
+  return ROUTES.CATALOG;
 }
 
 export function operatorRoute(workspaceId: string): string {

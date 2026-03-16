@@ -133,6 +133,50 @@ class PolicyService:
         }
 
 
+    async def create_tool_policy(self, payload: dict) -> dict:
+        policy = ToolPolicyModel(**payload)
+        self.db.add(policy)
+        await self.db.commit()
+        await self.db.refresh(policy)
+        return self._serialize_policy("tool", policy)
+
+    async def delete_tool_policy(self, policy_id) -> bool:
+        pid = UUID(policy_id) if isinstance(policy_id, str) else policy_id
+        row = await self.db.get(ToolPolicyModel, pid)
+        if row is None:
+            return False
+        await self.db.delete(row)
+        await self.db.commit()
+        return True
+
+    async def create_safety_policy(self, payload: dict) -> dict:
+        policy = SafetyPolicyModel(**payload)
+        self.db.add(policy)
+        await self.db.commit()
+        await self.db.refresh(policy)
+        return self._serialize_policy("safety", policy)
+
+    async def update_safety_policy(self, policy_id, payload: dict) -> dict | None:
+        pid = UUID(policy_id) if isinstance(policy_id, str) else policy_id
+        row = await self.db.get(SafetyPolicyModel, pid)
+        if row is None:
+            return None
+        for key, value in payload.items():
+            setattr(row, key, value)
+        await self.db.commit()
+        await self.db.refresh(row)
+        return self._serialize_policy("safety", row)
+
+    async def delete_safety_policy(self, policy_id) -> bool:
+        pid = UUID(policy_id) if isinstance(policy_id, str) else policy_id
+        row = await self.db.get(SafetyPolicyModel, pid)
+        if row is None:
+            return False
+        await self.db.delete(row)
+        await self.db.commit()
+        return True
+
+
 async def seed_default_policies(db: AsyncSession) -> None:
     existing = await db.scalar(select(func.count()).select_from(ToolPolicyModel))
     if existing:

@@ -119,6 +119,8 @@ export const CATEGORY_ICONS: Record<string, React.ReactNode> = {
     task: React.createElement(Target, { className: 'w-4 h-4' }),
     language: React.createElement(FileText, { className: 'w-4 h-4' }),
     skills: React.createElement(Wrench, { className: 'w-4 h-4' }),
+    agent: React.createElement(Bot, { className: 'w-4 h-4' }),
+    workspace: React.createElement(FolderOpen, { className: 'w-4 h-4' }),
 }
 
 // ── Task label registry ─────────────────────────────────────────────────────

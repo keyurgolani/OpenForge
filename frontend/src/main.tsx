@@ -47,6 +47,8 @@ const PromptsSettingsPage = lazy(() => import('./pages/settings/prompts/PromptsP
 const PoliciesSettingsPage = lazy(() => import('./pages/settings/policies/PoliciesPage'))
 const ApprovalsSettingsPage = lazy(() => import('./pages/settings/approvals/ApprovalsPage'))
 const PipelinesSettingsPage = lazy(() => import('./pages/settings/pipelines/PipelinesPage'))
+const ToolsSettingsPage = lazy(() => import('./pages/settings/tools/ToolsPage'))
+const BundlesSettingsPage = lazy(() => import('./pages/settings/bundles/BundlesPage'))
 const SkillsSettingsPage = lazy(() => import('./pages/settings/skills/SkillsPage'))
 const MCPSettingsPage = lazy(() => import('./pages/settings/mcp/MCPPage'))
 const AuditSettingsPage = lazy(() => import('./pages/settings/audit/AuditPage'))
@@ -170,61 +172,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                         <WorkspaceAgentPage />
                                     </ErrorBoundary>
                                 } />
-                                <Route path="profiles" element={
-                                    <ErrorBoundary>
-                                        <ProfilesPage />
-                                    </ErrorBoundary>
-                                } />
-                                <Route path="profiles/:profileId" element={
-                                    <ErrorBoundary>
-                                        <ProfileDetailPage />
-                                    </ErrorBoundary>
-                                } />
-                                <Route path="workflows" element={
-                                    <ErrorBoundary>
-                                        <WorkflowsPage />
-                                    </ErrorBoundary>
-                                } />
-                                <Route path="workflows/:workflowId" element={
-                                    <ErrorBoundary>
-                                        <WorkflowDetailPage />
-                                    </ErrorBoundary>
-                                } />
-                                <Route path="missions" element={
-                                    <ErrorBoundary>
-                                        <MissionsPage />
-                                    </ErrorBoundary>
-                                } />
-                                <Route path="missions/:missionId" element={
-                                    <ErrorBoundary>
-                                        <MissionDetailPage />
-                                    </ErrorBoundary>
-                                } />
-                                <Route path="runs" element={
-                                    <ErrorBoundary>
-                                        <RunsPage />
-                                    </ErrorBoundary>
-                                } />
-                                <Route path="runs/:runId" element={
-                                    <ErrorBoundary>
-                                        <RunDetailPage />
-                                    </ErrorBoundary>
-                                } />
-                                <Route path="artifacts" element={
-                                    <ErrorBoundary>
-                                        <ArtifactsPage />
-                                    </ErrorBoundary>
-                                } />
-                                <Route path="artifacts/:artifactId" element={
-                                    <ErrorBoundary>
-                                        <ArtifactDetailPage />
-                                    </ErrorBoundary>
-                                } />
-                                <Route path="catalog" element={
-                                    <ErrorBoundary>
-                                        <CatalogPage />
-                                    </ErrorBoundary>
-                                } />
                                 <Route path="operator" element={
                                     <ErrorBoundary>
                                         <OperatorDashboardPage />
@@ -241,6 +188,17 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                     <AppShell />
                                 </ErrorBoundary>
                             }>
+                                <Route path="/profiles" element={<ErrorBoundary><ProfilesPage /></ErrorBoundary>} />
+                                <Route path="/profiles/:profileId" element={<ErrorBoundary><ProfileDetailPage /></ErrorBoundary>} />
+                                <Route path="/workflows" element={<ErrorBoundary><WorkflowsPage /></ErrorBoundary>} />
+                                <Route path="/workflows/:workflowId" element={<ErrorBoundary><WorkflowDetailPage /></ErrorBoundary>} />
+                                <Route path="/missions" element={<ErrorBoundary><MissionsPage /></ErrorBoundary>} />
+                                <Route path="/missions/:missionId" element={<ErrorBoundary><MissionDetailPage /></ErrorBoundary>} />
+                                <Route path="/runs" element={<ErrorBoundary><RunsPage /></ErrorBoundary>} />
+                                <Route path="/runs/:runId" element={<ErrorBoundary><RunDetailPage /></ErrorBoundary>} />
+                                <Route path="/artifacts" element={<ErrorBoundary><ArtifactsPage /></ErrorBoundary>} />
+                                <Route path="/artifacts/:artifactId" element={<ErrorBoundary><ArtifactDetailPage /></ErrorBoundary>} />
+                                <Route path="/catalog" element={<ErrorBoundary><CatalogPage /></ErrorBoundary>} />
                                 <Route path="/settings" element={<ErrorBoundary><SettingsLayout /></ErrorBoundary>}>
                                     <Route index element={<SettingsIndex />} />
                                     <Route path="workspaces" element={<ErrorBoundary><WorkspacesPage /></ErrorBoundary>} />
@@ -256,6 +214,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                     </Route>
                                     <Route path="prompts" element={<ErrorBoundary><PromptsSettingsPage /></ErrorBoundary>} />
                                     <Route path="policies" element={<ErrorBoundary><PoliciesSettingsPage /></ErrorBoundary>} />
+                                    <Route path="tools" element={<ErrorBoundary><ToolsSettingsPage /></ErrorBoundary>} />
+                                    <Route path="bundles" element={<ErrorBoundary><BundlesSettingsPage /></ErrorBoundary>} />
                                     <Route path="approvals" element={<ErrorBoundary><ApprovalsSettingsPage /></ErrorBoundary>} />
                                     <Route path="pipelines" element={<ErrorBoundary><PipelinesSettingsPage /></ErrorBoundary>} />
                                     <Route path="skills" element={<ErrorBoundary><SkillsSettingsPage /></ErrorBoundary>} />

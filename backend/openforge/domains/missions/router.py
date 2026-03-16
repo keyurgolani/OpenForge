@@ -106,7 +106,7 @@ async def clone_mission_template(
 # ---------- CRUD ----------
 
 
-@router.get("/", response_model=MissionListResponse)
+@router.get("", response_model=MissionListResponse)
 async def list_missions(
     skip: int = 0,
     limit: int = 100,
@@ -147,7 +147,7 @@ async def get_mission(
     return mission
 
 
-@router.post("/", response_model=MissionResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=MissionResponse, status_code=status.HTTP_201_CREATED)
 async def create_mission(
     mission_data: MissionCreate,
     service: MissionService = Depends(get_mission_service),

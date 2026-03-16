@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { formatDistanceToNow } from 'date-fns'
 import {
     listConversations,
     createConversation,
@@ -19,13 +20,13 @@ import {
     bulkRestoreConversations,
     bulkPermanentlyDeleteConversations,
 } from '@/lib/api'
-import { useStreamingChat, type Mention, type TimelineEntry } from '@/hooks/useStreamingChat'
+import { useStreamingChat, type Mention, type TimelineEntry, type TimelineModelSelection, type TimelineThinking, type TimelineToolCall, type TimelinePromptOptimized, type TimelineAttachmentsProcessed, type TimelineIntermediateResponse } from '@/hooks/useStreamingChat'
 import { useToast } from '@/components/shared/ToastProvider'
 import {
     Plus, Send, Square, Loader2, MessageSquare, Trash2, Bot, User, Sparkles,
     ChevronDown, ChevronRight, ChevronLeft, ChevronUp, ChevronsUp, Check, Pencil,
     Paperclip, X, Copy, Search, Network, AtSign,
-    RotateCcw, Trash, Mic, Pause, Play,
+    RotateCcw, Trash, Mic, Pause, Play, Brain, Download,
 } from 'lucide-react'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem,
@@ -35,12 +36,34 @@ import { sanitizeProviderDisplayName } from '@/lib/provider-display'
 import { chatRoute } from '@/lib/routes'
 import { renderAgentMessageContent, type MentionResolutionMaps } from '@/lib/agent-content'
 import Siderail from '@/components/shared/Siderail'
+import { ToolCallCard } from '@/components/shared/ToolCallCard'
+import { TimelineBadge } from '@/components/shared/TimelineBadge'
 function renderMessageContent(
     content: string,
     workspaceId: string,
     maps?: MentionResolutionMaps,
 ): string {
     return renderAgentMessageContent(content, workspaceId, maps)
+}
+
+function buildActiveThreadPreview(messages: Message[]): string | null {
+    const latestMessage = [...messages].reverse().find((message) => message.content?.trim())
+    if (!latestMessage?.content) return null
+
+    const normalized = latestMessage.content.replace(/\s+/g, ' ').trim()
+    if (!normalized) return null
+
+    return normalized.length > 83 ? `${normalized.slice(0, 83)}…` : normalized
+}
+
+function formatThreadRelativeTime(value: string | null): string | null {
+    if (!value) return null
+
+    try {
+        return formatDistanceToNow(new Date(value), { addSuffix: true })
+    } catch {
+        return null
+    }
 }
 
 const CHAT_STREAMING_SAFE_GAP = 4
@@ -1138,6 +1161,10 @@ export default function WorkspaceAgentPage() {
     }
 
     const activeConversationIsArchived = Boolean(conversationData?.is_archived || activeConversationRecord?.is_archived)
+    const activeThreadPreview = useMemo(
+        () => buildActiveThreadPreview(messages),
+        [messages],
+    )
     // Input box stays editable while streaming so the user can compose their next message
     const inputDisabled = uploadingFiles || activeConversationIsArchived
     const composerDisabled = (isStreaming && !isInterrupted) || uploadingFiles || activeConversationIsArchived
@@ -1208,36 +1235,33 @@ export default function WorkspaceAgentPage() {
                                                 <span className="agent-generation-orb" aria-hidden />
                                                 Agent Generating Response
                                             </div>
-                                            <div className="chat-workflow-stack w-full">
-                                                <div className="text-xs text-muted-foreground/40 p-4 text-center">
-                                                    Timeline view not available
+                                            <div className="w-full space-y-2">
+                                                <div className="chat-workflow-stack">
+                                                    <TimelineRenderer timeline={streamingTimeline} isLive />
                                                 </div>
                                                 {(streamingContent || isInterrupted) && (
-                                                <div className={`chat-workflow-step chat-workflow-step--iconic chat-workflow-step--response chat-section-reveal ${streamingContent ? 'chat-workflow-step-live' : ''}`}>
-                                                    <div className="chat-workflow-header">
-                                                        <MessageSquare className="h-3.5 w-3.5" />
-                                                        <span>Response</span>
-                                                        <span className="chat-workflow-status">{isInterrupted ? 'Interrupted' : 'Streaming'}</span>
-                                                    </div>
+                                                <>
                                                     <div className="chat-bubble-assistant relative px-4 py-3">
                                                             {!streamResponseExpanded && streamResponseHasHiddenTop && (
                                                                 <>
                                                                     <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-12 rounded-t-2xl bg-gradient-to-b from-card/92 via-card/66 to-transparent" />
-                                                                    <button
-                                                                        type="button"
-                                                                        className="absolute left-1/2 top-0 z-[3] -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 rounded-full border border-accent/30 bg-card/95 px-2.5 py-0.5 text-[11px] text-accent/80 hover:border-accent/55 hover:text-accent shadow-sm"
-                                                                        onClick={() => {
-                                                                            setStreamResponseExpanded(true)
-                                                                            window.requestAnimationFrame(() => {
-                                                                                ensureExpandedBlockVisible(streamingMessageRef.current, 'auto')
-                                                                            })
-                                                                        }}
-                                                                        aria-label="Expand streaming response"
-                                                                        title="Show full response while streaming"
-                                                                    >
-                                                                        <ChevronsUp className="h-3 w-3" />
-                                                                        Expand
-                                                                    </button>
+                                                                    <div className="relative z-[3] flex justify-center -mt-1 mb-1">
+                                                                        <button
+                                                                            type="button"
+                                                                            className="flex items-center gap-1 rounded-full border border-accent/30 bg-card/95 px-2.5 py-0.5 text-[11px] text-accent/80 hover:border-accent/55 hover:text-accent shadow-sm"
+                                                                            onClick={() => {
+                                                                                setStreamResponseExpanded(true)
+                                                                                window.requestAnimationFrame(() => {
+                                                                                    ensureExpandedBlockVisible(streamingMessageRef.current, 'auto')
+                                                                                })
+                                                                            }}
+                                                                            aria-label="Expand streaming response"
+                                                                            title="Show full response while streaming"
+                                                                        >
+                                                                            <ChevronsUp className="h-3 w-3" />
+                                                                            Expand
+                                                                        </button>
+                                                                    </div>
                                                                 </>
                                                             )}
                                                             <div
@@ -1261,7 +1285,7 @@ export default function WorkspaceAgentPage() {
                                                                 )}
                                                             </div>
                                                         </div>
-                                                    </div>
+                                                </>
                                                 )}
                                             </div>
                                         </div>
@@ -1645,12 +1669,12 @@ export default function WorkspaceAgentPage() {
                                                         key={c.id}
                                                         conv={c}
                                                         active={activeCid === c.id}
-                                                        workspaceId={workspaceId}
                                                         onSelect={() => handleSelectConversation(c.id)}
                                                         onDelete={() => handleDeleteConv(c.id)}
                                                         onDownload={(format) => handleDownloadConv(c.id, format)}
                                                         onCopy={() => handleCopyConv(c.id)}
                                                         onRename={(title) => updateConversation(workspaceId, c.id, { title, title_locked: true }).then(() => invalidateAllConvQueries())}
+                                                        activePreview={activeCid === c.id ? activeThreadPreview : null}
                                                     />
                                                 ))
                                             )}
@@ -1709,12 +1733,12 @@ export default function WorkspaceAgentPage() {
                                                         key={c.id}
                                                         conv={{ ...c, title: (c.title ?? '').replace(/^\[delegated\]\s*/i, '') || 'Delegated Task' }}
                                                         active={activeCid === c.id}
-                                                        workspaceId={workspaceId}
                                                         onSelect={() => handleSelectConversation(c.id)}
                                                         onDelete={() => handleDeleteConv(c.id)}
                                                         onDownload={(format) => handleDownloadConv(c.id, format)}
                                                         onCopy={() => handleCopyConv(c.id)}
                                                         onRename={(title) => updateConversation(workspaceId, c.id, { title, title_locked: true }).then(() => invalidateAllConvQueries())}
+                                                        enhanceActive={false}
                                                     />
                                                 ))
                                             )}
@@ -1814,17 +1838,22 @@ export default function WorkspaceAgentPage() {
 }
 
 // ── Conversation row with inline rename ─────────────────────────────────────
-function ConversationRow({ conv, active, workspaceId, onSelect, onDelete, onDownload, onCopy, onRename }: {
-    conv: Conversation; active: boolean; workspaceId: string
+function ConversationRow({ conv, active, onSelect, onDelete, onDownload, onCopy, onRename, activePreview = null, enhanceActive = true }: {
+    conv: Conversation; active: boolean
     onSelect: () => void; onDelete: () => void
     onDownload: (format: 'json' | 'markdown' | 'txt') => void
     onCopy: () => void
     onRename: (title: string) => void
+    activePreview?: string | null
+    enhanceActive?: boolean
 }) {
     const [editing, setEditing] = useState(false)
     const [draft, setDraft] = useState(conv.title ?? '')
     const [showDownloadMenu, setShowDownloadMenu] = useState(false)
     const inputRef = useRef<HTMLInputElement>(null)
+    const showActiveCard = active && enhanceActive
+    const relativeTime = showActiveCard ? formatThreadRelativeTime(conv.last_message_at) : null
+    const actionIconClass = showActiveCard ? 'h-3.5 w-3.5' : 'h-3 w-3'
 
     const openRename = () => {
         setDraft(conv.title ?? '')
@@ -1845,14 +1874,21 @@ function ConversationRow({ conv, active, workspaceId, onSelect, onDelete, onDown
         <ContextMenu>
             <ContextMenuTrigger asChild>
                 <div
-                    className={`group flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 cursor-pointer transition-colors ${active
-                        ? 'border-accent/35 bg-accent/12 ring-1 ring-accent/20'
-                        : 'border-transparent bg-transparent hover:border-border/60 hover:bg-muted/35'
+                    className={`group flex items-start gap-1.5 cursor-pointer transition-colors ${showActiveCard
+                        ? 'rounded-2xl border border-accent/45 bg-[linear-gradient(180deg,hsla(var(--accent)/0.14),hsla(var(--card)/0.8))] px-3 py-3 shadow-[0_0_0_1px_hsla(var(--accent)/0.14)]'
+                        : active
+                        ? 'rounded-md border border-accent/35 bg-accent/12 px-2.5 py-1.5 ring-1 ring-accent/20'
+                        : 'rounded-md border border-transparent bg-transparent px-2.5 py-1.5 hover:border-border/60 hover:bg-muted/35'
                         }`}
                     onClick={onSelect}
                 >
-                    <MessageSquare className="w-3 h-3 flex-shrink-0 text-muted-foreground" />
-                    <div className="flex-1 min-w-0">
+                    <div className={`${showActiveCard
+                        ? 'mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl border border-accent/30 bg-accent/12 text-accent'
+                        : 'pt-0.5'
+                    }`}>
+                        <MessageSquare className={`${showActiveCard ? 'h-3.5 w-3.5 text-accent' : 'w-3 h-3 text-muted-foreground'} flex-shrink-0`} />
+                    </div>
+                    <div className="min-w-0 flex-1">
                         {editing ? (
                             <input
                                 ref={inputRef}
@@ -1864,29 +1900,52 @@ function ConversationRow({ conv, active, workspaceId, onSelect, onDelete, onDown
                                 onClick={e => e.stopPropagation()}
                             />
                         ) : (
-                            <p className="text-[11px] font-medium truncate leading-tight">{conv.title ?? 'New Chat'}</p>
+                            <p className={`${showActiveCard ? 'text-sm font-semibold leading-tight text-foreground' : 'text-[11px] font-medium leading-tight'} truncate`}>
+                                {conv.title ?? 'New Chat'}
+                            </p>
                         )}
-                        <p className="text-[10px] text-muted-foreground/85 leading-tight">{conv.message_count} messages</p>
+                        {showActiveCard && activePreview ? (
+                            <>
+                                <p className="mt-1 truncate text-[12px] leading-5 text-muted-foreground/88">
+                                    {activePreview}
+                                </p>
+                                <div className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground/72">
+                                    <span>{conv.message_count} message{conv.message_count === 1 ? '' : 's'}</span>
+                                    {relativeTime && (
+                                        <>
+                                            <span aria-hidden>•</span>
+                                            <span>{relativeTime}</span>
+                                        </>
+                                    )}
+                                </div>
+                            </>
+                        ) : (
+                            <p className="text-[10px] text-muted-foreground/85 leading-tight">{conv.message_count} messages</p>
+                        )}
                     </div>
-                    <div className="relative opacity-0 group-hover:opacity-100 flex items-center gap-0.5">
+                    <div className={`relative flex items-center gap-0.5 ${showActiveCard ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                         <button
-                            className="btn-ghost h-6 w-6 p-0 justify-center"
+                            className={showActiveCard
+                                ? 'btn-ghost h-7 w-7 rounded-lg border-border/55 bg-card/55'
+                                : 'inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors'
+                            }
                             onClick={startEdit}
                             title="Rename chat"
                             aria-label="Rename chat"
                         >
-                            <Pencil className="w-2.5 h-2.5" />
+                            <Pencil className={actionIconClass} />
                         </button>
                         <button
                             type="button"
-                            className="btn-ghost h-6 w-6 p-0 justify-center text-muted-foreground hover:text-foreground"
+                            className={showActiveCard
+                                ? 'btn-ghost h-7 w-7 rounded-lg border-border/55 bg-card/55 text-muted-foreground hover:text-foreground'
+                                : 'inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors'
+                            }
                             onClick={(e) => { e.stopPropagation(); setShowDownloadMenu(m => !m) }}
                             title="Download chat"
                             aria-label="Download chat"
                         >
-                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                            </svg>
+                            <Download className={actionIconClass} />
                         </button>
                         {showDownloadMenu && (
                             <div className="absolute right-0 top-full mt-1 z-50 min-w-[100px] rounded-lg border border-border/60 bg-popover py-1 shadow-lg">
@@ -1903,12 +1962,15 @@ function ConversationRow({ conv, active, workspaceId, onSelect, onDelete, onDown
                             </div>
                         )}
                         <button
-                            className="btn-ghost h-6 w-6 p-0 justify-center"
+                            className={showActiveCard
+                                ? 'btn-ghost h-7 w-7 rounded-lg border-border/55 bg-card/55'
+                                : 'inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors'
+                            }
                             onClick={e => { e.stopPropagation(); onDelete() }}
                             title="Move chat to trash"
                             aria-label="Move chat to trash"
                         >
-                            <Trash2 className="w-2.5 h-2.5" />
+                            <Trash2 className={actionIconClass} />
                         </button>
                     </div>
                 </div>
@@ -1990,7 +2052,7 @@ function TrashedConversationRow({
                                 e.stopPropagation()
                                 setShowDownloadMenu(!showDownloadMenu)
                             }}
-                            className="btn-ghost h-6 w-6 p-0 justify-center text-muted-foreground hover:text-foreground"
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
                             aria-label="Download chat"
                             title="Download chat"
                         >
@@ -2017,7 +2079,7 @@ function TrashedConversationRow({
                         <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); onRestore() }}
-                            className="btn-ghost h-6 px-2 py-0 text-[10px] rounded-md"
+                            className="inline-flex h-6 items-center px-2 rounded-md text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
                             aria-label="Restore chat"
                         >
                             Restore
@@ -2025,9 +2087,9 @@ function TrashedConversationRow({
                         <button
                             type="button"
                             onClick={handleDeleteClick}
-                            className={`h-6 p-0 justify-center rounded-md transition-all ${confirmingDelete
+                            className={`inline-flex items-center justify-center h-6 rounded-md transition-all ${confirmingDelete
                                 ? 'w-auto px-2 bg-red-500/20 border border-red-500/40 text-red-400 text-[10px] font-medium'
-                                : 'btn-ghost w-6 text-red-400 hover:bg-red-500/10'
+                                : 'w-6 text-red-400 hover:bg-red-500/10'
                             }`}
                             aria-label="Delete permanently"
                             title={confirmingDelete ? 'Click again to confirm' : 'Delete permanently'}
@@ -2474,6 +2536,345 @@ const MentionDropdown = React.forwardRef<HTMLDivElement, {
     )
 })
 
+// ── Thinking sentence ticker ─────────────────────────────────────────────────
+
+/**
+ * Extract displayable thought segments from streaming thinking text.
+ *
+ * Aggressively splits on: newlines, sentence punctuation (.!?) followed
+ * by a space, and also force-breaks long runs (>100 chars) at the nearest
+ * word boundary.  Short segments (<20 chars) are merged forward.
+ */
+function extractThoughts(text: string): string[] {
+    if (!text) return []
+
+    // Phase 1: split on newlines
+    const lines = text.split('\n')
+    // The last line is still being typed — don't include it
+    const closedLines = lines.slice(0, -1).map(l => l.trim()).filter(Boolean)
+    const lastLine = lines[lines.length - 1] || ''
+
+    // Phase 2: within the last line, split on sentence boundaries (. ! ? followed by space)
+    const segments: string[] = [...closedLines]
+    const sentenceRe = /(.*?[.!?])(?=\s)/g
+    let lastEnd = 0
+    let m: RegExpExecArray | null
+    while ((m = sentenceRe.exec(lastLine)) !== null) {
+        const s = lastLine.slice(lastEnd, sentenceRe.lastIndex).trim()
+        if (s) segments.push(s)
+        lastEnd = sentenceRe.lastIndex
+    }
+
+    // Phase 3: force-break any remaining long text at word boundaries (~100 char chunks)
+    const remainder = lastLine.slice(lastEnd).trim()
+    if (remainder.length > 100) {
+        let pos = 0
+        while (pos < remainder.length) {
+            const end = Math.min(pos + 100, remainder.length)
+            if (end >= remainder.length) break // leave the rest as trailing
+            const spaceIdx = remainder.lastIndexOf(' ', end)
+            const breakAt = spaceIdx > pos ? spaceIdx : end
+            segments.push(remainder.slice(pos, breakAt).trim())
+            pos = breakAt
+        }
+    }
+
+    // Phase 4: merge short segments (<20 chars) with the next one
+    const merged: string[] = []
+    let buf = ''
+    for (const seg of segments) {
+        buf = buf ? `${buf} ${seg}` : seg
+        if (buf.length >= 20) {
+            merged.push(buf)
+            buf = ''
+        }
+    }
+    if (buf && merged.length > 0) {
+        merged[merged.length - 1] += ' ' + buf
+    } else if (buf) {
+        merged.push(buf)
+    }
+
+    return merged
+}
+
+const TICKER_DWELL_MS = 1500
+const TICKER_POLL_MS = 250
+
+function ThinkingTicker({ content }: { content: string; isStreaming: boolean }) {
+    const thoughtsRef = useRef<string[]>([])
+    const lastShownText = useRef<string | null>(null)
+    const shownAt = useRef(0)
+    const phase = useRef<'idle' | 'visible' | 'exiting' | 'entering'>('idle')
+    const pRef = useRef<HTMLParagraphElement>(null)
+
+    const [text, setText] = useState<string | null>(null)
+    const [animCls, setAnimCls] = useState('ticker-enter')
+
+    const thoughts = useMemo(() => extractThoughts(content), [content])
+    thoughtsRef.current = thoughts
+
+    // Listen for animation end to advance the phase
+    useEffect(() => {
+        const el = pRef.current
+        if (!el) return
+        const handler = () => {
+            if (phase.current === 'entering') {
+                phase.current = 'visible'
+                shownAt.current = Date.now()
+            } else if (phase.current === 'exiting') {
+                // Exit done — swap text and enter
+                const available = thoughtsRef.current
+                const latest = available.length > 0 ? available[available.length - 1] : lastShownText.current
+                if (latest) {
+                    lastShownText.current = latest
+                    setText(latest)
+                }
+                phase.current = 'entering'
+                setAnimCls('ticker-enter')
+            }
+        }
+        el.addEventListener('animationend', handler)
+        return () => el.removeEventListener('animationend', handler)
+    }, [text]) // rebind when text changes so pRef targets the current element
+
+    // Interval poller — checks for new thoughts and triggers transitions
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const available = thoughtsRef.current
+            if (available.length === 0) return
+            const latest = available[available.length - 1]
+
+            if (phase.current === 'idle') {
+                // First thought — show with enter animation
+                phase.current = 'entering'
+                lastShownText.current = latest
+                setText(latest)
+                setAnimCls('ticker-enter')
+                return
+            }
+
+            if (phase.current !== 'visible') return
+            if (latest === lastShownText.current) return
+
+            const elapsed = Date.now() - shownAt.current
+            if (elapsed < TICKER_DWELL_MS) return
+
+            // Start exit animation — the animationend handler will swap and enter
+            phase.current = 'exiting'
+            setAnimCls('ticker-exit')
+        }, TICKER_POLL_MS)
+
+        return () => clearInterval(interval)
+    }, [])
+
+    if (text == null) {
+        return (
+            <span className="thinking-shimmer text-sm font-medium">
+                Thinking...
+            </span>
+        )
+    }
+
+    const cleaned = text.replace(/^["'"]+|["'"]+$/g, '')
+
+    return (
+        <div className="min-h-[1.6em] overflow-hidden">
+            <p ref={pRef} key={text} className={`text-sm text-foreground/75 leading-relaxed ${animCls}`}>
+                {cleaned}
+            </p>
+        </div>
+    )
+}
+
+// ── Timeline renderer ────────────────────────────────────────────────────────
+function TimelineRenderer({ timeline, isLive = false }: { timeline: TimelineEntry[]; isLive?: boolean }) {
+    // For items that default to closed (thinking, prompt_optimized, etc.)
+    const [expandedIndices, setExpandedIndices] = useState<Set<number>>(new Set())
+    // For items that default to open (intermediate_response)
+    const [collapsedIndices, setCollapsedIndices] = useState<Set<number>>(new Set())
+
+    const toggleIndex = useCallback((idx: number) => {
+        setExpandedIndices(prev => {
+            const next = new Set(prev)
+            if (next.has(idx)) next.delete(idx)
+            else next.add(idx)
+            return next
+        })
+    }, [])
+
+    const toggleCollapse = useCallback((idx: number) => {
+        setCollapsedIndices(prev => {
+            const next = new Set(prev)
+            if (next.has(idx)) next.delete(idx)
+            else next.add(idx)
+            return next
+        })
+    }, [])
+
+    if (!timeline || timeline.length === 0) return null
+
+    return (
+        <>
+            {timeline.map((entry, idx) => {
+                switch (entry.type) {
+                    case 'model_selection':
+                        // Model name is shown in the message footer instead
+                        return null
+                    case 'thinking': {
+                        const e = entry as TimelineThinking
+                        const isActive = isLive && (e.done === false || (e.done == null && !e.durationMs))
+
+                        if (isActive) {
+                            return (
+                                <div key={idx} className="flex items-center gap-2 px-1 py-1">
+                                    <Brain className="h-3.5 w-3.5 text-accent/60 animate-pulse flex-shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                        <ThinkingTicker content={e.content} isStreaming />
+                                    </div>
+                                </div>
+                            )
+                        }
+
+                        const isOpen = expandedIndices.has(idx)
+                        return (
+                            <div key={idx} className="px-1">
+                                <button
+                                    type="button"
+                                    onClick={() => toggleIndex(idx)}
+                                    className="flex items-center gap-1.5 text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors py-0.5"
+                                >
+                                    <ChevronRight className={`h-3 w-3 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+                                    <span>Thought{(e.durationMs ?? (e as any).duration_ms) != null ? ` ${((e.durationMs ?? (e as any).duration_ms) / 1000).toFixed(1)} seconds` : ''}</span>
+                                </button>
+                                {isOpen && (
+                                    <pre className="whitespace-pre-wrap break-words text-xs text-foreground/60 leading-relaxed mt-1 ml-4.5">
+                                        {e.content}
+                                    </pre>
+                                )}
+                            </div>
+                        )
+                    }
+                    case 'tool_call': {
+                        const e = entry as TimelineToolCall
+                        const result = e.success != null
+                            ? {
+                                success: e.success,
+                                output: e.output,
+                                error: e.error ?? undefined,
+                            }
+                            : undefined
+                        return (
+                            <ToolCallCard
+                                key={idx}
+                                callId={e.call_id}
+                                toolName={e.tool_name}
+                                arguments={e.arguments}
+                                result={result}
+                                isRunning={e.success == null}
+                            />
+                        )
+                    }
+                    case 'prompt_optimized': {
+                        const e = entry as TimelinePromptOptimized
+                        const isOpen = expandedIndices.has(idx)
+                        return (
+                            <TimelineBadge
+                                key={idx}
+                                type="optimization"
+                                open={isOpen}
+                                onToggle={() => toggleIndex(idx)}
+                                label={
+                                    <>
+                                        <Sparkles className="h-3 w-3 text-accent/60" />
+                                        <span className="text-[11px] text-muted-foreground/80">Prompt Optimized</span>
+                                    </>
+                                }
+                            >
+                                <div className="space-y-2 text-[11px]">
+                                    <div>
+                                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground/50 mb-1">Original</div>
+                                        <pre className="whitespace-pre-wrap break-words rounded bg-muted/25 px-2 py-1.5 text-foreground/70 max-h-32 overflow-y-auto">
+                                            {e.original}
+                                        </pre>
+                                    </div>
+                                    <div>
+                                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground/50 mb-1">Optimized</div>
+                                        <pre className="whitespace-pre-wrap break-words rounded bg-muted/25 px-2 py-1.5 text-foreground/70 max-h-32 overflow-y-auto">
+                                            {e.optimized}
+                                        </pre>
+                                    </div>
+                                </div>
+                            </TimelineBadge>
+                        )
+                    }
+                    case 'attachments_processed': {
+                        const e = entry as TimelineAttachmentsProcessed
+                        const isOpen = expandedIndices.has(idx)
+                        return (
+                            <TimelineBadge
+                                key={idx}
+                                type="attachment"
+                                open={isOpen}
+                                onToggle={() => toggleIndex(idx)}
+                                label={
+                                    <>
+                                        <Paperclip className="h-3 w-3 text-accent/60" />
+                                        <span className="text-[11px] text-muted-foreground/80">
+                                            {e.attachments.length} Attachment{e.attachments.length !== 1 ? 's' : ''} Processed
+                                        </span>
+                                    </>
+                                }
+                            >
+                                <div className="space-y-1 text-[11px]">
+                                    {e.attachments.map((att, i) => (
+                                        <div key={i} className="flex items-center gap-2">
+                                            <Paperclip className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+                                            <span className="text-foreground/75 truncate">{att.filename}</span>
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${att.status === 'success' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'}`}>
+                                                {att.status}
+                                            </span>
+                                            {att.pipeline && (
+                                                <span className="text-muted-foreground/40 text-[10px]">{att.pipeline}</span>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </TimelineBadge>
+                        )
+                    }
+                    case 'intermediate_response': {
+                        const e = entry as TimelineIntermediateResponse
+                        const isCollapsed = collapsedIndices.has(idx)
+                        return (
+                            <div key={idx}>
+                                <button
+                                    type="button"
+                                    onClick={() => toggleCollapse(idx)}
+                                    className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors py-0.5 px-1"
+                                >
+                                    <ChevronRight className={`h-3 w-3 transition-transform ${isCollapsed ? '' : 'rotate-90'}`} />
+                                    <span>Intermediate response</span>
+                                </button>
+                                {!isCollapsed && (
+                                    <div className="px-4 py-2 mt-1">
+                                        <div
+                                            className="markdown-content text-sm"
+                                            dangerouslySetInnerHTML={{ __html: e.content }}
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        )
+                    }
+                    default:
+                        return null
+                }
+            })}
+        </>
+    )
+}
+
 // ── Chat message card ───────────────────────────────────────────────────────
 function ChatMessageCard({
     message: msg,
@@ -2530,47 +2931,39 @@ function ChatMessageCard({
                             </div>
                         )}
                         {hasWorkflowSteps && (
-                            <div className="chat-workflow-stack w-full">
+                            <div className="w-full space-y-2">
                                 {(msg.timeline?.length ?? 0) > 0 && (
-                                    <div className="text-xs text-muted-foreground/40 p-2 text-center">
-                                        Timeline view not available
+                                    <div className="chat-workflow-stack">
+                                        <TimelineRenderer timeline={msg.timeline!} />
                                     </div>
                                 )}
-                                <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--response chat-section-reveal">
-                                    <div className="chat-workflow-header">
-                                        <MessageSquare className="h-3.5 w-3.5" />
-                                        <span>Response</span>
-                                        {msg.is_interrupted && (
-                                            <span className="chat-workflow-status">Interrupted</span>
-                                        )}
-                                    </div>
-                                    <div className="chat-bubble-assistant px-4 py-3">
-                                        {msg.content && (
-                                            <div
-                                                className="markdown-content text-sm"
-                                                dangerouslySetInnerHTML={{ __html: renderMessageContent(msg.content, workspaceId, mentionMaps) }}
-                                                onClick={(e) => {
-                                                    const a = (e.target as HTMLElement).closest('a')
-                                                    if (a) { const h = a.getAttribute('href'); if (h?.startsWith('/')) { e.preventDefault(); navigate(h) } }
-                                                }}
-                                            />
-                                        )}
-                                        {msg.is_interrupted && (
-                                            <span className={`inline-flex items-center gap-1 text-xs text-muted-foreground/50 italic ${msg.content ? 'mt-1' : ''}`}>
-                                                …Interrupted
-                                            </span>
-                                        )}
-                                    </div>
+                                <div className="chat-bubble-assistant px-4 py-3">
+                                    {msg.content && (
+                                        <div
+                                            className="markdown-content text-sm"
+                                            dangerouslySetInnerHTML={{ __html: renderMessageContent(msg.content, workspaceId, mentionMaps) }}
+                                            onClick={(e) => {
+                                                const a = (e.target as HTMLElement).closest('a')
+                                                if (a) { const h = a.getAttribute('href'); if (h?.startsWith('/')) { e.preventDefault(); navigate(h) } }
+                                            }}
+                                        />
+                                    )}
+                                    {msg.is_interrupted && (
+                                        <span className={`inline-flex items-center gap-1 text-xs text-muted-foreground/50 italic ${msg.content ? 'mt-1' : ''}`}>
+                                            …Interrupted
+                                        </span>
+                                    )}
                                 </div>
-                                <div className="chat-workflow-step chat-workflow-step--iconic chat-section-reveal">
-                                    <span className="chat-message-meta flex items-center gap-1.5 pl-1 pt-0.5">
-                                        {new Date(msg.created_at).toLocaleTimeString()}
-                                        {generationSeconds && ` · Took ${generationSeconds}s`}
-                                        <button type="button" onClick={handleCopy} className="p-0.5 rounded text-muted-foreground/40 hover:text-muted-foreground transition-colors" aria-label="Copy message" title="Copy message">
-                                            {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                                        </button>
-                                    </span>
-                                </div>
+                                <span className="chat-message-meta flex items-center gap-1.5 pl-1 pt-0.5">
+                                    {new Date(msg.created_at).toLocaleTimeString()}
+                                    {generationSeconds && ` · ${generationSeconds}s`}
+                                    {msg.model_used && (
+                                        <span className="text-muted-foreground/40">· {msg.model_used}</span>
+                                    )}
+                                    <button type="button" onClick={handleCopy} className="p-0.5 rounded text-muted-foreground/40 hover:text-muted-foreground transition-colors" aria-label="Copy message" title="Copy message">
+                                        {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                    </button>
+                                </span>
                             </div>
                         )}
                         {msg.role !== 'assistant' && (

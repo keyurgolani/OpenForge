@@ -19,6 +19,7 @@ from openforge.api import tasks
 from openforge.api import attachments
 from openforge.api import mcp as mcp_api
 from openforge.api import export as export_api
+from openforge.api import import_api
 from openforge.api import models as models_api
 from openforge.api import tool_server as tool_server_api
 
@@ -37,6 +38,7 @@ api_router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 api_router.include_router(attachments.router, prefix="/attachments", tags=["attachments"])
 api_router.include_router(mcp_api.router, prefix="/mcp", tags=["mcp"])
 api_router.include_router(export_api.router, prefix="/export", tags=["export"])
+api_router.include_router(import_api.router, prefix="/import", tags=["import"])
 api_router.include_router(models_api.router, prefix="/models", tags=["models"])
 api_router.include_router(tool_server_api.router, tags=["tool-server"])
 

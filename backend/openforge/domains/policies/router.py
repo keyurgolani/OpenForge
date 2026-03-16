@@ -17,6 +17,9 @@ from .schemas import (
     PolicyResponse,
     PolicySimulationRequest,
     PolicySimulationResponse,
+    SafetyPolicyCreate,
+    SafetyPolicyUpdate,
+    ToolPolicyCreate,
     ToolPolicyUpdate,
 )
 from .service import PolicyService
@@ -131,7 +134,64 @@ async def deny_request(
     return approval
 
 
-@router.get("/", response_model=PolicyListResponse)
+@router.post("/safety", response_model=PolicyResponse, status_code=201)
+async def create_safety_policy(
+    data: SafetyPolicyCreate,
+    service: PolicyService = Depends(get_policy_service),
+):
+    """Create a new safety policy."""
+    result = await service.create_safety_policy(data.model_dump(exclude_unset=True))
+    return PolicyResponse(**result)
+
+
+@router.patch("/safety/{policy_id}", response_model=PolicyResponse)
+async def update_safety_policy(
+    policy_id: str,
+    data: SafetyPolicyUpdate,
+    service: PolicyService = Depends(get_policy_service),
+):
+    """Update an existing safety policy."""
+    result = await service.update_safety_policy(
+        policy_id, data.model_dump(exclude_unset=True, exclude_none=True)
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Safety policy not found")
+    return PolicyResponse(**result)
+
+
+@router.delete("/safety/{policy_id}", status_code=204)
+async def delete_safety_policy(
+    policy_id: str,
+    service: PolicyService = Depends(get_policy_service),
+):
+    """Delete a safety policy."""
+    deleted = await service.delete_safety_policy(policy_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Safety policy not found")
+
+
+@router.post("/tool", response_model=PolicyResponse, status_code=201)
+async def create_tool_policy(
+    data: ToolPolicyCreate,
+    service: PolicyService = Depends(get_policy_service),
+):
+    """Create a new tool policy."""
+    result = await service.create_tool_policy(data.model_dump(exclude_unset=True))
+    return PolicyResponse(**result)
+
+
+@router.delete("/tool/{policy_id}", status_code=204)
+async def delete_tool_policy(
+    policy_id: str,
+    service: PolicyService = Depends(get_policy_service),
+):
+    """Delete a tool policy."""
+    deleted = await service.delete_tool_policy(policy_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Tool policy not found")
+
+
+@router.get("", response_model=PolicyListResponse)
 async def list_policies(
     skip: int = 0,
     limit: int = 100,

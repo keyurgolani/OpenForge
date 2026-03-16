@@ -9,7 +9,6 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 # Deterministic namespaces
 # ---------------------------------------------------------------------------
 SEED_NAMESPACE = uuid5(NAMESPACE_URL, "https://openforge.dev/phase12/missions")
-DEFAULT_SEED_WORKSPACE_ID = uuid5(SEED_NAMESPACE, "workspace")
 
 # Related domain namespaces -- keeps cross-domain references deterministic
 WORKFLOW_NAMESPACE = uuid5(NAMESPACE_URL, "https://openforge.dev/phase12/workflows")
@@ -55,7 +54,7 @@ def get_seed_mission_blueprints(
         extension columns once migrated).
     """
 
-    ws = workspace_id or DEFAULT_SEED_WORKSPACE_ID
+    ws = workspace_id or None
 
     def _decorate_blueprints(blueprints: list[dict[str, Any]]) -> list[dict[str, Any]]:
         decorated: list[dict[str, Any]] = []
@@ -100,7 +99,7 @@ def get_seed_mission_blueprints(
                     "Use when you want a hands-free daily briefing that scans "
                     "research sources and delivers a polished digest every morning."
                 ),
-                "status": "draft",
+                "status": "active",
             },
             "tags": ["research", "digest", "scheduled", "daily", "autonomous"],
             "catalog_metadata": {
@@ -156,7 +155,7 @@ def get_seed_mission_blueprints(
                     "Use when you need ongoing surveillance of specific entities "
                     "and want to be alerted immediately when something changes."
                 ),
-                "status": "draft",
+                "status": "active",
             },
             "tags": ["monitoring", "targets", "alerts", "heartbeat", "autonomous"],
             "catalog_metadata": {
@@ -213,7 +212,7 @@ def get_seed_mission_blueprints(
                     "thorough, multi-source investigation with human approval at "
                     "key decision points."
                 ),
-                "status": "draft",
+                "status": "active",
             },
             "tags": ["research", "deep-dive", "manual", "supervised"],
             "catalog_metadata": {
@@ -270,7 +269,7 @@ def get_seed_mission_blueprints(
                     "Use when you want automated weekly intelligence reports on "
                     "competitors to inform strategic planning and product decisions."
                 ),
-                "status": "draft",
+                "status": "active",
             },
             "tags": ["competitive-intelligence", "weekly", "scheduled", "reports", "autonomous"],
             "catalog_metadata": {
@@ -326,7 +325,7 @@ def get_seed_mission_blueprints(
                     "your workspace for quality degradation, stale data, and "
                     "operational issues."
                 ),
-                "status": "draft",
+                "status": "active",
             },
             "tags": ["monitoring", "health", "workspace", "heartbeat", "ops"],
             "catalog_metadata": {
@@ -384,7 +383,7 @@ def get_seed_mission_blueprints(
                     "entries accurate, well-written, and up to date without "
                     "manual intervention."
                 ),
-                "status": "draft",
+                "status": "active",
             },
             "tags": ["knowledge", "curation", "quality", "scheduled", "autonomous"],
             "catalog_metadata": {
@@ -442,7 +441,7 @@ def get_seed_mission_blueprints(
                     "topics, unexpected connections, or emerging trends that your "
                     "current research has not covered."
                 ),
-                "status": "draft",
+                "status": "active",
             },
             "tags": ["discovery", "exploration", "manual", "interactive", "insights"],
             "catalog_metadata": {
@@ -502,7 +501,7 @@ def get_seed_mission_blueprints(
                     "multi-day investigation with structured phases and human "
                     "approval between each stage."
                 ),
-                "status": "draft",
+                "status": "active",
             },
             "tags": ["research", "campaign", "multi-day", "supervised", "manual", "advanced"],
             "catalog_metadata": {
@@ -561,7 +560,7 @@ def get_seed_mission_blueprints(
                     "everything that happened in your workspace, delivered as a "
                     "clean summary artifact."
                 ),
-                "status": "draft",
+                "status": "active",
             },
             "tags": ["summary", "daily", "scheduled", "activity", "autonomous"],
             "catalog_metadata": {
@@ -619,7 +618,7 @@ def get_seed_mission_blueprints(
                     "automated progress tracking, metric comparison, and deviation "
                     "alerts without manual check-ins."
                 ),
-                "status": "draft",
+                "status": "active",
             },
             "tags": ["experiments", "tracking", "interval", "metrics", "autonomous"],
             "catalog_metadata": {

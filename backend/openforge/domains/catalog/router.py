@@ -18,7 +18,7 @@ def get_catalog_service(db=Depends(get_db)) -> CatalogService:
     return CatalogService(db)
 
 
-@router.get("/", response_model=CatalogListResponse)
+@router.get("", response_model=CatalogListResponse)
 async def list_catalog(
     skip: int = 0,
     limit: int = 100,

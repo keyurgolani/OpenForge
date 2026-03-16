@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowRight, Sparkles } from 'lucide-react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 import EmptyState from '@/components/shared/EmptyState'
 import ErrorState from '@/components/shared/ErrorState'
@@ -31,7 +31,6 @@ const EMPTY_COMPOSER: ProfileComposerState = {
 }
 
 export default function ProfilesPage() {
-  const { workspaceId } = useParams<{ workspaceId: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { data, isLoading, error } = useProfilesQuery()
@@ -51,7 +50,7 @@ export default function ProfilesPage() {
       setComposer(EMPTY_COMPOSER)
       setIsComposerOpen(false)
       await queryClient.invalidateQueries({ queryKey: ['profiles'] })
-      navigate(profilesRoute(workspaceId as string, createdProfile.id))
+      navigate(profilesRoute(createdProfile.id))
     },
   })
 
@@ -192,7 +191,7 @@ export default function ProfilesPage() {
               </div>
               <div className="mt-5 flex justify-end">
                 <Link
-                  to={profilesRoute(workspaceId as string, profile.id)}
+                  to={profilesRoute(profile.id)}
                   className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-background/35 px-3 py-2 text-sm text-muted-foreground transition hover:text-foreground"
                 >
                   View Details

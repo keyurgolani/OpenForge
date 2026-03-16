@@ -7,16 +7,15 @@ import { artifactsRoute } from '@/lib/routes'
 import type { Artifact } from '@/types/artifacts'
 
 interface ArtifactCardProps {
-  workspaceId: string
   artifact: Artifact
 }
 
-export function ArtifactCard({ workspaceId, artifact }: ArtifactCardProps) {
+export function ArtifactCard({ artifact }: ArtifactCardProps) {
   const sourceChips = getArtifactSourceChips(artifact)
 
   return (
     <Link
-      to={artifactsRoute(workspaceId, artifact.id)}
+      to={artifactsRoute(artifact.id)}
       className="group block rounded-2xl border border-border/60 bg-card/30 p-5 transition-all hover:-translate-y-0.5 hover:border-accent/35 hover:bg-card/45"
     >
       <div className="flex items-start justify-between gap-3">

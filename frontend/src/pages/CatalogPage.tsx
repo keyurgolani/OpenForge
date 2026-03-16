@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
 import { BookOpen, Check, Copy, AlertTriangle, Star, Tag, ArrowRight } from 'lucide-react'
 
 import EmptyState from '@/components/shared/EmptyState'
@@ -37,7 +36,6 @@ const DIFFICULTY_COLORS: Record<string, string> = {
 }
 
 export default function CatalogPage() {
-  const { workspaceId } = useParams<{ workspaceId: string }>()
   const [activeTab, setActiveTab] = useState<FilterTab>('all')
   const [featuredOnly, setFeaturedOnly] = useState(false)
   const [selectedItem, setSelectedItem] = useState<CatalogItem | null>(null)
@@ -58,17 +56,15 @@ export default function CatalogPage() {
   const cloneWorkflow = useCloneWorkflowTemplate()
 
   const handleClone = (item: CatalogItem) => {
-    if (!workspaceId) return
-
     switch (item.catalog_type) {
       case 'profile':
         cloneProfile.mutate({ templateId: item.id, data: {} })
         break
       case 'mission':
-        cloneMission.mutate({ templateId: item.id, data: { workspace_id: workspaceId } })
+        cloneMission.mutate({ templateId: item.id, data: {} })
         break
       case 'workflow':
-        cloneWorkflow.mutate({ templateId: item.id, data: { workspace_id: workspaceId } })
+        cloneWorkflow.mutate({ templateId: item.id, data: {} })
         break
     }
   }

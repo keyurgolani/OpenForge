@@ -469,12 +469,22 @@ class ProfileRegistry:
         tool_overrides: dict[str, str] = {}
         skill_ids: list[str] = []
         if bundles:
-            category_values = {
-                category
+            # If any tool-enabled bundle allows all categories (None), the
+            # merged result is also "all categories" (None).
+            has_unrestricted = any(
+                bundle.allowed_tool_categories is None
                 for bundle in bundles
-                for category in (bundle.allowed_tool_categories or [])
-            }
-            allowed_categories = sorted(category_values) if category_values else None
+                if bundle.tools_enabled
+            )
+            if has_unrestricted:
+                allowed_categories = None
+            else:
+                category_values = {
+                    category
+                    for bundle in bundles
+                    for category in (bundle.allowed_tool_categories or [])
+                }
+                allowed_categories = sorted(category_values) if category_values else None
             blocked_tool_ids = self._dedupe_list(
                 tool_id
                 for bundle in bundles

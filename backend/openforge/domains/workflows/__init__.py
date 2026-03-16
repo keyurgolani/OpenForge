@@ -32,7 +32,7 @@ from .schemas import (
     WorkflowVersionListResponse,
     WorkflowVersionResponse,
 )
-from .seed import DEFAULT_SEED_WORKSPACE_ID, get_seed_workflow_blueprints, seed_example_workflows
+from .seed import get_seed_workflow_blueprints, seed_example_workflows
 from .router import router
 
 __all__ = [
@@ -60,7 +60,7 @@ __all__ = [
     "WorkflowEdgeUpdate",
     "WorkflowEdgeResponse",
     "WorkflowEdgeListResponse",
-    "DEFAULT_SEED_WORKSPACE_ID",
+    # DEFAULT_SEED_WORKSPACE_ID removed — workflows are workspace-agnostic
     "get_seed_workflow_blueprints",
     "seed_example_workflows",
     "router",

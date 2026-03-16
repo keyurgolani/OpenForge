@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { FileOutput, Plus, Sparkles } from 'lucide-react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/shared/Card'
 import EmptyState from '@/components/shared/EmptyState'
@@ -35,7 +35,6 @@ const CREATE_DEFAULTS: CreateDraft = {
 }
 
 export default function ArtifactsPage() {
-  const { workspaceId = '' } = useParams<{ workspaceId: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -47,7 +46,6 @@ export default function ArtifactsPage() {
   const [draft, setDraft] = useState<CreateDraft>(CREATE_DEFAULTS)
 
   const { data, isLoading, error } = useArtifactsQuery({
-    workspaceId,
     q: search.trim() || undefined,
     artifactType: artifactType === 'all' ? undefined : artifactType,
     status: status === 'all' ? undefined : status,
@@ -56,7 +54,6 @@ export default function ArtifactsPage() {
 
   const createMutation = useMutation({
     mutationFn: async () => createArtifact({
-      workspace_id: workspaceId,
       artifact_type: draft.artifact_type,
       title: draft.title,
       summary: draft.summary || undefined,
@@ -73,7 +70,7 @@ export default function ArtifactsPage() {
       await queryClient.invalidateQueries({ queryKey: ['artifacts'] })
       setCreateOpen(false)
       setDraft(CREATE_DEFAULTS)
-      navigate(artifactsRoute(workspaceId, artifact.id))
+      navigate(artifactsRoute(artifact.id))
     },
   })
 
@@ -233,7 +230,7 @@ export default function ArtifactsPage() {
       ) : (
         <div className="grid gap-4 xl:grid-cols-2">
           {artifacts.map((artifact) => (
-            <ArtifactCard key={artifact.id} workspaceId={workspaceId} artifact={artifact} />
+            <ArtifactCard key={artifact.id} artifact={artifact} />
           ))}
         </div>
       )}

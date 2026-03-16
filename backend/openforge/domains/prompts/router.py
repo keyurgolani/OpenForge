@@ -27,7 +27,7 @@ def get_prompt_service(db=Depends(get_db)) -> PromptService:
     return PromptService(db)
 
 
-@router.get("/", response_model=PromptListResponse)
+@router.get("", response_model=PromptListResponse)
 async def list_prompts(
     skip: int = 0,
     limit: int = 100,
@@ -45,7 +45,7 @@ async def get_prompt(prompt_id: UUID, service: PromptService = Depends(get_promp
     return prompt
 
 
-@router.post("/", response_model=PromptResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=PromptResponse, status_code=status.HTTP_201_CREATED)
 async def create_prompt(prompt_data: PromptCreate, service: PromptService = Depends(get_prompt_service)):
     return await service.create_prompt(prompt_data.model_dump())
 

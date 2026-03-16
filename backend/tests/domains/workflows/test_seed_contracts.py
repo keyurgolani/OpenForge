@@ -3,7 +3,6 @@ from __future__ import annotations
 import pytest
 
 from openforge.domains.workflows.seed import (
-    DEFAULT_SEED_WORKSPACE_ID,
     get_seed_workflow_blueprints,
     seed_example_workflows,
 )
@@ -23,7 +22,7 @@ def test_seed_workflow_blueprints_cover_phase9_runtime_blueprint() -> None:
     nodes = workflow["version"]["nodes"]
     edges = workflow["version"]["edges"]
 
-    assert workflow["workspace_id"] == DEFAULT_SEED_WORKSPACE_ID
+    assert workflow["workspace_id"] is None
     assert workflow["status"] == "active"
     assert workflow["is_system"] is True
     assert workflow["is_template"] is True

@@ -51,10 +51,10 @@ export default function WorkspaceOverviewPage() {
   const { workspaceId = '' } = useParams<{ workspaceId: string }>()
 
   const profilesQuery = useProfilesQuery(6)
-  const workflowsQuery = useWorkflowsQuery({ workspaceId, limit: 6 })
-  const missionsQuery = useMissionsQuery({ workspaceId, limit: 6 })
-  const runsQuery = useRunsQuery({ workspaceId, limit: 6 })
-  const artifactsQuery = useArtifactsQuery({ workspaceId, limit: 6 })
+  const workflowsQuery = useWorkflowsQuery({ limit: 6 })
+  const missionsQuery = useMissionsQuery({ limit: 6 })
+  const runsQuery = useRunsQuery({ limit: 6 })
+  const artifactsQuery = useArtifactsQuery({ limit: 6 })
   const knowledgeQuery = useKnowledgeSummaryQuery(workspaceId, 6)
 
   const isLoading = [

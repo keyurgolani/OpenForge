@@ -2,10 +2,10 @@ import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
     listWorkspaces, listProviders, createWorkspace, updateWorkspace, deleteWorkspace,
-    listSettings,
+    mergeWorkspaces, listSettings,
 } from '@/lib/api'
 import {
-    Loader2, Trash2, CheckCircle2, Plus,
+    Loader2, Trash2, CheckCircle2, Plus, Merge,
     ChevronDown, ChevronUp, Eye, Save,
     Bot, Brain, AlertCircle,
 } from 'lucide-react'
@@ -342,6 +342,118 @@ function WorkspacesSettings({
                     onSaved={() => qc.invalidateQueries({ queryKey: ['workspaces'] })}
                 />
             ))}
+
+            {(workspaces as WorkspaceRow[]).length >= 2 && (
+                <MergeWorkspacesSection workspaces={workspaces as WorkspaceRow[]} onMerged={() => qc.invalidateQueries({ queryKey: ['workspaces'] })} />
+            )}
+        </div>
+    )
+}
+
+function MergeWorkspacesSection({ workspaces, onMerged }: { workspaces: WorkspaceRow[]; onMerged: () => void }) {
+    const [open, setOpen] = useState(false)
+    const [sourceId, setSourceId] = useState('')
+    const [targetId, setTargetId] = useState('')
+    const [deleteSource, setDeleteSource] = useState(true)
+    const [merging, setMerging] = useState(false)
+    const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
+
+    const handleMerge = async () => {
+        if (!sourceId || !targetId || sourceId === targetId) return
+        setMerging(true)
+        setResult(null)
+        try {
+            const data = await mergeWorkspaces(targetId, sourceId, deleteSource)
+            const msg = `Merged ${data.tables_updated} entity groups into target workspace.${data.source_deleted ? ' Source workspace deleted.' : ''}`
+            setResult({ ok: true, message: msg })
+            setSourceId('')
+            setTargetId('')
+            onMerged()
+        } catch (err: unknown) {
+            const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? String(err)
+            setResult({ ok: false, message: msg })
+        } finally {
+            setMerging(false)
+        }
+    }
+
+    const sourceName = workspaces.find(w => w.id === sourceId)?.name
+    const targetName = workspaces.find(w => w.id === targetId)?.name
+
+    return (
+        <div className="glass-card rounded-xl border border-border/60">
+            <button
+                type="button"
+                onClick={() => setOpen(p => !p)}
+                className="w-full flex items-center gap-2.5 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+                <Merge className="w-4 h-4" />
+                <span>Merge Workspaces</span>
+                <ChevronDown className={`w-3.5 h-3.5 ml-auto transition-transform ${open ? 'rotate-180' : ''}`} />
+            </button>
+
+            {open && (
+                <div className="px-4 pb-4 space-y-3 border-t border-border/40 pt-3">
+                    <p className="text-xs text-muted-foreground">
+                        Move all knowledge, conversations, runs, artifacts, and other entities from the source workspace into the target workspace.
+                    </p>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="space-y-1.5 text-xs">
+                            <span className="text-muted-foreground font-medium">Source (merge from)</span>
+                            <select className="input text-xs w-full" value={sourceId} onChange={e => setSourceId(e.target.value)}>
+                                <option value="">Select source...</option>
+                                {workspaces.filter(w => w.id !== targetId).map(w => (
+                                    <option key={w.id} value={w.id}>{getWorkspaceIcon(w.icon)} {w.name}</option>
+                                ))}
+                            </select>
+                        </label>
+                        <label className="space-y-1.5 text-xs">
+                            <span className="text-muted-foreground font-medium">Target (merge into)</span>
+                            <select className="input text-xs w-full" value={targetId} onChange={e => setTargetId(e.target.value)}>
+                                <option value="">Select target...</option>
+                                {workspaces.filter(w => w.id !== sourceId).map(w => (
+                                    <option key={w.id} value={w.id}>{getWorkspaceIcon(w.icon)} {w.name}</option>
+                                ))}
+                            </select>
+                        </label>
+                    </div>
+
+                    <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                        <input type="checkbox" className="accent-accent" checked={deleteSource} onChange={e => setDeleteSource(e.target.checked)} />
+                        Delete source workspace after merge
+                    </label>
+
+                    {sourceId && targetId && sourceId !== targetId && (
+                        <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-amber-300">
+                            <AlertCircle className="w-3.5 h-3.5 inline mr-1.5" />
+                            All entities from <strong>{sourceName}</strong> will be moved into <strong>{targetName}</strong>.
+                            {deleteSource ? ' The source workspace will be deleted.' : ''} This cannot be undone.
+                        </div>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                        <button
+                            className="btn-primary text-xs py-1.5 px-4 gap-1.5"
+                            onClick={handleMerge}
+                            disabled={!sourceId || !targetId || sourceId === targetId || merging}
+                        >
+                            {merging ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Merge className="w-3.5 h-3.5" />}
+                            Merge
+                        </button>
+                    </div>
+
+                    {result && (
+                        <div className={`rounded-lg border px-3 py-2 text-xs ${result.ok
+                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                            : 'border-red-500/30 bg-red-500/10 text-red-300'
+                        }`}>
+                            {result.ok ? <CheckCircle2 className="w-3.5 h-3.5 inline mr-1.5" /> : <AlertCircle className="w-3.5 h-3.5 inline mr-1.5" />}
+                            {result.message}
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     )
 }

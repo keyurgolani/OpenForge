@@ -262,12 +262,12 @@ export default function AppShell() {
     knowledgeItem: (knowledgeId: string) => `/w/${workspaceId}/knowledge/${knowledgeId}`,
     chat: chatRoute(workspaceId),
     chatConversation: (conversationId: string) => chatRoute(workspaceId, conversationId),
-    profiles: profilesRoute(workspaceId),
-    workflows: workflowsRoute(workspaceId),
-    missions: missionsRoute(workspaceId),
-    runs: runsRoute(workspaceId),
-    artifacts: artifactsRoute(workspaceId),
-    catalog: catalogRoute(workspaceId),
+    profiles: profilesRoute(),
+    workflows: workflowsRoute(),
+    missions: missionsRoute(),
+    runs: runsRoute(),
+    artifacts: artifactsRoute(),
+    catalog: catalogRoute(),
     settings: '/settings',
   }), [workspaceId])
 
@@ -403,10 +403,10 @@ export default function AppShell() {
           onClose={() => setShowKnowledgeCreate(false)}
         />
 
-        <div className="relative z-0 flex min-h-0 flex-1 gap-3 p-3">
+        <div className="relative z-0 flex min-h-0 min-w-0 flex-1 gap-3 overflow-hidden p-3">
           <main
             data-openforge-main-content="1"
-            className={`relative z-20 flex min-h-0 flex-1 flex-col ${isSettingsPage ? 'overflow-hidden' : 'overflow-auto'} ${isPrimarySurface ? '' : 'rounded-2xl border border-border/60 bg-card/25'}`}
+            className={`relative z-20 flex min-h-0 min-w-0 flex-1 flex-col ${isSettingsPage ? 'overflow-hidden' : 'overflow-auto'} ${isPrimarySurface ? '' : 'rounded-2xl border border-border/60 bg-card/25'}`}
           >
             <Outlet />
           </main>

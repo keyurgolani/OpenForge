@@ -4,7 +4,6 @@ import pytest
 
 from openforge.db.models import ArtifactLinkModel, ArtifactSinkModel, ArtifactVersionModel
 from openforge.domains.artifacts.seed import (
-    DEFAULT_SEED_WORKSPACE_ID,
     SEED_ARTIFACT_TYPES,
     get_seed_artifact_blueprints,
     seed_example_artifacts,
@@ -48,7 +47,7 @@ def test_seed_blueprints_cover_versions_lineage_and_sources() -> None:
     blueprint_by_slug = {blueprint["slug"]: blueprint for blueprint in blueprints}
 
     assert len(blueprints) >= 6
-    assert blueprint_by_slug["operator-note"]["artifact"]["workspace_id"] == DEFAULT_SEED_WORKSPACE_ID
+    assert blueprint_by_slug["operator-note"]["artifact"]["workspace_id"] is None
     assert blueprint_by_slug["execution-report"]["artifact"]["source_run_id"] is not None
     assert blueprint_by_slug["research-brief"]["artifact"]["source_evidence_packet_id"] is not None
     assert blueprint_by_slug["execution-summary"]["versions"]

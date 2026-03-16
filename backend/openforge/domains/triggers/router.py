@@ -29,7 +29,7 @@ def get_trigger_service(db=Depends(get_db)) -> TriggerService:
     return TriggerService(db)
 
 
-@router.get("/", response_model=TriggerListResponse)
+@router.get("", response_model=TriggerListResponse)
 async def list_triggers(
     skip: int = 0,
     limit: int = 100,
@@ -68,7 +68,7 @@ async def get_trigger(
     return trigger
 
 
-@router.post("/", response_model=TriggerResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=TriggerResponse, status_code=status.HTTP_201_CREATED)
 async def create_trigger(
     trigger_data: TriggerCreate,
     service: TriggerService = Depends(get_trigger_service),

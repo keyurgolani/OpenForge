@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -9,6 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openforge.db.models import ApprovalRequestModel
+
+logger = logging.getLogger("openforge.approval_service")
 
 
 class ApprovalService:
@@ -70,6 +73,8 @@ class ApprovalService:
         request.resolution_note = note
         await self.db.commit()
         await self.db.refresh(request)
+        # Unblock the waiting execution engine via HITL service
+        await self._notify_hitl(str(approval_id), approved=True)
         return request
 
     async def deny_request(self, approval_id: UUID, note: str | None = None, resolved_by: str = "operator") -> ApprovalRequestModel | None:
@@ -82,4 +87,17 @@ class ApprovalService:
         request.resolution_note = note
         await self.db.commit()
         await self.db.refresh(request)
+        # Unblock the waiting execution engine via HITL service
+        await self._notify_hitl(str(approval_id), approved=False)
         return request
+
+    async def _notify_hitl(self, hitl_id: str, *, approved: bool) -> None:
+        """Notify the HITL service so the waiting agent is unblocked."""
+        try:
+            from openforge.runtime.hitl import hitl_service
+            # Unblock in-process waiter
+            hitl_service.resolve(hitl_id, approved)
+            # Unblock cross-process waiter (Celery)
+            await hitl_service._publish_redis_decision(hitl_id, approved)
+        except Exception as exc:
+            logger.warning("Failed to notify HITL service for %s: %s", hitl_id, exc)

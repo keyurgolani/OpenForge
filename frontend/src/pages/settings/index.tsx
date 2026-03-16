@@ -20,7 +20,7 @@ function resolveLegacySettingsRoute(searchParams: URLSearchParams): string {
     approvals: '/settings/approvals',
     hitl: '/settings/approvals',
     jobs: '/settings/pipelines',
-    tools: '/settings/policies',
+    tools: '/settings/tools',
     skills: '/settings/skills',
     mcp: '/settings/mcp',
     audit: '/settings/audit',

@@ -1025,6 +1025,7 @@ class AgentExecutionEngine:
             context_sources: list[dict[str, Any]] = []
             full_response = ""
             full_thinking = ""
+            intermediate_response_total = 0  # bytes of full_response that are intermediate
             all_tool_calls: list[dict[str, Any]] = []
             tool_calls_count = 0
             rate_limiter = ToolCallRateLimiter(
@@ -1050,6 +1051,7 @@ class AgentExecutionEngine:
 
                 response_this_turn = ""
                 thinking_this_turn = ""
+                thinking_started_at: float | None = None
                 tool_calls_this_turn: list[dict[str, Any]] = []
                 finish_reason = "stop"
 
@@ -1069,6 +1071,9 @@ class AgentExecutionEngine:
                     if event_type == "thinking":
                         chunk = event.get("content", "")
                         if chunk:
+                            if thinking_started_at is None:
+                                import time as _time
+                                thinking_started_at = _time.monotonic()
                             full_thinking += chunk
                             thinking_this_turn += chunk
                             await self._publish(
@@ -1113,18 +1118,40 @@ class AgentExecutionEngine:
                     elif event_type == "done":
                         finish_reason = event.get("finish_reason", "stop")
 
+                def _thinking_entry() -> dict[str, Any]:
+                    import time as _time
+                    entry: dict[str, Any] = {"type": "thinking", "content": thinking_this_turn.strip()}
+                    if thinking_started_at is not None:
+                        entry["duration_ms"] = round((_time.monotonic() - thinking_started_at) * 1000)
+                    return entry
+
                 if was_cancelled:
                     if thinking_this_turn.strip():
-                        timeline.append({"type": "thinking", "content": thinking_this_turn.strip()})
+                        timeline.append(_thinking_entry())
                     break
 
                 if not tool_calls_this_turn or finish_reason == "stop":
                     if thinking_this_turn.strip():
-                        timeline.append({"type": "thinking", "content": thinking_this_turn.strip()})
+                        timeline.append(_thinking_entry())
                     break
 
                 if thinking_this_turn.strip():
-                    timeline.append({"type": "thinking", "content": thinking_this_turn.strip()})
+                    timeline.append(_thinking_entry())
+
+                # Record intermediate response text that appeared before tool calls
+                if response_this_turn.strip():
+                    intermediate_response_total += len(response_this_turn)
+                    timeline.append({
+                        "type": "intermediate_response",
+                        "content": response_this_turn.strip(),
+                    })
+                    await self._publish(
+                        execution_id,
+                        workspace_id,
+                        "agent_intermediate_response",
+                        conversation_id=conversation_id,
+                        data={"content": response_this_turn.strip()},
+                    )
 
                 tool_results_for_messages: list[dict[str, Any]] = []
                 for call in tool_calls_this_turn:
@@ -1465,15 +1492,17 @@ class AgentExecutionEngine:
                     logger.warning("Final summary turn failed: %s", exc)
 
             generation_ms = int((time.perf_counter() - generation_started) * 1000)
+            # Only save the final response portion; intermediate responses live in the timeline
+            final_response = full_response[intermediate_response_total:].strip() if intermediate_response_total > 0 else full_response
             await conversation_service.add_message(
                 db,
                 conversation_id,
                 role="assistant",
-                content=full_response,
+                content=final_response,
                 thinking=full_thinking.strip() or None,
                 model_used=model,
                 provider_used=provider_name,
-                token_count=llm_gateway.count_tokens(full_response),
+                token_count=llm_gateway.count_tokens(final_response),
                 generation_ms=generation_ms,
                 context_sources=context_sources,
                 tool_calls=all_tool_calls or None,

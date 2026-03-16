@@ -645,7 +645,7 @@ export function ToolCallCard({ callId: _callId, toolName, arguments: args, resul
             autoCollapseTimer.current = setTimeout(() => {
                 setIsExpanded(false)
                 autoCollapseTimer.current = null
-            }, 3000)
+            }, 1000)
         }
         wasRunning.current = isRunning
     }, [isRunning]) // eslint-disable-line react-hooks/exhaustive-deps

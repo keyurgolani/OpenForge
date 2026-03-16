@@ -9,7 +9,6 @@ interface WorkflowsResponse {
 }
 
 interface WorkflowQueryOptions {
-  workspaceId?: string
   limit?: number
   status?: WorkflowStatus
   isSystem?: boolean
@@ -22,16 +21,14 @@ interface WorkflowVersionsResponse {
 }
 
 export function useWorkflowsQuery({
-  workspaceId,
   limit = 100,
   status,
   isSystem,
   isTemplate,
 }: WorkflowQueryOptions = {}) {
   return useQuery<WorkflowsResponse>({
-    queryKey: ['workflows', workspaceId ?? 'all', limit, status ?? 'all', isSystem ?? 'all', isTemplate ?? 'all'],
+    queryKey: ['workflows', limit, status ?? 'all', isSystem ?? 'all', isTemplate ?? 'all'],
     queryFn: () => listWorkflows({
-      workspace_id: workspaceId,
       limit,
       status,
       is_system: isSystem,

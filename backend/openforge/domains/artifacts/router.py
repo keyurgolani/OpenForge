@@ -35,7 +35,7 @@ def get_artifact_service(db=Depends(get_db)) -> ArtifactService:
     return ArtifactService(db)
 
 
-@router.get("/", response_model=ArtifactListResponse)
+@router.get("", response_model=ArtifactListResponse)
 async def list_artifacts(
     skip: int = 0,
     limit: int = 100,
@@ -85,7 +85,7 @@ async def get_artifact(
     return artifact
 
 
-@router.post("/", response_model=ArtifactResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ArtifactResponse, status_code=status.HTTP_201_CREATED)
 async def create_artifact(
     artifact_data: ArtifactCreate,
     service: ArtifactService = Depends(get_artifact_service),

@@ -6,7 +6,13 @@ from typing import Any, Protocol
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 SEED_NAMESPACE = uuid5(NAMESPACE_URL, "https://openforge.dev/phase12/profiles")
-DEFAULT_SEED_WORKSPACE_ID = uuid5(SEED_NAMESPACE, "workspace")
+
+# Architecture component namespaces (must match their respective seed modules)
+_CB_NS = uuid5(NAMESPACE_URL, "https://openforge.dev/phase12/capability-bundles")
+_SP_NS = uuid5(NAMESPACE_URL, "https://openforge.dev/phase12/safety-policies")
+_MEM_NS = uuid5(NAMESPACE_URL, "https://openforge.dev/phase12/memory-policies")
+_MOD_NS = uuid5(NAMESPACE_URL, "https://openforge.dev/phase12/model-policies")
+_OC_NS = uuid5(NAMESPACE_URL, "https://openforge.dev/phase12/output-contracts")
 
 
 class ProfileSeeder(Protocol):
@@ -18,6 +24,31 @@ class ProfileSeeder(Protocol):
 
 def _seed_uuid(slug: str) -> UUID:
     return uuid5(SEED_NAMESPACE, slug)
+
+
+def _cb(slug: str) -> str:
+    """Capability bundle UUID as string (for JSONB array storage)."""
+    return str(uuid5(_CB_NS, slug))
+
+
+def _sp(scope_id: str) -> UUID:
+    """Safety policy UUID."""
+    return uuid5(_SP_NS, scope_id)
+
+
+def _mem(slug: str) -> UUID:
+    """Memory policy UUID."""
+    return uuid5(_MEM_NS, slug)
+
+
+def _mod(slug: str) -> UUID:
+    """Model policy UUID."""
+    return uuid5(_MOD_NS, slug)
+
+
+def _oc(slug: str) -> UUID:
+    """Output contract UUID."""
+    return uuid5(_OC_NS, slug)
 
 
 def get_seed_profile_blueprints() -> list[dict[str, Any]]:
@@ -44,6 +75,14 @@ def get_seed_profile_blueprints() -> list[dict[str, Any]]:
             "version": "1.0.0",
             "role": "coordinator",
             "system_prompt_ref": "profile.planning",
+
+            # Architecture references
+            "capability_bundle_ids": [_cb("bundle.planner")],
+            "model_policy_id": _mod("model-policy.high-quality"),
+            "memory_policy_id": _mem("memory-policy.standard-chat"),
+            "safety_policy_id": _sp("safety-policy.standard-safety"),
+            "output_contract_id": _oc("output-contract.streaming-text"),
+
             "is_system": True,
             "is_template": True,
             "status": "active",
@@ -92,6 +131,14 @@ def get_seed_profile_blueprints() -> list[dict[str, Any]]:
             "version": "1.0.0",
             "role": "specialist",
             "system_prompt_ref": "profile.research",
+
+            # Architecture references
+            "capability_bundle_ids": [_cb("bundle.research-assistant")],
+            "model_policy_id": _mod("model-policy.high-quality"),
+            "memory_policy_id": _mem("memory-policy.research-mode"),
+            "safety_policy_id": _sp("safety-policy.standard-safety"),
+            "output_contract_id": _oc("output-contract.citation-required"),
+
             "is_system": True,
             "is_template": True,
             "status": "active",
@@ -141,6 +188,17 @@ def get_seed_profile_blueprints() -> list[dict[str, Any]]:
             "version": "1.0.0",
             "role": "specialist",
             "system_prompt_ref": "profile.deep-research",
+
+            # Architecture references
+            "capability_bundle_ids": [
+                _cb("bundle.research-assistant"),
+                _cb("bundle.deep-retrieval"),
+            ],
+            "model_policy_id": _mod("model-policy.high-quality"),
+            "memory_policy_id": _mem("memory-policy.full-context"),
+            "safety_policy_id": _sp("safety-policy.standard-safety"),
+            "output_contract_id": _oc("output-contract.citation-required"),
+
             "is_system": True,
             "is_template": True,
             "status": "active",
@@ -189,6 +247,14 @@ def get_seed_profile_blueprints() -> list[dict[str, Any]]:
             "version": "1.0.0",
             "role": "specialist",
             "system_prompt_ref": "profile.exploratory",
+
+            # Architecture references
+            "capability_bundle_ids": [_cb("bundle.knowledge-worker")],
+            "model_policy_id": _mod("model-policy.high-quality"),
+            "memory_policy_id": _mem("memory-policy.research-mode"),
+            "safety_policy_id": _sp("safety-policy.permissive-safety"),
+            "output_contract_id": _oc("output-contract.streaming-text"),
+
             "is_system": True,
             "is_template": True,
             "status": "active",
@@ -237,6 +303,14 @@ def get_seed_profile_blueprints() -> list[dict[str, Any]]:
             "version": "1.0.0",
             "role": "worker",
             "system_prompt_ref": "profile.summarization",
+
+            # Architecture references
+            "capability_bundle_ids": [_cb("bundle.retrieval-only")],
+            "model_policy_id": _mod("model-policy.cost-optimized"),
+            "memory_policy_id": _mem("memory-policy.short-context"),
+            "safety_policy_id": _sp("safety-policy.standard-safety"),
+            "output_contract_id": _oc("output-contract.streaming-text"),
+
             "is_system": True,
             "is_template": True,
             "status": "active",
@@ -286,6 +360,17 @@ def get_seed_profile_blueprints() -> list[dict[str, Any]]:
             "version": "1.0.0",
             "role": "reviewer",
             "system_prompt_ref": "profile.verification",
+
+            # Architecture references
+            "capability_bundle_ids": [
+                _cb("bundle.read-only-tools"),
+                _cb("bundle.semantic-search"),
+            ],
+            "model_policy_id": _mod("model-policy.high-quality"),
+            "memory_policy_id": _mem("memory-policy.research-mode"),
+            "safety_policy_id": _sp("safety-policy.strict-safety"),
+            "output_contract_id": _oc("output-contract.citation-required"),
+
             "is_system": True,
             "is_template": True,
             "status": "active",
@@ -334,6 +419,14 @@ def get_seed_profile_blueprints() -> list[dict[str, Any]]:
             "version": "1.0.0",
             "role": "assistant",
             "system_prompt_ref": "profile.general-task",
+
+            # Architecture references
+            "capability_bundle_ids": [_cb("bundle.full-assistant")],
+            "model_policy_id": _mod("model-policy.permissive"),
+            "memory_policy_id": _mem("memory-policy.standard-chat"),
+            "safety_policy_id": _sp("safety-policy.standard-safety"),
+            "output_contract_id": _oc("output-contract.streaming-text"),
+
             "is_system": True,
             "is_template": True,
             "status": "active",
@@ -383,6 +476,17 @@ def get_seed_profile_blueprints() -> list[dict[str, Any]]:
             "version": "1.0.0",
             "role": "specialist",
             "system_prompt_ref": "profile.internet-research",
+
+            # Architecture references
+            "capability_bundle_ids": [
+                _cb("bundle.web-research-tools"),
+                _cb("bundle.semantic-search"),
+            ],
+            "model_policy_id": _mod("model-policy.high-quality"),
+            "memory_policy_id": _mem("memory-policy.research-mode"),
+            "safety_policy_id": _sp("safety-policy.standard-safety"),
+            "output_contract_id": _oc("output-contract.citation-required"),
+
             "is_system": True,
             "is_template": True,
             "status": "active",
@@ -432,6 +536,14 @@ def get_seed_profile_blueprints() -> list[dict[str, Any]]:
             "version": "1.0.0",
             "role": "reviewer",
             "system_prompt_ref": "profile.critic-reviewer",
+
+            # Architecture references
+            "capability_bundle_ids": [_cb("bundle.read-only-tools")],
+            "model_policy_id": _mod("model-policy.high-quality"),
+            "memory_policy_id": _mem("memory-policy.standard-chat"),
+            "safety_policy_id": _sp("safety-policy.standard-safety"),
+            "output_contract_id": _oc("output-contract.streaming-text"),
+
             "is_system": True,
             "is_template": True,
             "status": "active",
@@ -481,6 +593,14 @@ def get_seed_profile_blueprints() -> list[dict[str, Any]]:
             "version": "1.0.0",
             "role": "coordinator",
             "system_prompt_ref": "profile.router-dispatcher",
+
+            # Architecture references
+            "capability_bundle_ids": [_cb("bundle.coordinator")],
+            "model_policy_id": _mod("model-policy.cost-optimized"),
+            "memory_policy_id": _mem("memory-policy.coordination-memory"),
+            "safety_policy_id": _sp("safety-policy.trust-boundary-enforced"),
+            "output_contract_id": _oc("output-contract.structured-json"),
+
             "is_system": True,
             "is_template": True,
             "status": "active",
@@ -530,6 +650,14 @@ def get_seed_profile_blueprints() -> list[dict[str, Any]]:
             "version": "1.0.0",
             "role": "worker",
             "system_prompt_ref": "profile.executor",
+
+            # Architecture references
+            "capability_bundle_ids": [_cb("bundle.tool-executor")],
+            "model_policy_id": _mod("model-policy.cost-optimized"),
+            "memory_policy_id": _mem("memory-policy.short-context"),
+            "safety_policy_id": _sp("safety-policy.standard-safety"),
+            "output_contract_id": _oc("output-contract.batch-processing"),
+
             "is_system": True,
             "is_template": True,
             "status": "active",
@@ -569,6 +697,6 @@ async def seed_example_profiles(service: ProfileSeeder, workspace_id: UUID | Non
     """Seed deterministic profile definitions through the profile service."""
 
     created_profiles: list[dict[str, Any]] = []
-    for blueprint in get_seed_profile_blueprints(workspace_id):
+    for blueprint in get_seed_profile_blueprints():
         created_profiles.append(await service.create_profile(blueprint))
     return created_profiles

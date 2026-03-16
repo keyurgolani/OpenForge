@@ -35,7 +35,7 @@ def get_workflow_service(db=Depends(get_db)) -> WorkflowService:
     return WorkflowService(db)
 
 
-@router.get("/", response_model=WorkflowListResponse)
+@router.get("", response_model=WorkflowListResponse)
 async def list_workflows(
     skip: int = 0,
     limit: int = 100,
@@ -97,7 +97,7 @@ async def get_workflow(workflow_id: UUID, service: WorkflowService = Depends(get
     return workflow
 
 
-@router.post("/", response_model=WorkflowResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=WorkflowResponse, status_code=status.HTTP_201_CREATED)
 async def create_workflow(body: WorkflowCreate, service: WorkflowService = Depends(get_workflow_service)):
     return await service.create_workflow(body.model_dump())
 

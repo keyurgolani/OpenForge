@@ -1,13 +1,16 @@
 import { useState } from 'react'
-import { Activity, ArrowRight, Filter, Heart, Layers3, Pause, Play, Rocket, Shield } from 'lucide-react'
-import { Link, useParams } from 'react-router-dom'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Activity, ArrowRight, Filter, Heart, Layers3, Pause, Play, Rocket, Shield, Sparkles } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
 
 import EmptyState from '@/components/shared/EmptyState'
 import ErrorState from '@/components/shared/ErrorState'
 import LoadingState from '@/components/shared/LoadingState'
+import MutationButton from '@/components/shared/MutationButton'
 import PageHeader from '@/components/shared/PageHeader'
 import StatusBadge from '@/components/shared/StatusBadge'
 import { useLaunchMission, useMissionsQuery, usePauseMission, useResumeMission } from '@/features/missions'
+import { createMission } from '@/lib/api'
 import { formatRelativeTime } from '@/lib/formatters'
 import { EMPTY_STATE_COPY, getDescription, getLabel } from '@/lib/productVocabulary'
 import { missionsRoute } from '@/lib/routes'
@@ -16,19 +19,48 @@ import type { MissionStatus } from '@/types/missions'
 type SystemFilter = 'all' | 'system' | 'workspace'
 type TemplateFilter = 'all' | 'template' | 'custom'
 
+type MissionComposerState = {
+  name: string
+  description: string
+  autonomy_mode: 'manual' | 'supervised' | 'autonomous'
+}
+
+const EMPTY_COMPOSER: MissionComposerState = {
+  name: '',
+  description: '',
+  autonomy_mode: 'manual',
+}
+
 export default function MissionsPage() {
-  const { workspaceId = '' } = useParams<{ workspaceId: string }>()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [statusFilter, setStatusFilter] = useState<'all' | MissionStatus>('all')
   const [modeFilter, setModeFilter] = useState<string>('all')
   const [systemFilter, setSystemFilter] = useState<SystemFilter>('all')
   const [templateFilter, setTemplateFilter] = useState<TemplateFilter>('all')
+  const [composer, setComposer] = useState<MissionComposerState>(EMPTY_COMPOSER)
+  const [isComposerOpen, setIsComposerOpen] = useState(false)
   const { data, isLoading, error } = useMissionsQuery({
-    workspaceId,
     status: statusFilter === 'all' ? undefined : statusFilter,
   })
   const launchMutation = useLaunchMission()
   const pauseMutation = usePauseMission()
   const resumeMutation = useResumeMission()
+
+  const createMut = useMutation({
+    mutationFn: async () => createMission({
+      name: composer.name,
+      description: composer.description || null,
+      autonomy_mode: composer.autonomy_mode,
+      status: 'draft',
+    }),
+    onSuccess: async (createdMission) => {
+      setComposer(EMPTY_COMPOSER)
+      setIsComposerOpen(false)
+      await queryClient.invalidateQueries({ queryKey: ['missions'] })
+      navigate(missionsRoute(createdMission.id))
+    },
+  })
 
   if (isLoading) {
     return <LoadingState label="Loading missions..." />
@@ -61,8 +93,70 @@ export default function MissionsPage() {
       <PageHeader
         title={getLabel('mission', true)}
         description={getDescription('mission')}
-        actions={<span className="text-sm text-muted-foreground/90">{data?.total ?? 0} visible</span>}
+        actions={(
+          <MutationButton
+            isPending={false}
+            variant="secondary"
+            icon={<Sparkles className="h-4 w-4" />}
+            onClick={() => setIsComposerOpen((current) => !current)}
+          >
+            {isComposerOpen ? 'Close Builder' : 'New Mission'}
+          </MutationButton>
+        )}
       />
+
+      {isComposerOpen ? (
+        <section className="rounded-3xl border border-border/60 bg-card/35 p-5">
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">Mission Builder</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Create a new mission definition. You can configure workflows, triggers, and policies on the detail page.
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="space-y-2 text-sm">
+              <span className="text-muted-foreground">Name</span>
+              <input
+                className="input w-full"
+                value={composer.name}
+                onChange={(event) => setComposer((current) => ({ ...current, name: event.target.value }))}
+              />
+            </label>
+            <label className="space-y-2 text-sm">
+              <span className="text-muted-foreground">Autonomy Mode</span>
+              <select
+                className="input w-full"
+                value={composer.autonomy_mode}
+                onChange={(event) => setComposer((current) => ({ ...current, autonomy_mode: event.target.value as MissionComposerState['autonomy_mode'] }))}
+              >
+                <option value="manual">Manual</option>
+                <option value="supervised">Supervised</option>
+                <option value="autonomous">Autonomous</option>
+              </select>
+            </label>
+            <label className="space-y-2 text-sm md:col-span-2">
+              <span className="text-muted-foreground">Description</span>
+              <textarea
+                className="input min-h-28 w-full py-3"
+                value={composer.description}
+                onChange={(event) => setComposer((current) => ({ ...current, description: event.target.value }))}
+              />
+            </label>
+          </div>
+          <div className="mt-4 flex justify-end">
+            <MutationButton
+              isPending={createMut.isPending}
+              isSuccess={createMut.isSuccess}
+              isError={createMut.isError}
+              onClick={() => createMut.mutate()}
+            >
+              Create Draft Mission
+            </MutationButton>
+          </div>
+        </section>
+      ) : null}
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_320px]">
         <div className="rounded-2xl border border-border/60 bg-card/30 p-5">
@@ -217,7 +311,7 @@ export default function MissionsPage() {
                   ) : null}
                 </div>
                 <Link
-                  to={missionsRoute(workspaceId, mission.id)}
+                  to={missionsRoute(mission.id)}
                   className="inline-flex h-10 items-center gap-2 rounded-xl border border-border/60 bg-background/50 px-3 text-sm text-foreground transition hover:border-accent/35 hover:text-accent"
                 >
                   View Details

@@ -255,15 +255,6 @@ class WorkflowService:
     ) -> tuple[list[dict[str, Any]], int]:
         query = select(WorkflowDefinitionModel).order_by(WorkflowDefinitionModel.updated_at.desc())
         count_query = select(func.count()).select_from(WorkflowDefinitionModel)
-        for filter_query in (query, count_query):
-            if workspace_id is not None:
-                filter_query = filter_query.where(WorkflowDefinitionModel.workspace_id == workspace_id)
-            if status is not None:
-                filter_query = filter_query.where(WorkflowDefinitionModel.status == status)
-            if is_system is not None:
-                filter_query = filter_query.where(WorkflowDefinitionModel.is_system == is_system)
-            if is_template is not None:
-                filter_query = filter_query.where(WorkflowDefinitionModel.is_template == is_template)
         if workspace_id is not None:
             query = query.where(WorkflowDefinitionModel.workspace_id == workspace_id)
             count_query = count_query.where(WorkflowDefinitionModel.workspace_id == workspace_id)
@@ -529,6 +520,19 @@ class WorkflowService:
             return None
         return workflow
 
+    async def _unique_slug(self, base_slug: str) -> str:
+        """Return a slug guaranteed to be unique by appending a numeric suffix."""
+        candidate = base_slug
+        suffix = 0
+        while True:
+            exists = await self.db.scalar(
+                select(WorkflowDefinitionModel.id).where(WorkflowDefinitionModel.slug == candidate).limit(1)
+            )
+            if exists is None:
+                return candidate
+            suffix += 1
+            candidate = f"{base_slug}-{suffix}"
+
     async def clone_template(self, workflow_id: UUID, clone_data: dict[str, Any]) -> dict[str, Any] | None:
         template = await self.get_template(workflow_id)
         if template is None or template.get("current_version") is None:
@@ -553,10 +557,13 @@ class WorkflowService:
                 }
             )
 
+        desired_slug = clone_data.get("slug") or f"{template['slug']}-clone"
+        unique_slug = await self._unique_slug(desired_slug)
+
         payload = {
             "workspace_id": clone_data["workspace_id"],
             "name": clone_data.get("name") or template["name"],
-            "slug": clone_data.get("slug") or f"{template['slug']}-clone",
+            "slug": unique_slug,
             "description": template.get("description"),
             "status": template.get("status", "draft"),
             "is_system": False,

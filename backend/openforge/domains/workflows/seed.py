@@ -6,7 +6,6 @@ from typing import Any, Protocol
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 SEED_NAMESPACE = uuid5(NAMESPACE_URL, "https://openforge.dev/phase10/workflows")
-DEFAULT_SEED_WORKSPACE_ID = uuid5(SEED_NAMESPACE, "workspace")
 
 
 class WorkflowSeeder(Protocol):
@@ -56,7 +55,7 @@ def _catalog_template_metadata(
 def get_seed_workflow_blueprints(workspace_id: UUID | None = None) -> list[dict[str, Any]]:
     """Return deterministic workflow blueprints for dev and test environments."""
 
-    resolved_workspace_id = workspace_id or DEFAULT_SEED_WORKSPACE_ID
+    resolved_workspace_id = workspace_id or None
 
     def _decorate_blueprints(blueprints: list[dict[str, Any]]) -> list[dict[str, Any]]:
         decorated: list[dict[str, Any]] = []

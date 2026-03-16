@@ -5,17 +5,14 @@ import { getArtifactLinkHref, getArtifactLinkTargetLabel } from '@/features/arti
 import type { ArtifactLineage, ArtifactLink } from '@/types/artifacts'
 
 interface ArtifactLineagePanelProps {
-  workspaceId: string
   lineage?: ArtifactLineage | null
 }
 
 function LineageGroup({
-  workspaceId,
   title,
   emptyLabel,
   items,
 }: {
-  workspaceId: string
   title: string
   emptyLabel: string
   items: ArtifactLink[]
@@ -30,7 +27,7 @@ function LineageGroup({
       ) : (
         <div className="space-y-2">
           {items.map((item) => {
-            const href = getArtifactLinkHref(workspaceId, item)
+            const href = getArtifactLinkHref(item)
             const content = (
               <div className="rounded-xl border border-border/50 bg-background/35 px-3 py-3">
                 <div className="flex items-center justify-between gap-3">
@@ -62,7 +59,7 @@ function LineageGroup({
   )
 }
 
-export function ArtifactLineagePanel({ workspaceId, lineage }: ArtifactLineagePanelProps) {
+export function ArtifactLineagePanel({ lineage }: ArtifactLineagePanelProps) {
   return (
     <Card glass>
       <CardHeader>
@@ -71,19 +68,16 @@ export function ArtifactLineagePanel({ workspaceId, lineage }: ArtifactLineagePa
       </CardHeader>
       <CardContent className="space-y-5">
         <LineageGroup
-          workspaceId={workspaceId}
           title="Sources"
           emptyLabel="No source links were attached."
           items={lineage?.sources ?? []}
         />
         <LineageGroup
-          workspaceId={workspaceId}
           title="Derivations"
           emptyLabel="No derivation links were attached."
           items={lineage?.derivations ?? []}
         />
         <LineageGroup
-          workspaceId={workspaceId}
           title="Related Objects"
           emptyLabel="No related objects were attached."
           items={lineage?.related ?? []}

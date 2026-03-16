@@ -55,8 +55,8 @@ export function PrimaryNavCollapsed({
 
   return (
     <div className={cn('flex flex-col h-full gap-3', className)}>
-      {/* Top half */}
-      <div className="h-1/2 flex flex-col items-center py-3 gap-1 glass-card" style={{ boxShadow: 'none' }}>
+      {/* Top section */}
+      <div className={cn(isAgnosticPage ? 'flex-1' : 'h-1/2', 'flex flex-col items-center py-3 gap-1 glass-card')} style={{ boxShadow: 'none' }}>
         {isAgnosticPage ? (
           <button
             type="button"
@@ -107,10 +107,8 @@ export function PrimaryNavCollapsed({
         )}
       </div>
 
-      {/* Bottom half: workspace-agnostic */}
+      {/* Bottom section: global and workspace-scoped */}
       <div className="h-1/2 flex flex-col items-center py-3 gap-1 glass-card" style={{ boxShadow: 'none' }}>
-        {!isAgnosticPage && (
-          <>
             <NavIcon
               to={routes.profiles}
               title="Profiles"
@@ -147,8 +145,6 @@ export function PrimaryNavCollapsed({
               isActive={isActive('/catalog')}
               icon={<BookOpen className="w-4 h-4" />}
             />
-          </>
-        )}
 
         <div className="flex-1" />
 

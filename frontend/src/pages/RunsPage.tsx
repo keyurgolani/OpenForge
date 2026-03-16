@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, ArrowRight, Boxes, Clock3, Filter, PauseCircle } from 'lucide-react'
 
@@ -16,11 +15,9 @@ import type { ExecutionStatus } from '@/types/common'
 import type { RunType } from '@/types/runs'
 
 export default function RunsPage() {
-  const { workspaceId = '' } = useParams<{ workspaceId: string }>()
   const [statusFilter, setStatusFilter] = useState<'all' | ExecutionStatus>('all')
   const [runTypeFilter, setRunTypeFilter] = useState<'all' | RunType>('all')
   const { data, isLoading, error } = useRunsQuery({
-    workspaceId,
     status: statusFilter === 'all' ? undefined : statusFilter,
     runType: runTypeFilter === 'all' ? undefined : runTypeFilter,
   })
@@ -130,7 +127,7 @@ export default function RunsPage() {
                 <tr key={run.id} className="text-sm text-foreground">
                   <td className="px-4 py-3">
                     <div className="min-w-0">
-                      <Link className="font-medium transition hover:text-accent" to={runsRoute(workspaceId, run.id)}>
+                      <Link className="font-medium transition hover:text-accent" to={runsRoute(run.id)}>
                         {truncateText(run.id, 18)}
                       </Link>
                       <p className="mt-1 text-xs text-muted-foreground/80">Updated {formatRelativeTime(run.updated_at ?? run.started_at)}</p>
@@ -140,7 +137,7 @@ export default function RunsPage() {
                   <td className="px-4 py-3"><StatusBadge status={run.status} /></td>
                   <td className="px-4 py-3 text-muted-foreground/90">
                     {run.workflow_id ? (
-                      <Link className="transition hover:text-accent" to={workflowsRoute(workspaceId, run.workflow_id)}>
+                      <Link className="transition hover:text-accent" to={workflowsRoute(run.workflow_id)}>
                         {truncateText(run.workflow_id, 14)}
                       </Link>
                     ) : 'No workflow'}
@@ -150,7 +147,7 @@ export default function RunsPage() {
                   <td className="px-4 py-3 text-muted-foreground/90">
                     <div className="flex items-center justify-between gap-3">
                       <span>{run.completed_at ? formatDateTime(run.completed_at) : 'In progress'}</span>
-                      <Link className="inline-flex items-center gap-1 text-xs text-accent transition hover:text-accent/80" to={runsRoute(workspaceId, run.id)}>
+                      <Link className="inline-flex items-center gap-1 text-xs text-accent transition hover:text-accent/80" to={runsRoute(run.id)}>
                         Inspect
                         <ArrowRight className="h-3.5 w-3.5" />
                       </Link>

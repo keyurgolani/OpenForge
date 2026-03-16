@@ -8,12 +8,12 @@ import {
 import type { MissionDefinition } from '@/types/missions'
 
 interface MissionsResponse { missions: MissionDefinition[]; total: number }
-interface MissionQueryOptions { workspaceId?: string; limit?: number; status?: string }
+interface MissionQueryOptions { limit?: number; status?: string }
 
-export function useMissionsQuery({ workspaceId, limit = 100, status }: MissionQueryOptions = {}) {
+export function useMissionsQuery({ limit = 100, status }: MissionQueryOptions = {}) {
   return useQuery<MissionsResponse>({
-    queryKey: ['missions', workspaceId ?? 'all', limit, status ?? 'all'],
-    queryFn: () => listMissions({ workspace_id: workspaceId, limit, status }),
+    queryKey: ['missions', limit, status ?? 'all'],
+    queryFn: () => listMissions({ limit, status }),
   })
 }
 

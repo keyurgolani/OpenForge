@@ -64,12 +64,18 @@ export interface TimelineAttachmentsProcessed {
     attachments: AttachmentProcessed[]
 }
 
+export interface TimelineIntermediateResponse {
+    type: 'intermediate_response'
+    content: string
+}
+
 export type TimelineEntry =
     | TimelineModelSelection
     | TimelineThinking
     | TimelineToolCall
     | TimelinePromptOptimized
     | TimelineAttachmentsProcessed
+    | TimelineIntermediateResponse
 
 interface StreamSnapshot {
     content?: string
@@ -130,6 +136,12 @@ function applyEventToTimeline(timeline: TimelineEntry[], eventType: string, even
             break
         }
         case 'agent_tool_call_start': {
+            // Mark any open thinking block as done
+            const lastBeforeTool = updated[updated.length - 1]
+            if (lastBeforeTool?.type === 'thinking' && !lastBeforeTool.done) {
+                const durationMs = lastBeforeTool.startedAt != null ? Date.now() - lastBeforeTool.startedAt : undefined
+                updated[updated.length - 1] = { ...lastBeforeTool, done: true, durationMs }
+            }
             const d = eventData as { call_id: string; tool_name: string; arguments: Record<string, unknown> }
             updated.push({
                 type: 'tool_call',
@@ -210,6 +222,13 @@ function applyEventToTimeline(timeline: TimelineEntry[], eventType: string, even
         case 'agent_attachments_processed': {
             const d = eventData as AttachmentProcessed[]
             updated.push({ type: 'attachments_processed', attachments: Array.isArray(d) ? d : [] })
+            break
+        }
+        case 'agent_intermediate_response': {
+            const d = eventData as { content: string }
+            if (d.content) {
+                updated.push({ type: 'intermediate_response', content: d.content })
+            }
             break
         }
     }
@@ -438,6 +457,21 @@ export function useStreamingChat(conversationId: string | null) {
                 if (m.conversation_id !== conversationId) return
                 setTimeline(prev => {
                     const updated = applyNestedEvent(prev, m.data.scope_path, m.data.event)
+                    timelineRef.current = updated
+                    return updated
+                })
+            }),
+            on('agent_intermediate_response', (msg) => {
+                const m = msg as { conversation_id: string; data: { content: string } }
+                if (m.conversation_id !== conversationId) return
+                // The intermediate content is now in the timeline — clear it from
+                // the streaming response so the final response block only shows
+                // the actual final-iteration content.
+                tokenQueueRef.current = ''
+                displayedContentRef.current = ''
+                setStreamingContent('')
+                setTimeline(prev => {
+                    const updated = applyEventToTimeline(prev, 'agent_intermediate_response', m.data)
                     timelineRef.current = updated
                     return updated
                 })

@@ -100,20 +100,82 @@ export function parseChromeHTML(html: string): ParsedBookmark[] {
 
 export function parseKarakeepJSON(raw: string): ParsedBookmark[] {
     const data = JSON.parse(raw)
-    const items: unknown[] = Array.isArray(data) ? data : (data.bookmarks ?? data.items ?? [])
+
+    // Resolve the item list from various Karakeep export shapes:
+    //   - root-level array
+    //   - { bookmarks: [...] }
+    //   - { items: [...] }
+    //   - { data: [...] }             (Karakeep v2 flat)
+    //   - { data: { bookmarks: [...] } }
+    //   - { data: { items: [...] } }
+    let items: unknown[]
+    if (Array.isArray(data)) {
+        items = data
+    } else if (Array.isArray(data.bookmarks)) {
+        items = data.bookmarks
+    } else if (Array.isArray(data.items)) {
+        items = data.items
+    } else if (Array.isArray(data.data)) {
+        items = data.data
+    } else if (data.data && typeof data.data === 'object') {
+        items = Array.isArray(data.data.bookmarks)
+            ? data.data.bookmarks
+            : Array.isArray(data.data.items)
+                ? data.data.items
+                : []
+    } else {
+        items = []
+    }
+
+    // Extract the URL from several possible locations within each item
+    const extractUrl = (item: any): string | undefined => {
+        if (typeof item.url === 'string' && item.url) return item.url
+        if (typeof item.link === 'string' && item.link) return item.link
+        if (item.content && typeof item.content === 'object') {
+            if (typeof item.content.url === 'string' && item.content.url) return item.content.url
+            if (typeof item.content.link === 'string' && item.content.link) return item.content.link
+        }
+        return undefined
+    }
+
+    // Extract tags handling both string arrays and object arrays (e.g. {name: "tag"})
+    const extractTags = (item: any): string[] => {
+        const rawTags = item.tags ?? item.labels ?? item.content?.tags
+        if (!Array.isArray(rawTags)) return []
+        return rawTags.map((t: any) => (typeof t === 'string' ? t : t?.name ?? String(t)))
+    }
+
+    // Coerce a raw created_at value (may be number, string, or Date) to ISO string
+    const normalizeDate = (val: unknown): string | undefined => {
+        if (val == null) return undefined
+        if (typeof val === 'string' && val) return val
+        if (typeof val === 'number' && val > 0) {
+            const ms = val > 1e12 ? val : val * 1000
+            try { return new Date(ms).toISOString() } catch { return undefined }
+        }
+        return String(val) || undefined
+    }
+
+    // Coerce to string or undefined
+    const toStr = (val: unknown): string | undefined => {
+        if (val == null) return undefined
+        const s = String(val)
+        return s || undefined
+    }
 
     return items
-        .filter((item: any) => item && typeof item === 'object' && item.url)
-        .map((item: any) => ({
-            url: String(item.url),
-            title: String(item.title ?? item.name ?? item.url),
-            tags: Array.isArray(item.tags)
-                ? item.tags.map((t: any) => (typeof t === 'string' ? t : t?.name ?? String(t)))
-                : [],
-            description: item.description ? String(item.description) : undefined,
-            created_at: item.created_at ?? item.createdAt ?? item.date ?? undefined,
-            note: item.note ?? item.notes ?? undefined,
-        }))
+        .filter((item: any) => item && typeof item === 'object' && extractUrl(item))
+        .map((item: any) => {
+            const url = extractUrl(item)!
+            return {
+                url,
+                title: String(item.title ?? item.name ?? item.content?.title ?? url),
+                tags: extractTags(item),
+                description: toStr(item.description ?? item.summary ?? item.content?.description),
+                created_at: normalizeDate(item.created_at ?? item.createdAt ?? item.date ?? item.content?.created_at),
+                note: toStr(item.note ?? item.notes ?? item.content?.note),
+            }
+        })
 }
 
 export function parseRaindropCSV(csv: string): ParsedBookmark[] {

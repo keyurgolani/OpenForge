@@ -329,6 +329,8 @@ export type SettingsSection =
   | 'models'
   | 'prompts'
   | 'policies'
+  | 'tools'
+  | 'bundles'
   | 'approvals'
   | 'pipelines'
   | 'skills'
@@ -351,6 +353,8 @@ export const SETTINGS_LABELS: Record<SettingsSection, string> = {
   models: 'AI Models',
   prompts: 'Prompts',
   policies: 'Policies',
+  tools: 'Tools',
+  bundles: 'Bundles',
   approvals: 'Approvals',
   pipelines: 'Pipelines',
   skills: 'Skills',
@@ -365,6 +369,8 @@ export const SETTINGS_DESCRIPTIONS: Record<SettingsSection, string> = {
   models: 'Configure AI model providers and model assignments.',
   prompts: 'Manage prompt templates for profiles.',
   policies: 'Define execution policies and guardrails.',
+  tools: 'View and manage native agent tools and permissions.',
+  bundles: 'Manage capability bundles that define tool access, retrieval, and skill configurations for profiles.',
   approvals: 'Review and approve pending human-in-the-loop items.',
   pipelines: 'Configure data processing pipelines.',
   skills: 'Manage custom skills and capabilities.',
@@ -379,7 +385,7 @@ export const SETTINGS_MODEL_LABELS: Record<SettingsModelSubsection, string> = {
   reasoning: 'Reasoning',
   vision: 'Vision',
   embedding: 'Embedding',
-  audio: 'Audio',
+  audio: 'Speech',
   clip: 'CLIP',
   pdf: 'PDF',
 };
