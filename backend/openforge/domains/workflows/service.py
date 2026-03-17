@@ -25,8 +25,8 @@ class WorkflowService:
 
     def _serialize_node(self, instance: WorkflowNodeModel) -> dict[str, Any]:
         return {
-            "id": instance.id,
-            "workflow_version_id": instance.workflow_version_id,
+            "id": str(instance.id),
+            "workflow_version_id": str(instance.workflow_version_id),
             "node_key": instance.node_key,
             "node_type": instance.node_type,
             "label": instance.label,
@@ -80,10 +80,10 @@ class WorkflowService:
 
     def _serialize_edge(self, instance: WorkflowEdgeModel) -> dict[str, Any]:
         return {
-            "id": instance.id,
-            "workflow_version_id": instance.workflow_version_id,
-            "from_node_id": instance.from_node_id,
-            "to_node_id": instance.to_node_id,
+            "id": str(instance.id),
+            "workflow_version_id": str(instance.workflow_version_id),
+            "from_node_id": str(instance.from_node_id),
+            "to_node_id": str(instance.to_node_id),
             "edge_type": instance.edge_type,
             "condition": instance.condition_json or {},
             "priority": instance.priority,
@@ -102,13 +102,14 @@ class WorkflowService:
     ) -> dict[str, Any]:
         node_list = list(nodes or [])
         edge_list = list(edges or [])
-        entry_node = next((node for node in node_list if node["id"] == instance.entry_node_id), None)
+        entry_node_id_str = str(instance.entry_node_id) if instance.entry_node_id else None
+        entry_node = next((node for node in node_list if node["id"] == entry_node_id_str), None)
         return {
-            "id": instance.id,
-            "workflow_id": instance.workflow_id,
+            "id": str(instance.id),
+            "workflow_id": str(instance.workflow_id),
             "version_number": instance.version_number,
             "state_schema": instance.state_schema or {},
-            "entry_node_id": instance.entry_node_id,
+            "entry_node_id": entry_node_id_str,
             "entry_node": entry_node,
             "default_input_schema": instance.default_input_schema or {},
             "default_output_schema": instance.default_output_schema or {},
@@ -221,13 +222,13 @@ class WorkflowService:
     async def _build_workflow_response(self, definition: WorkflowDefinitionModel) -> dict[str, Any]:
         current_version = await self._load_version(definition.current_version_id) if definition.current_version_id else None
         return {
-            "id": definition.id,
-            "workspace_id": definition.workspace_id,
+            "id": str(definition.id),
+            "workspace_id": str(definition.workspace_id) if definition.workspace_id else None,
             "name": definition.name,
             "slug": definition.slug,
             "description": definition.description,
             "status": definition.status,
-            "current_version_id": definition.current_version_id,
+            "current_version_id": str(definition.current_version_id) if definition.current_version_id else None,
             "is_system": getattr(definition, "is_system", False),
             "is_template": getattr(definition, "is_template", False),
             "template_kind": getattr(definition, "template_kind", None),
@@ -240,8 +241,8 @@ class WorkflowService:
             "current_version": current_version,
             "created_at": getattr(definition, "created_at", None),
             "updated_at": getattr(definition, "updated_at", None),
-            "created_by": getattr(definition, "created_by", None),
-            "updated_by": getattr(definition, "updated_by", None),
+            "created_by": str(definition.created_by) if getattr(definition, "created_by", None) else None,
+            "updated_by": str(definition.updated_by) if getattr(definition, "updated_by", None) else None,
         }
 
     async def list_workflows(
