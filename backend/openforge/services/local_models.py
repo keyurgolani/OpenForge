@@ -189,7 +189,12 @@ def get_local_models_with_status(capability_type: str | None = None) -> list[dic
 # ── Seed / ensure system provider ───────────────────────────────────────────
 
 async def ensure_local_provider(db) -> None:
-    """Ensure the 'openforge-local' system provider exists in the database."""
+    """Ensure the 'openforge-local' system provider exists in the database.
+
+    Also fixes default-provider state: the local provider must never be
+    the system default for chat, and if no non-local provider holds the
+    default flag, the first available one is promoted.
+    """
     from sqlalchemy import select
     from openforge.db.models import LLMProvider
 
@@ -205,6 +210,7 @@ async def ensure_local_provider(db) -> None:
             display_name="OpenForge Local",
             endpoint_id="local",
             is_system=True,
+            is_system_default=False,
             enabled_models=[],
         )
         db.add(provider)
@@ -212,6 +218,26 @@ async def ensure_local_provider(db) -> None:
     else:
         if not provider.is_system:
             provider.is_system = True
-            logger.info("Marked existing openforge-local provider as is_system=True")
+        # Local provider must never be the chat default
+        if provider.is_system_default:
+            provider.is_system_default = False
+            logger.info("Cleared is_system_default from openforge-local provider")
+
+    await db.flush()
+
+    # If no non-local provider is the system default, promote the first one
+    has_default = await db.scalar(
+        select(LLMProvider.id).where(
+            LLMProvider.is_system_default == True,
+            LLMProvider.is_system == False,
+        ).limit(1)
+    )
+    if has_default is None:
+        first_non_local = (await db.execute(
+            select(LLMProvider).where(LLMProvider.is_system == False).limit(1)
+        )).scalar_one_or_none()
+        if first_non_local is not None:
+            first_non_local.is_system_default = True
+            logger.info("Promoted '%s' as system default LLM provider", first_non_local.display_name)
 
     await db.commit()
