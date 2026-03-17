@@ -72,7 +72,7 @@ class MissionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    workspace_id: UUID
+    workspace_id: Optional[UUID]
     name: str
     slug: str
     description: Optional[str]
