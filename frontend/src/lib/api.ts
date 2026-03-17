@@ -83,6 +83,13 @@ export const downloadMarkerModel = (): Promise<any> =>
 export const deleteMarkerModel = (): Promise<any> =>
     api.delete('/models/marker').then(r => r.data)
 
+// ── TTS Models ──
+export const listTTSModels = (): Promise<any> => api.get('/models/tts').then(r => r.data)
+export const downloadTTSModel = (modelId: string): Promise<any> => api.post('/models/tts/download', { model_id: modelId }).then(r => r.data)
+export const deleteTTSModel = (modelId: string): Promise<any> => api.delete(`/models/tts/${modelId}`).then(r => r.data)
+export const getTTSDefault = (): Promise<any> => api.get('/models/tts/default').then(r => r.data)
+export const setTTSDefault = (modelId: string): Promise<any> => api.put('/models/tts/default', { model_id: modelId }).then(r => r.data)
+
 // ── Workspaces ──
 export const listWorkspaces = (): Promise<any> => api.get('/workspaces').then(r => r.data)
 export const createWorkspace = (data: object): Promise<any> => api.post('/workspaces', data).then(r => r.data)

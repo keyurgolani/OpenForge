@@ -28,6 +28,7 @@ def _to_response(provider: LLMProvider) -> LLMProviderResponse:
         default_model=provider.default_model,
         enabled_models=provider.enabled_models,
         is_system_default=provider.is_system_default,
+        is_system=getattr(provider, "is_system", False),
         has_api_key=provider.api_key_enc is not None,
         created_at=provider.created_at,
         updated_at=provider.updated_at,

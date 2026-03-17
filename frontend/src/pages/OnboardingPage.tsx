@@ -1,15 +1,16 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
     getOnboarding, advanceOnboarding, createProvider,
-    testConnection, listModels, createWorkspace, listProviders,
+    testConnection, createWorkspace, listProviders,
     listSettings, updateSetting, listSchedules, updateSchedule,
 } from '@/lib/api'
-import { Play, FileText, Eye, EyeOff, Loader2, Link, Star, X, Search, CheckCircle2, XCircle, Sliders, Sparkles, ArrowLeft, ArrowRight, Plus, Trash2, MessageSquare, Lock, Brain, Folder, Briefcase, Microscope, BookOpen, Target, Globe, Lightbulb, Wrench, Palette, BarChart3, Rocket, Shield, FlaskConical, Leaf, Key, Settings2, PenLine, Database, Sprout } from 'lucide-react'
+import { Play, FileText, Eye, EyeOff, Loader2, Link, Star, X, Search, CheckCircle2, XCircle, Sliders, Sparkles, ArrowLeft, ArrowRight, Plus, Trash2, MessageSquare, Lock, Brain, Folder, Briefcase, Microscope, BookOpen, Target, Globe, Lightbulb, Wrench, Palette, BarChart3, Rocket, Shield, FlaskConical, Leaf, Key, Settings2, PenLine, Database, Sprout, Mic } from 'lucide-react'
 import { ProviderIcon } from '@/components/shared/ProviderIcon'
 import { ModelOverrideSelect } from '@/components/shared/ModelOverrideSelect'
 import { isLocalProvider, sanitizeProviderDisplayName } from '@/lib/provider-display'
+import { ModelTypeSelector, type ConfiguredModel } from '@/components/shared/ModelTypeSelector'
 
 const PROVIDERS = [
     { id: 'openai', name: 'OpenAI', color: 'from-emerald-500/20 border-emerald-500/30', needsKey: true, needsUrl: false },
@@ -30,12 +31,6 @@ const PROVIDERS = [
 
 const STEPS = ['welcome', 'providers_setup', 'models_setup', 'workspace_create', 'automation_preferences']
 
-interface TypedModel {
-    provider_id: string
-    model_id: string
-    model_name: string
-    is_default?: boolean
-}
 const AUTO_KNOWLEDGE_INTELLIGENCE_KEY = 'automation.auto_knowledge_intelligence_enabled'
 const AUTO_BOOKMARK_EXTRACTION_KEY = 'automation.auto_bookmark_content_extraction_enabled'
 
@@ -347,287 +342,108 @@ function ProvidersSetupStep({ onNext, onBack, loading }: { onNext: () => void; o
     )
 }
 
-type ModelTypeKey = 'chat' | 'vision' | 'embedding'
-
 function ModelsSetupStep({ onNext, onBack, loading }: { onNext: () => void; onBack: () => void; loading: boolean }) {
     const qc = useQueryClient()
-    const [activeType, setActiveType] = useState<ModelTypeKey>('chat')
-    const [chatModels, setChatModels] = useState<TypedModel[]>([])
-    const [visionModels, setVisionModels] = useState<TypedModel[]>([])
-    const [embeddingModels, setEmbeddingModels] = useState<TypedModel[]>([])
-    const [initialized, setInitialized] = useState(false)
-    const [saving, setSaving] = useState(false)
-    const [saveError, setSaveError] = useState<string | null>(null)
+    const [activeTab, setActiveTab] = useState<string>('chat')
 
-    // Add-model form
-    const [addProviderId, setAddProviderId] = useState('')
-    const [providerModels, setProviderModels] = useState<{ id: string; name: string }[]>([])
-    const [fetchingModels, setFetchingModels] = useState(false)
-    const [fetchAttempted, setFetchAttempted] = useState(false)
-    const [selectedModelIds, setSelectedModelIds] = useState<Set<string>>(new Set())
-    const [modelSearch, setModelSearch] = useState('')
-    const [fetchError, setFetchError] = useState<string | null>(null)
-    const [manualModelId, setManualModelId] = useState('')
-
-    const { data: providers = [] } = useQuery<ProviderOption[]>({ queryKey: ['providers'], queryFn: listProviders })
-    const { data: settings = [] } = useQuery<Array<{ key: string; value: unknown }>>({ queryKey: ['app-settings'], queryFn: listSettings })
-
-    useEffect(() => {
-        if (initialized || !settings.length) return
-        const parse = (key: string): TypedModel[] => {
-            const s = settings.find(x => x.key === key)
-            if (!s?.value) return []
-            try { return s.value as TypedModel[] } catch { return [] }
-        }
-        setChatModels(parse('system_chat_models'))
-        setVisionModels(parse('system_vision_models'))
-        setEmbeddingModels(parse('system_embedding_models'))
-        setInitialized(true)
-    }, [settings, initialized])
-
-    const currentModels = activeType === 'chat' ? chatModels : activeType === 'vision' ? visionModels : embeddingModels
-    const setCurrentModels = (m: TypedModel[]) => {
-        if (activeType === 'chat') setChatModels(m)
-        else if (activeType === 'vision') setVisionModels(m)
-        else setEmbeddingModels(m)
+    // Config keys for each model type
+    const CONFIG_KEYS: Record<string, string> = {
+        chat: 'system_chat_models',
+        vision: 'system_vision_models',
+        embedding: 'system_embedding_models',
+        stt: 'system_stt_models',
+        tts: 'system_tts_models',
+        clip: 'system_clip_models',
+        pdf: 'system_pdf_models',
     }
 
-    const handleFetchModels = async (pid: string) => {
-        if (!pid) { setProviderModels([]); setSelectedModelIds(new Set()); setFetchAttempted(false); return }
-        setFetchingModels(true); setFetchError(null); setProviderModels([]); setSelectedModelIds(new Set()); setFetchAttempted(false)
-        try {
-            const list = await listModels(pid)
-            setProviderModels(list)
-        } catch (e: unknown) {
-            const err = e as { response?: { data?: { detail?: string } }; message?: string }
-            setFetchError(err?.response?.data?.detail ?? err?.message ?? 'Could not fetch models')
-        } finally {
-            setFetchingModels(false)
-            setFetchAttempted(true)
-        }
-    }
-
-    const handleProviderChange = (pid: string) => {
-        setAddProviderId(pid); setModelSearch(''); setManualModelId(''); setFetchAttempted(false); handleFetchModels(pid)
-    }
-
-    const toggleModelSelection = (modelId: string) => {
-        setSelectedModelIds(prev => {
-            const next = new Set(prev)
-            if (next.has(modelId)) next.delete(modelId)
-            else next.add(modelId)
-            return next
-        })
-    }
-
-    const handleAddModels = () => {
-        if (!addProviderId) return
-        const idsToAdd = manualModelId ? [manualModelId] : Array.from(selectedModelIds)
-        if (idsToAdd.length === 0) return
-
-        const existing = currentModels
-        const newModels: TypedModel[] = []
-        for (const modelId of idsToAdd) {
-            if (existing.some(m => m.provider_id === addProviderId && m.model_id === modelId)) continue
-            const modelName = providerModels.find(m => m.id === modelId)?.name ?? modelId
-            newModels.push({
-                provider_id: addProviderId,
-                model_id: modelId,
-                model_name: modelName,
-                is_default: existing.length === 0 && newModels.length === 0,
-            })
-        }
-        if (newModels.length > 0) {
-            setCurrentModels([...existing, ...newModels])
-        }
-        setSelectedModelIds(new Set()); setModelSearch(''); setManualModelId('')
-    }
-
-    const handleRemoveModel = (providerId: string, modelId: string) => {
-        const updated = currentModels.filter(m => !(m.provider_id === providerId && m.model_id === modelId))
-        if (updated.length > 0 && !updated.some(m => m.is_default)) {
-            updated[0] = { ...updated[0], is_default: true }
-        }
-        setCurrentModels(updated)
-    }
-
-    const handleSetDefault = (providerId: string, modelId: string) => {
-        setCurrentModels(currentModels.map(m => ({ ...m, is_default: m.provider_id === providerId && m.model_id === modelId })))
-    }
-
-    const filteredProviderModels = useMemo(() => {
-        const q = modelSearch.toLowerCase()
-        return q ? providerModels.filter(m => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)) : providerModels
-    }, [providerModels, modelSearch])
-
-    const handleSaveAndContinue = async () => {
-        setSaving(true); setSaveError(null)
-        try {
-            const saves = [
-                updateSetting('system_chat_models', { value: chatModels, category: 'llm' }),
-                updateSetting('system_vision_models', { value: visionModels, category: 'llm' }),
-                updateSetting('system_embedding_models', { value: embeddingModels, category: 'llm' }),
-            ]
-            // Sync system_vision_provider_id / system_vision_model for backend fallback
-            const defaultVision = visionModels.find(m => m.is_default) ?? visionModels[0]
-            if (defaultVision) {
-                saves.push(updateSetting('system_vision_provider_id', { value: defaultVision.provider_id, category: 'llm' }))
-                saves.push(updateSetting('system_vision_model', { value: defaultVision.model_id, category: 'llm' }))
-            }
-            await Promise.all(saves)
-            qc.invalidateQueries({ queryKey: ['app-settings'] })
-            onNext()
-        } catch (e: unknown) {
-            const err = e as { response?: { data?: { detail?: string } }; message?: string }
-            setSaveError(err?.response?.data?.detail ?? err?.message ?? 'Save failed')
-        } finally {
-            setSaving(false)
-        }
-    }
-
-    const TYPE_TABS: { key: ModelTypeKey; label: string; desc: string }[] = [
-        { key: 'chat', label: 'Chat', desc: 'Models for conversation and agent tasks' },
-        { key: 'vision', label: 'Vision', desc: 'Models for image analysis and description' },
-        { key: 'embedding', label: 'Embedding', desc: 'Models for semantic search and similarity' },
+    const TABS = [
+        { key: 'chat', label: 'Chat', icon: MessageSquare },
+        { key: 'vision', label: 'Vision', icon: Eye },
+        { key: 'embedding', label: 'Embedding', icon: Database },
+        { key: 'stt', label: 'Speech-to-Text', icon: Mic },
+        { key: 'tts', label: 'Text-to-Speech', icon: Play },
+        { key: 'clip', label: 'Visual Search', icon: Search },
+        { key: 'pdf', label: 'PDF Processing', icon: FileText },
     ]
 
-    const totalConfigured = chatModels.length + visionModels.length + embeddingModels.length
+    // Load settings
+    const { data: settings } = useQuery({
+        queryKey: ['settings'],
+        queryFn: listSettings,
+    })
+
+    // Parse configured models for each type from settings
+    const getModelsForType = (type: string): ConfiguredModel[] => {
+        const key = CONFIG_KEYS[type]
+        const raw = settings?.find((s: any) => s.key === key)?.value
+        if (!raw) return []
+        try { return typeof raw === 'string' ? JSON.parse(raw) : (Array.isArray(raw) ? raw : []) } catch { return [] }
+    }
+
+    const handleModelsChange = async (type: string, models: ConfiguredModel[]) => {
+        const key = CONFIG_KEYS[type]
+        await updateSetting(key, { value: JSON.stringify(models), category: 'llm' })
+        qc.invalidateQueries({ queryKey: ['settings'] })
+    }
+
+    // Count total configured models across all types
+    const totalConfigured = Object.keys(CONFIG_KEYS).reduce((sum, type) => {
+        return sum + getModelsForType(type).length
+    }, 0)
 
     return (
-        <div className="glass-card shadow-glass-lg p-6 flex flex-col space-y-5 animate-slide-up border border-accent/20">
-            <div>
-                <h2 className="text-xl font-bold mb-1">Configure Models</h2>
-                <p className="text-muted-foreground text-sm">
-                    Pick system-wide default models for each type. Workspaces can override these later.
-                </p>
+        <div className="glass-card shadow-glass-lg p-6 space-y-5 animate-fade-in border border-accent/20">
+            <div className="text-center space-y-1">
+                <h2 className="text-lg font-bold">Configure Models</h2>
+                <p className="text-xs text-muted-foreground">Select models for each capability. OpenForge Local models run on your hardware.</p>
             </div>
 
-            {/* Type tabs */}
-            <div className="flex gap-1 p-1 rounded-lg bg-muted/30 border border-border/50">
-                {TYPE_TABS.map(t => (
-                    <button
-                        key={t.key}
-                        onClick={() => { setActiveType(t.key); setAddProviderId(''); setProviderModels([]); setSelectedModelIds(new Set()); setManualModelId(''); setModelSearch(''); setFetchError(null) }}
-                        className={`flex-1 py-1.5 px-2 rounded-md text-xs font-medium transition-all ${activeType === t.key ? 'bg-accent text-accent-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-                    >
-                        {t.label}
-                        {(activeType !== t.key) && (
-                            <span className="ml-1 text-[9px] opacity-60">
-                                {t.key === 'chat' ? chatModels.length : t.key === 'vision' ? visionModels.length : embeddingModels.length}
-                            </span>
-                        )}
-                    </button>
-                ))}
+            {/* Tab bar */}
+            <div className="flex flex-wrap gap-1.5 justify-center">
+                {TABS.map(tab => {
+                    const count = getModelsForType(tab.key).length
+                    const isActive = activeTab === tab.key
+                    return (
+                        <button
+                            key={tab.key}
+                            onClick={() => setActiveTab(tab.key)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                isActive
+                                    ? 'bg-accent/20 text-accent ring-1 ring-accent/30'
+                                    : 'text-muted-foreground hover:bg-muted/40'
+                            }`}
+                        >
+                            <tab.icon className="w-3 h-3" />
+                            {tab.label}
+                            {count > 0 && (
+                                <span className="bg-accent/20 text-accent text-[10px] px-1.5 py-0.5 rounded-full">{count}</span>
+                            )}
+                        </button>
+                    )
+                })}
             </div>
 
-            <p className="text-[11px] text-muted-foreground -mt-2">{TYPE_TABS.find(t => t.key === activeType)?.desc}</p>
+            {/* Active tab content */}
+            <ModelTypeSelector
+                key={activeTab}
+                configType={activeTab as any}
+                configuredModels={getModelsForType(activeTab)}
+                onModelsChange={(models) => handleModelsChange(activeTab, models)}
+                compact
+            />
 
-            {/* Current models list */}
-            {currentModels.length > 0 && (
-                <div className="space-y-1.5">
-                    {currentModels.map(m => {
-                        const prov = providers.find(p => p.id === m.provider_id)
-                        return (
-                            <div key={`${m.provider_id}:${m.model_id}`} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border/50 bg-muted/10 text-xs">
-                                <ProviderIcon providerId={prov?.provider_name ?? ''} className="w-3.5 h-3.5 flex-shrink-0" />
-                                <span className="text-muted-foreground truncate">{sanitizeProviderDisplayName(prov?.display_name ?? m.provider_id)}</span>
-                                <span className="text-foreground font-medium truncate flex-1">{m.model_name}</span>
-                                <button onClick={() => handleSetDefault(m.provider_id, m.model_id)} className={`p-1 rounded transition-colors ${m.is_default ? 'text-yellow-400' : 'text-muted-foreground hover:text-yellow-400'}`} title="Set as default">
-                                    <Star className="w-3 h-3" fill={m.is_default ? 'currentColor' : 'none'} />
-                                </button>
-                                <button onClick={() => handleRemoveModel(m.provider_id, m.model_id)} className="p-1 rounded text-muted-foreground hover:text-red-400 transition-colors">
-                                    <X className="w-3 h-3" />
-                                </button>
-                            </div>
-                        )
-                    })}
-                </div>
-            )}
-
-            {/* Add model */}
-            <div className="space-y-2 rounded-xl border border-border/60 p-3 bg-muted/10">
-                <p className="text-xs font-medium text-muted-foreground">Add a model</p>
-                <select
-                    className="input text-xs"
-                    value={addProviderId}
-                    onChange={e => handleProviderChange(e.target.value)}
-                >
-                    <option value="">Select provider…</option>
-                    {providers.map((p: ProviderOption) => (
-                        <option key={p.id} value={p.id}>{sanitizeProviderDisplayName(p.display_name)}</option>
-                    ))}
-                </select>
-
-                {fetchingModels && (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
-                        <Loader2 className="w-3 h-3 animate-spin" /> Fetching models…
-                    </div>
-                )}
-
-                {fetchError && (
-                    <div className="space-y-1">
-                        <p className="text-xs text-red-400">{fetchError}</p>
-                        <input className="input text-xs" placeholder="Enter model ID manually (e.g. gpt-4o)" value={manualModelId} onChange={e => setManualModelId(e.target.value)} />
-                    </div>
-                )}
-
-                {!fetchError && fetchAttempted && !fetchingModels && providerModels.length === 0 && (
-                    <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">This provider doesn't support model listing. Enter the model ID manually.</p>
-                        <input className="input text-xs" placeholder="Enter model ID (e.g. meta-llama/Meta-Llama-3-8B-Instruct)" value={manualModelId} onChange={e => setManualModelId(e.target.value)} />
-                    </div>
-                )}
-
-                {providerModels.length > 0 && (
-                    <>
-                        <div className="relative">
-                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
-                            <input className="input text-xs pl-7" placeholder={`Filter ${providerModels.length} models…`} value={modelSearch} onChange={e => setModelSearch(e.target.value)} />
-                        </div>
-                        <div className="max-h-40 overflow-y-auto rounded-lg border border-border/50 bg-background/30 divide-y divide-border/20">
-                            {filteredProviderModels.map(m => {
-                                const isSelected = selectedModelIds.has(m.id)
-                                const alreadyAdded = currentModels.some(cm => cm.provider_id === addProviderId && cm.model_id === m.id)
-                                return (
-                                    <button key={m.id} onClick={() => !alreadyAdded && toggleModelSelection(m.id)}
-                                        disabled={alreadyAdded}
-                                        className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${alreadyAdded ? 'opacity-40 cursor-not-allowed' : 'hover:bg-muted/30'} ${isSelected ? 'bg-accent/10 text-foreground' : 'text-muted-foreground'}`}>
-                                        <div className={`w-3 h-3 rounded flex-shrink-0 border transition-colors flex items-center justify-center ${isSelected ? 'bg-accent border-accent' : 'border-border'}`}>
-                                            {isSelected && <CheckCircle2 className="w-2.5 h-2.5 text-accent-foreground" />}
-                                        </div>
-                                        {m.name}
-                                        {alreadyAdded && <span className="ml-auto text-[10px] text-muted-foreground">added</span>}
-                                    </button>
-                                )
-                            })}
-                        </div>
-                        {selectedModelIds.size > 0 && (
-                            <p className="text-[11px] text-muted-foreground">{selectedModelIds.size} model{selectedModelIds.size > 1 ? 's' : ''} selected</p>
-                        )}
-                    </>
-                )}
-
-                <button
-                    className="btn-primary w-full justify-center py-2 text-xs"
-                    onClick={handleAddModels}
-                    disabled={!addProviderId || (selectedModelIds.size === 0 && !manualModelId)}
-                >
-                    <Plus className="w-3 h-3" /> Add {selectedModelIds.size > 1 ? `${selectedModelIds.size} Models` : 'Model'}
-                </button>
-            </div>
-
-            {saveError && <p className="text-xs text-red-400">{saveError}</p>}
-
+            {/* Navigation */}
             <div className="flex gap-3">
-                <button className="btn-ghost justify-center py-3 px-4" onClick={onBack} disabled={saving || loading}>
+                <button className="btn-ghost justify-center py-3 px-4" onClick={onBack} disabled={loading}>
                     <ArrowLeft className="w-4 h-4" /> Back
                 </button>
                 <button
                     className="btn-primary flex-1 justify-center py-3"
-                    onClick={handleSaveAndContinue}
-                    disabled={saving || loading || totalConfigured === 0}
+                    onClick={onNext}
+                    disabled={loading || totalConfigured === 0}
                 >
-                    {(saving || loading) ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                     {totalConfigured === 0 ? 'Add at least one model to continue' : 'Save & Continue'}
                     <ArrowRight className="w-4 h-4" />
                 </button>

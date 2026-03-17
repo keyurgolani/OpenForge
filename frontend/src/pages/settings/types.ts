@@ -10,7 +10,7 @@ export type WorkspaceRow = {
     conversation_count: number
 }
 
-export type ProviderRow = { id: string; display_name: string; provider_name: string; default_model: string | null; is_system_default: boolean; has_api_key: boolean; base_url: string | null; enabled_models: { id: string; name: string }[] }
+export type ProviderRow = { id: string; display_name: string; provider_name: string; default_model: string | null; is_system_default: boolean; is_system?: boolean; has_api_key: boolean; base_url: string | null; enabled_models: { id: string; name: string }[] }
 
 export type LLMSubTab = 'providers' | 'chat' | 'vision' | 'embedding' | 'audio' | 'clip' | 'pdf'
 

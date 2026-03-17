@@ -40,6 +40,7 @@ class LLMProvider(Base):
     default_model: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     enabled_models: Mapped[List[Dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
     is_system_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=now_utc
     )

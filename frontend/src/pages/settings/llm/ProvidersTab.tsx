@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
     Loader2, Trash2, CheckCircle2, XCircle, Plus,
     ChevronDown, ChevronUp, Eye, EyeOff, Globe2, Server,
-    Save, Sliders,
+    Save, Sliders, HardDrive, Shield,
 } from 'lucide-react'
 import { ProviderIcon } from '@/components/shared/ProviderIcon'
 import { isLocalProvider, sanitizeProviderDisplayName } from '@/lib/provider-display'
@@ -258,14 +258,15 @@ function ProviderCard({ provider, expanded, onToggle, onDelete }: {
                     <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-sm">{sanitizeProviderDisplayName(provider.display_name) || provider.provider_name}</span>
                         <span className="chip-muted text-[10px]">{provider.provider_name}</span>
-                        {isLocalProvider(provider.provider_name) && <span className="chip-muted text-[10px]">Local</span>}
+                        {provider.is_system && <span className="text-[10px] px-1.5 py-0.5 rounded border font-medium bg-lime-500/15 text-lime-300 border-lime-500/30 flex items-center gap-0.5"><HardDrive className="w-2.5 h-2.5" /> Built-in</span>}
+                        {!provider.is_system && isLocalProvider(provider.provider_name) && <span className="chip-muted text-[10px]">Local</span>}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                        {provider.has_api_key ? 'Key configured' : provider.base_url ?? 'No credentials set'}
+                        {provider.is_system ? 'Local models — runs on your hardware' : provider.has_api_key ? 'Key configured' : provider.base_url ?? 'No credentials set'}
                     </p>
                 </div>
                 <div className="flex gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                    <button className="btn-ghost p-1.5 text-red-400" onClick={onDelete}><Trash2 className="w-3.5 h-3.5" /></button>
+                    {!provider.is_system && <button className="btn-ghost p-1.5 text-red-400" onClick={onDelete}><Trash2 className="w-3.5 h-3.5" /></button>}
                     <button className="btn-ghost p-1.5" onClick={onToggle}>
                         {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                     </button>
@@ -274,6 +275,16 @@ function ProviderCard({ provider, expanded, onToggle, onDelete }: {
 
             {expanded && (
                 <div className="border-t border-border/50 px-4 py-4 space-y-4 animate-fade-in">
+                    {provider.is_system ? (
+                        <div className="flex items-start gap-2.5 rounded-lg bg-lime-500/10 border border-lime-500/20 p-3 text-xs text-lime-200">
+                            <HardDrive className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                            <div>
+                                <p className="font-medium">Built-in Local Provider</p>
+                                <p className="text-lime-200/70 mt-0.5">This provider offers locally-downloaded models for STT, TTS, embeddings, visual search (CLIP), and PDF processing. Models run on your hardware with no API key needed. Select models from this provider in each model type settings tab.</p>
+                            </div>
+                        </div>
+                    ) : (
+                    <>
                     {/* Edit credentials */}
                     <div className="space-y-2">
                         <label className="text-xs font-medium text-muted-foreground">Edit Credentials</label>
@@ -315,6 +326,8 @@ function ProviderCard({ provider, expanded, onToggle, onDelete }: {
                             </div>
                         )}
                     </div>
+                    </>
+                    )}
                 </div>
             )}
         </div>

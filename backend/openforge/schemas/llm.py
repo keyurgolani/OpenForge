@@ -32,6 +32,7 @@ class LLMProviderResponse(BaseModel):
     default_model: Optional[str] = None
     enabled_models: list[dict] = []
     is_system_default: bool
+    is_system: bool = False
     has_api_key: bool
     created_at: datetime
     updated_at: datetime
@@ -42,6 +43,11 @@ class LLMProviderResponse(BaseModel):
 class ModelInfo(BaseModel):
     id: str
     name: str
+    capability_type: Optional[str] = None
+    engine: Optional[str] = None
+    size_mb: Optional[int] = None
+    requires_gpu: Optional[bool] = None
+    downloaded: Optional[bool] = None
 
 
 class ConnectionTestResult(BaseModel):

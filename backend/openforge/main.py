@@ -247,6 +247,17 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Profile registry initialization failed (continuing): %s", e)
 
+    # Ensure the OpenForge Local system provider exists.
+    try:
+        from openforge.db.postgres import AsyncSessionLocal
+        from openforge.services.local_models import ensure_local_provider
+
+        async with AsyncSessionLocal() as db:
+            await ensure_local_provider(db)
+        logger.info("OpenForge Local system provider ensured.")
+    except Exception as e:
+        logger.warning("OpenForge Local provider seeding skipped: %s", e)
+
     # Seed the Phase 3 managed prompt catalog and default trust policies.
     try:
         from openforge.db.postgres import AsyncSessionLocal
