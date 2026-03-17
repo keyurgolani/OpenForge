@@ -30,12 +30,12 @@ class LocalModel:
 
 LOCAL_MODELS: list[LocalModel] = [
     # ── STT / Whisper ──
-    LocalModel(id="whisper-tiny", name="Whisper Tiny", capability_type="stt", size_mb=75),
-    LocalModel(id="whisper-base", name="Whisper Base", capability_type="stt", size_mb=150),
-    LocalModel(id="whisper-small", name="Whisper Small", capability_type="stt", size_mb=500),
-    LocalModel(id="whisper-medium", name="Whisper Medium", capability_type="stt", size_mb=1500),
-    LocalModel(id="whisper-large-v2", name="Whisper Large v2", capability_type="stt", size_mb=3000),
-    LocalModel(id="whisper-large-v3", name="Whisper Large v3", capability_type="stt", size_mb=3000),
+    LocalModel(id="openai/whisper-tiny", name="Whisper Tiny", capability_type="stt", size_mb=75),
+    LocalModel(id="openai/whisper-base", name="Whisper Base", capability_type="stt", size_mb=145),
+    LocalModel(id="openai/whisper-small", name="Whisper Small", capability_type="stt", size_mb=460),
+    LocalModel(id="openai/whisper-medium", name="Whisper Medium", capability_type="stt", size_mb=1500),
+    LocalModel(id="openai/whisper-large-v2", name="Whisper Large v2", capability_type="stt", size_mb=3100, requires_gpu=True),
+    LocalModel(id="openai/whisper-large-v3", name="Whisper Large v3", capability_type="stt", size_mb=3100, requires_gpu=True),
 
     # ── TTS / Piper ──
     LocalModel(id="piper-en-us-amy", name="Piper EN-US Amy", capability_type="tts", engine="piper", size_mb=30),
@@ -49,10 +49,17 @@ LOCAL_MODELS: list[LocalModel] = [
     LocalModel(id="xtts-v2", name="XTTS v2", capability_type="tts", engine="coqui", size_mb=1800, requires_gpu=True),
 
     # ── Embedding ──
-    LocalModel(id="all-MiniLM-L6-v2", name="all-MiniLM-L6-v2", capability_type="embedding", size_mb=25),
-    LocalModel(id="all-mpnet-base-v2", name="all-mpnet-base-v2", capability_type="embedding", size_mb=420),
+    LocalModel(id="all-MiniLM-L6-v2", name="all-MiniLM-L6-v2", capability_type="embedding", size_mb=80),
+    LocalModel(id="all-MiniLM-L12-v2", name="all-MiniLM-L12-v2", capability_type="embedding", size_mb=120),
     LocalModel(id="BAAI/bge-small-en-v1.5", name="BGE Small EN v1.5", capability_type="embedding", size_mb=130),
-    LocalModel(id="BAAI/bge-base-en-v1.5", name="BGE Base EN v1.5", capability_type="embedding", size_mb=420),
+    LocalModel(id="intfloat/e5-small-v2", name="E5 Small v2", capability_type="embedding", size_mb=130),
+    LocalModel(id="BAAI/bge-base-en-v1.5", name="BGE Base EN v1.5", capability_type="embedding", size_mb=440),
+    LocalModel(id="all-mpnet-base-v2", name="all-mpnet-base-v2", capability_type="embedding", size_mb=420),
+    LocalModel(id="nomic-ai/nomic-embed-text-v1", name="Nomic Embed Text v1", capability_type="embedding", size_mb=540),
+    LocalModel(id="intfloat/e5-base-v2", name="E5 Base v2", capability_type="embedding", size_mb=440),
+    LocalModel(id="thenlper/gte-base", name="GTE Base", capability_type="embedding", size_mb=440),
+    LocalModel(id="BAAI/bge-large-en-v1.5", name="BGE Large EN v1.5", capability_type="embedding", size_mb=1300, requires_gpu=True),
+    LocalModel(id="intfloat/e5-large-v2", name="E5 Large v2", capability_type="embedding", size_mb=1300, requires_gpu=True),
 
     # ── CLIP ──
     LocalModel(id="clip-ViT-B-16", name="CLIP ViT-B/16", capability_type="clip", size_mb=600),
@@ -111,8 +118,8 @@ def get_download_status(model_id: str) -> bool:
     root = _models_root()
 
     if model.capability_type == "stt":
-        # Whisper models are stored as <name>.pt (strip "whisper-" prefix for file name)
-        whisper_name = model.id.replace("whisper-", "")
+        # Whisper models: id is "openai/whisper-<size>", file is "<size>.pt"
+        whisper_name = model.id.split("/")[-1].replace("whisper-", "")
         whisper_dir = root / "whisper"
         return (whisper_dir / f"{whisper_name}.pt").exists()
 
