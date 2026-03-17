@@ -9,6 +9,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.inspection import inspect as sa_inspect
 
@@ -22,10 +23,27 @@ class CrudDomainService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    @staticmethod
+    def _jsonb_safe(value: Any) -> Any:
+        """Recursively convert UUID objects to strings for JSONB-safe storage."""
+        if isinstance(value, UUID):
+            return str(value)
+        if isinstance(value, dict):
+            return {k: CrudDomainService._jsonb_safe(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [CrudDomainService._jsonb_safe(item) for item in value]
+        return value
+
     def _normalize_payload(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         normalized: dict[str, Any] = {}
         for key, value in payload.items():
-            normalized[self.field_aliases.get(key, key)] = value
+            canon_key = self.field_aliases.get(key, key)
+            col = getattr(self.model, canon_key, None) if self.model else None
+            if col is not None and hasattr(col, 'type') and isinstance(getattr(col, 'type', None), JSONB):
+                value = self._jsonb_safe(value)
+            elif isinstance(value, (list, dict)):
+                value = self._jsonb_safe(value)
+            normalized[canon_key] = value
         return normalized
 
     def _serialize(self, instance: Any) -> dict[str, Any]:
