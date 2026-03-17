@@ -126,7 +126,7 @@ class MissionService(CrudDomainService):
         unique_slug = await self._unique_slug(desired_slug)
 
         clone_payload = {
-            "workspace_id": clone_data["workspace_id"],
+            "workspace_id": clone_data.get("workspace_id"),
             "name": clone_data.get("name") or template["name"],
             "slug": unique_slug,
             "description": template.get("description"),

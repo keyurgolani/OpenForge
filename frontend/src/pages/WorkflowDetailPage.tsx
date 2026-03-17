@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, GitBranch, PlayCircle, Route, Shapes, Waypoints } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/shared/Card'
 import ErrorState from '@/components/shared/ErrorState'
@@ -8,7 +9,10 @@ import LoadingState from '@/components/shared/LoadingState'
 import PageHeader from '@/components/shared/PageHeader'
 import Section from '@/components/shared/Section'
 import StatusBadge from '@/components/shared/StatusBadge'
+import { useToast } from '@/components/shared/ToastProvider'
 import { useWorkflowQuery, useWorkflowVersionQuery, useWorkflowVersionsQuery } from '@/features/workflows'
+import { useWorkspaces } from '@/hooks/useWorkspace'
+import { updateWorkflow } from '@/lib/api'
 import { formatDateTime } from '@/lib/formatters'
 import { workflowsRoute } from '@/lib/routes'
 import type { WorkflowDefinition, WorkflowNode, WorkflowVersion } from '@/types/workflows'
@@ -70,6 +74,17 @@ export default function WorkflowDetailPage() {
   )
   const selectedVersion = selectedVersionData ?? workflow?.current_version ?? null
   const [selectedNodeId, setSelectedNodeId] = useState<string>('')
+  const { data: workspaces = [] } = useWorkspaces()
+  const { success: showSuccess } = useToast()
+  const queryClient = useQueryClient()
+  const updateWorkspaceMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: object }) => updateWorkflow(id, data),
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['workflow', vars.id] })
+      queryClient.invalidateQueries({ queryKey: ['workflows'] })
+      showSuccess('Workspace updated.')
+    },
+  })
 
   useEffect(() => {
     if (!selectedVersionId) {
@@ -160,6 +175,22 @@ export default function WorkflowDetailPage() {
               <div>
                 <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Template kind</p>
                 <p className="mt-1 text-sm font-medium text-foreground">{workflow.template_kind ?? 'None'}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Workspace</p>
+                <select
+                  value={workflow.workspace_id ?? ''}
+                  onChange={(e) => {
+                    const val = e.target.value || null
+                    updateWorkspaceMutation.mutate({ id: workflow.id, data: { workspace_id: val } })
+                  }}
+                  className="mt-1 w-full rounded-lg border border-border/60 bg-background/40 px-2.5 py-1.5 text-sm text-foreground"
+                >
+                  <option value="">No workspace</option>
+                  {(workspaces as any[]).map((ws: any) => (
+                    <option key={ws.id} value={ws.id}>{ws.name}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Created</p>

@@ -120,7 +120,7 @@ class MissionListResponse(BaseModel):
 
 class MissionTemplateCloneRequest(BaseModel):
     """Request body for cloning a mission template."""
-    workspace_id: UUID
+    workspace_id: Optional[UUID] = None
     name: Optional[str] = Field(default=None, min_length=1, max_length=255)
     slug: Optional[str] = Field(default=None, min_length=1, max_length=100)
 

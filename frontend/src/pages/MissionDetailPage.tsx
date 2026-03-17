@@ -1,5 +1,6 @@
-import { Activity, ArrowLeft, Clock, Heart, Pause, Play, Power, PowerOff, Rocket, Zap } from 'lucide-react'
-import { Link, useParams } from 'react-router-dom'
+import { useState } from 'react'
+import { Activity, ArrowLeft, Clock, Heart, Pause, Pencil, Play, Power, PowerOff, Rocket, Save, Trash2, Zap } from 'lucide-react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/shared/Card'
 import ErrorState from '@/components/shared/ErrorState'
@@ -7,8 +8,10 @@ import LoadingState from '@/components/shared/LoadingState'
 import PageHeader from '@/components/shared/PageHeader'
 import Section from '@/components/shared/Section'
 import StatusBadge from '@/components/shared/StatusBadge'
+import { useToast } from '@/components/shared/ToastProvider'
 import {
   useActivateMission,
+  useDeleteMission,
   useDisableMission,
   useLaunchMission,
   useMissionArtifactsQuery,
@@ -17,7 +20,9 @@ import {
   useMissionRunsQuery,
   usePauseMission,
   useResumeMission,
+  useUpdateMission,
 } from '@/features/missions'
+import { useWorkspaces } from '@/hooks/useWorkspace'
 import { formatDateTime, formatRelativeTime } from '@/lib/formatters'
 import { missionsRoute } from '@/lib/routes'
 
@@ -32,6 +37,14 @@ export default function MissionDetailPage() {
   const resumeMutation = useResumeMission()
   const disableMutation = useDisableMission()
   const activateMutation = useActivateMission()
+  const updateMission = useUpdateMission()
+  const deleteMission = useDeleteMission()
+  const { data: workspaces = [] } = useWorkspaces()
+  const { success: showSuccess } = useToast()
+  const navigate = useNavigate()
+  const [isEditing, setIsEditing] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [editDescription, setEditDescription] = useState('')
 
   if (isLoading) {
     return <LoadingState label="Loading mission detail..." />
@@ -51,15 +64,84 @@ export default function MissionDetailPage() {
         title={mission.name}
         description="Inspect mission configuration, health, triggers, recent runs, and lifecycle controls."
         actions={(
-          <Link
-            to={missionsRoute()}
-            className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Missions
-          </Link>
+          <div className="flex items-center gap-2">
+            {!mission.is_template && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditName(mission.name)
+                    setEditDescription(mission.description ?? '')
+                    setIsEditing(!isEditing)
+                  }}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
+                >
+                  <Pencil className="h-4 w-4" />
+                  {isEditing ? 'Cancel' : 'Edit'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm(`Delete mission "${mission.name}"?`)) {
+                      deleteMission.mutate(mission.id, {
+                        onSuccess: () => navigate(missionsRoute()),
+                      })
+                    }
+                  }}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 text-sm text-red-400 transition hover:bg-red-500/20"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </button>
+              </>
+            )}
+            <Link
+              to={missionsRoute()}
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </Link>
+          </div>
         )}
       />
+
+      {/* Inline edit form */}
+      {isEditing && (
+        <div className="rounded-2xl border border-accent/30 bg-card/30 p-5 space-y-4">
+          <div>
+            <label className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Name</label>
+            <input
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-border/60 bg-background/40 px-3 py-2 text-sm text-foreground"
+            />
+          </div>
+          <div>
+            <label className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Description</label>
+            <textarea
+              value={editDescription}
+              onChange={(e) => setEditDescription(e.target.value)}
+              rows={3}
+              className="mt-1 w-full rounded-lg border border-border/60 bg-background/40 px-3 py-2 text-sm text-foreground"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              updateMission.mutate(
+                { id: mission.id, data: { name: editName, description: editDescription } },
+                { onSuccess: () => { showSuccess('Mission updated.'); setIsEditing(false) } },
+              )
+            }}
+            disabled={updateMission.isPending}
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-accent/40 bg-accent/10 px-4 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:opacity-50"
+          >
+            <Save className="h-4 w-4" />
+            Save Changes
+          </button>
+        </div>
+      )}
 
       {/* Header stats */}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -173,6 +255,25 @@ export default function MissionDetailPage() {
                     {mission.is_template ? <span className="rounded-full border border-border/60 px-2.5 py-1 text-xs text-foreground">Template</span> : null}
                     {!mission.is_system && !mission.is_template ? <span className="rounded-full border border-border/60 px-2.5 py-1 text-xs text-muted-foreground/80">Custom workspace mission</span> : null}
                   </div>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Workspace</p>
+                  <select
+                    value={mission.workspace_id ?? ''}
+                    onChange={(e) => {
+                      const val = e.target.value || null
+                      updateMission.mutate(
+                        { id: mission.id, data: { workspace_id: val } },
+                        { onSuccess: () => showSuccess('Workspace updated.') },
+                      )
+                    }}
+                    className="mt-1 w-full rounded-lg border border-border/60 bg-background/40 px-2.5 py-1.5 text-sm text-foreground"
+                  >
+                    <option value="">No workspace</option>
+                    {(workspaces as any[]).map((ws: any) => (
+                      <option key={ws.id} value={ws.id}>{ws.name}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Created</p>
