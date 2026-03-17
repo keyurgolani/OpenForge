@@ -132,7 +132,7 @@ class MissionService(CrudDomainService):
             "description": template.get("description"),
             "workflow_id": template["workflow_id"],
             "workflow_version_id": template.get("workflow_version_id"),
-            "default_profile_ids": list(template.get("default_profile_ids") or []),
+            "default_profile_ids": [str(x) for x in (template.get("default_profile_ids") or [])],
             "default_trigger_ids": [],
             "autonomy_mode": template.get("autonomy_mode", "supervised"),
             "approval_policy_id": template.get("approval_policy_id"),

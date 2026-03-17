@@ -134,7 +134,7 @@ class ProfileService(CrudDomainService):
             "model_policy_id": template.get("model_policy_id"),
             "memory_policy_id": template.get("memory_policy_id"),
             "safety_policy_id": template.get("safety_policy_id"),
-            "capability_bundle_ids": list(template.get("capability_bundle_ids") or []),
+            "capability_bundle_ids": [str(x) for x in (template.get("capability_bundle_ids") or [])],
             "output_contract_id": template.get("output_contract_id"),
             "is_system": False,
             "is_template": False,

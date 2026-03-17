@@ -5,6 +5,7 @@ import EmptyState from '@/components/shared/EmptyState'
 import ErrorState from '@/components/shared/ErrorState'
 import LoadingState from '@/components/shared/LoadingState'
 import PageHeader from '@/components/shared/PageHeader'
+import { useToast } from '@/components/shared/ToastProvider'
 import {
   useCatalogQuery,
   useCatalogReadinessQuery,
@@ -51,20 +52,40 @@ export default function CatalogPage() {
     selectedItem?.id,
   )
 
+  const { success: showSuccess, error: showError } = useToast()
   const cloneProfile = useCloneProfileTemplate()
   const cloneMission = useCloneMissionTemplate()
   const cloneWorkflow = useCloneWorkflowTemplate()
 
+  const cloneCallbacks = {
+    onSuccess: (data: any, item: CatalogItem) => {
+      const name = data?.name ?? item.name
+      showSuccess(`"${name}" cloned successfully. You can find it in your ${item.catalog_type}s.`)
+    },
+    onError: (_err: any, item: CatalogItem) => {
+      showError('Clone failed', `Could not clone "${item.name}". Please try again.`)
+    },
+  }
+
   const handleClone = (item: CatalogItem) => {
     switch (item.catalog_type) {
       case 'profile':
-        cloneProfile.mutate({ templateId: item.id, data: {} })
+        cloneProfile.mutate(
+          { templateId: item.id, data: {} },
+          { onSuccess: (data) => cloneCallbacks.onSuccess(data, item), onError: (err) => cloneCallbacks.onError(err, item) },
+        )
         break
       case 'mission':
-        cloneMission.mutate({ templateId: item.id, data: {} })
+        cloneMission.mutate(
+          { templateId: item.id, data: {} },
+          { onSuccess: (data) => cloneCallbacks.onSuccess(data, item), onError: (err) => cloneCallbacks.onError(err, item) },
+        )
         break
       case 'workflow':
-        cloneWorkflow.mutate({ templateId: item.id, data: {} })
+        cloneWorkflow.mutate(
+          { templateId: item.id, data: {} },
+          { onSuccess: (data) => cloneCallbacks.onSuccess(data, item), onError: (err) => cloneCallbacks.onError(err, item) },
+        )
         break
     }
   }
