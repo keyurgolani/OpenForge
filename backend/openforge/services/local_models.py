@@ -51,8 +51,8 @@ LOCAL_MODELS: list[LocalModel] = [
     # ── Embedding ──
     LocalModel(id="all-MiniLM-L6-v2", name="all-MiniLM-L6-v2", capability_type="embedding", size_mb=25),
     LocalModel(id="all-mpnet-base-v2", name="all-mpnet-base-v2", capability_type="embedding", size_mb=420),
-    LocalModel(id="bge-small-en-v1.5", name="bge-small-en-v1.5", capability_type="embedding", size_mb=130),
-    LocalModel(id="bge-base-en-v1.5", name="bge-base-en-v1.5", capability_type="embedding", size_mb=420),
+    LocalModel(id="BAAI/bge-small-en-v1.5", name="BGE Small EN v1.5", capability_type="embedding", size_mb=130),
+    LocalModel(id="BAAI/bge-base-en-v1.5", name="BGE Base EN v1.5", capability_type="embedding", size_mb=420),
 
     # ── CLIP ──
     LocalModel(id="clip-ViT-B-16", name="CLIP ViT-B/16", capability_type="clip", size_mb=600),
@@ -134,13 +134,14 @@ def get_download_status(model_id: str) -> bool:
         if not emb_dir.exists():
             return False
         safe_name = model.id.replace("/", "--")
-        # Check HuggingFace cache pattern
-        model_cache = emb_dir / f"models--{safe_name}"
-        if model_cache.exists() and any(model_cache.rglob("config.json")):
-            return True
-        alt = emb_dir / safe_name
-        if alt.exists() and any(alt.rglob("config.json")):
-            return True
+        # HuggingFace cache pattern: models--<org>--<name> or models--sentence-transformers--<name>
+        for candidate in [
+            emb_dir / f"models--{safe_name}",
+            emb_dir / f"models--sentence-transformers--{safe_name}",
+            emb_dir / safe_name,
+        ]:
+            if candidate.exists() and any(candidate.rglob("config.json")):
+                return True
         return False
 
     if model.capability_type == "clip":
