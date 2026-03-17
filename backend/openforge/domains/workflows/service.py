@@ -36,8 +36,8 @@ class WorkflowService:
             "input_mapping": instance.input_mapping_json or {},
             "output_mapping": instance.output_mapping_json or {},
             "status": instance.status,
-            "created_at": instance.created_at,
-            "updated_at": instance.updated_at,
+            "created_at": instance.created_at.isoformat() if instance.created_at else None,
+            "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
         }
 
     def _node_type_value(self, value: Any) -> str | None:
@@ -89,8 +89,8 @@ class WorkflowService:
             "priority": instance.priority,
             "label": instance.label,
             "status": instance.status,
-            "created_at": instance.created_at,
-            "updated_at": instance.updated_at,
+            "created_at": instance.created_at.isoformat() if instance.created_at else None,
+            "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
         }
 
     def _serialize_version(
@@ -117,8 +117,8 @@ class WorkflowService:
             "change_note": instance.change_note,
             "nodes": node_list,
             "edges": edge_list,
-            "created_at": instance.created_at,
-            "updated_at": instance.updated_at,
+            "created_at": instance.created_at.isoformat() if instance.created_at else None,
+            "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
         }
 
     async def _load_nodes(self, workflow_version_id: UUID) -> list[dict[str, Any]]:
@@ -239,8 +239,8 @@ class WorkflowService:
             "sort_priority": getattr(definition, "sort_priority", 0),
             "icon": getattr(definition, "icon", None),
             "current_version": current_version,
-            "created_at": getattr(definition, "created_at", None),
-            "updated_at": getattr(definition, "updated_at", None),
+            "created_at": definition.created_at.isoformat() if getattr(definition, "created_at", None) else None,
+            "updated_at": definition.updated_at.isoformat() if getattr(definition, "updated_at", None) else None,
             "created_by": str(definition.created_by) if getattr(definition, "created_by", None) else None,
             "updated_by": str(definition.updated_by) if getattr(definition, "updated_by", None) else None,
         }
