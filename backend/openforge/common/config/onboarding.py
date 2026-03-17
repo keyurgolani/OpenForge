@@ -22,10 +22,10 @@ _STEP_ORDER = (
 
 _VALID_TRANSITIONS = {
     "welcome": {"providers_setup"},
-    "providers_setup": {"models_setup"},
-    "models_setup": {"workspace_create"},
-    "workspace_create": {"automation_preferences"},
-    "automation_preferences": {"complete"},
+    "providers_setup": {"welcome", "models_setup"},
+    "models_setup": {"providers_setup", "workspace_create"},
+    "workspace_create": {"models_setup", "automation_preferences"},
+    "automation_preferences": {"workspace_create", "complete"},
     "complete": set(),
 }
 

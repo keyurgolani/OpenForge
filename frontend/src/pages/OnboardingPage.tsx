@@ -6,7 +6,7 @@ import {
     testConnection, listModels, createWorkspace, listProviders,
     listSettings, updateSetting, listSchedules, updateSchedule,
 } from '@/lib/api'
-import { Play, FileText, Eye, EyeOff, Loader2, Link, Star, X, Search, CheckCircle2, XCircle, Sliders, Sparkles, ArrowRight, Plus, Trash2, MessageSquare, Lock, Brain, Folder, Briefcase, Microscope, BookOpen, Target, Globe, Lightbulb, Wrench, Palette, BarChart3, Rocket, Shield, FlaskConical, Leaf, Key, Settings2, PenLine, Database, Sprout } from 'lucide-react'
+import { Play, FileText, Eye, EyeOff, Loader2, Link, Star, X, Search, CheckCircle2, XCircle, Sliders, Sparkles, ArrowLeft, ArrowRight, Plus, Trash2, MessageSquare, Lock, Brain, Folder, Briefcase, Microscope, BookOpen, Target, Globe, Lightbulb, Wrench, Palette, BarChart3, Rocket, Shield, FlaskConical, Leaf, Key, Settings2, PenLine, Database, Sprout } from 'lucide-react'
 import { ProviderIcon } from '@/components/shared/ProviderIcon'
 import { ModelOverrideSelect } from '@/components/shared/ModelOverrideSelect'
 import { isLocalProvider, sanitizeProviderDisplayName } from '@/lib/provider-display'
@@ -89,14 +89,19 @@ export default function OnboardingPage() {
                         const stepIdx = STEPS.indexOf(step)
                         const isDone = stepIdx > i
                         const isActive = stepIdx === i
+                        const canClick = isDone && !advance.isPending
                         return (
                             <div key={s} className="flex items-center gap-2">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500 ${isDone ? 'bg-accent/20 text-accent outline outline-2 outline-accent/30 shadow-glass-sm' :
-                                    isActive ? 'bg-accent text-accent-foreground scale-110 outline outline-2 outline-accent/50 shadow-glass-md' :
-                                        'glass-sm text-muted-foreground border border-border/50'
-                                    }`}>
+                                <button
+                                    type="button"
+                                    disabled={!canClick}
+                                    onClick={() => canClick && advance.mutate(s)}
+                                    className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500 ${isDone ? 'bg-accent/20 text-accent outline outline-2 outline-accent/30 shadow-glass-sm cursor-pointer hover:scale-110' :
+                                        isActive ? 'bg-accent text-accent-foreground scale-110 outline outline-2 outline-accent/50 shadow-glass-md' :
+                                            'glass-sm text-muted-foreground border border-border/50'
+                                    } ${!canClick ? 'cursor-default' : ''}`}>
                                     {isDone ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : i + 1}
-                                </div>
+                                </button>
                                 {i < STEPS.length - 1 && (
                                     <div className={`w-16 h-0.5 transition-all duration-500 rounded-full ${isDone ? 'bg-accent/50 shadow-[0_0_8px_rgba(var(--accent),0.5)]' : 'bg-border/50'}`} />
                                 )}
@@ -109,16 +114,16 @@ export default function OnboardingPage() {
                     <WelcomeStep onNext={() => advance.mutate('providers_setup')} loading={advance.isPending} />
                 )}
                 {step === 'providers_setup' && (
-                    <ProvidersSetupStep onNext={() => advance.mutate('models_setup')} loading={advance.isPending} />
+                    <ProvidersSetupStep onNext={() => advance.mutate('models_setup')} onBack={() => advance.mutate('welcome')} loading={advance.isPending} />
                 )}
                 {step === 'models_setup' && (
-                    <ModelsSetupStep onNext={() => advance.mutate('workspace_create')} loading={advance.isPending} />
+                    <ModelsSetupStep onNext={() => advance.mutate('workspace_create')} onBack={() => advance.mutate('providers_setup')} loading={advance.isPending} />
                 )}
                 {step === 'workspace_create' && (
                     <WorkspaceCreateStep onNext={async () => {
                         await advance.mutateAsync('automation_preferences')
                         qc.invalidateQueries({ queryKey: ['onboarding'] })
-                    }} />
+                    }} onBack={() => advance.mutate('models_setup')} loading={advance.isPending} />
                 )}
                 {step === 'automation_preferences' && (
                     <AutomationPreferencesStep onNext={async () => {
@@ -129,7 +134,7 @@ export default function OnboardingPage() {
                         }).then((ws: { id: string }[]) => {
                             if (ws.length > 0) navigate(`/w/${ws[0].id}`)
                         })
-                    }} loading={advance.isPending} />
+                    }} onBack={() => advance.mutate('workspace_create')} loading={advance.isPending} />
                 )}
             </div>
         </div>
@@ -170,7 +175,7 @@ function WelcomeStep({ onNext, loading }: { onNext: () => void; loading: boolean
     )
 }
 
-function ProvidersSetupStep({ onNext, loading }: { onNext: () => void; loading: boolean }) {
+function ProvidersSetupStep({ onNext, onBack, loading }: { onNext: () => void; onBack: () => void; loading: boolean }) {
     const [configured, setConfigured] = useState<{ id: string; name: string }[]>([])
     const [selected, setSelected] = useState<string | null>(null)
     const [apiKey, setApiKey] = useState('')
@@ -321,22 +326,27 @@ function ProvidersSetupStep({ onNext, loading }: { onNext: () => void; loading: 
                 )}
             </div>
 
-            <button
-                className="btn-primary w-full justify-center py-3"
-                onClick={onNext}
-                disabled={loading || configured.length === 0}
-            >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                {configured.length === 0 ? 'Add at least one provider to continue' : `Continue with ${configured.length} provider${configured.length > 1 ? 's' : ''}`}
-                <ArrowRight className="w-4 h-4" />
-            </button>
+            <div className="flex gap-3">
+                <button className="btn-ghost justify-center py-3 px-4" onClick={onBack} disabled={loading}>
+                    <ArrowLeft className="w-4 h-4" /> Back
+                </button>
+                <button
+                    className="btn-primary flex-1 justify-center py-3"
+                    onClick={onNext}
+                    disabled={loading || configured.length === 0}
+                >
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    {configured.length === 0 ? 'Add at least one provider to continue' : `Continue with ${configured.length} provider${configured.length > 1 ? 's' : ''}`}
+                    <ArrowRight className="w-4 h-4" />
+                </button>
+            </div>
         </div>
     )
 }
 
 type ModelTypeKey = 'chat' | 'vision' | 'embedding'
 
-function ModelsSetupStep({ onNext, loading }: { onNext: () => void; loading: boolean }) {
+function ModelsSetupStep({ onNext, onBack, loading }: { onNext: () => void; onBack: () => void; loading: boolean }) {
     const qc = useQueryClient()
     const [activeType, setActiveType] = useState<ModelTypeKey>('chat')
     const [chatModels, setChatModels] = useState<TypedModel[]>([])
@@ -605,15 +615,20 @@ function ModelsSetupStep({ onNext, loading }: { onNext: () => void; loading: boo
 
             {saveError && <p className="text-xs text-red-400">{saveError}</p>}
 
-            <button
-                className="btn-primary w-full justify-center py-3"
-                onClick={handleSaveAndContinue}
-                disabled={saving || loading || totalConfigured === 0}
-            >
-                {(saving || loading) ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                {totalConfigured === 0 ? 'Add at least one model to continue' : 'Save & Continue'}
-                <ArrowRight className="w-4 h-4" />
-            </button>
+            <div className="flex gap-3">
+                <button className="btn-ghost justify-center py-3 px-4" onClick={onBack} disabled={saving || loading}>
+                    <ArrowLeft className="w-4 h-4" /> Back
+                </button>
+                <button
+                    className="btn-primary flex-1 justify-center py-3"
+                    onClick={handleSaveAndContinue}
+                    disabled={saving || loading || totalConfigured === 0}
+                >
+                    {(saving || loading) ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    {totalConfigured === 0 ? 'Add at least one model to continue' : 'Save & Continue'}
+                    <ArrowRight className="w-4 h-4" />
+                </button>
+            </div>
         </div>
     )
 }
@@ -629,7 +644,7 @@ const parseBooleanSetting = (value: unknown, fallback: boolean) => {
     return fallback
 }
 
-function AutomationPreferencesStep({ onNext, loading }: { onNext: () => void | Promise<void>; loading: boolean }) {
+function AutomationPreferencesStep({ onNext, onBack, loading }: { onNext: () => void | Promise<void>; onBack: () => void; loading: boolean }) {
     const qc = useQueryClient()
     const [saving, setSaving] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -777,11 +792,16 @@ function AutomationPreferencesStep({ onNext, loading }: { onNext: () => void | P
                 <p className="text-xs text-red-400">{error}</p>
             )}
 
-            <button className="btn-primary w-full justify-center py-3" onClick={apply} disabled={saving || loading}>
-                {(saving || loading) ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                Save Preferences & Launch
-                <ArrowRight className="w-4 h-4" />
-            </button>
+            <div className="flex gap-3">
+                <button className="btn-ghost justify-center py-3 px-4" onClick={onBack} disabled={saving || loading}>
+                    <ArrowLeft className="w-4 h-4" /> Back
+                </button>
+                <button className="btn-primary flex-1 justify-center py-3" onClick={apply} disabled={saving || loading}>
+                    {(saving || loading) ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    Save Preferences & Launch
+                    <ArrowRight className="w-4 h-4" />
+                </button>
+            </div>
         </div>
     )
 }
@@ -797,7 +817,7 @@ function TogglePill({ checked }: { checked: boolean }) {
     )
 }
 
-function WorkspaceCreateStep({ onNext }: { onNext: () => void }) {
+function WorkspaceCreateStep({ onNext, onBack, loading }: { onNext: () => void; onBack: () => void; loading: boolean }) {
     const { data: providers = [] } = useQuery({ queryKey: ['providers'], queryFn: listProviders })
     const [creating, setCreating] = useState(false)
 
@@ -889,17 +909,22 @@ function WorkspaceCreateStep({ onNext }: { onNext: () => void }) {
                 <Plus className="w-4 h-4" /> Add another workspace
             </button>
 
-            <button
-                className="btn-primary w-full justify-center py-3"
-                onClick={handleCreate}
-                disabled={!canLaunch || creating}
-            >
-                {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                {creating
-                    ? `Creating ${workspaces.filter(w => w.name.trim()).length} workspace(s)…`
-                    : `Launch OpenForge`}
-                <ArrowRight className="w-4 h-4" />
-            </button>
+            <div className="flex gap-3">
+                <button className="btn-ghost justify-center py-3 px-4" onClick={onBack} disabled={creating || loading}>
+                    <ArrowLeft className="w-4 h-4" /> Back
+                </button>
+                <button
+                    className="btn-primary flex-1 justify-center py-3"
+                    onClick={handleCreate}
+                    disabled={!canLaunch || creating}
+                >
+                    {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    {creating
+                        ? `Creating ${workspaces.filter(w => w.name.trim()).length} workspace(s)…`
+                        : `Launch OpenForge`}
+                    <ArrowRight className="w-4 h-4" />
+                </button>
+            </div>
         </div>
     )
 }
