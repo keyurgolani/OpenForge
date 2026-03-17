@@ -11,7 +11,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 SEED_NAMESPACE = uuid5(NAMESPACE_URL, "https://openforge.dev/phase12/missions")
 
 # Related domain namespaces -- keeps cross-domain references deterministic
-WORKFLOW_NAMESPACE = uuid5(NAMESPACE_URL, "https://openforge.dev/phase12/workflows")
+WORKFLOW_NAMESPACE = uuid5(NAMESPACE_URL, "https://openforge.dev/phase10/workflows")
 PROFILE_NAMESPACE = uuid5(NAMESPACE_URL, "https://openforge.dev/phase12/profiles")
 
 
@@ -31,7 +31,7 @@ def _seed_uuid(slug: str) -> UUID:
 
 
 def _workflow_uuid(slug: str) -> UUID:
-    return uuid5(WORKFLOW_NAMESPACE, slug)
+    return uuid5(WORKFLOW_NAMESPACE, f"{slug}/workflow")
 
 
 def _profile_uuid(slug: str) -> UUID:
@@ -85,7 +85,7 @@ def get_seed_mission_blueprints(
                     "articles, and data releases relevant to the workspace's focus "
                     "areas, complete with source links and one-paragraph summaries."
                 ),
-                "workflow_id": _workflow_uuid("daily-research-digest"),
+                "workflow_id": _workflow_uuid("internet-research"),
                 "default_profile_ids": [
                     _profile_uuid("research-analyst"),
                     _profile_uuid("digest-writer"),
@@ -142,7 +142,7 @@ def get_seed_mission_blueprints(
                     "due-diligence monitoring, competitive surveillance, or "
                     "compliance tracking."
                 ),
-                "workflow_id": _workflow_uuid("target-watch"),
+                "workflow_id": _workflow_uuid("verify-and-refine"),
                 "default_profile_ids": [
                     _profile_uuid("osint-monitor"),
                 ],
@@ -197,7 +197,7 @@ def get_seed_mission_blueprints(
                     "so the operator can approve the research plan before execution "
                     "begins. Triggered manually when a research question arises."
                 ),
-                "workflow_id": _workflow_uuid("autonomous-research"),
+                "workflow_id": _workflow_uuid("internet-deep-research"),
                 "default_profile_ids": [
                     _profile_uuid("research-analyst"),
                     _profile_uuid("research-strategist"),
@@ -255,7 +255,7 @@ def get_seed_mission_blueprints(
                     "strategic moves, hiring signals, product launches, and market "
                     "positioning changes."
                 ),
-                "workflow_id": _workflow_uuid("competitor-intel"),
+                "workflow_id": _workflow_uuid("multi-source-synthesis"),
                 "default_profile_ids": [
                     _profile_uuid("competitive-analyst"),
                     _profile_uuid("report-writer"),
@@ -311,7 +311,7 @@ def get_seed_mission_blueprints(
                     "emits alert artifacts when quality thresholds are breached. "
                     "Acts as the workspace's built-in self-diagnostic system."
                 ),
-                "workflow_id": _workflow_uuid("workspace-monitoring"),
+                "workflow_id": _workflow_uuid("workspace-discovery"),
                 "default_profile_ids": [
                     _profile_uuid("workspace-ops"),
                 ],
@@ -368,7 +368,7 @@ def get_seed_mission_blueprints(
                     "updated, along with before-and-after quality scores. Scheduled "
                     "to run on a configurable cron cadence."
                 ),
-                "workflow_id": _workflow_uuid("knowledge-refinement"),
+                "workflow_id": _workflow_uuid("verify-and-refine"),
                 "default_profile_ids": [
                     _profile_uuid("knowledge-curator"),
                     _profile_uuid("editor"),
@@ -426,7 +426,7 @@ def get_seed_mission_blueprints(
                     "discovered topics ranked by novelty and relevance, with "
                     "suggested follow-up research threads."
                 ),
-                "workflow_id": _workflow_uuid("exploratory-discovery"),
+                "workflow_id": _workflow_uuid("exploratory-swarm"),
                 "default_profile_ids": [
                     _profile_uuid("discovery-explorer"),
                     _profile_uuid("research-analyst"),
@@ -485,7 +485,7 @@ def get_seed_mission_blueprints(
                     "that require days of sustained investigation and iterative "
                     "refinement under human supervision."
                 ),
-                "workflow_id": _workflow_uuid("deep-research-campaign"),
+                "workflow_id": _workflow_uuid("internet-deep-research"),
                 "default_profile_ids": [
                     _profile_uuid("research-strategist"),
                     _profile_uuid("research-analyst"),
@@ -545,7 +545,7 @@ def get_seed_mission_blueprints(
                     "without reviewing individual logs. Fires automatically via a "
                     "daily cron trigger."
                 ),
-                "workflow_id": _workflow_uuid("daily-summary"),
+                "workflow_id": _workflow_uuid("review-and-publish"),
                 "default_profile_ids": [
                     _profile_uuid("workspace-ops"),
                     _profile_uuid("digest-writer"),
@@ -604,7 +604,7 @@ def get_seed_mission_blueprints(
                     "expected metrics, it emits an alert artifact to notify the "
                     "operator."
                 ),
-                "workflow_id": _workflow_uuid("experiment-tracking"),
+                "workflow_id": _workflow_uuid("plan-execute-review"),
                 "default_profile_ids": [
                     _profile_uuid("experiment-analyst"),
                 ],

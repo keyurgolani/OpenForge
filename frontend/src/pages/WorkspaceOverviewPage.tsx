@@ -50,7 +50,7 @@ function SummaryCard({
 export default function WorkspaceOverviewPage() {
   const { workspaceId = '' } = useParams<{ workspaceId: string }>()
 
-  const profilesQuery = useProfilesQuery(6)
+  const profilesQuery = useProfilesQuery({ limit: 6 })
   const workflowsQuery = useWorkflowsQuery({ limit: 6 })
   const missionsQuery = useMissionsQuery({ limit: 6 })
   const runsQuery = useRunsQuery({ limit: 6 })

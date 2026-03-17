@@ -24,7 +24,7 @@ export function useWorkflowsQuery({
   limit = 100,
   status,
   isSystem,
-  isTemplate,
+  isTemplate = false,
 }: WorkflowQueryOptions = {}) {
   return useQuery<WorkflowsResponse>({
     queryKey: ['workflows', limit, status ?? 'all', isSystem ?? 'all', isTemplate ?? 'all'],

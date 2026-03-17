@@ -225,8 +225,6 @@ async def _seed_missions(db: AsyncSession) -> None:
                 MissionDefinitionModel.slug == slug
             )
         )
-        if existing is not None:
-            continue
 
         mission_data = dict(blueprint["mission"])
         # Merge catalog metadata from top-level blueprint keys into mission data
@@ -239,6 +237,22 @@ async def _seed_missions(db: AsyncSession) -> None:
         for jsonb_key in ("default_profile_ids", "default_trigger_ids", "output_artifact_types", "tags", "catalog_metadata"):
             if jsonb_key in mission_data:
                 mission_data[jsonb_key] = _stringify_uuids(mission_data[jsonb_key])
+
+        if existing is not None:
+            # Update cross-domain references on existing records to fix
+            # any stale workflow/profile links from prior seed runs.
+            changed = False
+            new_wf_id = str(mission_data.get("workflow_id", ""))
+            if new_wf_id and str(existing.workflow_id) != new_wf_id:
+                existing.workflow_id = new_wf_id
+                changed = True
+            new_profiles = mission_data.get("default_profile_ids")
+            if new_profiles is not None and existing.default_profile_ids != new_profiles:
+                existing.default_profile_ids = new_profiles
+                changed = True
+            if changed:
+                seeded += 1
+            continue
 
         try:
             mission = MissionDefinitionModel(**mission_data)

@@ -397,7 +397,7 @@ export const logoutAuth = (): Promise<void> =>
 // ── Domain APIs ──────────────────────────────────────────────────────────────
 
 // Profiles
-export const listProfiles = (params?: { skip?: number; limit?: number }): Promise<any> =>
+export const listProfiles = (params?: { skip?: number; limit?: number; is_system?: boolean; is_template?: boolean }): Promise<any> =>
     api.get('/profiles', { params }).then(r => r.data)
 export const getProfile = (id: string): Promise<any> => api.get(`/profiles/${id}`).then(r => r.data)
 export const resolveProfile = (id: string): Promise<any> => api.get(`/profiles/${id}/resolve`).then(r => r.data)

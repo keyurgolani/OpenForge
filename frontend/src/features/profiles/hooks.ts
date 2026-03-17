@@ -8,10 +8,15 @@ interface ProfilesResponse {
   total: number
 }
 
-export function useProfilesQuery(limit = 100) {
+interface ProfileQueryOptions {
+  limit?: number
+  isTemplate?: boolean
+}
+
+export function useProfilesQuery({ limit = 100, isTemplate = false }: ProfileQueryOptions = {}) {
   return useQuery<ProfilesResponse>({
-    queryKey: ['profiles', limit],
-    queryFn: () => listProfiles({ limit }),
+    queryKey: ['profiles', limit, isTemplate ?? 'all'],
+    queryFn: () => listProfiles({ limit, is_template: isTemplate }),
   })
 }
 
