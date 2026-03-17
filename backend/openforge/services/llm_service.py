@@ -182,8 +182,16 @@ class LLMService:
                 select(Config).where(Config.key == "system_chat_models")
             )
             cfg_row = cfg_result.scalar_one_or_none()
-            if cfg_row and isinstance(cfg_row.value, list):
-                _chat_models_entries = cfg_row.value
+            if cfg_row and cfg_row.value is not None:
+                raw = cfg_row.value
+                if isinstance(raw, str):
+                    try:
+                        import json as _json
+                        raw = _json.loads(raw)
+                    except (ValueError, TypeError):
+                        raw = []
+                if isinstance(raw, list):
+                    _chat_models_entries = raw
 
         if not provider and _chat_models_entries:
             # Fall back to the default model's provider from system_chat_models
