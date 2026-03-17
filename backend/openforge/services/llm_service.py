@@ -37,8 +37,10 @@ def _to_response(provider: LLMProvider) -> LLMProviderResponse:
 
 class LLMService:
     async def create_provider(self, db: AsyncSession, data: LLMProviderCreate) -> LLMProviderResponse:
-        # Check if this is the first provider — if so, make it the default
-        count_result = await db.execute(select(func.count(LLMProvider.id)))
+        # Check if this is the first non-local provider — if so, make it the default
+        count_result = await db.execute(
+            select(func.count(LLMProvider.id)).where(LLMProvider.is_system == False)
+        )
         is_first = count_result.scalar() == 0
 
         provider = LLMProvider(
@@ -103,8 +105,10 @@ class LLMService:
         await db.flush()
 
         if was_default:
-            # Promote the next available provider
-            next_result = await db.execute(select(LLMProvider).limit(1))
+            # Promote the next available non-local provider
+            next_result = await db.execute(
+                select(LLMProvider).where(LLMProvider.is_system == False).limit(1)
+            )
             next_provider = next_result.scalar_one_or_none()
             if next_provider:
                 next_provider.is_system_default = True
@@ -162,9 +166,12 @@ class LLMService:
             provider = p_result.scalar_one_or_none()
 
         if not provider:
-            # Fall back to system default
+            # Fall back to system default (skip local-only providers)
             p_result = await db.execute(
-                select(LLMProvider).where(LLMProvider.is_system_default == True)
+                select(LLMProvider).where(
+                    LLMProvider.is_system_default == True,
+                    LLMProvider.is_system == False,
+                )
             )
             provider = p_result.scalar_one_or_none()
 
