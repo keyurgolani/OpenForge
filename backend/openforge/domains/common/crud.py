@@ -8,8 +8,12 @@ from collections.abc import Mapping
 from typing import Any
 from uuid import UUID
 
+import re
+
+from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.inspection import inspect as sa_inspect
 
@@ -90,10 +94,26 @@ class CrudDomainService:
             return None
         return self._serialize(instance)
 
+    @staticmethod
+    def _friendly_integrity_message(exc: IntegrityError) -> str:
+        """Extract a user-friendly message from a unique-constraint violation."""
+        detail = str(exc.orig) if exc.orig else str(exc)
+        m = re.search(r"Key \((\w+)\)=\((.+?)\) already exists", detail)
+        if m:
+            return f"A record with {m.group(1)} \"{m.group(2)}\" already exists."
+        return "A record with that value already exists."
+
     async def create_record(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         instance = self.model(**self._normalize_payload(payload))
         self.db.add(instance)
-        await self.db.commit()
+        try:
+            await self.db.commit()
+        except IntegrityError as exc:
+            await self.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=self._friendly_integrity_message(exc),
+            ) from None
         await self.db.refresh(instance)
         return self._serialize(instance)
 
@@ -105,7 +125,14 @@ class CrudDomainService:
         for key, value in self._normalize_payload(payload).items():
             setattr(instance, key, value)
 
-        await self.db.commit()
+        try:
+            await self.db.commit()
+        except IntegrityError as exc:
+            await self.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=self._friendly_integrity_message(exc),
+            ) from None
         await self.db.refresh(instance)
         return self._serialize(instance)
 
