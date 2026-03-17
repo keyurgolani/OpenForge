@@ -6,7 +6,7 @@ import {
     testConnection, createWorkspace, listProviders,
     listSettings, updateSetting, listSchedules, updateSchedule,
 } from '@/lib/api'
-import { Play, FileText, Eye, EyeOff, Loader2, Link, Star, X, Search, CheckCircle2, XCircle, Sliders, Sparkles, ArrowLeft, ArrowRight, Plus, Trash2, MessageSquare, Lock, Brain, Folder, Briefcase, Microscope, BookOpen, Target, Globe, Lightbulb, Wrench, Palette, BarChart3, Rocket, Shield, FlaskConical, Leaf, Key, Settings2, PenLine, Database, Sprout, Mic } from 'lucide-react'
+import { Play, FileText, Eye, EyeOff, Loader2, Link, Star, X, Search, CheckCircle2, XCircle, Sliders, Sparkles, ArrowLeft, ArrowRight, Plus, Trash2, MessageSquare, Lock, Brain, Folder, Briefcase, Microscope, BookOpen, Target, Globe, Lightbulb, Wrench, Palette, BarChart3, Rocket, Shield, FlaskConical, Leaf, Key, Settings2, PenLine, Database, Sprout, Mic, SkipForward, Image, Volume2 } from 'lucide-react'
 import { ProviderIcon } from '@/components/shared/ProviderIcon'
 import { ModelOverrideSelect } from '@/components/shared/ModelOverrideSelect'
 import { isLocalProvider, sanitizeProviderDisplayName } from '@/lib/provider-display'
@@ -29,7 +29,30 @@ const PROVIDERS = [
     { id: 'custom-anthropic', name: 'Custom Anthropic-compat.', color: 'from-rose-500/20 border-rose-500/30', needsKey: false, needsUrl: true },
 ]
 
-const STEPS = ['welcome', 'providers_setup', 'models_setup', 'workspace_create', 'automation_preferences']
+const STEPS = [
+    'welcome', 'providers_setup',
+    'models_chat', 'models_vision', 'models_embedding',
+    'models_stt', 'models_tts', 'models_clip', 'models_pdf',
+    'workspace_create', 'automation_preferences',
+]
+
+// Model step metadata
+const MODEL_STEPS: Record<string, {
+    configType: 'chat' | 'vision' | 'embedding' | 'stt' | 'tts' | 'clip' | 'pdf'
+    configKey: string
+    title: string
+    description: string
+    icon: typeof MessageSquare
+    required: boolean
+}> = {
+    models_chat: { configType: 'chat', configKey: 'system_chat_models', title: 'Chat Models', description: 'Primary reasoning model for conversations and tasks. At least one chat model is required.', icon: MessageSquare, required: true },
+    models_vision: { configType: 'vision', configKey: 'system_vision_models', title: 'Vision Models', description: 'Models for analyzing images and visual content.', icon: Eye, required: false },
+    models_embedding: { configType: 'embedding', configKey: 'system_embedding_models', title: 'Embedding Models', description: 'Models for semantic search and knowledge indexing. Local models run on your hardware.', icon: Database, required: false },
+    models_stt: { configType: 'stt', configKey: 'system_stt_models', title: 'Speech-to-Text', description: 'Transcribe audio to text. Local Whisper models available via OpenForge Local.', icon: Mic, required: false },
+    models_tts: { configType: 'tts', configKey: 'system_tts_models', title: 'Text-to-Speech', description: 'Generate speech from text. Local Piper and Coqui models available.', icon: Volume2, required: false },
+    models_clip: { configType: 'clip', configKey: 'system_clip_models', title: 'Visual Search (CLIP)', description: 'Generate image embeddings for visual search across your knowledge.', icon: Image, required: false },
+    models_pdf: { configType: 'pdf', configKey: 'system_pdf_models', title: 'PDF Processing', description: 'Layout-aware PDF extraction. Local Marker model available for best results.', icon: FileText, required: false },
+}
 
 const AUTO_KNOWLEDGE_INTELLIGENCE_KEY = 'automation.auto_knowledge_intelligence_enabled'
 const AUTO_BOOKMARK_EXTRACTION_KEY = 'automation.auto_bookmark_content_extraction_enabled'
@@ -81,26 +104,26 @@ export default function OnboardingPage() {
                 </div>
 
                 {/* Progress stepper */}
-                <div className="flex items-center gap-2 justify-center mb-10">
+                <div className="flex items-center gap-1 justify-center mb-10">
                     {STEPS.map((s, i) => {
                         const stepIdx = STEPS.indexOf(step)
                         const isDone = stepIdx > i
                         const isActive = stepIdx === i
                         const canClick = isDone && !advance.isPending
                         return (
-                            <div key={s} className="flex items-center gap-2">
+                            <div key={s} className="flex items-center gap-1">
                                 <button
                                     type="button"
                                     disabled={!canClick}
                                     onClick={() => canClick && advance.mutate(s)}
-                                    className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500 ${isDone ? 'bg-accent/20 text-accent outline outline-2 outline-accent/30 shadow-glass-sm cursor-pointer hover:scale-110' :
-                                        isActive ? 'bg-accent text-accent-foreground scale-110 outline outline-2 outline-accent/50 shadow-glass-md' :
+                                    className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all duration-500 ${isDone ? 'bg-accent/20 text-accent outline outline-1 outline-accent/30 cursor-pointer hover:scale-110' :
+                                        isActive ? 'bg-accent text-accent-foreground scale-110 outline outline-2 outline-accent/50 shadow-glass-sm' :
                                             'glass-sm text-muted-foreground border border-border/50'
                                     } ${!canClick ? 'cursor-default' : ''}`}>
-                                    {isDone ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : i + 1}
+                                    {isDone ? <CheckCircle2 className="w-3 h-3 flex-shrink-0" /> : i + 1}
                                 </button>
                                 {i < STEPS.length - 1 && (
-                                    <div className={`w-16 h-0.5 transition-all duration-500 rounded-full ${isDone ? 'bg-accent/50 shadow-[0_0_8px_rgba(var(--accent),0.5)]' : 'bg-border/50'}`} />
+                                    <div className={`w-6 h-0.5 transition-all duration-500 rounded-full ${isDone ? 'bg-accent/50' : 'bg-border/50'}`} />
                                 )}
                             </div>
                         )
@@ -111,16 +134,30 @@ export default function OnboardingPage() {
                     <WelcomeStep onNext={() => advance.mutate('providers_setup')} loading={advance.isPending} />
                 )}
                 {step === 'providers_setup' && (
-                    <ProvidersSetupStep onNext={() => advance.mutate('models_setup')} onBack={() => advance.mutate('welcome')} loading={advance.isPending} />
+                    <ProvidersSetupStep onNext={() => advance.mutate('models_chat')} onBack={() => advance.mutate('welcome')} loading={advance.isPending} />
                 )}
-                {step === 'models_setup' && (
-                    <ModelsSetupStep onNext={() => advance.mutate('workspace_create')} onBack={() => advance.mutate('providers_setup')} loading={advance.isPending} />
-                )}
+                {Object.keys(MODEL_STEPS).map(stepKey => {
+                    if (step !== stepKey) return null
+                    const meta = MODEL_STEPS[stepKey]
+                    const stepIdx = STEPS.indexOf(stepKey)
+                    const prevStep = STEPS[stepIdx - 1]
+                    const nextStep = STEPS[stepIdx + 1]
+                    return (
+                        <ModelConfigStep
+                            key={stepKey}
+                            meta={meta}
+                            onNext={() => advance.mutate(nextStep)}
+                            onBack={() => advance.mutate(prevStep)}
+                            onSkip={meta.required ? undefined : () => advance.mutate(nextStep)}
+                            loading={advance.isPending}
+                        />
+                    )
+                })}
                 {step === 'workspace_create' && (
                     <WorkspaceCreateStep onNext={async () => {
                         await advance.mutateAsync('automation_preferences')
                         qc.invalidateQueries({ queryKey: ['onboarding'] })
-                    }} onBack={() => advance.mutate('models_setup')} loading={advance.isPending} />
+                    }} onBack={() => advance.mutate('models_pdf')} loading={advance.isPending} />
                 )}
                 {step === 'automation_preferences' && (
                     <AutomationPreferencesStep onNext={async () => {
@@ -342,111 +379,73 @@ function ProvidersSetupStep({ onNext, onBack, loading }: { onNext: () => void; o
     )
 }
 
-function ModelsSetupStep({ onNext, onBack, loading }: { onNext: () => void; onBack: () => void; loading: boolean }) {
+function ModelConfigStep({ meta, onNext, onBack, onSkip, loading }: {
+    meta: typeof MODEL_STEPS[keyof typeof MODEL_STEPS]
+    onNext: () => void
+    onBack: () => void
+    onSkip?: () => void
+    loading: boolean
+}) {
     const qc = useQueryClient()
-    const [activeTab, setActiveTab] = useState<string>('chat')
+    const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: listSettings })
 
-    // Config keys for each model type
-    const CONFIG_KEYS: Record<string, string> = {
-        chat: 'system_chat_models',
-        vision: 'system_vision_models',
-        embedding: 'system_embedding_models',
-        stt: 'system_stt_models',
-        tts: 'system_tts_models',
-        clip: 'system_clip_models',
-        pdf: 'system_pdf_models',
-    }
-
-    const TABS = [
-        { key: 'chat', label: 'Chat', icon: MessageSquare },
-        { key: 'vision', label: 'Vision', icon: Eye },
-        { key: 'embedding', label: 'Embedding', icon: Database },
-        { key: 'stt', label: 'Speech-to-Text', icon: Mic },
-        { key: 'tts', label: 'Text-to-Speech', icon: Play },
-        { key: 'clip', label: 'Visual Search', icon: Search },
-        { key: 'pdf', label: 'PDF Processing', icon: FileText },
-    ]
-
-    // Load settings
-    const { data: settings } = useQuery({
-        queryKey: ['settings'],
-        queryFn: listSettings,
-    })
-
-    // Parse configured models for each type from settings
-    const getModelsForType = (type: string): ConfiguredModel[] => {
-        const key = CONFIG_KEYS[type]
-        const raw = settings?.find((s: any) => s.key === key)?.value
+    const configuredModels: ConfiguredModel[] = (() => {
+        const raw = settings?.find((s: any) => s.key === meta.configKey)?.value
         if (!raw) return []
         try { return typeof raw === 'string' ? JSON.parse(raw) : (Array.isArray(raw) ? raw : []) } catch { return [] }
-    }
+    })()
 
-    const handleModelsChange = async (type: string, models: ConfiguredModel[]) => {
-        const key = CONFIG_KEYS[type]
-        await updateSetting(key, { value: JSON.stringify(models), category: 'llm' })
+    const handleModelsChange = async (models: ConfiguredModel[]) => {
+        await updateSetting(meta.configKey, { value: JSON.stringify(models), category: 'llm' })
         qc.invalidateQueries({ queryKey: ['settings'] })
     }
 
-    // Count total configured models across all types
-    const totalConfigured = Object.keys(CONFIG_KEYS).reduce((sum, type) => {
-        return sum + getModelsForType(type).length
-    }, 0)
+    const Icon = meta.icon
 
     return (
         <div className="glass-card shadow-glass-lg p-6 space-y-5 animate-fade-in border border-accent/20">
-            <div className="text-center space-y-1">
-                <h2 className="text-lg font-bold">Configure Models</h2>
-                <p className="text-xs text-muted-foreground">Select models for each capability. OpenForge Local models run on your hardware.</p>
+            <div className="text-center space-y-2">
+                <div className="w-12 h-12 rounded-2xl bg-accent/20 border border-accent/30 flex items-center justify-center mx-auto">
+                    <Icon className="w-6 h-6 text-accent" />
+                </div>
+                <h2 className="text-lg font-bold">{meta.title}</h2>
+                <p className="text-xs text-muted-foreground">{meta.description}</p>
+                {!meta.required && (
+                    <p className="text-[11px] text-muted-foreground/70 italic">This step is optional — you can configure it later in Settings.</p>
+                )}
             </div>
 
-            {/* Tab bar */}
-            <div className="flex flex-wrap gap-1.5 justify-center">
-                {TABS.map(tab => {
-                    const count = getModelsForType(tab.key).length
-                    const isActive = activeTab === tab.key
-                    return (
-                        <button
-                            key={tab.key}
-                            onClick={() => setActiveTab(tab.key)}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                                isActive
-                                    ? 'bg-accent/20 text-accent ring-1 ring-accent/30'
-                                    : 'text-muted-foreground hover:bg-muted/40'
-                            }`}
-                        >
-                            <tab.icon className="w-3 h-3" />
-                            {tab.label}
-                            {count > 0 && (
-                                <span className="bg-accent/20 text-accent text-[10px] px-1.5 py-0.5 rounded-full">{count}</span>
-                            )}
-                        </button>
-                    )
-                })}
-            </div>
-
-            {/* Active tab content */}
             <ModelTypeSelector
-                key={activeTab}
-                configType={activeTab as any}
-                configuredModels={getModelsForType(activeTab)}
-                onModelsChange={(models) => handleModelsChange(activeTab, models)}
+                configType={meta.configType}
+                configuredModels={configuredModels}
+                onModelsChange={handleModelsChange}
                 compact
             />
 
-            {/* Navigation */}
             <div className="flex gap-3">
                 <button className="btn-ghost justify-center py-3 px-4" onClick={onBack} disabled={loading}>
                     <ArrowLeft className="w-4 h-4" /> Back
                 </button>
-                <button
-                    className="btn-primary flex-1 justify-center py-3"
-                    onClick={onNext}
-                    disabled={loading || totalConfigured === 0}
-                >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                    {totalConfigured === 0 ? 'Add at least one model to continue' : 'Save & Continue'}
-                    <ArrowRight className="w-4 h-4" />
-                </button>
+                {onSkip && configuredModels.length === 0 ? (
+                    <button
+                        className="btn-ghost flex-1 justify-center py-3 border border-border/50"
+                        onClick={onSkip}
+                        disabled={loading}
+                    >
+                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <SkipForward className="w-4 h-4" />}
+                        Skip
+                    </button>
+                ) : (
+                    <button
+                        className="btn-primary flex-1 justify-center py-3"
+                        onClick={onNext}
+                        disabled={loading || (meta.required && configuredModels.length === 0)}
+                    >
+                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                        {meta.required && configuredModels.length === 0 ? 'Add at least one model' : 'Continue'}
+                        <ArrowRight className="w-4 h-4" />
+                    </button>
+                )}
             </div>
         </div>
     )

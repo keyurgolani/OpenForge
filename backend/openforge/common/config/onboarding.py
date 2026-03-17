@@ -14,20 +14,30 @@ from openforge.schemas.settings import OnboardingState
 _STEP_ORDER = (
     "welcome",
     "providers_setup",
-    "models_setup",
+    "models_chat",
+    "models_vision",
+    "models_embedding",
+    "models_stt",
+    "models_tts",
+    "models_clip",
+    "models_pdf",
     "workspace_create",
     "automation_preferences",
     "complete",
 )
 
-_VALID_TRANSITIONS = {
-    "welcome": {"providers_setup"},
-    "providers_setup": {"welcome", "models_setup"},
-    "models_setup": {"providers_setup", "workspace_create"},
-    "workspace_create": {"models_setup", "automation_preferences"},
-    "automation_preferences": {"workspace_create", "complete"},
-    "complete": set(),
-}
+# Build transitions: each step can go forward or backward one step.
+# Model steps (except chat) can also skip forward to the next step.
+_VALID_TRANSITIONS: dict[str, set[str]] = {}
+for _i, _step in enumerate(_STEP_ORDER):
+    _targets: set[str] = set()
+    if _i > 0:
+        _targets.add(_STEP_ORDER[_i - 1])  # backward
+    if _i < len(_STEP_ORDER) - 1:
+        _targets.add(_STEP_ORDER[_i + 1])  # forward
+    _VALID_TRANSITIONS[_step] = _targets
+# complete is terminal
+_VALID_TRANSITIONS["complete"] = set()
 
 
 class OnboardingService:
