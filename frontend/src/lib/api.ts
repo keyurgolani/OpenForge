@@ -371,7 +371,7 @@ export const updateMCPToolOverride = (
 ): Promise<any> => api.put(`/mcp/servers/${serverId}/tools/${encodeURIComponent(toolName)}`, data).then(r => r.data)
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
-export const checkAuth = (): Promise<{ authenticated: boolean; auth_enabled: boolean }> =>
+export const checkAuth = (): Promise<{ authenticated: boolean; auth_enabled: boolean; onboarding_complete: boolean }> =>
     fetch('/api/auth/check').then(r => r.json())
 
 export const loginAuth = (password: string): Promise<{ authenticated: boolean; auth_enabled: boolean }> =>

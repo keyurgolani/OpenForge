@@ -60,6 +60,8 @@ export default function OnboardingPage() {
 
     useEffect(() => {
         if (onboarding?.is_complete) {
+            // Notify AuthGuard that onboarding is done so it stops redirecting here
+            window.dispatchEvent(new Event('openforge:onboarding-complete'))
             qc.fetchQuery({
                 queryKey: ['workspaces'],
                 queryFn: () => import('@/lib/api').then(a => a.listWorkspaces()),
@@ -128,6 +130,7 @@ export default function OnboardingPage() {
                 {step === 'automation_preferences' && (
                     <AutomationPreferencesStep onNext={async () => {
                         await advance.mutateAsync('complete')
+                        window.dispatchEvent(new Event('openforge:onboarding-complete'))
                         qc.fetchQuery({
                             queryKey: ['workspaces'],
                             queryFn: () => import('@/lib/api').then(a => a.listWorkspaces()),

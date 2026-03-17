@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useState, useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter, Route, Routes, Navigate } from 'react-router-dom'
+import { BrowserRouter, Route, Routes, Navigate, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ToastProvider, useToast } from '@/components/shared/ToastProvider'
 import ErrorBoundary from '@/components/shared/ErrorBoundary'
@@ -77,13 +77,18 @@ function PageLoader() {
     )
 }
 
-/** AuthGuard: checks auth status on mount and listens for 401 events */
+/** AuthGuard: checks auth status on mount, enforces onboarding, and listens for 401 events */
 function AuthGuard({ children }: { children: React.ReactNode }) {
     const [status, setStatus] = useState<'loading' | 'ok' | 'login'>('loading')
+    const [onboardingComplete, setOnboardingComplete] = useState(true)
+    const location = useLocation()
 
     useEffect(() => {
         checkAuth()
-            .then(data => setStatus(data.authenticated ? 'ok' : 'login'))
+            .then(data => {
+                setStatus(data.authenticated ? 'ok' : 'login')
+                setOnboardingComplete(data.onboarding_complete !== false)
+            })
             .catch(() => setStatus('ok')) // if check fails, don't block access
     }, [])
 
@@ -93,8 +98,24 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
         return () => window.removeEventListener('openforge:unauthorized', handler)
     }, [])
 
+    // Listen for onboarding completion event dispatched by OnboardingPage
+    useEffect(() => {
+        const handler = () => setOnboardingComplete(true)
+        window.addEventListener('openforge:onboarding-complete', handler)
+        return () => window.removeEventListener('openforge:onboarding-complete', handler)
+    }, [])
+
     if (status === 'loading') return <PageLoader />
-    if (status === 'login') return <LoginPage onSuccess={() => setStatus('ok')} />
+    if (status === 'login') return <LoginPage onSuccess={() => {
+        setStatus('ok')
+        checkAuth().then(d => setOnboardingComplete(d.onboarding_complete !== false)).catch(() => {})
+    }} />
+
+    // Server says onboarding is not complete — redirect to /onboarding
+    if (!onboardingComplete && !location.pathname.startsWith('/onboarding')) {
+        return <Navigate to="/onboarding" replace />
+    }
+
     return <>{children}</>
 }
 

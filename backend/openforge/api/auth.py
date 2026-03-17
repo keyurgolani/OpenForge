@@ -52,22 +52,38 @@ async def logout(response: Response):
 @router.get("/check")
 async def check(request: Request):
     from openforge.config import get_settings
+    from openforge.db.postgres import AsyncSessionLocal
+    from openforge.common.config.onboarding import onboarding_service
+
     settings = get_settings()
 
-    if not settings.admin_password:
-        return {"authenticated": True, "auth_enabled": False}
+    authenticated = True
+    auth_enabled = bool(settings.admin_password)
 
-    token = request.cookies.get("openforge_session")
-    if not token:
-        return {"authenticated": False, "auth_enabled": True}
+    if auth_enabled:
+        token = request.cookies.get("openforge_session")
+        if not token:
+            return {"authenticated": False, "auth_enabled": True, "onboarding_complete": False}
+        try:
+            from jose import jwt
+            secret = settings.encryption_key or "openforge-fallback-secret"
+            jwt.decode(token, secret, algorithms=["HS256"])
+        except Exception:
+            return {"authenticated": False, "auth_enabled": True, "onboarding_complete": False}
 
+    onboarding_complete = False
     try:
-        from jose import jwt, JWTError
-        secret = settings.encryption_key or "openforge-fallback-secret"
-        jwt.decode(token, secret, algorithms=["HS256"])
-        return {"authenticated": True, "auth_enabled": True}
+        async with AsyncSessionLocal() as db:
+            state = await onboarding_service.get_state(db)
+            onboarding_complete = state.is_complete
     except Exception:
-        return {"authenticated": False, "auth_enabled": True}
+        pass
+
+    return {
+        "authenticated": authenticated,
+        "auth_enabled": auth_enabled,
+        "onboarding_complete": onboarding_complete,
+    }
 
 
 def _encode_token(secret: str, exp: datetime) -> str:
