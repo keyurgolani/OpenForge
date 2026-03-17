@@ -1,4 +1,4 @@
-"""Phase 12 catalog seeder - orchestrates seeding of curated profiles, workflows, and missions."""
+"""Catalog seeder - orchestrates seeding of curated profiles, workflows, and missions."""
 
 from __future__ import annotations
 
@@ -254,7 +254,7 @@ async def _seed_missions(db: AsyncSession) -> None:
 
 
 async def seed_curated_catalog(db: AsyncSession) -> None:
-    """Seed all Phase 12 curated catalog entries."""
+    """Seed all curated catalog entries."""
     await _seed_capability_bundles(db)
     await _seed_model_policies(db)
     await _seed_memory_policies(db)

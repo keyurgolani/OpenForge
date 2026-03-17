@@ -81,7 +81,7 @@ async def test_create_entity_from_mention_creates_provenance_and_marks_resolutio
         extraction_job_id=uuid4(),
         mention_text="OpenForge",
         entity_type=EntityType.ORGANIZATION.value,
-        context_snippet="OpenForge shipped the graph foundation in Phase 5.",
+        context_snippet="OpenForge shipped the graph foundation.",
         source_type="knowledge",
         source_id=uuid4(),
         extraction_method="llm",

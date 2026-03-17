@@ -117,7 +117,7 @@ class WorkflowDefinition(BaseModel):
     is_template: bool = False
     template_kind: str | None = None
     template_metadata: dict[str, Any] = Field(default_factory=dict)
-    # Phase 12 catalog metadata
+    # Catalog metadata
     tags: list[str] = Field(default_factory=list)
     is_featured: bool = False
     is_recommended: bool = False

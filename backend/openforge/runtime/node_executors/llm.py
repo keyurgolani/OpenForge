@@ -1,6 +1,6 @@
 """LLM node executor.
 
-Integrates with Phase 7 profiles, Phase 3 prompts/policies, and the LLM
+Integrates with agent profiles, managed prompts/policies, and the LLM
 gateway to produce real model-backed responses when configured.  Falls back
 to deterministic static responses for testing and template-driven workflows.
 """
@@ -75,7 +75,7 @@ class LLMNodeExecutor(BaseNodeExecutor):
         # Resolve profile
         profile = await self._resolve_profile(context, config)
 
-        # Render system prompt through Phase 3 prompt catalogue
+        # Render system prompt through managed prompt catalogue
         system_prompt = await self._resolve_system_prompt(context, config, profile)
 
         # Build messages
@@ -96,7 +96,7 @@ class LLMNodeExecutor(BaseNodeExecutor):
     async def _resolve_profile(
         self, context: NodeExecutionContext, config: dict[str, Any]
     ) -> Any:
-        """Resolve agent profile from Phase 7 profile registry."""
+        """Resolve agent profile from the profile registry."""
         profile_id = config.get("profile_id") or config.get("profile_slug")
         if profile_id and self._profile_registry:
             profile = self._profile_registry.get(str(profile_id))
@@ -111,7 +111,7 @@ class LLMNodeExecutor(BaseNodeExecutor):
     async def _resolve_system_prompt(
         self, context: NodeExecutionContext, config: dict[str, Any], profile: Any
     ) -> str:
-        """Render system prompt through Phase 3 managed prompt catalogue."""
+        """Render system prompt through the managed prompt catalogue."""
         # Direct prompt override in config takes precedence
         if config.get("system_prompt"):
             return str(config["system_prompt"])

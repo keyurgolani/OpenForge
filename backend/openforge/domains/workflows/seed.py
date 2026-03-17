@@ -1,4 +1,4 @@
-"""Deterministic workflow blueprints for Phase 10 composite runtime foundations."""
+"""Deterministic workflow blueprints for composite workflow runtime foundations."""
 
 from __future__ import annotations
 
@@ -194,7 +194,7 @@ def get_seed_workflow_blueprints(workspace_id: UUID | None = None) -> list[dict[
                         },
                     },
                     "status": "active",
-                    "change_note": "Phase 10 review and publish template.",
+                    "change_note": "Review and publish template.",
                     "nodes": [
                         {
                             "id": review_node_id,
@@ -232,7 +232,7 @@ def get_seed_workflow_blueprints(workspace_id: UUID | None = None) -> list[dict[
                                 "title_template": "Reviewed publish request",
                                 "body_template": "{review_text}",
                                 "artifact_state_key": "artifact_ids",
-                                "change_note": "Created by Phase 10 seed workflow",
+                                "change_note": "Created by seed workflow",
                             },
                             "input_mapping": {},
                             "output_mapping": {},
@@ -284,7 +284,7 @@ def get_seed_workflow_blueprints(workspace_id: UUID | None = None) -> list[dict[
                     "default_input_schema": {"type": "object", "required": ["request"]},
                     "default_output_schema": {"type": "object", "properties": {"review_text": {"type": "string"}}},
                     "status": "active",
-                    "change_note": "Phase 10 plan-execute-review template.",
+                    "change_note": "Plan-execute-review template.",
                     "nodes": [
                         {
                             "id": plan_node_id,
@@ -361,7 +361,7 @@ def get_seed_workflow_blueprints(workspace_id: UUID | None = None) -> list[dict[
                     "default_input_schema": {"type": "object", "required": ["research_tasks"]},
                     "default_output_schema": {"type": "object", "properties": {"research_summary": {"type": "string"}}},
                     "status": "active",
-                    "change_note": "Phase 10 map-reduce proof template.",
+                    "change_note": "Map-reduce proof template.",
                     "nodes": [
                         {
                             "id": map_reduce_fanout_id,
@@ -451,7 +451,7 @@ def get_seed_workflow_blueprints(workspace_id: UUID | None = None) -> list[dict[
                     "default_input_schema": {"type": "object", "required": ["review_tasks"]},
                     "default_output_schema": {"type": "object", "properties": {"council_summary": {"type": "string"}}},
                     "status": "active",
-                    "change_note": "Phase 10 reviewer council template.",
+                    "change_note": "Reviewer council template.",
                     "nodes": [
                         {
                             "id": council_fanout_id,
@@ -1400,7 +1400,7 @@ def get_seed_workflow_blueprints(workspace_id: UUID | None = None) -> list[dict[
 
 
 async def seed_example_workflows(service: WorkflowSeeder, workspace_id: UUID | None = None) -> list[dict[str, Any]]:
-    """Seed the foundational Phase 9 workflow set through the workflow service."""
+    """Seed the foundational workflow set through the workflow service."""
 
     created_workflows: list[dict[str, Any]] = []
     foundational_slugs = {

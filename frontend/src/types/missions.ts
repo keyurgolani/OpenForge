@@ -25,7 +25,7 @@ export interface MissionDefinition {
   is_system: boolean;
   is_template: boolean;
   recommended_use_case?: string;
-  // Phase 12 catalog metadata
+  // Catalog metadata
   tags: string[];
   catalog_metadata: Record<string, unknown>;
   is_featured: boolean;

@@ -1,5 +1,5 @@
 """
-Graph provenance management for Phase 5.
+Graph provenance management.
 
 Manages provenance links between graph objects and their sources.
 """

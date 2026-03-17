@@ -6,7 +6,7 @@ from .types import ArtifactSyncStatus
 
 
 def normalize_sync_status(sync_status: str | None) -> str:
-    """Normalize sink sync status to a known Phase 8 value."""
+    """Normalize sink sync status to a known artifact sync status value."""
 
     if sync_status in {member.value for member in ArtifactSyncStatus}:
         return str(sync_status)

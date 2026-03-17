@@ -185,7 +185,7 @@ async def seed_default_policies(db: AsyncSession) -> None:
     db.add(
         ToolPolicyModel(
             name="System Default Tool Policy",
-            description="Default operator-facing tool controls for the current Phase 3 trust foundation.",
+            description="Default operator-facing tool controls for the current trust foundation.",
             scope_type=PolicyScopeType.SYSTEM.value,
             scope_id=None,
             default_action="allow",

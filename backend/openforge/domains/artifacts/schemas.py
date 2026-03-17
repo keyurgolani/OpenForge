@@ -77,10 +77,10 @@ class ArtifactCreate(BaseModel):
     tags: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
-    # Compatibility with the older Phase 1 artifact shape.
+    # Compatibility with the older artifact shape.
     content: dict[str, Any] = Field(default_factory=dict)
 
-    # Phase 8 version payload fields.
+    # Version payload fields.
     content_type: str = Field(default="structured_payload", max_length=100)
     body: str | None = None
     structured_payload: dict[str, Any] = Field(default_factory=dict)
@@ -126,7 +126,7 @@ class ArtifactSinkResponse(ArtifactSink):
 
 
 class ArtifactResponse(BaseModel):
-    """Artifact response with Phase 8-compatible detail fields."""
+    """Artifact response with full detail fields."""
 
     id: UUID
     artifact_type: ArtifactType

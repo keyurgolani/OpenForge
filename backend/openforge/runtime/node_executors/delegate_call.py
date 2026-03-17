@@ -1,7 +1,7 @@
 """Delegate-call executor.
 
 Spawns a bounded child run and merges the result back with merge audit
-tracking per Phase 10 requirements.
+tracking for delegation and composition.
 """
 
 from __future__ import annotations

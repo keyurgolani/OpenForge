@@ -16,14 +16,14 @@ class DomainNoun(StrEnum):
     ARTIFACT = "artifact"
     KNOWLEDGE = "knowledge"
     GRAPH = "graph"
-    # Phase 12 curated catalog
+    # Curated catalog
     CATALOG = "catalog"
-    # Phase 7 profile building blocks
+    # Profile building blocks
     CAPABILITY_BUNDLE = "capability_bundle"
     MODEL_POLICY = "model_policy"
     MEMORY_POLICY = "memory_policy"
     OUTPUT_CONTRACT = "output_contract"
-    # Phase 13 observability and evaluation
+    # Observability and evaluation
     OBSERVABILITY = "observability"
     EVALUATION = "evaluation"
 

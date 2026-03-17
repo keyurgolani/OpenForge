@@ -1,5 +1,5 @@
 """
-Shared CRUD helpers for Phase 1 domain services.
+Shared CRUD helpers for core domain services.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from sqlalchemy.inspection import inspect as sa_inspect
 
 
 class CrudDomainService:
-    """Minimal reusable CRUD implementation for Phase 1 domain services."""
+    """Minimal reusable CRUD implementation for domain services."""
 
     model = None
     field_aliases: dict[str, str] = {}

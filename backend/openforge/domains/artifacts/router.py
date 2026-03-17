@@ -50,7 +50,7 @@ async def list_artifacts(
     q: str | None = None,
     service: ArtifactService = Depends(get_artifact_service),
 ):
-    """List artifacts with first-pass Phase 8 filtering."""
+    """List artifacts with filtering."""
 
     try:
         artifacts, total = await service.list_artifacts(

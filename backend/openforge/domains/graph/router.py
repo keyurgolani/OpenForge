@@ -1,5 +1,5 @@
 """
-Graph API router for Phase 5.
+Graph API router.
 
 Exposes CRUD, extraction, traversal, provenance, and bounded graph query
 surfaces.

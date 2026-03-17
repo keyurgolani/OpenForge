@@ -178,7 +178,7 @@ class ToolOutputProcessingResult(BaseModel):
 
 
 # =============================================================================
-# Graph-Aware Retrieval Types (Phase 5)
+# Graph-Aware Retrieval Types
 # =============================================================================
 
 

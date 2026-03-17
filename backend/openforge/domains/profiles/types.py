@@ -48,7 +48,7 @@ class AgentProfile(BaseModel):
     is_template: bool = Field(default=False)
     status: ProfileStatus = Field(default=ProfileStatus.DRAFT)
     icon: Optional[str] = Field(default=None, max_length=100)
-    # Phase 12 catalog metadata
+    # Catalog metadata
     tags: list[str] = Field(default_factory=list)
     catalog_metadata: dict[str, Any] = Field(default_factory=dict)
     is_featured: bool = Field(default=False)

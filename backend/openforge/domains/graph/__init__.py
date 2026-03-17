@@ -1,5 +1,5 @@
 """
-Graph domain package for Phase 5 Knowledge Model.
+Graph domain package for the Knowledge Model.
 
 This package provides entity and relationship management for the knowledge graph.
 """

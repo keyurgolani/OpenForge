@@ -1,6 +1,6 @@
 """Tool node executor.
 
-Integrates with Phase 3 policy evaluation and the tool server for live
+Integrates with managed policy evaluation and the tool server for live
 tool dispatch.  Retains deterministic operations (template, set_value,
 append_list) for testing and simple transform workflows.
 """
@@ -135,7 +135,7 @@ class ToolNodeExecutor(BaseNodeExecutor):
         tool_name: str,
         risk_level: str,
     ) -> None:
-        """Evaluate tool access through Phase 3 policy engine."""
+        """Evaluate tool access through the policy engine."""
         if self._policy_engine is None:
             return
 

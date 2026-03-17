@@ -10,7 +10,7 @@ from openforge.domains.workflows.service import WorkflowService
 from tests.domains.graph._helpers import FakeAsyncSession
 
 
-def test_seed_workflow_blueprints_cover_phase9_runtime_blueprint() -> None:
+def test_seed_workflow_blueprints_cover_runtime_blueprint() -> None:
     blueprints = get_seed_workflow_blueprints()
     blueprint_by_slug = {blueprint["slug"]: blueprint for blueprint in blueprints}
 
@@ -35,7 +35,7 @@ def test_seed_workflow_blueprints_cover_phase9_runtime_blueprint() -> None:
 
 
 @pytest.mark.asyncio
-async def test_seed_example_workflows_create_phase9_runtime_ready_workflow() -> None:
+async def test_seed_example_workflows_create_runtime_ready_workflow() -> None:
     db = FakeAsyncSession()
     service = WorkflowService(db)
 

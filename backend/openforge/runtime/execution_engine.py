@@ -2,8 +2,8 @@
 
 This module intentionally lives under ``openforge.runtime`` rather than the
 deleted legacy service package. It keeps the chat/tool/HITL surface working
-through Phase 4 while Profiles, Workflows, Missions, and Runs continue to take
-over long-term execution ownership.
+while Profiles, Workflows, Missions, and Runs continue to take over
+long-term execution ownership.
 """
 
 from __future__ import annotations

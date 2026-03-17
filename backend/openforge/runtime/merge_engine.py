@@ -1,7 +1,7 @@
 """Merge and reduce helpers for composite execution.
 
 Provides explicit merge strategies for child-to-parent state integration
-and collection reduction with audit metadata per Phase 10 requirements.
+and collection reduction with audit metadata for delegation and composition.
 """
 
 from __future__ import annotations

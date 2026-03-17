@@ -1,7 +1,7 @@
 """State transfer helpers for composite execution.
 
 Provides explicit, validated parent-to-child state mapping with support for
-conflict detection and schema validation per Phase 10 requirements.
+conflict detection and schema validation for composite workflow execution.
 """
 
 from __future__ import annotations

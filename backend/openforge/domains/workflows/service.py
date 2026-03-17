@@ -18,7 +18,7 @@ from openforge.db.models import (
 
 
 class WorkflowService:
-    """Service for managing Phase 9 workflow definitions and versions."""
+    """Service for managing workflow definitions and versions."""
 
     def __init__(self, db: AsyncSession):
         self.db = db

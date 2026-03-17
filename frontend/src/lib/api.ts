@@ -394,7 +394,7 @@ export const loginAuth = (password: string): Promise<{ authenticated: boolean; a
 export const logoutAuth = (): Promise<void> =>
     fetch('/api/auth/logout', { method: 'POST' }).then(() => undefined)
 
-// ── Domain APIs (Phase 1 Architecture) ───────────────────────────────────────
+// ── Domain APIs ──────────────────────────────────────────────────────────────
 
 // Profiles
 export const listProfiles = (params?: { skip?: number; limit?: number }): Promise<any> =>

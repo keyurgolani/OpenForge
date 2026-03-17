@@ -1,4 +1,4 @@
-"""Retrieval service boundary for Phase 4."""
+"""Retrieval service boundary."""
 
 from __future__ import annotations
 
@@ -509,7 +509,7 @@ class RetrievalService:
         )
 
     # =========================================================================
-    # Graph-Aware Retrieval (Phase 5)
+    # Graph-Aware Retrieval
     # =========================================================================
 
     async def search_with_graph_expansion(

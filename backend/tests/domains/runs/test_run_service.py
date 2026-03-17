@@ -68,7 +68,7 @@ async def test_run_service_lists_steps_lineage_checkpoints_and_events() -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_service_serializes_phase10_composite_metadata() -> None:
+async def test_run_service_serializes_composite_metadata() -> None:
     run_id = uuid4()
     run = RunModel(
         id=run_id,

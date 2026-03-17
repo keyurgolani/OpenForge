@@ -1,4 +1,4 @@
-"""Runtime profile registry built on the Phase 7 profile core model."""
+"""Runtime profile registry built on the agent profile core model."""
 
 from __future__ import annotations
 

@@ -31,7 +31,7 @@ class MissionCreate(BaseModel):
     is_template: bool = Field(default=False)
     recommended_use_case: Optional[str] = Field(default=None)
     status: MissionStatus = Field(default=MissionStatus.DRAFT)
-    # Phase 12 catalog metadata
+    # Catalog metadata
     tags: list[str] = Field(default_factory=list)
     catalog_metadata: dict[str, Any] = Field(default_factory=dict)
     is_featured: bool = Field(default=False)
@@ -88,7 +88,7 @@ class MissionResponse(BaseModel):
     is_template: bool
     recommended_use_case: Optional[str]
     status: MissionStatus
-    # Phase 12 catalog metadata
+    # Catalog metadata
     tags: list[str] = Field(default_factory=list)
     catalog_metadata: dict[str, Any] = Field(default_factory=dict)
     is_featured: bool = False

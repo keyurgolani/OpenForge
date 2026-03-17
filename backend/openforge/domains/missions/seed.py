@@ -1,4 +1,4 @@
-"""Deterministic mission blueprints for Phase 12 curated mission templates."""
+"""Deterministic mission blueprints for curated mission templates."""
 
 from __future__ import annotations
 

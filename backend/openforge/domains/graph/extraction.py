@@ -1,5 +1,5 @@
 """
-Graph extraction pipeline for Phase 5.
+Graph extraction pipeline.
 
 Queues extraction jobs, extracts entity/relationship mentions, canonicalizes
 them, and persists durable extraction results.

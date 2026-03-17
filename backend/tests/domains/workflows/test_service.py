@@ -141,7 +141,7 @@ async def test_create_workflow_creates_initial_version_nodes_edges_without_legac
 
 
 @pytest.mark.asyncio
-async def test_create_workflow_persists_phase10_template_metadata() -> None:
+async def test_create_workflow_persists_composite_template_metadata() -> None:
     workspace_id = uuid4()
     db = FakeAsyncSession()
     service = WorkflowService(db)

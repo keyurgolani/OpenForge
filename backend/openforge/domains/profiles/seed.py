@@ -1,4 +1,4 @@
-"""Deterministic seed data for Phase 12 curated agent profiles."""
+"""Deterministic seed data for curated agent profiles."""
 
 from __future__ import annotations
 

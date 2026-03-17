@@ -1,5 +1,5 @@
 """
-Graph domain types and enums for Phase 5.
+Graph domain types and enums.
 """
 
 from __future__ import annotations

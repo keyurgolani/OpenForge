@@ -28,5 +28,5 @@ __all__ = [
     "GraphProvenanceLinkModel",
 ]
 
-# Note: Import these models from db.models after running migration 005_phase5_graph_foundation
+# Note: Import these models from db.models after running migration 005_graph_foundation
 # The models are defined in: backend/openforge/db/models.py

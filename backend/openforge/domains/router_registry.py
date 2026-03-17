@@ -21,12 +21,12 @@ from .retrieval.router import router as retrieval_router
 from .runs.router import router as runs_router
 from .triggers.router import router as triggers_router
 from .workflows.router import router as workflows_router
-# Phase 7 profile building blocks
+# Profile building blocks
 from .capability_bundles.router import router as capability_bundles_router
 from .model_policies.router import router as model_policies_router
 from .memory_policies.router import router as memory_policies_router
 from .output_contracts.router import router as output_contracts_router
-# Phase 13 observability and evaluation
+# Observability and evaluation
 from .observability.router import router as observability_router
 from .evaluation.router import router as evaluation_router
 
@@ -102,14 +102,14 @@ def register_domain_routers(app: FastAPI) -> None:
         tags=["graph"],
     )
 
-    # Phase 12 curated catalog
+    # Curated catalog
     app.include_router(
         catalog_router,
         prefix=API_PREFIXES[DomainNoun.CATALOG],
         tags=["catalog"],
     )
 
-    # Phase 7 profile building blocks
+    # Profile building blocks
     # Register capability bundles domain
     app.include_router(
         capability_bundles_router,
@@ -155,7 +155,7 @@ def register_domain_routers(app: FastAPI) -> None:
         tags=["retrieval"],
     )
 
-    # Phase 13 observability and evaluation
+    # Observability and evaluation
     app.include_router(
         observability_router,
         prefix=API_PREFIXES[DomainNoun.OBSERVABILITY],

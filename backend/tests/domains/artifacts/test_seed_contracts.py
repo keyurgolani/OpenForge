@@ -17,7 +17,7 @@ def _seed_type(artifact_type: str) -> dict[str, object]:
     return next(seed for seed in SEED_ARTIFACT_TYPES if seed["artifact_type"] == artifact_type)
 
 
-def test_seed_artifact_types_cover_phase8_core_output_categories() -> None:
+def test_seed_artifact_types_cover_core_output_categories() -> None:
     required_types = {
         "note",
         "summary",

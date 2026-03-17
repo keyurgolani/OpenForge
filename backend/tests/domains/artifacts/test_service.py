@@ -36,7 +36,7 @@ async def test_create_artifact_creates_initial_version_links_and_sinks() -> None
             "workspace_id": workspace_id,
             "artifact_type": "report",
             "title": "Weekly execution report",
-            "summary": "Phase 8 rollout summary",
+            "summary": "Artifact rollout summary",
             "status": ArtifactStatus.ACTIVE,
             "visibility": ArtifactVisibility.WORKSPACE,
             "creation_mode": ArtifactCreationMode.RUN_GENERATED,
@@ -51,7 +51,7 @@ async def test_create_artifact_creates_initial_version_links_and_sinks() -> None
             "structured_payload": {"kpis": {"artifacts_created": 3}},
             "change_note": "Initial run output",
             "source_evidence_packet_id": evidence_packet_id,
-            "tags": ["phase8", "reporting"],
+            "tags": ["artifact", "reporting"],
             "links": [
                 {
                     "link_type": ArtifactLinkType.INFORMED_BY,
@@ -79,7 +79,7 @@ async def test_create_artifact_creates_initial_version_links_and_sinks() -> None
     assert artifact["current_version"]["structured_payload"] == {"kpis": {"artifacts_created": 3}}
     assert artifact["visibility"] == ArtifactVisibility.WORKSPACE
     assert artifact["status"] == ArtifactStatus.ACTIVE
-    assert artifact["tags"] == ["phase8", "reporting"]
+    assert artifact["tags"] == ["artifact", "reporting"]
 
     created_versions = [obj for obj in db.added if isinstance(obj, ArtifactVersionModel)]
     created_links = [obj for obj in db.added if isinstance(obj, ArtifactLinkModel)]
@@ -183,7 +183,7 @@ async def test_update_artifact_content_change_creates_new_version_and_promotes_i
         current_version_id=original_version_id,
         created_by_type="run",
         created_by_id=uuid4(),
-        tags_json=["phase8"],
+        tags_json=["artifact"],
     )
     version_model = ArtifactVersionModel(
         id=original_version_id,
@@ -229,7 +229,7 @@ async def test_update_artifact_content_change_creates_new_version_and_promotes_i
 
 
 @pytest.mark.asyncio
-async def test_list_versions_lineage_and_sinks_return_structured_phase8_views() -> None:
+async def test_list_versions_lineage_and_sinks_return_structured_views() -> None:
     artifact_id = uuid4()
     version_one_id = uuid4()
     version_two_id = uuid4()

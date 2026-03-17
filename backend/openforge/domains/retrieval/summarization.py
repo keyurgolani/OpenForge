@@ -1,4 +1,4 @@
-"""Shared summarization helpers for Phase 4 retrieval flows."""
+"""Shared summarization helpers for retrieval flows."""
 
 from __future__ import annotations
 

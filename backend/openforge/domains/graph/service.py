@@ -1,5 +1,5 @@
 """
-Graph service for Phase 5.
+Graph service.
 
 Provides canonical graph CRUD, bounded graph queries, and normalization
 inspection surfaces.

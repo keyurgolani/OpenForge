@@ -1,5 +1,5 @@
 """
-Graph traversal algorithms for Phase 5.
+Graph traversal algorithms.
 
 Provides graph traversal and neighborhood queries.
 """

@@ -1,4 +1,4 @@
-"""Evaluation package for OpenForge Phase 13."""
+"""Evaluation package for OpenForge observability and evaluation."""
 
 from .comparisons import compare_runs, compare_steps
 from .harness import EvaluationHarness

@@ -6,7 +6,7 @@ from .base import BaseNodeExecutor, NodeExecutionContext, NodeExecutionResult
 
 
 class ArtifactNodeExecutor(BaseNodeExecutor):
-    """Create artifacts through the shared Phase 8 artifact service."""
+    """Create artifacts through the shared artifact service."""
 
     supported_types = ("artifact",)
 

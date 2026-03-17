@@ -69,7 +69,7 @@ def test_required_alembic_version_length_matches_current_revision_history() -> N
 
     required_length = postgres_module._required_alembic_version_length(script_dir)
 
-    assert required_length >= len("012_phase13_observability_evaluation")
+    assert required_length >= len("012_observability_evaluation")
 
 
 def test_ensure_alembic_version_table_capacity_widens_short_postgres_column(monkeypatch) -> None:

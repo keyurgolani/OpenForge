@@ -15,7 +15,7 @@ venv/
 coverage.xml
 htmlcov/
 
-# SDLC scratch space (planning docs, temp scripts, summaries, reports)
+# Internal planning documents
 sdlc/
 static/
 

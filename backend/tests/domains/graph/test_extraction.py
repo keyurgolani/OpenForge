@@ -27,15 +27,15 @@ async def test_load_source_content_reads_knowledge_documents() -> None:
         id=source_id,
         workspace_id=uuid4(),
         type="note",
-        title="Phase 5 Notes",
-        content="OpenForge introduced graph provenance in Phase 5.",
+        title="Graph Notes",
+        content="OpenForge introduced graph provenance in the knowledge graph.",
     )
     db = FakeAsyncSession(objects={(Knowledge, source_id): knowledge})
     service = GraphExtractionService(db)
 
     content = await service._load_source_content(SourceType.KNOWLEDGE.value, source_id)
 
-    assert content == "OpenForge introduced graph provenance in Phase 5."
+    assert content == "OpenForge introduced graph provenance in the knowledge graph."
 
 
 @pytest.mark.asyncio

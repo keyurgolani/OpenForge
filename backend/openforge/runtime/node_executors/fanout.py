@@ -1,7 +1,7 @@
 """Fanout executor.
 
 Spawns multiple child runs from a single parent step with configurable
-failure handling and branch-level retry tracking per Phase 10 requirements.
+failure handling and branch-level retry tracking for composite workflow execution.
 """
 
 from __future__ import annotations

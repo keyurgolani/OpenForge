@@ -2548,13 +2548,13 @@ const MentionDropdown = React.forwardRef<HTMLDivElement, {
 function extractThoughts(text: string): string[] {
     if (!text) return []
 
-    // Phase 1: split on newlines
+    // Step 1: split on newlines
     const lines = text.split('\n')
     // The last line is still being typed — don't include it
     const closedLines = lines.slice(0, -1).map(l => l.trim()).filter(Boolean)
     const lastLine = lines[lines.length - 1] || ''
 
-    // Phase 2: within the last line, split on sentence boundaries (. ! ? followed by space)
+    // Step 2: within the last line, split on sentence boundaries (. ! ? followed by space)
     const segments: string[] = [...closedLines]
     const sentenceRe = /(.*?[.!?])(?=\s)/g
     let lastEnd = 0
@@ -2565,7 +2565,7 @@ function extractThoughts(text: string): string[] {
         lastEnd = sentenceRe.lastIndex
     }
 
-    // Phase 3: force-break any remaining long text at word boundaries (~100 char chunks)
+    // Step 3: force-break any remaining long text at word boundaries (~100 char chunks)
     const remainder = lastLine.slice(lastEnd).trim()
     if (remainder.length > 100) {
         let pos = 0
@@ -2579,7 +2579,7 @@ function extractThoughts(text: string): string[] {
         }
     }
 
-    // Phase 4: merge short segments (<20 chars) with the next one
+    // Step 4: merge short segments (<20 chars) with the next one
     const merged: string[] = []
     let buf = ''
     for (const seg of segments) {

@@ -258,7 +258,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("OpenForge Local provider seeding skipped: %s", e)
 
-    # Seed the Phase 3 managed prompt catalog and default trust policies.
+    # Seed the managed prompt catalog and default trust policies.
     try:
         from openforge.db.postgres import AsyncSessionLocal
         from openforge.domains.policies.service import seed_default_policies
@@ -267,20 +267,20 @@ async def lifespan(app: FastAPI):
         async with AsyncSessionLocal() as db:
             await seed_prompt_catalog(db)
             await seed_default_policies(db)
-        logger.info("Phase 3 prompt and policy catalog seeded.")
+        logger.info("Prompt and policy catalog seeded.")
     except Exception as e:
-        logger.warning("Phase 3 prompt/policy seeding skipped: %s", e)
+        logger.warning("Prompt/policy seeding skipped: %s", e)
 
-    # Seed Phase 12 curated catalog (profiles, workflows, missions).
+    # Seed curated catalog (profiles, workflows, missions).
     try:
         from openforge.db.postgres import AsyncSessionLocal
         from openforge.domains.catalog.seeder import seed_curated_catalog
 
         async with AsyncSessionLocal() as db:
             await seed_curated_catalog(db)
-        logger.info("Phase 12 curated catalog seeded.")
+        logger.info("Curated catalog seeded.")
     except Exception as e:
-        logger.warning("Phase 12 catalog seeding skipped: %s", e)
+        logger.warning("Catalog seeding skipped: %s", e)
 
     # Enable agent mode on all existing workspaces (idempotent)
     try:
@@ -399,7 +399,7 @@ app.include_router(api_router)
 from openforge.api.websocket import ws_router
 app.include_router(ws_router)
 
-# Register domain routers (Phase 1 architecture)
+# Register domain routers
 from openforge.domains import register_domain_routers
 register_domain_routers(app)
 

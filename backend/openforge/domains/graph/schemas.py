@@ -1,5 +1,5 @@
 """
-Graph domain request/response schemas for Phase 5.
+Graph domain request/response schemas.
 """
 
 from __future__ import annotations

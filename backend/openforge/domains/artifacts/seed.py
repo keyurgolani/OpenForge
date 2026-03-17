@@ -1,4 +1,4 @@
-"""Deterministic artifact metadata and example artifacts for Phase 8."""
+"""Deterministic artifact metadata and example artifacts."""
 
 from __future__ import annotations
 
@@ -152,7 +152,7 @@ def get_seed_artifact_blueprints(workspace_id: UUID | None = None) -> list[dict[
     reviewer_user_id = _seed_uuid("reviewer-user")
     operator_user_id = _seed_uuid("operator-user")
     weekly_evidence_packet_id = _seed_uuid("weekly-evidence-packet")
-    knowledge_item_id = _seed_uuid("phase8-knowledge")
+    knowledge_item_id = _seed_uuid("seed-knowledge")
     artifact_entity_id = _seed_uuid("artifact-entity")
 
     return [
@@ -162,7 +162,7 @@ def get_seed_artifact_blueprints(workspace_id: UUID | None = None) -> list[dict[
                 "workspace_id": resolved_workspace_id,
                 "artifact_type": ArtifactType.NOTE.value,
                 "title": "Operator handoff note",
-                "summary": "Tracks the Phase 8 durable output cutover.",
+                "summary": "Tracks the durable output cutover.",
                 "status": ArtifactStatus.ACTIVE.value,
                 "visibility": ArtifactVisibility.WORKSPACE.value,
                 "creation_mode": ArtifactCreationMode.USER_CREATED.value,
@@ -171,7 +171,7 @@ def get_seed_artifact_blueprints(workspace_id: UUID | None = None) -> list[dict[
                 "content_type": "markdown",
                 "body": "## Handoff\n\n- Artifact browser is live\n- Legacy target writes route through artifacts",
                 "change_note": "Initial operator note",
-                "tags": ["phase8", "handoff"],
+                "tags": ["handoff"],
             },
         },
         {
@@ -180,7 +180,7 @@ def get_seed_artifact_blueprints(workspace_id: UUID | None = None) -> list[dict[
                 "workspace_id": resolved_workspace_id,
                 "artifact_type": ArtifactType.REPORT.value,
                 "title": "Weekly execution report",
-                "summary": "Run-generated report for the Phase 8 rollout.",
+                "summary": "Run-generated report for the artifact rollout.",
                 "status": ArtifactStatus.ACTIVE.value,
                 "visibility": ArtifactVisibility.WORKSPACE.value,
                 "creation_mode": ArtifactCreationMode.RUN_GENERATED.value,
@@ -191,7 +191,7 @@ def get_seed_artifact_blueprints(workspace_id: UUID | None = None) -> list[dict[
                 "created_by_type": "run",
                 "created_by_id": weekly_run_id,
                 "content_type": "markdown",
-                "body": "# Weekly execution report\n\n## Outcome\nPhase 8 durable output unification landed.",
+                "body": "# Weekly execution report\n\n## Outcome\nDurable output unification landed.",
                 "structured_payload": {
                     "kpis": {
                         "artifacts_created": 6,
@@ -200,13 +200,13 @@ def get_seed_artifact_blueprints(workspace_id: UUID | None = None) -> list[dict[
                 },
                 "change_note": "Generated from the weekly execution run",
                 "source_evidence_packet_id": weekly_evidence_packet_id,
-                "tags": ["phase8", "report"],
+                "tags": ["report"],
                 "links": [
                     {
                         "link_type": ArtifactLinkType.INFORMED_BY.value,
                         "target_type": ArtifactObjectType.KNOWLEDGE.value,
                         "target_id": knowledge_item_id,
-                        "label": "Phase 8 design note",
+                        "label": "Artifact design note",
                     }
                 ],
                 "sinks": [
@@ -223,7 +223,7 @@ def get_seed_artifact_blueprints(workspace_id: UUID | None = None) -> list[dict[
             "artifact": {
                 "workspace_id": resolved_workspace_id,
                 "artifact_type": ArtifactType.PLAN.value,
-                "title": "Phase 8 rollout plan",
+                "title": "Artifact rollout plan",
                 "summary": "Checklist for shipping artifact unification safely.",
                 "status": ArtifactStatus.ACTIVE.value,
                 "visibility": ArtifactVisibility.WORKSPACE.value,
@@ -234,7 +234,7 @@ def get_seed_artifact_blueprints(workspace_id: UUID | None = None) -> list[dict[
                 "body": "1. Unify artifact contracts\n2. Replace legacy target writes\n3. Ship browser, detail, and history UI",
                 "structured_payload": {"checklist_state": {"completed": 2, "remaining": 1}},
                 "change_note": "Initial rollout plan",
-                "tags": ["phase8", "plan"],
+                "tags": ["plan"],
             },
         },
         {
@@ -253,7 +253,7 @@ def get_seed_artifact_blueprints(workspace_id: UUID | None = None) -> list[dict[
                 "body": "Keep all meaningful durable outputs inside the artifact system.",
                 "structured_payload": {"owner": "platform", "priority": "high"},
                 "change_note": "Imported from legacy target path",
-                "tags": ["phase8", "target"],
+                "tags": ["target"],
             },
         },
         {
@@ -276,7 +276,7 @@ def get_seed_artifact_blueprints(workspace_id: UUID | None = None) -> list[dict[
                 "structured_payload": {"entities": ["artifact-system", "legacy-targets"]},
                 "change_note": "Generated from research synthesis run",
                 "source_evidence_packet_id": weekly_evidence_packet_id,
-                "tags": ["phase8", "research"],
+                "tags": ["research"],
                 "links": [
                     {
                         "link_type": ArtifactLinkType.RELATED.value,
@@ -288,7 +288,7 @@ def get_seed_artifact_blueprints(workspace_id: UUID | None = None) -> list[dict[
                 "sinks": [
                     {
                         "sink_type": ArtifactSinkType.KNOWLEDGE_LINKED.value,
-                        "destination_ref": "knowledge://artifacts/phase8-research-brief",
+                        "destination_ref": "knowledge://artifacts/research-brief",
                         "sync_status": ArtifactSyncStatus.PENDING_SYNC.value,
                     }
                 ],
@@ -308,16 +308,16 @@ def get_seed_artifact_blueprints(workspace_id: UUID | None = None) -> list[dict[
                 "created_by_type": "user",
                 "created_by_id": reviewer_user_id,
                 "content_type": "markdown",
-                "body": "Phase 8 unified durable outputs under the artifact model.",
+                "body": "Unified durable outputs under the artifact model.",
                 "structured_payload": {"confidence": "medium"},
                 "change_note": "Initial derived summary",
-                "tags": ["phase8", "summary"],
+                "tags": ["summary"],
             },
             "versions": [
                 {
                     "content_type": "markdown",
                     "body": (
-                        "Phase 8 unified durable outputs under a versioned artifact model and "
+                        "Unified durable outputs under a versioned artifact model and "
                         "replaced filesystem target writes with artifact-backed persistence."
                     ),
                     "structured_payload": {"confidence": "high", "reviewed": True},
@@ -343,7 +343,7 @@ def get_seed_artifact_blueprints(workspace_id: UUID | None = None) -> list[dict[
             "post_create_sinks": [
                 {
                     "sink_type": ArtifactSinkType.FILE_EXPORT.value,
-                    "destination_ref": "export://reports/phase8-execution-summary.md",
+                    "destination_ref": "export://reports/execution-summary.md",
                     "sync_status": ArtifactSyncStatus.PENDING_SYNC.value,
                 }
             ],
@@ -356,7 +356,7 @@ async def seed_example_artifacts(
     *,
     workspace_id: UUID | None = None,
 ) -> list[dict[str, Any]]:
-    """Create the deterministic Phase 8 example artifacts through the shared service layer."""
+    """Create the deterministic example artifacts through the shared service layer."""
 
     created_by_slug: dict[str, dict[str, Any]] = {}
     created_artifacts: list[dict[str, Any]] = []

@@ -18,7 +18,7 @@ from .versioning import build_version_diff_summary, next_version_number, should_
 
 
 class ArtifactService:
-    """Service for managing Phase 8 artifacts, versions, lineage, and sinks."""
+    """Service for managing artifacts, versions, lineage, and sinks."""
 
     def __init__(self, db: AsyncSession):
         self.db = db

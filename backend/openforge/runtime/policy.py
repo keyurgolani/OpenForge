@@ -1,7 +1,7 @@
 """
 Policy Engine
 
-Transitional runtime wrapper over the Phase 3 policy evaluator.
+Transitional runtime wrapper over the managed policy evaluator.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ logger = logging.getLogger("openforge.runtime.policy")
 
 class PolicyEngine:
     """
-    Transitional adapter that maps Phase 3 decisions to the runtime's
+    Transitional adapter that maps policy decisions to the runtime's
     `"approve"`, `"hitl_required"`, and `"blocked"` labels.
     """
 

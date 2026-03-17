@@ -1,4 +1,4 @@
-"""Phase 10 composite runtime types and constants."""
+"""Composite workflow runtime types and constants."""
 
 from __future__ import annotations
 

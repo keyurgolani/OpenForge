@@ -1,5 +1,5 @@
 """
-Graph normalization and canonicalization for Phase 5.
+Graph normalization and canonicalization.
 
 Normalizes entity and relationship mentions into canonical graph objects while
 preserving durable canonicalization records and provenance.

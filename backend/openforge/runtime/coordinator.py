@@ -1,4 +1,4 @@
-"""Runtime coordinator for Phase 9 workflow execution."""
+"""Runtime coordinator for workflow execution."""
 
 from __future__ import annotations
 

@@ -40,7 +40,7 @@ static/
 frontend/dist/
 frontend/.vite/
 
-# Dev docs
+# Internal planning documents
 sdlc/
 docs/
 

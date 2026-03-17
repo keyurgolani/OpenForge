@@ -476,7 +476,7 @@ class AgentMemory(Base):
     )
 
 # =============================================================================
-# NEW DOMAIN MODELS (Phase 1 Architecture)
+# NEW DOMAIN MODELS
 # =============================================================================
 
 # These models represent the final architecture nouns and will be used
@@ -503,7 +503,7 @@ class AgentProfileModel(Base):
     is_template: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(50), default="draft")
     icon: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    # Phase 12 catalog metadata
+    # Catalog metadata
     tags: Mapped[list] = mapped_column(JSONB, default=list)
     catalog_metadata: Mapped[dict] = mapped_column(JSONB, default=dict)
     is_featured: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -539,7 +539,7 @@ class WorkflowDefinitionModel(Base):
     template_kind: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
     template_metadata: Mapped[dict] = mapped_column(JSONB, default=dict)
     status: Mapped[str] = mapped_column(String(50), default="draft")
-    # Phase 12 catalog metadata
+    # Catalog metadata
     tags: Mapped[list] = mapped_column(JSONB, default=list)
     is_featured: Mapped[bool] = mapped_column(Boolean, default=False)
     is_recommended: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -651,7 +651,7 @@ class MissionDefinitionModel(Base):
     is_template: Mapped[bool] = mapped_column(Boolean, default=False)
     recommended_use_case: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(50), default="draft")
-    # Phase 12 catalog metadata
+    # Catalog metadata
     tags: Mapped[list] = mapped_column(JSONB, default=list)
     catalog_metadata: Mapped[dict] = mapped_column(JSONB, default=dict)
     is_featured: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -1288,7 +1288,7 @@ class ToolOutputSummaryModel(Base):
 
 
 # =============================================================================
-# Phase 5: Graph Domain Models
+# Graph Domain Models
 # =============================================================================
 
 
@@ -1513,7 +1513,7 @@ class GraphProvenanceLinkModel(Base):
 
 
 # =============================================================================
-# Phase 7: Profile Core Models
+# Profile Models
 # =============================================================================
 
 
@@ -1623,7 +1623,7 @@ class OutputContractModel(Base):
 
 
 # =============================================================================
-# Phase 13: Observability & Evaluation Models
+# Observability & Evaluation Models
 # =============================================================================
 
 

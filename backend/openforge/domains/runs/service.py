@@ -12,7 +12,7 @@ from openforge.db.models import CheckpointModel, RunModel, RunStepModel, Runtime
 
 
 class RunService:
-    """Service for managing Phase 9 runs and runtime inspection views."""
+    """Service for managing runs and runtime inspection views."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
