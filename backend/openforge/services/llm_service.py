@@ -229,6 +229,19 @@ class LLMService:
                         model = entry["model_id"]
                         break
 
+        # Last resort: auto-detect from provider's available models
+        if not model:
+            try:
+                available = await self.list_models(db, provider.id)
+                if available:
+                    model = available[0].id
+                    logger.info(
+                        "Auto-selected model '%s' from provider '%s' (no default configured)",
+                        model, provider.display_name,
+                    )
+            except Exception:
+                pass
+
         if not model:
             raise HTTPException(
                 status_code=400,
