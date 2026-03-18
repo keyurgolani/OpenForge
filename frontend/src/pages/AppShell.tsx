@@ -9,7 +9,7 @@ import { useUIStore } from '@/stores/uiStore'
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
 import { getShortcutDisplay } from '@/lib/keyboard'
 import { onQuickKnowledgeOpen, type QuickKnowledgeType } from '@/lib/quick-knowledge'
-import { artifactsRoute, catalogRoute, chatRoute, knowledgeRoute, missionsRoute, profilesRoute, runsRoute, searchRoute, workspaceOverviewRoute, workflowsRoute } from '@/lib/routes'
+import { artifactsRoute, catalogRoute, chatRoute, dashboardRoute, knowledgeRoute, missionsRoute, profilesRoute, runsRoute, searchRoute, workflowsRoute } from '@/lib/routes'
 import CommandPalette from '@/components/shared/CommandPalette'
 import CreateDispatcher from '@/components/knowledge/create/CreateDispatcher'
 import KnowledgeTypeGrid from '@/components/knowledge/KnowledgeTypeGrid'
@@ -257,7 +257,7 @@ export default function AppShell() {
   }, [location.pathname])
 
   const routes = useMemo(() => ({
-    workspace: workspaceOverviewRoute(workspaceId),
+    workspace: dashboardRoute(workspaceId),
     knowledge: knowledgeRoute(workspaceId),
     knowledgeItem: (knowledgeId: string) => `/w/${workspaceId}/knowledge/${knowledgeId}`,
     chat: chatRoute(workspaceId),
@@ -271,7 +271,7 @@ export default function AppShell() {
     settings: '/settings',
   }), [workspaceId])
 
-  const isWorkspaceHome = location.pathname === workspaceOverviewRoute(workspaceId)
+  const isDashboard = location.pathname === dashboardRoute(workspaceId)
   const isKnowledgeBoardPage = location.pathname === knowledgeRoute(workspaceId)
   const isSearchPage = location.pathname.includes('/search')
   const isSettingsPage = location.pathname.includes('/settings')
@@ -284,7 +284,7 @@ export default function AppShell() {
   const isArtifactsPage = location.pathname.includes('/artifacts')
   const isCatalogPage = location.pathname.includes('/catalog')
   const isPrimarySurface = (
-    isWorkspaceHome
+    isDashboard
     || isKnowledgeBoardPage
     || isSearchPage
     || isSettingsPage

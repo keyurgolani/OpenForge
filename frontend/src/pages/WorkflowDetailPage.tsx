@@ -1,20 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, GitBranch, PlayCircle, Route, Shapes, Waypoints } from 'lucide-react'
-import { Link, useParams } from 'react-router-dom'
+import { ArrowLeft, Copy, GitBranch, Pencil, PlayCircle, Route, Save, Shapes, Trash2, Waypoints } from 'lucide-react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/shared/Card'
+import { CloneStepperModal } from '@/components/shared/CloneStepperModal'
 import ErrorState from '@/components/shared/ErrorState'
 import LoadingState from '@/components/shared/LoadingState'
 import PageHeader from '@/components/shared/PageHeader'
 import Section from '@/components/shared/Section'
 import StatusBadge from '@/components/shared/StatusBadge'
 import { useToast } from '@/components/shared/ToastProvider'
+import WorkflowFlowView from '@/components/shared/WorkflowFlowView'
 import { useWorkflowQuery, useWorkflowVersionQuery, useWorkflowVersionsQuery } from '@/features/workflows'
 import { useWorkspaces } from '@/hooks/useWorkspace'
-import { updateWorkflow } from '@/lib/api'
+import { deleteWorkflow, updateWorkflow } from '@/lib/api'
 import { formatDateTime } from '@/lib/formatters'
-import { workflowsRoute } from '@/lib/routes'
+import { catalogRoute, workflowsRoute } from '@/lib/routes'
 import type { WorkflowDefinition, WorkflowNode, WorkflowVersion } from '@/types/workflows'
 
 function formatJson(value: unknown): string {
@@ -64,6 +66,7 @@ export function getCompositeNodeFacts(node: WorkflowNode | null): Array<{ label:
 
 export default function WorkflowDetailPage() {
   const { workflowId = '' } = useParams<{ workflowId: string }>()
+  const navigate = useNavigate()
   const { data: workflow, isLoading, error } = useWorkflowQuery(workflowId)
   const { data: versionsData } = useWorkflowVersionsQuery(workflowId)
   const versions = useMemo(() => versionsData?.versions ?? [], [versionsData])
@@ -77,12 +80,47 @@ export default function WorkflowDetailPage() {
   const { data: workspaces = [] } = useWorkspaces()
   const { success: showSuccess } = useToast()
   const queryClient = useQueryClient()
+
+  // Clone stepper state
+  const [showCloneStepper, setShowCloneStepper] = useState(false)
+
+  // Inline editing state
+  const [isEditing, setIsEditing] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [editSlug, setEditSlug] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [editStatus, setEditStatus] = useState('')
+
   const updateWorkspaceMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: object }) => updateWorkflow(id, data),
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['workflow', vars.id] })
       queryClient.invalidateQueries({ queryKey: ['workflows'] })
       showSuccess('Workspace updated.')
+    },
+  })
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      updateWorkflow(workflowId, {
+        name: editName,
+        slug: editSlug,
+        description: editDescription || null,
+        status: editStatus,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workflow', workflowId] })
+      queryClient.invalidateQueries({ queryKey: ['workflows'] })
+      showSuccess('Workflow updated.')
+      setIsEditing(false)
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteWorkflow(workflowId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workflows'] })
+      navigate(workflowsRoute())
     },
   })
 
@@ -121,6 +159,7 @@ export default function WorkflowDetailPage() {
   const workflowBadges = getWorkflowPatternBadges(workflow)
   const compositeNodes = (activeVersion?.nodes ?? []).filter((node) => COMPOSITE_NODE_TYPES.has(node.node_type))
   const compositeFacts = getCompositeNodeFacts(selectedNode)
+  const isTemplate = workflow.is_template === true
 
   return (
     <div className="space-y-6 p-6">
@@ -128,13 +167,53 @@ export default function WorkflowDetailPage() {
         title={workflow.name}
         description="Inspect the active runtime definition, compare version snapshots, and review node and edge structure with full version history and graph visualization."
         actions={(
-          <Link
-            to={workflowsRoute()}
-            className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Workflows
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              to={isTemplate ? catalogRoute() : workflowsRoute()}
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              {isTemplate ? 'Back to Catalog' : 'Back to Workflows'}
+            </Link>
+            {isTemplate ? (
+              <button
+                onClick={() => setShowCloneStepper(true)}
+                className="inline-flex h-9 items-center gap-2 rounded-lg border border-accent/40 bg-accent/10 px-3 text-sm text-accent transition hover:bg-accent/20"
+              >
+                <Copy className="h-4 w-4" />
+                Clone
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditName(workflow.name)
+                    setEditSlug(workflow.slug)
+                    setEditDescription(workflow.description ?? '')
+                    setEditStatus(workflow.status)
+                    setIsEditing(!isEditing)
+                  }}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
+                >
+                  <Pencil className="h-4 w-4" />
+                  {isEditing ? 'Cancel' : 'Edit'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm(`Delete workflow "${workflow.name}"?`)) {
+                      deleteMutation.mutate()
+                    }
+                  }}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 text-sm text-red-400 transition hover:bg-red-500/20"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </button>
+              </>
+            )}
+          </div>
         )}
       />
 
@@ -157,6 +236,60 @@ export default function WorkflowDetailPage() {
           </div>
         ))}
       </div>
+
+      {/* Inline edit form (user mode only) */}
+      {isEditing && !isTemplate && (
+        <div className="rounded-2xl border border-accent/30 bg-card/30 p-5 space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Name</label>
+              <input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-border/60 bg-background/40 px-3 py-2 text-sm text-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Slug</label>
+              <input
+                value={editSlug}
+                onChange={(e) => setEditSlug(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-border/60 bg-background/40 px-3 py-2 text-sm text-foreground"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Description</label>
+            <textarea
+              value={editDescription}
+              onChange={(e) => setEditDescription(e.target.value)}
+              rows={3}
+              className="mt-1 w-full rounded-lg border border-border/60 bg-background/40 px-3 py-2 text-sm text-foreground"
+            />
+          </div>
+          <div>
+            <label className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Status</label>
+            <select
+              value={editStatus}
+              onChange={(e) => setEditStatus(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-border/60 bg-background/40 px-3 py-2 text-sm text-foreground"
+            >
+              <option value="draft">Draft</option>
+              <option value="active">Active</option>
+              <option value="archived">Archived</option>
+            </select>
+          </div>
+          <button
+            type="button"
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending}
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-accent/40 bg-accent/10 px-4 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:opacity-50"
+          >
+            <Save className="h-4 w-4" />
+            Save Changes
+          </button>
+        </div>
+      )}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
         <Section title="Definition" description="The workflow identity stays stable while executable graph versions evolve underneath it.">
@@ -247,107 +380,17 @@ export default function WorkflowDetailPage() {
           </Section>
         </Section>
 
-        <Section title="Schemas" description="State, input, and output contracts are visible for builders and operators.">
-          <div className="grid gap-4">
-            {[
-              { title: 'State schema', description: 'Persisted runtime state shape for the selected version.', payload: activeVersion?.state_schema ?? {} },
-              { title: 'Default input schema', description: 'Expected launch payload for the selected version.', payload: activeVersion?.default_input_schema ?? {} },
-              { title: 'Default output schema', description: 'Final output contract for the selected version.', payload: activeVersion?.default_output_schema ?? {} },
-            ].map((schema) => (
-              <Card key={schema.title} glass>
-                <CardHeader>
-                  <CardTitle as="h2">{schema.title}</CardTitle>
-                  <CardDescription>{schema.description}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <pre className="overflow-x-auto rounded-xl border border-border/60 bg-background/50 p-4 text-xs text-foreground/90">
-                    {formatJson(schema.payload)}
-                  </pre>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </Section>
       </div>
 
-      <Section title="Composite orchestration" description="Composite patterns are defined directly in the workflow definition.">
-        <div className="grid gap-4 md:grid-cols-3">
-          <Card glass>
-            <CardHeader>
-              <CardTitle as="h2">Pattern</CardTitle>
-              <CardDescription>The composite pattern metadata attached to this template.</CardDescription>
-            </CardHeader>
-            <CardContent className="text-sm text-foreground">
-              {typeof workflow.template_metadata?.pattern === 'string' ? workflow.template_metadata.pattern : 'No pattern metadata'}
-            </CardContent>
-          </Card>
-          <Card glass>
-            <CardHeader>
-              <CardTitle as="h2">Composite nodes</CardTitle>
-              <CardDescription>Nodes using delegation, fan-out, subworkflow, join, or reduce semantics.</CardDescription>
-            </CardHeader>
-            <CardContent className="text-sm text-foreground">
-              {compositeNodes.length === 0 ? 'No composite nodes' : compositeNodes.map((node) => node.node_key).join(', ')}
-            </CardContent>
-          </Card>
-          <Card glass>
-            <CardHeader>
-              <CardTitle as="h2">Runtime summary</CardTitle>
-              <CardDescription>The workflow features the runtime should expose at execution time.</CardDescription>
-            </CardHeader>
-            <CardContent className="text-sm text-foreground">
-              {workflowBadges.length === 0 ? 'No runtime summary available' : workflowBadges.join(', ')}
-            </CardContent>
-          </Card>
-        </div>
-      </Section>
-
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
-        <Section title="Node inspector" description="Use the node list as a first-pass graph browser before a full visual editor exists.">
-          <div className="grid gap-3 lg:grid-cols-2">
-            {(activeVersion?.nodes ?? []).map((node) => {
-              const connections = countConnections(activeVersion, node.id)
-              return (
-                <button
-                  key={node.id}
-                  type="button"
-                  onClick={() => setSelectedNodeId(node.id)}
-                  className={`rounded-2xl border px-4 py-4 text-left transition ${
-                    selectedNodeId === node.id
-                      ? 'border-accent/40 bg-accent/10'
-                      : 'border-border/60 bg-card/30 hover:border-border/80'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{node.label}</p>
-                      <p className="mt-1 text-xs uppercase tracking-[0.12em] text-muted-foreground/75">{node.node_key}</p>
-                    </div>
-                    <StatusBadge status={node.status} />
-                  </div>
-                  <div className="mt-4 grid gap-2 text-xs text-muted-foreground/85 sm:grid-cols-3">
-                    <div>
-                      <p className="uppercase tracking-[0.12em] text-muted-foreground/70">Type</p>
-                      <p className="mt-1 text-sm font-medium text-foreground">{node.node_type}</p>
-                    </div>
-                    <div>
-                      <p className="uppercase tracking-[0.12em] text-muted-foreground/70">Inbound</p>
-                      <p className="mt-1 text-sm font-medium text-foreground">{connections.inbound}</p>
-                    </div>
-                    <div>
-                      <p className="uppercase tracking-[0.12em] text-muted-foreground/70">Outbound</p>
-                      <p className="mt-1 text-sm font-medium text-foreground">{connections.outbound}</p>
-                    </div>
-                  </div>
-                  {COMPOSITE_NODE_TYPES.has(node.node_type) ? (
-                    <div className="mt-3 inline-flex rounded-full border border-border/60 px-2.5 py-1 text-xs text-foreground">
-                      Composite node
-                    </div>
-                  ) : null}
-                </button>
-              )
-            })}
-          </div>
+        <Section title="Node inspector" description="Visual node flow following edge connections from the entry node.">
+          <WorkflowFlowView
+            nodes={activeVersion?.nodes ?? []}
+            edges={activeVersion?.edges ?? []}
+            entryNodeId={activeVersion?.entry_node_id ?? undefined}
+            selectedNodeId={selectedNodeId}
+            onSelectNode={setSelectedNodeId}
+          />
         </Section>
 
         <Section title="Selected node" description="Executor config and connected edges stay readable even without a graph canvas.">
@@ -426,44 +469,118 @@ export default function WorkflowDetailPage() {
         </Section>
       </div>
 
-      <Section title="Version metadata" description="Selected version timing and activation context.">
-        <div className="grid gap-4 md:grid-cols-3">
-          <Card glass>
-            <CardHeader>
-              <CardTitle as="h2">Selected version</CardTitle>
-              <CardDescription>The explicit executable snapshot currently in view.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground/90">
-              <div className="flex items-center justify-between gap-3">
-                <span>Status</span>
-                <StatusBadge status={activeVersion?.status ?? 'draft'} />
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span>Entry node</span>
-                <span className="text-foreground">{activeVersion?.entry_node?.node_key ?? 'None'}</span>
-              </div>
-            </CardContent>
-          </Card>
-          <Card glass>
-            <CardHeader>
-              <CardTitle as="h2">Created</CardTitle>
-              <CardDescription>Version snapshot creation timestamp.</CardDescription>
-            </CardHeader>
-            <CardContent className="text-sm text-foreground">
-              {activeVersion?.created_at ? formatDateTime(activeVersion.created_at) : 'Unknown'}
-            </CardContent>
-          </Card>
-          <Card glass>
-            <CardHeader>
-              <CardTitle as="h2">Updated</CardTitle>
-              <CardDescription>Latest metadata or topology update.</CardDescription>
-            </CardHeader>
-            <CardContent className="text-sm text-foreground">
-              {activeVersion?.updated_at ? formatDateTime(activeVersion.updated_at) : 'Unknown'}
-            </CardContent>
-          </Card>
+      {/* Tier 3 — Advanced (collapsible) */}
+      <details className="rounded-2xl border border-border/60 bg-card/30">
+        <summary className="cursor-pointer px-5 py-3 text-sm font-medium text-muted-foreground/70 uppercase tracking-[0.12em]">
+          Advanced
+        </summary>
+        <div className="px-5 pb-5 space-y-6">
+          <Section title="Schemas" description="State, input, and output contracts are visible for builders and operators.">
+            <div className="grid gap-4">
+              {[
+                { title: 'State schema', description: 'Persisted runtime state shape for the selected version.', payload: activeVersion?.state_schema ?? {} },
+                { title: 'Default input schema', description: 'Expected launch payload for the selected version.', payload: activeVersion?.default_input_schema ?? {} },
+                { title: 'Default output schema', description: 'Final output contract for the selected version.', payload: activeVersion?.default_output_schema ?? {} },
+              ].map((schema) => (
+                <Card key={schema.title} glass>
+                  <CardHeader>
+                    <CardTitle as="h2">{schema.title}</CardTitle>
+                    <CardDescription>{schema.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <pre className="overflow-x-auto rounded-xl border border-border/60 bg-background/50 p-4 text-xs text-foreground/90">
+                      {formatJson(schema.payload)}
+                    </pre>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </Section>
+
+          <Section title="Composite orchestration" description="Composite patterns are defined directly in the workflow definition.">
+            <div className="grid gap-4 md:grid-cols-3">
+              <Card glass>
+                <CardHeader>
+                  <CardTitle as="h2">Pattern</CardTitle>
+                  <CardDescription>The composite pattern metadata attached to this template.</CardDescription>
+                </CardHeader>
+                <CardContent className="text-sm text-foreground">
+                  {typeof workflow.template_metadata?.pattern === 'string' ? workflow.template_metadata.pattern : 'No pattern metadata'}
+                </CardContent>
+              </Card>
+              <Card glass>
+                <CardHeader>
+                  <CardTitle as="h2">Composite nodes</CardTitle>
+                  <CardDescription>Nodes using delegation, fan-out, subworkflow, join, or reduce semantics.</CardDescription>
+                </CardHeader>
+                <CardContent className="text-sm text-foreground">
+                  {compositeNodes.length === 0 ? 'No composite nodes' : compositeNodes.map((node) => node.node_key).join(', ')}
+                </CardContent>
+              </Card>
+              <Card glass>
+                <CardHeader>
+                  <CardTitle as="h2">Runtime summary</CardTitle>
+                  <CardDescription>The workflow features the runtime should expose at execution time.</CardDescription>
+                </CardHeader>
+                <CardContent className="text-sm text-foreground">
+                  {workflowBadges.length === 0 ? 'No runtime summary available' : workflowBadges.join(', ')}
+                </CardContent>
+              </Card>
+            </div>
+          </Section>
+
+          <Section title="Version metadata" description="Selected version timing and activation context.">
+            <div className="grid gap-4 md:grid-cols-3">
+              <Card glass>
+                <CardHeader>
+                  <CardTitle as="h2">Selected version</CardTitle>
+                  <CardDescription>The explicit executable snapshot currently in view.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm text-muted-foreground/90">
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Status</span>
+                    <StatusBadge status={activeVersion?.status ?? 'draft'} />
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Entry node</span>
+                    <span className="text-foreground">{activeVersion?.entry_node?.node_key ?? 'None'}</span>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card glass>
+                <CardHeader>
+                  <CardTitle as="h2">Created</CardTitle>
+                  <CardDescription>Version snapshot creation timestamp.</CardDescription>
+                </CardHeader>
+                <CardContent className="text-sm text-foreground">
+                  {activeVersion?.created_at ? formatDateTime(activeVersion.created_at) : 'Unknown'}
+                </CardContent>
+              </Card>
+              <Card glass>
+                <CardHeader>
+                  <CardTitle as="h2">Updated</CardTitle>
+                  <CardDescription>Latest metadata or topology update.</CardDescription>
+                </CardHeader>
+                <CardContent className="text-sm text-foreground">
+                  {activeVersion?.updated_at ? formatDateTime(activeVersion.updated_at) : 'Unknown'}
+                </CardContent>
+              </Card>
+            </div>
+          </Section>
         </div>
-      </Section>
+      </details>
+
+      {showCloneStepper && (
+        <CloneStepperModal
+          templateId={workflowId}
+          catalogType="workflow"
+          onClose={() => setShowCloneStepper(false)}
+          onSuccess={(clonedEntity) => {
+            setShowCloneStepper(false)
+            navigate(workflowsRoute(clonedEntity.id))
+          }}
+        />
+      )}
     </div>
   )
 }

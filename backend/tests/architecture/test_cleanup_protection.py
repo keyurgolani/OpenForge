@@ -178,7 +178,7 @@ class TestFrontendFileOrganization:
     def test_domain_page_shells_exist(self):
         """Canonical domain page shells should exist."""
         expected_pages = [
-            "WorkspaceOverviewPage.tsx",
+            "DashboardPage.tsx",
             "ProfilesPage.tsx",
             "WorkflowsPage.tsx",
             "MissionsPage.tsx",

@@ -39,7 +39,7 @@ export const ROUTES = {
 
   // Workspace-scoped routes
   WORKSPACE: WORKSPACE_PREFIX,
-  WORKSPACE_OVERVIEW: WORKSPACE_PREFIX,
+  DASHBOARD: WORKSPACE_PREFIX,
   KNOWLEDGE: `${WORKSPACE_PREFIX}/knowledge`,
   KNOWLEDGE_ITEM: `${WORKSPACE_PREFIX}/knowledge/:knowledgeId`,
   CHAT: `${WORKSPACE_PREFIX}/chat`,
@@ -80,8 +80,8 @@ export function workspaceRoute(workspaceId: string, suffix = ''): string {
   return `/w/${workspaceId}${normalizedSuffix}`;
 }
 
-export function workspaceOverviewRoute(workspaceId: string): string {
-  return routeWithParams(ROUTES.WORKSPACE_OVERVIEW, { workspaceId });
+export function dashboardRoute(workspaceId: string): string {
+  return routeWithParams(ROUTES.DASHBOARD, { workspaceId });
 }
 
 export function knowledgeRoute(workspaceId: string, knowledgeId?: string): string {

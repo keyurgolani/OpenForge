@@ -28,6 +28,7 @@ class NodeExecutionContext:
     step_index: int
     coordinator: Any
     step_id: UUID | None = None
+    capability_bundle: dict[str, Any] | None = None
 
 
 @dataclass(slots=True)

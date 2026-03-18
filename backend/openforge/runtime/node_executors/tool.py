@@ -74,6 +74,37 @@ class ToolNodeExecutor(BaseNodeExecutor):
     # Live tool dispatch
     # ------------------------------------------------------------------ #
 
+    def _validate_tool_access(self, context: NodeExecutionContext, tool_name: str) -> None:
+        """Validate tool access against the capability bundle."""
+        bundle = context.capability_bundle
+        if bundle is None:
+            return  # No bundle = unrestricted (backwards compatibility)
+
+        if not bundle.get("tools_enabled", True):
+            raise NodeExecutionError(
+                f"Tools are disabled by the capability bundle",
+                code="tools_disabled",
+            )
+
+        # Check category allowlist
+        allowed_categories = bundle.get("allowed_tool_categories")
+        if allowed_categories is not None:
+            tool_category = tool_name.split(".")[0] if "." in tool_name else tool_name
+            if tool_category not in allowed_categories:
+                raise NodeExecutionError(
+                    f"Tool category '{tool_category}' is not allowed. "
+                    f"Allowed categories: {', '.join(allowed_categories)}",
+                    code="tool_category_blocked",
+                )
+
+        # Check explicit blocklist
+        blocked_ids = bundle.get("blocked_tool_ids", [])
+        if tool_name in blocked_ids:
+            raise NodeExecutionError(
+                f"Tool '{tool_name}' is explicitly blocked by capability bundle",
+                code="tool_blocked",
+            )
+
     async def _execute_tool_call(
         self,
         context: NodeExecutionContext,
@@ -83,6 +114,9 @@ class ToolNodeExecutor(BaseNodeExecutor):
         tool_name = config.get("tool_name")
         if not tool_name:
             raise NodeExecutionError("tool_name is required for call_tool operation", code="missing_tool_name")
+
+        # Validate against capability bundle
+        self._validate_tool_access(context, tool_name)
 
         # Build tool arguments from config or state
         tool_args = self._build_tool_args(state, config)
@@ -177,39 +211,39 @@ class ToolNodeExecutor(BaseNodeExecutor):
         tool_args: dict[str, Any],
         config: dict[str, Any],
     ) -> Any:
-        """Dispatch tool call to the tool server via httpx."""
+        """Dispatch tool call via the existing ToolDispatcher."""
+        from openforge.integrations.tools.dispatcher import tool_dispatcher
+
+        workspace_id = str(getattr(context.run, "workspace_id", "") or "")
+        execution_id = str(getattr(context.run, "id", "") or "")
+
         try:
-            import httpx
-        except ImportError:
-            raise NodeExecutionError(
-                "httpx is required for live tool dispatch", code="missing_dependency"
+            result = await tool_dispatcher.execute(
+                tool_id=tool_name,
+                params=tool_args,
+                workspace_id=workspace_id,
+                execution_id=execution_id,
             )
-
-        tool_server_url = config.get("tool_server_url", "http://tool-server:8001")
-        timeout = config.get("timeout", 60)
-
-        try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.post(
-                    f"{tool_server_url}/tools/{tool_name}/execute",
-                    json={"arguments": tool_args},
-                )
-                response.raise_for_status()
-                return response.json()
-        except httpx.TimeoutException as exc:
-            raise NodeExecutionError(
-                f"Tool '{tool_name}' timed out", code="tool_timeout", retryable=True
-            ) from exc
-        except httpx.HTTPStatusError as exc:
-            raise NodeExecutionError(
-                f"Tool '{tool_name}' returned HTTP {exc.response.status_code}",
-                code="tool_call_failed",
-            ) from exc
         except Exception as exc:
             raise NodeExecutionError(
                 f"Tool '{tool_name}' dispatch failed: {exc}",
                 code="tool_call_failed",
             ) from exc
+
+        if not result.get("success", False):
+            error = result.get("error", "Unknown tool error")
+            raise NodeExecutionError(
+                f"Tool '{tool_name}' failed: {error}",
+                code="tool_call_failed",
+            )
+
+        output = result.get("output")
+        # Strip untrusted content boundary tags — they're for chat prompt
+        # injection protection and waste context window in workflow state.
+        if isinstance(output, str):
+            import re
+            output = re.sub(r'</?untrusted_content[^>]*>', '', output).strip()
+        return output
 
     def _process_tool_output(
         self, result: Any, config: dict[str, Any]

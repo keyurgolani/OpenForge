@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import dataclasses
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.inspection import inspect as sa_inspect
 
 from openforge.db.models import (
     AgentProfileModel,
@@ -216,3 +218,107 @@ class CatalogService:
             setup_requirements=requirements,
             warnings=warnings,
         )
+
+    # ── Unified clone ──
+
+    async def execute_unified_clone(self, request_data: dict) -> dict:
+        """Execute a full clone plan with dependency resolution in one transaction."""
+        from openforge.domains.catalog.clone_executor import execute_clone
+
+        return await execute_clone(
+            self.db,
+            root_template_id=request_data["root_template_id"],
+            root_catalog_type=request_data["root_catalog_type"],
+            overrides=request_data.get("overrides", {}),
+            dependency_resolutions=request_data.get("dependency_resolutions", []),
+        )
+
+    # ── Dependency tree resolution ──
+
+    async def get_dependency_tree(self, catalog_type: str, item_id: UUID) -> dict | None:
+        """Resolve the full dependency tree for a template entity."""
+        from openforge.domains.catalog.dependencies import resolve_dependency_tree
+
+        entity = await self._fetch_entity(catalog_type, item_id)
+        if entity is None:
+            return None
+
+        cache: dict[str, dict] = {}
+        await self._prefetch_dependencies(catalog_type, entity, cache)
+
+        def sync_lookup(cat_type: str, eid: UUID):
+            return cache.get(f"{cat_type}:{str(eid)}")
+
+        tree = resolve_dependency_tree(catalog_type, entity, lookup_fn=sync_lookup)
+        return dataclasses.asdict(tree)
+
+    async def _fetch_entity(self, catalog_type: str, entity_id: UUID) -> dict | None:
+        """Fetch a single entity by catalog type and ID, returning a plain dict."""
+        if catalog_type == "profile":
+            row = await self.db.get(AgentProfileModel, entity_id)
+            if not row:
+                return None
+            return {attr.key: getattr(row, attr.key) for attr in sa_inspect(row).mapper.column_attrs}
+        elif catalog_type == "workflow":
+            from openforge.domains.workflows.service import WorkflowService
+            svc = WorkflowService(self.db)
+            return await svc.get_workflow(entity_id)
+        elif catalog_type == "mission":
+            from openforge.domains.missions.service import MissionService
+            svc = MissionService(self.db)
+            return await svc.get_mission(entity_id)
+        return None
+
+    async def _prefetch_dependencies(
+        self,
+        catalog_type: str,
+        entity: dict,
+        cache: dict,
+        visited: set | None = None,
+        depth: int = 0,
+    ) -> None:
+        """Recursively prefetch all dependency entities into cache."""
+        if depth > 10:
+            return
+        if visited is None:
+            visited = set()
+        eid = str(entity.get("id", ""))
+        if eid in visited:
+            return
+        visited.add(eid)
+        cache[f"{catalog_type}:{eid}"] = entity
+
+        if catalog_type == "mission":
+            wf_id = entity.get("workflow_id")
+            if wf_id and f"workflow:{str(wf_id)}" not in cache:
+                wf = await self._fetch_entity(
+                    "workflow", wf_id if isinstance(wf_id, UUID) else UUID(str(wf_id))
+                )
+                if wf:
+                    cache[f"workflow:{str(wf['id'])}"] = wf
+                    await self._prefetch_dependencies("workflow", wf, cache, visited, depth + 1)
+            for pid in entity.get("default_profile_ids") or []:
+                if f"profile:{str(pid)}" not in cache:
+                    p = await self._fetch_entity("profile", UUID(str(pid)))
+                    if p:
+                        cache[f"profile:{str(p['id'])}"] = p
+
+        elif catalog_type == "workflow":
+            version = entity.get("current_version") or {}
+            for node in version.get("nodes") or []:
+                config = node.get("config") or node.get("config_json") or {}
+                for key in ("child_workflow_id", "workflow_id", "target_workflow_id"):
+                    ref_id = config.get(key)
+                    if ref_id and f"workflow:{str(ref_id)}" not in cache:
+                        child = await self._fetch_entity("workflow", UUID(str(ref_id)))
+                        if child:
+                            cache[f"workflow:{str(child['id'])}"] = child
+                            await self._prefetch_dependencies(
+                                "workflow", child, cache, visited, depth + 1
+                            )
+                for key in ("target_profile_id",):
+                    ref_id = config.get(key)
+                    if ref_id and f"profile:{str(ref_id)}" not in cache:
+                        p = await self._fetch_entity("profile", UUID(str(ref_id)))
+                        if p:
+                            cache[f"profile:{str(p['id'])}"] = p

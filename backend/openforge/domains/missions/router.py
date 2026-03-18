@@ -197,7 +197,7 @@ async def delete_mission(
 @router.post("/{mission_id}/launch", response_model=MissionLaunchResponse)
 async def launch_mission(
     mission_id: UUID,
-    workspace_id: UUID = Query(...),
+    workspace_id: Optional[UUID] = Query(default=None),
     body: Optional[MissionLaunchRequest] = None,
     launcher: MissionLauncher = Depends(get_mission_launcher),
 ):

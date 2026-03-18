@@ -87,6 +87,15 @@ class LLMNodeExecutor(BaseNodeExecutor):
         # Call LLM
         response_text = await self._call_llm(context, config, profile, messages)
 
+        if not response_text:
+            logger.warning(
+                "LLM node '%s' returned empty response. Messages had %d chars across %d messages. "
+                "This may indicate context length limits or model issues.",
+                context.node.get("node_key", "unknown"),
+                sum(len(m.get("content", "")) for m in messages),
+                len(messages),
+            )
+
         # Validate output contract if applicable
         validated = self._validate_output(response_text, config, profile)
 

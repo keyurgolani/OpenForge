@@ -14,7 +14,7 @@ import './index.css'
 
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage'))
 const AppShell = lazy(() => import('./pages/AppShell'))
-const WorkspaceOverviewPage = lazy(() => import('./pages/WorkspaceOverviewPage'))
+const DashboardPage = lazy(() => import('./pages/DashboardPage'))
 const WorkspaceHome = lazy(() => import('./pages/WorkspaceHome'))
 const ProfilesPage = lazy(() => import('./pages/ProfilesPage'))
 const ProfileDetailPage = lazy(() => import('./pages/ProfileDetailPage'))
@@ -170,7 +170,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                             }>
                                 <Route index element={
                                     <ErrorBoundary>
-                                        <WorkspaceOverviewPage />
+                                        <DashboardPage />
                                     </ErrorBoundary>
                                 } />
                                 <Route path="knowledge" element={

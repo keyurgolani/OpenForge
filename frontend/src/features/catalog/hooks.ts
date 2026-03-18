@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { listCatalog, checkCatalogReadiness, listProfileTemplates, cloneProfileTemplate, listMissionTemplates, cloneMissionTemplate, cloneWorkflowTemplate } from '@/lib/api'
-import type { CatalogItemType, CatalogListResponse, CatalogReadinessResponse, CatalogQueryParams } from '@/types/catalog'
+import { listCatalog, checkCatalogReadiness, listProfileTemplates, cloneProfileTemplate, listMissionTemplates, cloneMissionTemplate, cloneWorkflowTemplate, getCatalogDependencies, executeCatalogClone } from '@/lib/api'
+import type { CatalogItemType, CatalogListResponse, CatalogReadinessResponse, CatalogQueryParams, DependencyTree, UnifiedCloneRequest, UnifiedCloneResponse } from '@/types/catalog'
 
 export function useCatalogQuery(params?: CatalogQueryParams) {
   return useQuery<CatalogListResponse>({
@@ -60,6 +60,27 @@ export function useCloneWorkflowTemplate() {
       cloneWorkflowTemplate(templateId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workflows'] })
+    },
+  })
+}
+
+export function useDependencyTreeQuery(catalogType?: CatalogItemType, itemId?: string) {
+  return useQuery<DependencyTree>({
+    queryKey: ['catalog-dependencies', catalogType, itemId],
+    queryFn: () => getCatalogDependencies(catalogType as string, itemId as string),
+    enabled: Boolean(catalogType && itemId),
+  })
+}
+
+export function useUnifiedCloneMutation() {
+  const queryClient = useQueryClient()
+  return useMutation<UnifiedCloneResponse, Error, UnifiedCloneRequest>({
+    mutationFn: (body: UnifiedCloneRequest) => executeCatalogClone(body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profiles'] })
+      queryClient.invalidateQueries({ queryKey: ['workflows'] })
+      queryClient.invalidateQueries({ queryKey: ['missions'] })
+      queryClient.invalidateQueries({ queryKey: ['catalog'] })
     },
   })
 }

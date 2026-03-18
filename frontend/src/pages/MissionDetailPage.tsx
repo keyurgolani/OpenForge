@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import { Activity, ArrowLeft, Clock, Heart, Pause, Pencil, Play, Power, PowerOff, Rocket, Save, Trash2, Zap } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { Activity, ArrowLeft, Clock, Copy, Heart, Pause, Pencil, Play, Power, PowerOff, Rocket, Save, Trash2, Zap } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/shared/Card'
+import { CloneStepperModal } from '@/components/shared/CloneStepperModal'
 import ErrorState from '@/components/shared/ErrorState'
 import LoadingState from '@/components/shared/LoadingState'
 import PageHeader from '@/components/shared/PageHeader'
@@ -22,9 +24,11 @@ import {
   useResumeMission,
   useUpdateMission,
 } from '@/features/missions'
+import { useWorkflowQuery, useWorkflowsQuery } from '@/features/workflows'
 import { useWorkspaces } from '@/hooks/useWorkspace'
+import { listProfiles } from '@/lib/api'
 import { formatDateTime, formatRelativeTime } from '@/lib/formatters'
-import { missionsRoute } from '@/lib/routes'
+import { catalogRoute, missionsRoute, profilesRoute, workflowsRoute } from '@/lib/routes'
 
 export default function MissionDetailPage() {
   const { missionId = '' } = useParams<{ missionId: string }>()
@@ -43,8 +47,25 @@ export default function MissionDetailPage() {
   const { success: showSuccess } = useToast()
   const navigate = useNavigate()
   const [isEditing, setIsEditing] = useState(false)
+  const [showLaunchForm, setShowLaunchForm] = useState(false)
+  const [launchParams, setLaunchParams] = useState<Record<string, string>>({})
   const [editName, setEditName] = useState('')
   const [editDescription, setEditDescription] = useState('')
+  const [editAutonomyMode, setEditAutonomyMode] = useState('')
+  const [editWorkflowId, setEditWorkflowId] = useState('')
+  const [showCloneStepper, setShowCloneStepper] = useState(false)
+
+  // Resolve workflow name from workflow_id
+  const { data: resolvedWorkflow } = useWorkflowQuery(mission?.workflow_id)
+  // Fetch user workflows for the edit dropdown
+  const { data: userWorkflowsData } = useWorkflowsQuery({ isTemplate: false })
+  const userWorkflows = userWorkflowsData?.workflows ?? []
+  // Fetch all profiles for name resolution
+  const { data: allProfilesData } = useQuery({
+    queryKey: ['profiles-all-for-resolution'],
+    queryFn: () => listProfiles({ limit: 500 }),
+  })
+  const allProfilesList: any[] = allProfilesData?.profiles ?? []
 
   if (isLoading) {
     return <LoadingState label="Loading mission detail..." />
@@ -58,6 +79,12 @@ export default function MissionDetailPage() {
   const artifacts = artifactsData?.artifacts ?? []
   const anyPending = launchMutation.isPending || pauseMutation.isPending || resumeMutation.isPending || disableMutation.isPending || activateMutation.isPending
 
+  // Resolve profile names from default_profile_ids
+  const resolvedProfiles = (mission.default_profile_ids ?? []).map((pid: string) => {
+    const found = allProfilesList.find((p: any) => p.id === pid)
+    return { id: pid, name: found?.name ?? pid }
+  })
+
   return (
     <div className="space-y-6 p-6">
       <PageHeader
@@ -65,13 +92,23 @@ export default function MissionDetailPage() {
         description="Inspect mission configuration, health, triggers, recent runs, and lifecycle controls."
         actions={(
           <div className="flex items-center gap-2">
-            {!mission.is_template && (
+            {mission.is_template ? (
+              <button
+                onClick={() => setShowCloneStepper(true)}
+                className="inline-flex h-9 items-center gap-2 rounded-lg border border-accent/40 bg-accent/10 px-3 text-sm text-accent transition hover:bg-accent/20"
+              >
+                <Copy className="h-4 w-4" />
+                Clone
+              </button>
+            ) : (
               <>
                 <button
                   type="button"
                   onClick={() => {
                     setEditName(mission.name)
                     setEditDescription(mission.description ?? '')
+                    setEditAutonomyMode(mission.autonomy_mode ?? 'supervised')
+                    setEditWorkflowId(mission.workflow_id ?? '')
                     setIsEditing(!isEditing)
                   }}
                   className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
@@ -96,11 +133,11 @@ export default function MissionDetailPage() {
               </>
             )}
             <Link
-              to={missionsRoute()}
+              to={mission.is_template ? catalogRoute() : missionsRoute()}
               className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
             >
               <ArrowLeft className="h-4 w-4" />
-              Back
+              {mission.is_template ? 'Back to Catalog' : 'Back'}
             </Link>
           </div>
         )}
@@ -109,13 +146,26 @@ export default function MissionDetailPage() {
       {/* Inline edit form */}
       {isEditing && (
         <div className="rounded-2xl border border-accent/30 bg-card/30 p-5 space-y-4">
-          <div>
-            <label className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Name</label>
-            <input
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-border/60 bg-background/40 px-3 py-2 text-sm text-foreground"
-            />
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Name</label>
+              <input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-border/60 bg-background/40 px-3 py-2 text-sm text-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Autonomy mode</label>
+              <select
+                value={editAutonomyMode}
+                onChange={(e) => setEditAutonomyMode(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-border/60 bg-background/40 px-3 py-2 text-sm text-foreground"
+              >
+                <option value="supervised">Supervised</option>
+                <option value="autonomous">Autonomous</option>
+              </select>
+            </div>
           </div>
           <div>
             <label className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Description</label>
@@ -126,11 +176,34 @@ export default function MissionDetailPage() {
               className="mt-1 w-full rounded-lg border border-border/60 bg-background/40 px-3 py-2 text-sm text-foreground"
             />
           </div>
+          <div>
+            <label className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Workflow</label>
+            <select
+              value={editWorkflowId}
+              onChange={(e) => setEditWorkflowId(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-border/60 bg-background/40 px-3 py-2 text-sm text-foreground"
+            >
+              <option value="">No workflow</option>
+              {userWorkflows.map((wf: any) => (
+                <option key={wf.id} value={wf.id}>{wf.name}</option>
+              ))}
+            </select>
+          </div>
+          {(mission.output_artifact_types?.length ?? 0) > 0 && (
+            <div>
+              <label className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Output artifact types</label>
+              <div className="mt-1 flex flex-wrap gap-2">
+                {mission.output_artifact_types.map((t: string) => (
+                  <span key={t} className="rounded-full border border-border/60 bg-background/40 px-2.5 py-1 text-xs text-foreground">{t}</span>
+                ))}
+              </div>
+            </div>
+          )}
           <button
             type="button"
             onClick={() => {
               updateMission.mutate(
-                { id: mission.id, data: { name: editName, description: editDescription } },
+                { id: mission.id, data: { name: editName, description: editDescription, autonomy_mode: editAutonomyMode, workflow_id: editWorkflowId || null } },
                 { onSuccess: () => { showSuccess('Mission updated.'); setIsEditing(false) } },
               )
             }}
@@ -163,14 +236,37 @@ export default function MissionDetailPage() {
         ))}
       </div>
 
-      {/* Lifecycle actions */}
-      <Section title="Lifecycle actions" description="Control the mission lifecycle: launch, pause, resume, disable, or activate.">
+      {/* Launch input form */}
+      {showLaunchForm && !mission.is_template && (
+        <LaunchInputForm
+          inputSchema={resolvedWorkflow?.current_version?.default_input_schema ?? resolvedWorkflow?.default_input_schema}
+          params={launchParams}
+          onChange={setLaunchParams}
+          isPending={launchMutation.isPending}
+          onCancel={() => { setShowLaunchForm(false); setLaunchParams({}) }}
+          onLaunch={(processedParams) => {
+            launchMutation.mutate(
+              { id: mission.id, data: { parameters: processedParams } },
+              {
+                onSuccess: () => {
+                  showSuccess('Mission launched successfully.')
+                  setShowLaunchForm(false)
+                  setLaunchParams({})
+                },
+              },
+            )
+          }}
+        />
+      )}
+
+      {/* Lifecycle actions (user mode only) */}
+      {!mission.is_template && <Section title="Lifecycle actions" description="Control the mission lifecycle: launch, pause, resume, disable, or activate.">
         <div className="flex flex-wrap gap-3">
           {(mission.status === 'draft' || mission.status === 'disabled' || mission.status === 'failed') ? (
             <button
               type="button"
-              onClick={() => launchMutation.mutate({ id: mission.id })}
-              disabled={anyPending}
+              onClick={() => setShowLaunchForm(true)}
+              disabled={anyPending || showLaunchForm}
               className="inline-flex h-10 items-center gap-2 rounded-xl border border-accent/30 bg-accent/10 px-4 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:opacity-50"
             >
               <Play className="h-4 w-4" />
@@ -222,7 +318,7 @@ export default function MissionDetailPage() {
             </button>
           ) : null}
         </div>
-      </Section>
+      </Section>}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
         {/* Left column: Definition + Health */}
@@ -240,14 +336,17 @@ export default function MissionDetailPage() {
                 </div>
                 <div>
                   <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Workflow</p>
-                  <p className="mt-1 text-sm font-medium text-foreground font-mono">{mission.workflow_id}</p>
+                  {mission.workflow_id ? (
+                    <Link
+                      to={workflowsRoute(mission.workflow_id)}
+                      className="mt-1 inline-block text-sm font-medium text-accent hover:underline"
+                    >
+                      {resolvedWorkflow?.name ?? mission.workflow_id}
+                    </Link>
+                  ) : (
+                    <p className="mt-1 text-sm font-medium text-muted-foreground/80">None</p>
+                  )}
                 </div>
-                {mission.workflow_version_id ? (
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Workflow version</p>
-                    <p className="mt-1 text-sm font-medium text-foreground font-mono">{mission.workflow_version_id}</p>
-                  </div>
-                ) : null}
                 <div>
                   <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Mode flags</p>
                   <div className="mt-1 flex flex-wrap gap-2">
@@ -291,6 +390,32 @@ export default function MissionDetailPage() {
                     <p className="mt-1 text-sm text-muted-foreground/90">{mission.recommended_use_case}</p>
                   </div>
                 ) : null}
+                <div>
+                  <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Profiles</p>
+                  {resolvedProfiles.length === 0 ? (
+                    <p className="mt-1 text-sm font-medium text-muted-foreground/80">None assigned</p>
+                  ) : (
+                    <div className="mt-1 flex flex-wrap gap-2">
+                      {resolvedProfiles.map((rp) => (
+                        <Link
+                          key={rp.id}
+                          to={profilesRoute(rp.id)}
+                          className="rounded-full border border-accent/30 bg-accent/5 px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent/15 transition"
+                        >
+                          {rp.name}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Output types</p>
+                  <p className="mt-1 text-sm font-medium text-foreground">
+                    {mission.output_artifact_types?.length
+                      ? mission.output_artifact_types.join(', ')
+                      : 'None configured'}
+                  </p>
+                </div>
               </CardContent>
             </Card>
           </Section>
@@ -338,9 +463,23 @@ export default function MissionDetailPage() {
             )}
           </Section>
 
-          <Section title="Budget and policies" description="Approval and budget policy references for this mission.">
-            <Card glass padding="lg">
-              <CardContent className="grid gap-4 md:grid-cols-2">
+          {/* Tier 3 — Advanced (collapsible) */}
+          <details className="rounded-2xl border border-border/60 bg-card/30">
+            <summary className="cursor-pointer px-5 py-3 text-sm font-medium text-muted-foreground/70 uppercase tracking-[0.12em]">
+              Advanced
+            </summary>
+            <div className="px-5 pb-5">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Workflow ID</p>
+                  <p className="mt-1 text-sm font-medium text-foreground font-mono">{mission.workflow_id || 'None'}</p>
+                </div>
+                {mission.workflow_version_id ? (
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Workflow version ID</p>
+                    <p className="mt-1 text-sm font-medium text-foreground font-mono">{mission.workflow_version_id}</p>
+                  </div>
+                ) : null}
                 <div>
                   <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Approval policy</p>
                   <p className="mt-1 text-sm font-medium text-foreground font-mono">{mission.approval_policy_id || 'None'}</p>
@@ -349,21 +488,17 @@ export default function MissionDetailPage() {
                   <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Budget policy</p>
                   <p className="mt-1 text-sm font-medium text-foreground font-mono">{mission.budget_policy_id || 'None'}</p>
                 </div>
-                <div>
-                  <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Profiles</p>
-                  <p className="mt-1 text-sm font-medium text-foreground">{mission.default_profile_ids?.length ?? 0} assigned</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Output types</p>
-                  <p className="mt-1 text-sm font-medium text-foreground">
-                    {mission.output_artifact_types?.length
-                      ? mission.output_artifact_types.join(', ')
-                      : 'None configured'}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </Section>
+                {(mission as any).catalog_metadata ? (
+                  <div className="md:col-span-2">
+                    <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Catalog metadata</p>
+                    <pre className="mt-1 overflow-x-auto rounded-xl border border-border/60 bg-background/50 p-3 text-xs text-foreground/90">
+                      {JSON.stringify((mission as any).catalog_metadata, null, 2)}
+                    </pre>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </details>
         </div>
 
         {/* Right column: Triggers + Runs + Artifacts */}
@@ -435,6 +570,119 @@ export default function MissionDetailPage() {
             )}
           </Section>
         </div>
+      </div>
+
+      {showCloneStepper && (
+        <CloneStepperModal
+          templateId={missionId}
+          catalogType="mission"
+          onClose={() => setShowCloneStepper(false)}
+          onSuccess={(clonedEntity) => {
+            setShowCloneStepper(false)
+            navigate(missionsRoute(clonedEntity.id))
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+/** Dynamic form for mission launch parameters, generated from workflow input schema. */
+function LaunchInputForm({
+  inputSchema,
+  params,
+  onChange,
+  isPending,
+  onCancel,
+  onLaunch,
+}: {
+  inputSchema?: Record<string, any> | null
+  params: Record<string, string>
+  onChange: (params: Record<string, string>) => void
+  isPending: boolean
+  onCancel: () => void
+  onLaunch: (processedParams: Record<string, any>) => void
+}) {
+  const properties = inputSchema?.properties ?? {}
+  const required: string[] = inputSchema?.required ?? []
+  const fieldNames = Object.keys(properties)
+
+  const allRequiredFilled = required.every((key) => (params[key] ?? '').trim() !== '')
+
+  return (
+    <div className="rounded-2xl border border-accent/30 bg-card/30 p-5 space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold text-foreground">Launch Parameters</h3>
+        <p className="mt-1 text-xs text-muted-foreground/80">
+          {fieldNames.length > 0
+            ? 'Configure the input parameters for this mission run.'
+            : 'This mission does not require any input parameters.'}
+        </p>
+      </div>
+
+      {fieldNames.map((key) => {
+        const prop = properties[key]
+        const isRequired = required.includes(key)
+        const isArray = prop?.type === 'array'
+        const label = key.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+
+        return (
+          <div key={key}>
+            <label className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">
+              {label}
+              {isRequired && <span className="text-red-400 ml-1">*</span>}
+            </label>
+            {isArray ? (
+              <textarea
+                value={params[key] ?? ''}
+                onChange={(e) => onChange({ ...params, [key]: e.target.value })}
+                placeholder={`Enter ${label.toLowerCase()} (one per line)`}
+                rows={3}
+                className="mt-1 w-full rounded-lg border border-border/60 bg-background/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50"
+              />
+            ) : (
+              <input
+                value={params[key] ?? ''}
+                onChange={(e) => onChange({ ...params, [key]: e.target.value })}
+                placeholder={prop?.description || `Enter ${label.toLowerCase()}`}
+                className="mt-1 w-full rounded-lg border border-border/60 bg-background/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50"
+              />
+            )}
+            {prop?.description && (
+              <p className="mt-1 text-xs text-muted-foreground/60">{prop.description}</p>
+            )}
+          </div>
+        )
+      })}
+
+      <div className="flex items-center gap-3 pt-2">
+        <button
+          type="button"
+          onClick={() => {
+            const processed: Record<string, any> = {}
+            for (const [key, value] of Object.entries(params)) {
+              const prop = properties[key]
+              if (prop?.type === 'array' && typeof value === 'string') {
+                processed[key] = value.split('\n').map((s: string) => s.trim()).filter(Boolean)
+              } else {
+                processed[key] = value
+              }
+            }
+            onLaunch(processed)
+          }}
+          disabled={isPending || !allRequiredFilled}
+          className="inline-flex h-10 items-center gap-2 rounded-xl border border-accent/30 bg-accent/10 px-4 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:opacity-50"
+        >
+          <Play className="h-4 w-4" />
+          {isPending ? 'Launching...' : 'Launch Mission'}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="inline-flex h-10 items-center gap-2 rounded-xl border border-border/60 bg-background/40 px-4 text-sm text-muted-foreground transition hover:text-foreground"
+        >
+          Cancel
+        </button>
       </div>
     </div>
   )

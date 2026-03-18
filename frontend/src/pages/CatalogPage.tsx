@@ -1,18 +1,13 @@
 import { useState } from 'react'
-import { BookOpen, Check, Copy, AlertTriangle, Star, Tag, ArrowRight } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { BookOpen, Copy, Star, Tag } from 'lucide-react'
 
 import EmptyState from '@/components/shared/EmptyState'
 import ErrorState from '@/components/shared/ErrorState'
 import LoadingState from '@/components/shared/LoadingState'
 import PageHeader from '@/components/shared/PageHeader'
-import { useToast } from '@/components/shared/ToastProvider'
-import {
-  useCatalogQuery,
-  useCatalogReadinessQuery,
-  useCloneProfileTemplate,
-  useCloneMissionTemplate,
-  useCloneWorkflowTemplate,
-} from '@/features/catalog'
+import { CloneStepperModal } from '@/components/shared/CloneStepperModal'
+import { useCatalogQuery } from '@/features/catalog'
 import type { CatalogItem, CatalogItemType } from '@/types/catalog'
 
 type FilterTab = 'all' | CatalogItemType
@@ -36,10 +31,18 @@ const DIFFICULTY_COLORS: Record<string, string> = {
   advanced: 'border-red-500/25 bg-red-500/10 text-red-300',
 }
 
+const DETAIL_ROUTES: Record<CatalogItemType, string> = {
+  profile: '/profiles',
+  workflow: '/workflows',
+  mission: '/missions',
+}
+
 export default function CatalogPage() {
   const [activeTab, setActiveTab] = useState<FilterTab>('all')
   const [featuredOnly, setFeaturedOnly] = useState(false)
-  const [selectedItem, setSelectedItem] = useState<CatalogItem | null>(null)
+  const [cloneTarget, setCloneTarget] = useState<{ id: string; type: CatalogItemType } | null>(null)
+
+  const navigate = useNavigate()
 
   const queryParams = {
     catalog_type: activeTab === 'all' ? undefined : activeTab,
@@ -47,51 +50,6 @@ export default function CatalogPage() {
   }
 
   const { data, isLoading, error } = useCatalogQuery(queryParams)
-  const { data: readiness } = useCatalogReadinessQuery(
-    selectedItem?.catalog_type,
-    selectedItem?.id,
-  )
-
-  const { success: showSuccess, error: showError } = useToast()
-  const cloneProfile = useCloneProfileTemplate()
-  const cloneMission = useCloneMissionTemplate()
-  const cloneWorkflow = useCloneWorkflowTemplate()
-
-  const cloneCallbacks = {
-    onSuccess: (data: any, item: CatalogItem) => {
-      const name = data?.name ?? item.name
-      showSuccess(`"${name}" cloned successfully. You can find it in your ${item.catalog_type}s.`)
-    },
-    onError: (_err: any, item: CatalogItem) => {
-      showError('Clone failed', `Could not clone "${item.name}". Please try again.`)
-    },
-  }
-
-  const handleClone = (item: CatalogItem) => {
-    switch (item.catalog_type) {
-      case 'profile':
-        cloneProfile.mutate(
-          { templateId: item.id, data: {} },
-          { onSuccess: (data) => cloneCallbacks.onSuccess(data, item), onError: (err) => cloneCallbacks.onError(err, item) },
-        )
-        break
-      case 'mission':
-        cloneMission.mutate(
-          { templateId: item.id, data: {} },
-          { onSuccess: (data) => cloneCallbacks.onSuccess(data, item), onError: (err) => cloneCallbacks.onError(err, item) },
-        )
-        break
-      case 'workflow':
-        cloneWorkflow.mutate(
-          { templateId: item.id, data: {} },
-          { onSuccess: (data) => cloneCallbacks.onSuccess(data, item), onError: (err) => cloneCallbacks.onError(err, item) },
-        )
-        break
-    }
-  }
-
-  const isCloning =
-    cloneProfile.isPending || cloneMission.isPending || cloneWorkflow.isPending
 
   if (isLoading) {
     return (
@@ -176,14 +134,21 @@ export default function CatalogPage() {
             <CatalogCard
               key={item.id}
               item={item}
-              isSelected={selectedItem?.id === item.id}
-              readiness={selectedItem?.id === item.id ? readiness : undefined}
-              isCloning={isCloning}
-              onSelect={() => setSelectedItem(selectedItem?.id === item.id ? null : item)}
-              onClone={() => handleClone(item)}
+              isCloning={false}
+              onClone={() => setCloneTarget({ id: item.id, type: item.catalog_type })}
+              onClick={() => navigate(`${DETAIL_ROUTES[item.catalog_type]}/${item.id}`)}
             />
           ))}
         </div>
+      )}
+
+      {cloneTarget && (
+        <CloneStepperModal
+          templateId={cloneTarget.id}
+          catalogType={cloneTarget.type}
+          onClose={() => setCloneTarget(null)}
+          onSuccess={() => setCloneTarget(null)}
+        />
       )}
     </div>
   )
@@ -191,25 +156,21 @@ export default function CatalogPage() {
 
 function CatalogCard({
   item,
-  isSelected,
-  readiness,
   isCloning,
-  onSelect,
   onClone,
+  onClick,
 }: {
   item: CatalogItem
-  isSelected: boolean
-  readiness?: { is_ready: boolean; missing_dependencies: string[]; warnings: string[] } | null
   isCloning: boolean
-  onSelect: () => void
   onClone: () => void
+  onClick: () => void
 }) {
   return (
     <article
-      className={`rounded-2xl border bg-card/30 p-5 transition-colors ${
-        isSelected ? 'border-accent/40 bg-card/45' : 'border-border/60'
-      }`}
+      onClick={onClick}
+      className="rounded-2xl border border-border/60 bg-card/30 p-5 transition-colors hover:border-accent/30 hover:bg-card/45 cursor-pointer"
     >
+      {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1 min-w-0">
           <div className="flex items-center gap-2">
@@ -218,9 +179,6 @@ function CatalogCard({
             ) : null}
             <h2 className="text-lg font-semibold text-foreground truncate">{item.name}</h2>
           </div>
-          <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/75">
-            {item.slug}
-          </p>
         </div>
         <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
           <span
@@ -234,6 +192,7 @@ function CatalogCard({
         </div>
       </div>
 
+      {/* Description (2-line clamp) */}
       <p className="mt-3 text-sm text-muted-foreground/90 line-clamp-2">
         {item.description || 'No description provided.'}
       </p>
@@ -281,104 +240,20 @@ function CatalogCard({
         </div>
       ) : null}
 
-      {/* Readiness warning (when expanded) */}
-      {isSelected && readiness && !readiness.is_ready ? (
-        <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/[0.05] p-3">
-          <div className="flex items-center gap-2 text-xs font-medium text-amber-300">
-            <AlertTriangle className="h-3.5 w-3.5" />
-            Not ready to clone
-          </div>
-          {readiness.missing_dependencies.length > 0 ? (
-            <ul className="mt-2 space-y-1">
-              {readiness.missing_dependencies.map((dep) => (
-                <li key={dep} className="text-xs text-amber-300/80">
-                  - {dep}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {readiness.warnings.length > 0 ? (
-            <ul className="mt-1 space-y-1">
-              {readiness.warnings.map((warn) => (
-                <li key={warn} className="text-xs text-muted-foreground/80">
-                  {warn}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      ) : null}
-
-      {/* Actions */}
-      <div className="mt-5 flex items-center justify-end gap-2">
+      {/* Clone button */}
+      <div className="mt-5 flex items-center justify-end">
         <button
-          onClick={onSelect}
-          className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-background/35 px-3 py-2 text-sm text-muted-foreground transition hover:text-foreground"
-        >
-          {isSelected ? 'Hide Details' : 'View Details'}
-          <ArrowRight className="h-4 w-4" />
-        </button>
-        <button
-          onClick={onClone}
+          onClick={(e) => {
+            e.stopPropagation()
+            onClone()
+          }}
           disabled={isCloning}
           className="inline-flex items-center gap-2 rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-sm text-accent transition hover:bg-accent/20 disabled:opacity-50"
         >
-          {isCloning ? (
-            <Check className="h-4 w-4" />
-          ) : (
-            <Copy className="h-4 w-4" />
-          )}
+          <Copy className="h-4 w-4" />
           Clone
         </button>
       </div>
-
-      {/* Expanded details */}
-      {isSelected ? (
-        <div className="mt-4 space-y-3 border-t border-border/40 pt-4">
-          {item.recommended_use_cases.length > 0 ? (
-            <div>
-              <p className="text-xs font-medium text-muted-foreground/70 uppercase tracking-wider mb-1.5">
-                Recommended Use Cases
-              </p>
-              <ul className="space-y-1">
-                {item.recommended_use_cases.map((uc) => (
-                  <li key={uc} className="text-sm text-muted-foreground/90">
-                    - {uc}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          {item.expected_outputs.length > 0 ? (
-            <div>
-              <p className="text-xs font-medium text-muted-foreground/70 uppercase tracking-wider mb-1.5">
-                Expected Outputs
-              </p>
-              <ul className="space-y-1">
-                {item.expected_outputs.map((out) => (
-                  <li key={out} className="text-sm text-muted-foreground/90">
-                    - {out}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          {item.example_inputs.length > 0 ? (
-            <div>
-              <p className="text-xs font-medium text-muted-foreground/70 uppercase tracking-wider mb-1.5">
-                Example Inputs
-              </p>
-              <ul className="space-y-1">
-                {item.example_inputs.map((inp) => (
-                  <li key={inp} className="text-sm text-muted-foreground/90">
-                    - {inp}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
     </article>
   )
 }

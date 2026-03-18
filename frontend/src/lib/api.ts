@@ -13,7 +13,7 @@ import type {
     ArtifactVersionCreate,
     ArtifactVersionsResponse,
 } from '@/types/artifacts'
-import type { CatalogListResponse, CatalogQueryParams, CatalogReadinessResponse } from '@/types/catalog'
+import type { CatalogListResponse, CatalogQueryParams, CatalogReadinessResponse, DependencyTree, UnifiedCloneRequest, UnifiedCloneResponse } from '@/types/catalog'
 import type { Checkpoint, Run, RunCompositeDebug, RunLineage, RunStep, RuntimeEvent } from '@/types/runs'
 import type { WorkflowDefinition, WorkflowVersion } from '@/types/workflows'
 
@@ -589,6 +589,10 @@ export const listCatalog = (params?: CatalogQueryParams): Promise<CatalogListRes
     api.get('/catalog', { params }).then(r => r.data)
 export const checkCatalogReadiness = (catalogType: string, itemId: string): Promise<CatalogReadinessResponse> =>
     api.get(`/catalog/readiness/${catalogType}/${itemId}`).then(r => r.data)
+export const getCatalogDependencies = (catalogType: string, itemId: string): Promise<DependencyTree> =>
+    api.get(`/catalog/dependencies/${catalogType}/${itemId}`).then(r => r.data)
+export const executeCatalogClone = (body: UnifiedCloneRequest): Promise<UnifiedCloneResponse> =>
+    api.post('/catalog/clone', body).then(r => r.data)
 
 // Profile Templates
 export const listProfileTemplates = (params?: { skip?: number; limit?: number; is_featured?: boolean; tags?: string[] }): Promise<any> =>

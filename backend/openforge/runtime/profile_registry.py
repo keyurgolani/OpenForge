@@ -650,7 +650,7 @@ class ProfileRegistry:
         row.version = spec.version
         row.role = spec.role
         row.system_prompt_ref = spec.system_prompt_ref
-        row.capability_bundle_ids = [bundle.id]
+        row.capability_bundle_ids = [str(bundle.id)]
         row.model_policy_id = model_policy.id
         row.memory_policy_id = memory_policy.id
         row.safety_policy_id = safety_policy.id

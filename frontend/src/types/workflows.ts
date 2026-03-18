@@ -86,6 +86,8 @@ export interface WorkflowDefinition {
   sort_priority: number;
   icon?: string | null;
   current_version?: WorkflowVersion | null;
+  default_input_schema?: Record<string, any> | null;
+  default_output_schema?: Record<string, any> | null;
   status: WorkflowStatus;
   created_at?: string | null;
   updated_at?: string | null;

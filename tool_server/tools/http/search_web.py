@@ -46,7 +46,9 @@ class SearchWebTool(BaseTool):
         }
 
     async def execute(self, params: dict, context: ToolContext) -> ToolResult:
-        query = params["query"]
+        query = (params.get("query") or "").strip()
+        if not query:
+            return ToolResult(success=True, output={"results": [], "message": "No query provided."})
         max_results = params.get("max_results", 5)
         searxng_url = get_settings().searxng_url
 

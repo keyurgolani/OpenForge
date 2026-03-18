@@ -17,6 +17,7 @@ htmlcov/
 
 # Internal planning documents
 sdlc/
+docs/superpowers/
 static/
 
 .vscode/

@@ -35,7 +35,7 @@ def _workflow_uuid(slug: str) -> UUID:
 
 
 def _profile_uuid(slug: str) -> UUID:
-    return uuid5(PROFILE_NAMESPACE, slug)
+    return uuid5(PROFILE_NAMESPACE, f"profile.{slug}")
 
 
 # ---------------------------------------------------------------------------
@@ -87,8 +87,8 @@ def get_seed_mission_blueprints(
                 ),
                 "workflow_id": _workflow_uuid("internet-research"),
                 "default_profile_ids": [
-                    _profile_uuid("research-analyst"),
-                    _profile_uuid("digest-writer"),
+                    _profile_uuid("research"),
+                    _profile_uuid("summarization"),
                 ],
                 "default_trigger_ids": [],
                 "autonomy_mode": "autonomous",
@@ -144,7 +144,7 @@ def get_seed_mission_blueprints(
                 ),
                 "workflow_id": _workflow_uuid("verify-and-refine"),
                 "default_profile_ids": [
-                    _profile_uuid("osint-monitor"),
+                    _profile_uuid("internet-research"),
                 ],
                 "default_trigger_ids": [],
                 "autonomy_mode": "autonomous",
@@ -199,8 +199,8 @@ def get_seed_mission_blueprints(
                 ),
                 "workflow_id": _workflow_uuid("internet-deep-research"),
                 "default_profile_ids": [
-                    _profile_uuid("research-analyst"),
-                    _profile_uuid("research-strategist"),
+                    _profile_uuid("research"),
+                    _profile_uuid("planning"),
                 ],
                 "default_trigger_ids": [],
                 "autonomy_mode": "supervised",
@@ -257,8 +257,8 @@ def get_seed_mission_blueprints(
                 ),
                 "workflow_id": _workflow_uuid("multi-source-synthesis"),
                 "default_profile_ids": [
-                    _profile_uuid("competitive-analyst"),
-                    _profile_uuid("report-writer"),
+                    _profile_uuid("research"),
+                    _profile_uuid("summarization"),
                 ],
                 "default_trigger_ids": [],
                 "autonomy_mode": "autonomous",
@@ -313,7 +313,7 @@ def get_seed_mission_blueprints(
                 ),
                 "workflow_id": _workflow_uuid("workspace-discovery"),
                 "default_profile_ids": [
-                    _profile_uuid("workspace-ops"),
+                    _profile_uuid("general-task"),
                 ],
                 "default_trigger_ids": [],
                 "autonomy_mode": "autonomous",
@@ -370,8 +370,8 @@ def get_seed_mission_blueprints(
                 ),
                 "workflow_id": _workflow_uuid("verify-and-refine"),
                 "default_profile_ids": [
-                    _profile_uuid("knowledge-curator"),
-                    _profile_uuid("editor"),
+                    _profile_uuid("deep-research"),
+                    _profile_uuid("critic-reviewer"),
                 ],
                 "default_trigger_ids": [],
                 "autonomy_mode": "autonomous",
@@ -428,8 +428,8 @@ def get_seed_mission_blueprints(
                 ),
                 "workflow_id": _workflow_uuid("exploratory-swarm"),
                 "default_profile_ids": [
-                    _profile_uuid("discovery-explorer"),
-                    _profile_uuid("research-analyst"),
+                    _profile_uuid("exploratory"),
+                    _profile_uuid("research"),
                 ],
                 "default_trigger_ids": [],
                 "autonomy_mode": "interactive",
@@ -487,9 +487,9 @@ def get_seed_mission_blueprints(
                 ),
                 "workflow_id": _workflow_uuid("internet-deep-research"),
                 "default_profile_ids": [
-                    _profile_uuid("research-strategist"),
-                    _profile_uuid("research-analyst"),
-                    _profile_uuid("peer-reviewer"),
+                    _profile_uuid("planning"),
+                    _profile_uuid("research"),
+                    _profile_uuid("verification"),
                 ],
                 "default_trigger_ids": [],
                 "autonomy_mode": "supervised",
@@ -547,8 +547,8 @@ def get_seed_mission_blueprints(
                 ),
                 "workflow_id": _workflow_uuid("review-and-publish"),
                 "default_profile_ids": [
-                    _profile_uuid("workspace-ops"),
-                    _profile_uuid("digest-writer"),
+                    _profile_uuid("general-task"),
+                    _profile_uuid("summarization"),
                 ],
                 "default_trigger_ids": [],
                 "autonomy_mode": "autonomous",
@@ -606,7 +606,7 @@ def get_seed_mission_blueprints(
                 ),
                 "workflow_id": _workflow_uuid("plan-execute-review"),
                 "default_profile_ids": [
-                    _profile_uuid("experiment-analyst"),
+                    _profile_uuid("research"),
                 ],
                 "default_trigger_ids": [],
                 "autonomy_mode": "autonomous",

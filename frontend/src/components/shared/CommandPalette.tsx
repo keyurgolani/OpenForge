@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Command } from 'cmdk'
 import { listWorkspaces, listKnowledge } from '@/lib/api'
-import { chatRoute, knowledgeRoute, searchRoute, workspaceOverviewRoute } from '@/lib/routes'
+import { chatRoute, dashboardRoute, knowledgeRoute, searchRoute } from '@/lib/routes'
 import { useUIStore } from '@/stores/uiStore'
 import { isModKey, getShortcutDisplay } from '@/lib/keyboard'
 import { openQuickKnowledge, type QuickKnowledgeType } from '@/lib/quick-knowledge'
@@ -142,7 +142,7 @@ export default function CommandPalette() {
                                         <PaletteItem
                                             key={ws.id}
                                             icon={<span className="flex items-center justify-center">{getWorkspaceIcon(ws.icon)}</span>}
-                                            onSelect={() => run(() => navigate(workspaceOverviewRoute(ws.id)))}
+                                            onSelect={() => run(() => navigate(dashboardRoute(ws.id)))}
                                         >
                                             {ws.name}
                                         </PaletteItem>

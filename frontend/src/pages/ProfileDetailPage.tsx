@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Save, ShieldAlert, Trash2 } from 'lucide-react'
+import { ArrowLeft, Copy, Save, ShieldAlert, Trash2 } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/shared/Card'
+import { CloneStepperModal } from '@/components/shared/CloneStepperModal'
 import ErrorState from '@/components/shared/ErrorState'
 import LoadingState from '@/components/shared/LoadingState'
 import MutationButton from '@/components/shared/MutationButton'
@@ -20,7 +21,7 @@ import {
   listSafetyPolicies,
   listOutputContracts,
 } from '@/lib/api'
-import { profilesRoute } from '@/lib/routes'
+import { catalogRoute, profilesRoute } from '@/lib/routes'
 
 type DraftState = {
   name: string
@@ -58,6 +59,7 @@ export default function ProfileDetailPage() {
   const { data: resolved } = useResolvedProfileQuery(profileId)
   const { data: validation } = useProfileValidationQuery(profileId)
   const [draft, setDraft] = useState<DraftState>(EMPTY_DRAFT)
+  const [showCloneStepper, setShowCloneStepper] = useState(false)
 
   // Fetch building-block options
   const { data: bundlesData } = useQuery({ queryKey: ['capability-bundles'], queryFn: listCapabilityBundles })
@@ -132,6 +134,7 @@ export default function ProfileDetailPage() {
   }
 
   const resolvedBundles = resolved?.capability_bundles ?? []
+  const isTemplate = profile.is_template === true
 
   return (
     <div className="space-y-6 p-6">
@@ -141,29 +144,41 @@ export default function ProfileDetailPage() {
         actions={(
           <div className="flex flex-wrap items-center gap-2">
             <Link
-              to={profilesRoute()}
+              to={isTemplate ? catalogRoute() : profilesRoute()}
               className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
             >
               <ArrowLeft className="h-4 w-4" />
-              Back to Profiles
+              {isTemplate ? 'Back to Catalog' : 'Back to Profiles'}
             </Link>
-            <MutationButton
-              isPending={deleteMutation.isPending}
-              variant="danger"
-              icon={<Trash2 className="h-4 w-4" />}
-              onClick={() => deleteMutation.mutate()}
-            >
-              Delete
-            </MutationButton>
-            <MutationButton
-              isPending={saveMutation.isPending}
-              isSuccess={saveMutation.isSuccess}
-              isError={saveMutation.isError}
-              icon={<Save className="h-4 w-4" />}
-              onClick={() => saveMutation.mutate()}
-            >
-              Save Changes
-            </MutationButton>
+            {isTemplate ? (
+              <button
+                onClick={() => setShowCloneStepper(true)}
+                className="inline-flex h-9 items-center gap-2 rounded-lg border border-accent/40 bg-accent/10 px-3 text-sm text-accent transition hover:bg-accent/20"
+              >
+                <Copy className="h-4 w-4" />
+                Clone
+              </button>
+            ) : (
+              <>
+                <MutationButton
+                  isPending={deleteMutation.isPending}
+                  variant="danger"
+                  icon={<Trash2 className="h-4 w-4" />}
+                  onClick={() => deleteMutation.mutate()}
+                >
+                  Delete
+                </MutationButton>
+                <MutationButton
+                  isPending={saveMutation.isPending}
+                  isSuccess={saveMutation.isSuccess}
+                  isError={saveMutation.isError}
+                  icon={<Save className="h-4 w-4" />}
+                  onClick={() => saveMutation.mutate()}
+                >
+                  Save Changes
+                </MutationButton>
+              </>
+            )}
           </div>
         )}
       />
@@ -180,6 +195,7 @@ export default function ProfileDetailPage() {
                 <input
                   className="input w-full"
                   value={draft.name}
+                  disabled={isTemplate}
                   onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
                 />
               </label>
@@ -188,6 +204,7 @@ export default function ProfileDetailPage() {
                 <input
                   className="input w-full"
                   value={draft.slug}
+                  disabled={isTemplate}
                   onChange={(event) => setDraft((current) => ({ ...current, slug: event.target.value }))}
                 />
               </label>
@@ -196,6 +213,7 @@ export default function ProfileDetailPage() {
                 <select
                   className="input w-full"
                   value={draft.role}
+                  disabled={isTemplate}
                   onChange={(event) => setDraft((current) => ({ ...current, role: event.target.value }))}
                 >
                   <option value="assistant">Assistant</option>
@@ -210,6 +228,7 @@ export default function ProfileDetailPage() {
                 <select
                   className="input w-full"
                   value={draft.status}
+                  disabled={isTemplate}
                   onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))}
                 >
                   <option value="draft">Draft</option>
@@ -223,6 +242,7 @@ export default function ProfileDetailPage() {
                 <input
                   className="input w-full"
                   value={draft.system_prompt_ref}
+                  disabled={isTemplate}
                   onChange={(event) => setDraft((current) => ({ ...current, system_prompt_ref: event.target.value }))}
                 />
               </label>
@@ -231,6 +251,7 @@ export default function ProfileDetailPage() {
                 <textarea
                   className="input min-h-32 w-full py-3"
                   value={draft.description}
+                  disabled={isTemplate}
                   onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
                 />
               </label>
@@ -248,6 +269,7 @@ export default function ProfileDetailPage() {
                 <select
                   className="input w-full"
                   value={draft.model_policy_id}
+                  disabled={isTemplate}
                   onChange={(e) => setDraft((c) => ({ ...c, model_policy_id: e.target.value }))}
                 >
                   <option value="">None</option>
@@ -261,6 +283,7 @@ export default function ProfileDetailPage() {
                 <select
                   className="input w-full"
                   value={draft.memory_policy_id}
+                  disabled={isTemplate}
                   onChange={(e) => setDraft((c) => ({ ...c, memory_policy_id: e.target.value }))}
                 >
                   <option value="">None</option>
@@ -274,6 +297,7 @@ export default function ProfileDetailPage() {
                 <select
                   className="input w-full"
                   value={draft.safety_policy_id}
+                  disabled={isTemplate}
                   onChange={(e) => setDraft((c) => ({ ...c, safety_policy_id: e.target.value }))}
                 >
                   <option value="">None</option>
@@ -287,6 +311,7 @@ export default function ProfileDetailPage() {
                 <select
                   className="input w-full"
                   value={draft.output_contract_id}
+                  disabled={isTemplate}
                   onChange={(e) => setDraft((c) => ({ ...c, output_contract_id: e.target.value }))}
                 >
                   <option value="">None</option>
@@ -307,6 +332,7 @@ export default function ProfileDetailPage() {
                           type="checkbox"
                           className="accent-accent"
                           checked={draft.capability_bundle_ids.includes(b.id)}
+                          disabled={isTemplate}
                           onChange={(e) => {
                             setDraft((c) => ({
                               ...c,
@@ -328,117 +354,138 @@ export default function ProfileDetailPage() {
             </CardContent>
           </Card>
 
-          <Section
-            title="Resolved Composition"
-            description="This surface shows the effective policy and capability bundle resolution that the runtime will consume."
-          >
-            <div className="grid gap-4 lg:grid-cols-2">
-              <Card glass>
-                <CardHeader>
-                  <CardTitle as="h2">Runtime Summary</CardTitle>
-                  <CardDescription>Effective tools, retrieval, memory, and output defaults.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm text-muted-foreground">
-                  <div className="flex items-center justify-between">
-                    <span>Status</span>
-                    <StatusBadge status={profile.status} />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Tools enabled</span>
-                    <span className="text-foreground">{resolved?.effective_tools_enabled ? 'Yes' : 'No'}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Retrieval enabled</span>
-                    <span className="text-foreground">{resolved?.effective_retrieval_enabled ? 'Yes' : 'No'}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Retrieval limit</span>
-                    <span className="text-foreground">{resolved?.effective_retrieval_limit ?? 0}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>History limit</span>
-                    <span className="text-foreground">{resolved?.effective_history_limit ?? 0}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Default model</span>
-                    <span className="text-foreground">{resolved?.effective_default_model ?? 'Unassigned'}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Output mode</span>
-                    <span className="text-foreground">{resolved?.effective_execution_mode ?? 'streaming'}</span>
-                  </div>
-                </CardContent>
-              </Card>
+        </Section>
 
-              <Card glass>
-                <CardHeader>
-                  <CardTitle as="h2">Capability Bundles</CardTitle>
-                  <CardDescription>Bundles stay modular and reusable instead of embedding runtime behavior into the profile.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {resolvedBundles.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No capability bundles are attached yet.</p>
-                  ) : (
-                    resolvedBundles.map((bundle) => (
-                      <div key={bundle.id} className="rounded-xl border border-border/50 bg-background/35 p-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="font-medium text-foreground">{bundle.name}</p>
-                            <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/80">{bundle.slug}</p>
+        {/* Tier 3 — Advanced (collapsible) */}
+        <details className="rounded-2xl border border-border/60 bg-card/30">
+          <summary className="cursor-pointer px-5 py-3 text-sm font-medium text-muted-foreground/70 uppercase tracking-[0.12em]">
+            Advanced
+          </summary>
+          <div className="px-5 pb-5 space-y-6">
+            <Section
+              title="Resolved Composition"
+              description="This surface shows the effective policy and capability bundle resolution that the runtime will consume."
+            >
+              <div className="grid gap-4 lg:grid-cols-2">
+                <Card glass>
+                  <CardHeader>
+                    <CardTitle as="h2">Runtime Summary</CardTitle>
+                    <CardDescription>Effective tools, retrieval, memory, and output defaults.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-sm text-muted-foreground">
+                    <div className="flex items-center justify-between">
+                      <span>Status</span>
+                      <StatusBadge status={profile.status} />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Tools enabled</span>
+                      <span className="text-foreground">{resolved?.effective_tools_enabled ? 'Yes' : 'No'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Retrieval enabled</span>
+                      <span className="text-foreground">{resolved?.effective_retrieval_enabled ? 'Yes' : 'No'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Retrieval limit</span>
+                      <span className="text-foreground">{resolved?.effective_retrieval_limit ?? 0}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>History limit</span>
+                      <span className="text-foreground">{resolved?.effective_history_limit ?? 0}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Default model</span>
+                      <span className="text-foreground">{resolved?.effective_default_model ?? 'Unassigned'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Output mode</span>
+                      <span className="text-foreground">{resolved?.effective_execution_mode ?? 'streaming'}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card glass>
+                  <CardHeader>
+                    <CardTitle as="h2">Capability Bundles</CardTitle>
+                    <CardDescription>Bundles stay modular and reusable instead of embedding runtime behavior into the profile.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {resolvedBundles.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No capability bundles are attached yet.</p>
+                    ) : (
+                      resolvedBundles.map((bundle) => (
+                        <div key={bundle.id} className="rounded-xl border border-border/50 bg-background/35 p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-medium text-foreground">{bundle.name}</p>
+                              <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/80">{bundle.slug}</p>
+                            </div>
+                            <span className="rounded-full border border-border/50 px-2 py-1 text-xs text-muted-foreground">
+                              {bundle.retrieval_enabled ? 'Retrieval On' : 'Retrieval Off'}
+                            </span>
                           </div>
-                          <span className="rounded-full border border-border/50 px-2 py-1 text-xs text-muted-foreground">
-                            {bundle.retrieval_enabled ? 'Retrieval On' : 'Retrieval Off'}
-                          </span>
+                          <p className="mt-2 text-sm text-muted-foreground">{bundle.description || 'No bundle description yet.'}</p>
                         </div>
-                        <p className="mt-2 text-sm text-muted-foreground">{bundle.description || 'No bundle description yet.'}</p>
-                      </div>
-                    ))
-                  )}
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </Section>
+
+            <Section
+              title="Validation"
+              description="Profiles should be complete reusable workers, not partial mega-configs."
+            >
+              <Card glass className={validation?.is_complete ? 'border-emerald-500/25' : 'border-amber-500/30'}>
+                <CardHeader>
+                  <CardTitle as="h2" className="flex items-center gap-2">
+                    <ShieldAlert className="h-4 w-4" />
+                    Completeness Check
+                  </CardTitle>
+                  <CardDescription>
+                    {validation?.is_complete
+                      ? 'All required modular building blocks are attached.'
+                      : 'This profile still has missing or invalid architecture references.'}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4 text-sm">
+                  <div className="rounded-xl border border-border/50 bg-background/35 p-3">
+                    <p className="font-medium text-foreground">Missing fields</p>
+                    <p className="mt-2 text-muted-foreground">
+                      {validation?.missing_fields.length ? validation.missing_fields.join(', ') : 'None'}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border/50 bg-background/35 p-3">
+                    <p className="font-medium text-foreground">Invalid references</p>
+                    <p className="mt-2 text-muted-foreground">
+                      {validation?.invalid_references.length ? validation.invalid_references.join(', ') : 'None'}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border/50 bg-background/35 p-3">
+                    <p className="font-medium text-foreground">Warnings</p>
+                    <p className="mt-2 text-muted-foreground">
+                      {validation?.warnings.length ? validation.warnings.join(' ') : 'None'}
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
-            </div>
-          </Section>
-        </Section>
-
-        <Section
-          title="Validation"
-          description="Profiles should be complete reusable workers, not partial mega-configs."
-        >
-          <Card glass className={validation?.is_complete ? 'border-emerald-500/25' : 'border-amber-500/30'}>
-            <CardHeader>
-              <CardTitle as="h2" className="flex items-center gap-2">
-                <ShieldAlert className="h-4 w-4" />
-                Completeness Check
-              </CardTitle>
-              <CardDescription>
-                {validation?.is_complete
-                  ? 'All required modular building blocks are attached.'
-                  : 'This profile still has missing or invalid architecture references.'}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm">
-              <div className="rounded-xl border border-border/50 bg-background/35 p-3">
-                <p className="font-medium text-foreground">Missing fields</p>
-                <p className="mt-2 text-muted-foreground">
-                  {validation?.missing_fields.length ? validation.missing_fields.join(', ') : 'None'}
-                </p>
-              </div>
-              <div className="rounded-xl border border-border/50 bg-background/35 p-3">
-                <p className="font-medium text-foreground">Invalid references</p>
-                <p className="mt-2 text-muted-foreground">
-                  {validation?.invalid_references.length ? validation.invalid_references.join(', ') : 'None'}
-                </p>
-              </div>
-              <div className="rounded-xl border border-border/50 bg-background/35 p-3">
-                <p className="font-medium text-foreground">Warnings</p>
-                <p className="mt-2 text-muted-foreground">
-                  {validation?.warnings.length ? validation.warnings.join(' ') : 'None'}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </Section>
+            </Section>
+          </div>
+        </details>
       </div>
+
+      {showCloneStepper && (
+        <CloneStepperModal
+          templateId={profileId as string}
+          catalogType="profile"
+          onClose={() => setShowCloneStepper(false)}
+          onSuccess={(clonedEntity) => {
+            setShowCloneStepper(false)
+            navigate(profilesRoute(clonedEntity.id))
+          }}
+        />
+      )}
     </div>
   )
 }

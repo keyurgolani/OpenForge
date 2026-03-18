@@ -19,6 +19,7 @@ from openforge.db.models import (
     MissionDefinitionModel,
     RunModel,
     TriggerFireHistoryModel,
+    Workspace,
 )
 
 logger = logging.getLogger(__name__)
@@ -33,7 +34,7 @@ class MissionLauncher:
     async def launch_mission(
         self,
         mission_id: UUID,
-        workspace_id: UUID,
+        workspace_id: Optional[UUID] = None,
         parameters: Optional[dict[str, Any]] = None,
         trigger_id: Optional[UUID] = None,
         trigger_type: Optional[str] = None,
@@ -54,11 +55,19 @@ class MissionLauncher:
         if mission is None:
             raise ValueError(f"Mission not found: {mission_id}")
 
-        if str(mission.workspace_id) != str(workspace_id):
+        # Resolve workspace: use provided, fall back to mission's own, fall back to first workspace
+        resolved_workspace_id = workspace_id or mission.workspace_id
+        if workspace_id and mission.workspace_id and str(mission.workspace_id) != str(workspace_id):
             raise ValueError("Mission does not belong to the specified workspace")
+        if not resolved_workspace_id:
+            first_ws = await self.db.scalar(select(Workspace.id).order_by(Workspace.sort_order).limit(1))
+            if first_ws:
+                resolved_workspace_id = first_ws
+            else:
+                raise ValueError("No workspace available. Create a workspace before launching missions.")
 
         # 2. Verify mission is launchable
-        launchable_statuses = {"active"}
+        launchable_statuses = {"active", "draft"}
         if mission.status not in launchable_statuses:
             raise ValueError(
                 f"Mission cannot be launched in status '{mission.status}'. "
@@ -95,7 +104,7 @@ class MissionLauncher:
             workflow_version_id=mission.workflow_version_id,
             mission_id=mission_id,
             trigger_id=trigger_id,
-            workspace_id=workspace_id,
+            workspace_id=resolved_workspace_id,
             status="pending",
             input_payload=parameters or {},
             created_at=now,
@@ -130,6 +139,17 @@ class MissionLauncher:
             run.id,
             trigger_id,
         )
+
+        # 7. Dispatch workflow execution to Celery worker
+        try:
+            from openforge.worker.tasks import execute_workflow_run_task
+            execute_workflow_run_task.delay(str(run.id))
+            logger.info("Dispatched workflow execution task for run %s", run.id)
+        except Exception as dispatch_err:
+            logger.warning(
+                "Failed to dispatch Celery task for run %s, will need manual resume: %s",
+                run.id, dispatch_err,
+            )
 
         return {
             "run_id": run.id,

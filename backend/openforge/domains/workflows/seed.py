@@ -576,7 +576,8 @@ def get_seed_workflow_blueprints(workspace_id: UUID | None = None) -> list[dict[
                             "description": "Use an LLM to decompose the user query into effective search queries.",
                             "executor_ref": "llm.chat_completion",
                             "config": {
-                                "system_prompt": "You are a research query planner. Given a user question, produce a concise search plan with 1-3 search queries that will find the most relevant information.",
+                                "system_prompt": "You are a research query planner. Given a user question, produce a concise search plan with 1-3 search queries that will find the most relevant information. Respond with only the search queries, one per line.",
+                                "user_prompt_template": "{query}",
                                 "output_key": "search_plan",
                             },
                             "input_mapping": {"prompt": "query"},
@@ -591,8 +592,9 @@ def get_seed_workflow_blueprints(workspace_id: UUID | None = None) -> list[dict[
                             "description": "Run the planned web search queries and collect results.",
                             "executor_ref": "tool.web_search",
                             "config": {
-                                "operation": "search",
-                                "query_key": "search_plan",
+                                "operation": "call_tool",
+                                "tool_name": "http.search_web",
+                                "arg_mapping": {"query": "search_plan"},
                                 "output_key": "search_results",
                             },
                             "input_mapping": {},
@@ -608,6 +610,7 @@ def get_seed_workflow_blueprints(workspace_id: UUID | None = None) -> list[dict[
                             "executor_ref": "llm.chat_completion",
                             "config": {
                                 "system_prompt": "You are a research synthesizer. Given raw search results and the original query, produce a well-structured, cited summary answering the user's question.",
+                                "user_prompt_template": "Original query: {query}\n\nSearch results:\n{search_results}\n\nPlease synthesize these results into a comprehensive, well-cited summary.",
                                 "output_key": "synthesis",
                             },
                             "input_mapping": {"prompt": "search_results", "context": "query"},
@@ -717,6 +720,7 @@ def get_seed_workflow_blueprints(workspace_id: UUID | None = None) -> list[dict[
                             "executor_ref": "llm.chat_completion",
                             "config": {
                                 "system_prompt": "You are a research strategist. Decompose the user's complex question into 3-5 independent sub-queries that together will cover the topic comprehensively. Return each sub-query as an array item.",
+                                "user_prompt_template": "{query}",
                                 "output_key": "sub_queries",
                                 "output_format": "json_array",
                             },
@@ -775,6 +779,7 @@ def get_seed_workflow_blueprints(workspace_id: UUID | None = None) -> list[dict[
                             "executor_ref": "llm.chat_completion",
                             "config": {
                                 "system_prompt": "You are a research quality reviewer. Assess the following research synthesis for completeness, accuracy, and coherence. Flag any gaps or unsupported claims. Produce a final quality-verified version.",
+                                "user_prompt_template": "Original query: {query}\n\nResearch synthesis:\n{reduced_synthesis}\n\nPlease verify the quality and produce a final version.",
                                 "output_key": "quality_assessment",
                             },
                             "input_mapping": {"prompt": "reduced_synthesis", "context": "query"},
@@ -884,6 +889,7 @@ def get_seed_workflow_blueprints(workspace_id: UUID | None = None) -> list[dict[
                             "executor_ref": "llm.chat_completion",
                             "config": {
                                 "system_prompt": "You are a creative research director. Given a topic, generate 3-6 diverse exploration directions that cover different angles, perspectives, or sub-domains. Return each direction as an array item.",
+                                "user_prompt_template": "{topic}",
                                 "output_key": "directions",
                                 "output_format": "json_array",
                             },
@@ -1036,6 +1042,7 @@ def get_seed_workflow_blueprints(workspace_id: UUID | None = None) -> list[dict[
                             "executor_ref": "llm.chat_completion",
                             "config": {
                                 "system_prompt": "You are a fact-checker. Analyze the provided content for factual claims. For each claim, assess its accuracy and flag any that are unsupported, misleading, or incorrect. Produce a verification report.",
+                                "user_prompt_template": "Content to verify:\n{content}",
                                 "output_key": "verification_report",
                             },
                             "input_mapping": {"prompt": "content"},
@@ -1051,6 +1058,7 @@ def get_seed_workflow_blueprints(workspace_id: UUID | None = None) -> list[dict[
                             "executor_ref": "llm.chat_completion",
                             "config": {
                                 "system_prompt": "You are a content analyst. Review the original content and the verification report. Identify gaps in coverage, missing context, logical inconsistencies, and areas that need improvement. Produce a gap analysis.",
+                                "user_prompt_template": "Original content:\n{content}\n\nVerification report:\n{verification_report}",
                                 "output_key": "gap_analysis",
                             },
                             "input_mapping": {"prompt": "verification_report", "context": "content"},
@@ -1066,6 +1074,7 @@ def get_seed_workflow_blueprints(workspace_id: UUID | None = None) -> list[dict[
                             "executor_ref": "llm.chat_completion",
                             "config": {
                                 "system_prompt": "You are an expert editor. Refine the original content using the verification report and gap analysis. Fix inaccuracies, fill gaps, improve clarity, and produce a polished final version.",
+                                "user_prompt_template": "Original content:\n{content}\n\nVerification report:\n{verification_report}\n\nGap analysis:\n{gap_analysis}\n\nPlease produce the refined final version.",
                                 "output_key": "refined_content",
                             },
                             "input_mapping": {"prompt": "gap_analysis", "context": "content"},
@@ -1318,8 +1327,9 @@ def get_seed_workflow_blueprints(workspace_id: UUID | None = None) -> list[dict[
                             "description": "Scan and collect knowledge from the workspace based on the given scope.",
                             "executor_ref": "tool.workspace_scan",
                             "config": {
-                                "operation": "scan",
-                                "scope_key": "scope",
+                                "operation": "call_tool",
+                                "tool_name": "workspace.list_knowledge",
+                                "tool_args": {"limit": 50},
                                 "output_key": "knowledge_dump",
                             },
                             "input_mapping": {},
@@ -1335,6 +1345,7 @@ def get_seed_workflow_blueprints(workspace_id: UUID | None = None) -> list[dict[
                             "executor_ref": "llm.chat_completion",
                             "config": {
                                 "system_prompt": "You are a pattern analyst. Review the workspace knowledge dump and identify recurring themes, patterns, relationships, and structural insights. Organize your findings clearly.",
+                                "user_prompt_template": "Scope: {scope}\n\nKnowledge dump:\n{knowledge_dump}",
                                 "output_key": "patterns",
                             },
                             "input_mapping": {"prompt": "knowledge_dump", "context": "scope"},
@@ -1350,6 +1361,7 @@ def get_seed_workflow_blueprints(workspace_id: UUID | None = None) -> list[dict[
                             "executor_ref": "llm.chat_completion",
                             "config": {
                                 "system_prompt": "You are an insights generator. Based on the identified patterns and the original scope, produce actionable insights, recommendations, and a summary of key findings for the workspace.",
+                                "user_prompt_template": "Scope: {scope}\n\nPatterns found:\n{patterns}",
                                 "output_key": "insights",
                             },
                             "input_mapping": {"prompt": "patterns", "context": "scope"},

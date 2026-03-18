@@ -1,5 +1,5 @@
 import MarkdownIt from 'markdown-it'
-import { chatRoute, knowledgeRoute, workspaceOverviewRoute } from '@/lib/routes'
+import { chatRoute, dashboardRoute, knowledgeRoute } from '@/lib/routes'
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
 const STRUCTURED_ENTITY_RE = /\[\[(knowledge|chat|workspace):([a-f0-9-]+):([^\]]+)\]\]/gi
@@ -29,7 +29,7 @@ export function normalizeStructuredEntityRefs(content: string, workspaceId: stri
             return `[Chat: ${title}](${chatRoute(workspaceId, uuid)})`
         }
         if (entityType === 'workspace') {
-            return `[Workspace: ${title}](${workspaceOverviewRoute(uuid)})`
+            return `[Workspace: ${title}](${dashboardRoute(uuid)})`
         }
         return title
     })
@@ -62,7 +62,7 @@ function injectIdLinks(
         new RegExp(`(workspace_id\\s*[:=]\\s*\`?)(${UUID_PATTERN})(\`?)`, 'gi'),
         (_, pre, uuid: string, post) => {
             const name = maps?.workspacesById.get(uuid.toLowerCase()) ?? shortEntityLabel(uuid)
-            return `${pre}[Workspace: ${name}](${workspaceOverviewRoute(uuid)})${post}`
+            return `${pre}[Workspace: ${name}](${dashboardRoute(uuid)})${post}`
         },
     )
 
@@ -72,7 +72,7 @@ function injectIdLinks(
             const escapedName = nameLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
             out = out.replace(
                 new RegExp(`@(${escapedName})(?![^[]*\\])`, 'gi'),
-                (_, matched) => `[@${matched}](${workspaceOverviewRoute(workspaceRefId)})`,
+                (_, matched) => `[@${matched}](${dashboardRoute(workspaceRefId)})`,
             )
         }
 
@@ -90,7 +90,7 @@ function injectIdLinks(
             (uuid: string) => {
                 const entityId = uuid.toLowerCase()
                 const workspaceName = maps.workspacesById.get(entityId)
-                if (workspaceName) return `[Workspace: ${workspaceName}](${workspaceOverviewRoute(uuid)})`
+                if (workspaceName) return `[Workspace: ${workspaceName}](${dashboardRoute(uuid)})`
 
                 const chatTitle = maps.chatsById.get(entityId)
                 if (chatTitle) return `[Chat: ${chatTitle}](${chatRoute(workspaceId, uuid)})`

@@ -51,3 +51,22 @@ class CatalogReadinessResponse(BaseModel):
     missing_dependencies: list[str] = Field(default_factory=list)
     setup_requirements: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+
+class DependencyResolution(BaseModel):
+    """How to resolve a single dependency during a unified clone."""
+
+    template_id: str
+    catalog_type: str
+    resolution: str  # "clone" or "existing"
+    existing_id: Optional[str] = None
+    overrides: Optional[dict] = None
+
+
+class UnifiedCloneRequest(BaseModel):
+    """Request body for the unified transactional clone endpoint."""
+
+    root_template_id: str
+    root_catalog_type: str
+    overrides: dict = Field(default_factory=dict)
+    dependency_resolutions: list[DependencyResolution] = Field(default_factory=list)

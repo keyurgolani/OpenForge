@@ -2,11 +2,11 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from openforge.db.postgres import get_db
 
-from .schemas import CatalogListResponse, CatalogReadinessResponse
+from .schemas import CatalogListResponse, CatalogReadinessResponse, UnifiedCloneRequest
 from .service import CatalogService
 from .types import CatalogItemType
 
@@ -46,3 +46,25 @@ async def check_catalog_readiness(
 ):
     """Check whether a catalog template is ready to be cloned or used."""
     return await service.check_readiness(catalog_type, item_id)
+
+
+@router.post("/clone", status_code=status.HTTP_201_CREATED)
+async def unified_clone(
+    body: UnifiedCloneRequest,
+    service: CatalogService = Depends(get_catalog_service),
+):
+    """Execute a full clone plan with dependency resolution in a single transaction."""
+    return await service.execute_unified_clone(body.model_dump())
+
+
+@router.get("/dependencies/{catalog_type}/{item_id}")
+async def get_dependency_tree(
+    catalog_type: str,
+    item_id: UUID,
+    service: CatalogService = Depends(get_catalog_service),
+):
+    """Resolve the full recursive dependency tree for a template."""
+    tree = await service.get_dependency_tree(catalog_type, item_id)
+    if tree is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+    return tree

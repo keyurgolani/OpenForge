@@ -7,7 +7,13 @@ from uuid import UUID
 
 from sqlalchemy import select
 
-from openforge.db.models import RunModel, RunStepModel
+from openforge.db.models import (
+    AgentProfileModel,
+    CapabilityBundleModel,
+    MissionDefinitionModel,
+    RunModel,
+    RunStepModel,
+)
 
 from .checkpoint_store import CheckpointStore
 from .event_publisher import EventPublisher
@@ -134,6 +140,44 @@ class RuntimeCoordinator:
         await self.db.commit()
         return run.id
 
+    async def execute_existing_run(self, run_id: UUID) -> None:
+        """Execute an already-created run (e.g., from mission launcher).
+
+        Unlike execute_workflow() which creates a new RunModel, this method
+        picks up an existing pending run and drives it through the workflow.
+        """
+        run = await self.db.get(RunModel, run_id)
+        if run is None:
+            raise ValueError(f"Run {run_id} not found")
+        if run.status not in ("pending", "queued"):
+            raise ValueError(f"Run {run_id} is in status '{run.status}', expected 'pending' or 'queued'")
+
+        workflow = await self.workflow_service.get_runtime_workflow(run.workflow_id, run.workflow_version_id)
+        if workflow is None:
+            transition_run(run, "failed", error_code="workflow_not_found", error_message=f"Workflow {run.workflow_id} not found")
+            await self.db.commit()
+            return
+
+        # Initialise run state from input_payload if not already set
+        if not run.state_snapshot:
+            run.state_snapshot = dict(run.input_payload or {})
+        run.started_at = now_utc()
+        if run.root_run_id is None:
+            run.root_run_id = run.id
+        await self.db.flush()
+
+        await self.event_publisher.publish(
+            RuntimeEvent(
+                run_id=run.id,
+                event_type=RUN_STARTED,
+                workflow_id=workflow["id"],
+                workflow_version_id=workflow["current_version"]["id"],
+                payload={"backend": compile_workflow_graph(workflow).backend},
+            )
+        )
+        await self._continue_run(run, workflow, state_patch={})
+        await self.db.commit()
+
     async def resume_run(self, run_id: UUID, *, state_patch: dict[str, Any] | None = None) -> None:
         run = await self.db.get(RunModel, run_id)
         if run is None:
@@ -181,6 +225,74 @@ class RuntimeCoordinator:
         )
         await self.db.commit()
 
+    async def _resolve_capability_bundle(self, run: RunModel) -> dict[str, Any] | None:
+        """Resolve the merged capability bundle for a run from its mission's profiles."""
+        if not run.mission_id:
+            return None
+
+        mission = await self.db.get(MissionDefinitionModel, run.mission_id)
+        if not mission or not mission.default_profile_ids:
+            return None
+
+        # Merge capability bundles from all profiles
+        merged = {
+            "tools_enabled": True,
+            "allowed_tool_categories": None,  # None = unrestricted
+            "blocked_tool_ids": [],
+            "tool_overrides": {},
+            "max_tool_calls_per_minute": 30,
+            "max_tool_calls_per_execution": 200,
+            "retrieval_enabled": True,
+            "retrieval_limit": 5,
+        }
+
+        all_categories: list[str] = []
+        any_unrestricted = False
+
+        for pid in mission.default_profile_ids:
+            try:
+                profile = await self.db.get(AgentProfileModel, pid)
+            except Exception:
+                continue
+            if not profile or not profile.capability_bundle_ids:
+                continue
+
+            for bid in profile.capability_bundle_ids:
+                try:
+                    bundle = await self.db.get(CapabilityBundleModel, bid)
+                except Exception:
+                    continue
+                if not bundle:
+                    continue
+
+                if not bundle.tools_enabled:
+                    continue
+
+                if bundle.allowed_tool_categories is None:
+                    any_unrestricted = True
+                elif bundle.allowed_tool_categories:
+                    all_categories.extend(bundle.allowed_tool_categories)
+
+                merged["blocked_tool_ids"].extend(bundle.blocked_tool_ids or [])
+                merged["tool_overrides"].update(bundle.tool_overrides or {})
+                merged["max_tool_calls_per_minute"] = max(
+                    merged["max_tool_calls_per_minute"],
+                    bundle.max_tool_calls_per_minute or 30,
+                )
+                merged["max_tool_calls_per_execution"] = max(
+                    merged["max_tool_calls_per_execution"],
+                    bundle.max_tool_calls_per_execution or 200,
+                )
+
+        if any_unrestricted:
+            merged["allowed_tool_categories"] = None
+        elif all_categories:
+            merged["allowed_tool_categories"] = list(set(all_categories))
+        else:
+            merged["allowed_tool_categories"] = None  # No bundles found = unrestricted
+
+        return merged
+
     async def _continue_run(self, run: RunModel, workflow: dict[str, Any], *, state_patch: dict[str, Any]) -> None:
         graph = compile_workflow_graph(workflow)
         state = dict(run.state_snapshot or {})
@@ -189,6 +301,9 @@ class RuntimeCoordinator:
         if current_node_id is None:
             transition_run(run, "failed", error_code="missing_entry_node", error_message="Workflow has no entry node")
             return
+
+        # Resolve capability bundle once for the entire run
+        capability_bundle = await self._resolve_capability_bundle(run)
 
         while current_node_id is not None:
             if run.status == "cancelled":
@@ -239,7 +354,7 @@ class RuntimeCoordinator:
             )
 
             try:
-                result = await self._execute_node(step, run, workflow, node, state)
+                result = await self._execute_node(step, run, workflow, node, state, capability_bundle=capability_bundle)
             except NodeExecutionError as exc:
                 finish_step(step, "failed", error_code=exc.code, error_message=str(exc))
                 transition_run(run, "failed", error_code=exc.code, error_message=str(exc))
@@ -466,6 +581,7 @@ class RuntimeCoordinator:
         workflow: dict[str, Any],
         node: dict[str, Any],
         state: dict[str, Any],
+        capability_bundle: dict[str, Any] | None = None,
     ) -> NodeExecutionResult:
         if node.get("node_type") == "terminal":
             return NodeExecutionResult(state=dict(state), output=dict(state))
@@ -480,6 +596,7 @@ class RuntimeCoordinator:
             step_index=step.step_index,
             step_id=step.id,
             coordinator=self,
+            capability_bundle=capability_bundle,
         )
         return await executor.execute(context)
 
