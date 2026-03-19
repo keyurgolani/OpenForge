@@ -110,14 +110,3 @@ export function stringifyStructuredPayload(payload: Record<string, unknown> | un
   }
 }
 
-// Backward-compatible aliases
-export {
-  OUTPUT_TYPE_META as ARTIFACT_TYPE_META,
-  getOutputTypeLabel as getArtifactTypeLabel,
-  getOutputTypeAccent as getArtifactTypeAccent,
-  getOutputVisibilityLabel as getArtifactVisibilityLabel,
-  getOutputOriginLabel as getArtifactOriginLabel,
-  getOutputLinkTargetLabel as getArtifactLinkTargetLabel,
-  getOutputSourceChips as getArtifactSourceChips,
-  getOutputLinkHref as getArtifactLinkHref,
-}

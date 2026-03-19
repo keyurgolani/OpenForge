@@ -78,7 +78,7 @@ Primary relational database (v16) storing all structured data:
 - LLM provider configurations (with encrypted API keys)
 - Workspaces, conversations, and messages
 - Knowledge metadata and processing state
-- Agents (blueprints, compiled specs, profiles)
+- Agents (blueprints, compiled specs)
 - Automations (trigger config, budget config, output routing)
 - Runs and run steps
 - Outputs (versioned artifacts with lineage)

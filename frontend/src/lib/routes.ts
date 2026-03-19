@@ -23,15 +23,9 @@ export const ROUTES = {
   SETTINGS_MODELS_AUDIO: '/settings/models/audio',
   SETTINGS_MODELS_CLIP: '/settings/models/clip',
   SETTINGS_MODELS_PDF: '/settings/models/pdf',
-  SETTINGS_PIPELINES: '/settings/pipelines',
-  SETTINGS_SKILLS: '/settings/skills',
-  SETTINGS_MCP: '/settings/mcp',
-  SETTINGS_AUDIT: '/settings/audit',
-  SETTINGS_IMPORT: '/settings/import',
-  SETTINGS_EXPORT: '/settings/export',
-  // Legacy routes (redirect to new structure)
-  SETTINGS_PROVIDERS: '/settings/models/providers',
-  SETTINGS_TOOLS: '/settings/skills',
+  SETTINGS_TOOLS: '/settings/tools',
+  SETTINGS_DATA: '/settings/data',
+  SETTINGS_ADVANCED: '/settings/advanced',
 
   // Workspace-scoped routes
   WORKSPACE: WORKSPACE_PREFIX,
@@ -51,10 +45,6 @@ export const ROUTES = {
   RUN_DETAIL: '/runs/:runId',
   OUTPUTS: '/outputs',
   OUTPUT_DETAIL: '/outputs/:outputId',
-  /** @deprecated Use OUTPUTS */
-  ARTIFACTS: '/outputs',
-  /** @deprecated Use OUTPUT_DETAIL */
-  ARTIFACT_DETAIL: '/outputs/:outputId',
 } as const;
 
 export function routeWithParams(
@@ -124,11 +114,6 @@ export function outputsRoute(outputId?: string): string {
     return routeWithParams(ROUTES.OUTPUT_DETAIL, { outputId });
   }
   return ROUTES.OUTPUTS;
-}
-
-/** @deprecated Use outputsRoute instead */
-export function artifactsRoute(artifactId?: string): string {
-  return outputsRoute(artifactId);
 }
 
 export default ROUTES;

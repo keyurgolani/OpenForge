@@ -68,10 +68,6 @@ export type Visibility =
   | 'organization'
   | 'public';
 
-// Backward-compatible alias
-/** @deprecated Use OutputType instead */
-export type ArtifactType = OutputType;
-
 // =============================================================================
 // Domain Constants
 // =============================================================================
@@ -124,9 +120,6 @@ export const OUTPUT_TYPES = {
   INSIGHT: 'insight' as OutputType,
   OTHER: 'other' as OutputType,
 };
-
-/** @deprecated Use OUTPUT_TYPES instead */
-export const ARTIFACT_TYPES = OUTPUT_TYPES;
 
 // =============================================================================
 // User-Facing Labels
@@ -274,12 +267,8 @@ export type SettingsSection =
   | 'workspaces'
   | 'models'
   | 'tools'
-  | 'pipelines'
-  | 'skills'
-  | 'mcp'
-  | 'audit'
-  | 'import'
-  | 'export';
+  | 'data'
+  | 'advanced';
 
 export type SettingsModelSubsection =
   | 'providers'
@@ -293,25 +282,17 @@ export type SettingsModelSubsection =
 export const SETTINGS_LABELS: Record<SettingsSection, string> = {
   workspaces: 'Workspaces',
   models: 'AI Models',
-  tools: 'Tools',
-  pipelines: 'Pipelines',
-  skills: 'Skills',
-  mcp: 'MCP Servers',
-  audit: 'Audit',
-  import: 'Import',
-  export: 'Export',
+  tools: 'Tools & Connections',
+  data: 'Import / Export',
+  advanced: 'Advanced',
 };
 
 export const SETTINGS_DESCRIPTIONS: Record<SettingsSection, string> = {
   workspaces: 'Manage workspaces and their configurations.',
   models: 'Configure AI model providers and model assignments.',
-  tools: 'View and manage native agent tools and permissions.',
-  pipelines: 'Configure data processing pipelines.',
-  skills: 'Manage custom skills and capabilities.',
-  mcp: 'Configure Model Context Protocol servers.',
-  audit: 'View audit logs and container logs.',
-  import: 'Import data from external sources.',
-  export: 'Export workspace data.',
+  tools: 'Manage tools, skills, and MCP server connections.',
+  data: 'Import and export workspace data.',
+  advanced: 'Pipelines, audit logs, and system configuration.',
 };
 
 export const SETTINGS_MODEL_LABELS: Record<SettingsModelSubsection, string> = {

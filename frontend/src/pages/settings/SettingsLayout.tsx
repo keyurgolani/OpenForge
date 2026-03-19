@@ -10,13 +10,9 @@ import { cn } from '@/lib/utils';
 import {
   FolderOpen,
   Bot,
-  Hammer,
-  Timer,
   Wrench,
-  Layers,
-  History,
-  Upload,
-  Download,
+  ArrowUpDown,
+  Settings2,
 } from 'lucide-react';
 import { SETTINGS_LABELS, SETTINGS_DESCRIPTIONS, type SettingsSection } from '@/lib/productVocabulary';
 
@@ -41,37 +37,17 @@ const SETTINGS_NAV: SettingsNavItem[] = [
   {
     id: 'tools',
     route: '/settings/tools',
-    icon: Hammer,
-  },
-  {
-    id: 'pipelines',
-    route: '/settings/pipelines',
-    icon: Timer,
-  },
-  {
-    id: 'skills',
-    route: '/settings/skills',
     icon: Wrench,
   },
   {
-    id: 'mcp',
-    route: '/settings/mcp',
-    icon: Layers,
+    id: 'data',
+    route: '/settings/data',
+    icon: ArrowUpDown,
   },
   {
-    id: 'audit',
-    route: '/settings/audit',
-    icon: History,
-  },
-  {
-    id: 'import',
-    route: '/settings/import',
-    icon: Upload,
-  },
-  {
-    id: 'export',
-    route: '/settings/export',
-    icon: Download,
+    id: 'advanced',
+    route: '/settings/advanced',
+    icon: Settings2,
   },
 ];
 

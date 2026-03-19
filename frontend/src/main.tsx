@@ -39,13 +39,9 @@ const EmbeddingPage = lazy(() => import('./pages/settings/models/embedding/Embed
 const AudioPage = lazy(() => import('./pages/settings/models/audio/AudioPage'))
 const CLIPPage = lazy(() => import('./pages/settings/models/clip/CLIPPage'))
 const PDFPage = lazy(() => import('./pages/settings/models/pdf/PDFPage'))
-const PipelinesSettingsPage = lazy(() => import('./pages/settings/pipelines/PipelinesPage'))
-const ToolsSettingsPage = lazy(() => import('./pages/settings/tools/ToolsPage'))
-const SkillsSettingsPage = lazy(() => import('./pages/settings/skills/SkillsPage'))
-const MCPSettingsPage = lazy(() => import('./pages/settings/mcp/MCPPage'))
-const AuditSettingsPage = lazy(() => import('./pages/settings/audit/AuditPage'))
-const ImportSettingsPage = lazy(() => import('./pages/settings/import/ImportPage'))
-const ExportSettingsPage = lazy(() => import('./pages/settings/export/ExportPage'))
+const ToolsAndConnectionsPage = lazy(() => import('./pages/settings/ToolsAndConnectionsPage'))
+const DataPage = lazy(() => import('./pages/settings/DataPage'))
+const AdvancedPage = lazy(() => import('./pages/settings/AdvancedPage'))
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -217,13 +213,16 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                         <Route path="clip" element={<ErrorBoundary><CLIPPage /></ErrorBoundary>} />
                                         <Route path="pdf" element={<ErrorBoundary><PDFPage /></ErrorBoundary>} />
                                     </Route>
-                                    <Route path="tools" element={<ErrorBoundary><ToolsSettingsPage /></ErrorBoundary>} />
-                                    <Route path="pipelines" element={<ErrorBoundary><PipelinesSettingsPage /></ErrorBoundary>} />
-                                    <Route path="skills" element={<ErrorBoundary><SkillsSettingsPage /></ErrorBoundary>} />
-                                    <Route path="mcp" element={<ErrorBoundary><MCPSettingsPage /></ErrorBoundary>} />
-                                    <Route path="audit" element={<ErrorBoundary><AuditSettingsPage /></ErrorBoundary>} />
-                                    <Route path="import" element={<ErrorBoundary><ImportSettingsPage /></ErrorBoundary>} />
-                                    <Route path="export" element={<ErrorBoundary><ExportSettingsPage /></ErrorBoundary>} />
+                                    <Route path="tools" element={<ErrorBoundary><ToolsAndConnectionsPage /></ErrorBoundary>} />
+                                    <Route path="data" element={<ErrorBoundary><DataPage /></ErrorBoundary>} />
+                                    <Route path="advanced" element={<ErrorBoundary><AdvancedPage /></ErrorBoundary>} />
+                                    {/* Redirects from old routes */}
+                                    <Route path="skills" element={<Navigate to="/settings/tools" replace />} />
+                                    <Route path="mcp" element={<Navigate to="/settings/tools" replace />} />
+                                    <Route path="pipelines" element={<Navigate to="/settings/advanced" replace />} />
+                                    <Route path="audit" element={<Navigate to="/settings/advanced" replace />} />
+                                    <Route path="import" element={<Navigate to="/settings/data" replace />} />
+                                    <Route path="export" element={<Navigate to="/settings/data" replace />} />
                                 </Route>
                             </Route>
                             <Route path="/" element={<Navigate to={ROUTES.ONBOARDING} replace />} />

@@ -377,8 +377,7 @@ export const replayRun = (id: string, fromStep: number): Promise<Run> =>
 export const listOutputs = (params?: OutputQueryParams): Promise<OutputsResponse> =>
     api.get('/outputs', { params }).then(r => {
         const d = r.data
-        // Normalize: backend may return { artifacts: [...] } or { outputs: [...] }
-        return { outputs: d.outputs ?? d.artifacts ?? [], total: d.total ?? 0 }
+        return { outputs: d.outputs ?? [], total: d.total ?? 0 }
     })
 export const getOutput = (id: string): Promise<Output> => api.get(`/outputs/${id}`).then(r => r.data)
 export const createOutput = (data: OutputCreate): Promise<Output> => api.post('/outputs', data).then(r => r.data)
@@ -407,21 +406,6 @@ export const addOutputSink = (
     id: string,
     data: Pick<OutputSink, 'sink_type' | 'sink_state' | 'destination_ref' | 'sync_status' | 'metadata'>,
 ): Promise<OutputSink> => api.post(`/outputs/${id}/sinks`, data).then(r => r.data)
-
-// Backward-compatible aliases
-/** @deprecated Use listOutputs */ export const listArtifacts = listOutputs
-/** @deprecated Use getOutput */ export const getArtifact = getOutput
-/** @deprecated Use createOutput */ export const createArtifact = createOutput
-/** @deprecated Use updateOutput */ export const updateArtifact = updateOutput
-/** @deprecated Use deleteOutput */ export const deleteArtifact = deleteOutput
-/** @deprecated Use listOutputVersions */ export const listArtifactVersions = listOutputVersions
-/** @deprecated Use createOutputVersion */ export const createArtifactVersion = createOutputVersion
-/** @deprecated Use getOutputVersion */ export const getArtifactVersion = getOutputVersion
-/** @deprecated Use getOutputVersionDiff */ export const getArtifactVersionDiff = getOutputVersionDiff
-/** @deprecated Use promoteOutputVersion */ export const promoteArtifactVersion = promoteOutputVersion
-/** @deprecated Use getOutputLineage */ export const getArtifactLineage = getOutputLineage
-/** @deprecated Use listOutputSinks */ export const listArtifactSinks = listOutputSinks
-/** @deprecated Use addOutputSink */ export const addArtifactSink = addOutputSink
 
 // ── Agents ──
 export const listAgents = (params?: { status?: string; mode?: string; is_template?: boolean; skip?: number; limit?: number }): Promise<any> =>

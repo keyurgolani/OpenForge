@@ -389,7 +389,3 @@ class OutputService:
 
     async def add_sink(self, artifact_id: UUID, sink_data: dict[str, Any]) -> dict[str, Any]:
         return {}
-
-
-# Backward-compat alias
-ArtifactService = OutputService
