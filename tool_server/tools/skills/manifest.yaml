@@ -1,0 +1,23 @@
+category: skills
+description: "Manage agent skills"
+tools:
+  - name: skills.install
+    description: "Install a skill from a registry source"
+    risk_category: moderate
+    confirm_by_default: true
+  - name: skills.list_installed
+    description: "List all installed skills"
+    risk_category: safe
+    confirm_by_default: false
+  - name: skills.read
+    description: "Read the content of an installed skill"
+    risk_category: safe
+    confirm_by_default: false
+  - name: skills.remove
+    description: "Remove an installed skill"
+    risk_category: moderate
+    confirm_by_default: true
+  - name: skills.search
+    description: "Search a skill registry for available skills"
+    risk_category: safe
+    confirm_by_default: false

@@ -4,6 +4,9 @@ import importlib
 import logging
 import os
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 from protocol import BaseTool
 
@@ -108,6 +111,7 @@ TOOL_ALIASES: dict[str, str] = {
 class ToolRegistry:
     def __init__(self):
         self._tools: dict[str, BaseTool] = {}
+        self._manifests: dict[str, dict[str, Any]] = {}
 
     def register(self, tool: BaseTool) -> None:
         self._tools[tool.id] = tool
@@ -130,7 +134,9 @@ class ToolRegistry:
         """
         Auto-discover tool categories by scanning the tools/ directory.
         Each category is a subdirectory with an __init__.py that exports TOOLS: list[BaseTool].
+        Also loads manifest.yaml files for tool metadata.
         """
+        self._load_manifests(tools_package_dir)
         tools_path = Path(tools_package_dir)
         if not tools_path.exists():
             logger.warning("Tools directory '%s' not found", tools_package_dir)
@@ -158,6 +164,44 @@ class ToolRegistry:
                 logger.error(
                     "Failed to load tools from category '%s': %s", entry.name, exc
                 )
+
+
+    def _load_manifests(self, tools_package_dir: str = "tools") -> None:
+        """Scan tool directories for manifest.yaml and store metadata."""
+        tools_path = Path(tools_package_dir)
+        if not tools_path.exists():
+            return
+
+        for entry in sorted(tools_path.iterdir()):
+            if not entry.is_dir() or entry.name.startswith("_"):
+                continue
+            manifest_file = entry / "manifest.yaml"
+            if not manifest_file.exists():
+                continue
+            try:
+                data = yaml.safe_load(manifest_file.read_text(encoding="utf-8"))
+                if not isinstance(data, dict):
+                    continue
+                category = data.get("category", entry.name)
+                for tool_entry in data.get("tools", []):
+                    tool_name = tool_entry.get("name", "")
+                    if tool_name:
+                        self._manifests[tool_name] = {
+                            "category": category,
+                            "category_description": data.get("description", ""),
+                            **tool_entry,
+                        }
+                logger.debug("Loaded manifest for category '%s'", category)
+            except Exception as exc:
+                logger.warning("Failed to load manifest from '%s': %s", manifest_file, exc)
+
+    def get_tool_manifest(self, tool_name: str) -> dict[str, Any] | None:
+        """Return manifest metadata for a tool, if available."""
+        return self._manifests.get(tool_name)
+
+    def list_manifests(self) -> dict[str, dict[str, Any]]:
+        """Return all loaded tool manifests."""
+        return dict(self._manifests)
 
 
 registry = ToolRegistry()

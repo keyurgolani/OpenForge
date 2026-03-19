@@ -52,6 +52,15 @@ class InvokeAgentTool(BaseTool):
                         "If omitted, the workspace's default agent is used."
                     ),
                 },
+                "transfer": {
+                    "type": "boolean",
+                    "description": (
+                        "If true, performs a swarm-style transfer: switches the active agent "
+                        "for the current conversation instead of spawning a child conversation. "
+                        "Use this when the user should continue talking to the target agent."
+                    ),
+                    "default": False,
+                },
             },
             "required": ["instruction"],
         }
@@ -66,6 +75,35 @@ class InvokeAgentTool(BaseTool):
             return ToolResult(success=False, error="instruction is required")
 
         workspace_id = params.get("workspace_id") or context.workspace_id
+        transfer = params.get("transfer", False)
+
+        if transfer:
+            # Swarm-style transfer: switch active agent for conversation
+            agent_id = params.get("agent_id")
+            if not agent_id:
+                return ToolResult(success=False, error="agent_id is required for transfer mode")
+
+            payload = {
+                "target_agent_slug": agent_id,
+                "workspace_id": workspace_id,
+                "conversation_id": context.conversation_id or "",
+            }
+            try:
+                async with httpx.AsyncClient(timeout=300.0) as client:
+                    resp = await client.post(
+                        f"{context.main_app_url}/api/v1/runtime/delegations/transfer",
+                        json=payload,
+                    )
+                    resp.raise_for_status()
+                    return ToolResult(success=True, output=resp.json())
+            except httpx.HTTPStatusError as exc:
+                body = exc.response.text[:300] if exc.response else ""
+                return ToolResult(
+                    success=False,
+                    error=f"Agent transfer HTTP error {exc.response.status_code}: {body}",
+                )
+            except Exception as exc:
+                return ToolResult(success=False, error=str(exc))
 
         payload = {
             "instruction": instruction,

@@ -34,7 +34,6 @@ ID_HELPERS = {
     "generate_id",
     "generate_short_id",
     "parse_uuid",
-    "slugify",
     "validate_uuid",
 }
 
@@ -146,12 +145,12 @@ class TestFrontendFileOrganization:
                 f"Delete this directory as it's no longer needed."
             )
 
-    def test_no_legacy_agent_pages(self):
-        """Legacy agent pages should not exist."""
-        agents_page = FRONTEND_ROOT / "pages" / "AgentsPage.tsx"
-        if agents_page.exists():
+    def test_no_legacy_agent_components_page(self):
+        """Legacy agent component pages should not exist."""
+        legacy_page = FRONTEND_ROOT / "pages" / "AgentExecutionsPage.tsx"
+        if legacy_page.exists():
             pytest.fail(
-                f"Legacy AgentsPage exists: {agents_page}. "
+                f"Legacy AgentExecutionsPage exists: {legacy_page}. "
                 f"Delete this page as it's no longer needed."
             )
 
@@ -170,7 +169,7 @@ class TestFrontendFileOrganization:
         assert features_dir.exists(), "features directory not found"
 
         # Check that domain features exist
-        expected_features = ["profiles", "workflows", "missions", "runs", "artifacts", "knowledge"]
+        expected_features = ["agents", "automations", "runs", "outputs", "knowledge"]
         for feature in expected_features:
             feature_dir = features_dir / feature
             assert feature_dir.exists(), f"Feature directory not found: {feature}"
@@ -179,11 +178,10 @@ class TestFrontendFileOrganization:
         """Canonical domain page shells should exist."""
         expected_pages = [
             "DashboardPage.tsx",
-            "ProfilesPage.tsx",
-            "WorkflowsPage.tsx",
-            "MissionsPage.tsx",
+            "AgentsPage.tsx",
+            "AutomationsPage.tsx",
             "RunsPage.tsx",
-            "ArtifactsPage.tsx",
+            "OutputsPage.tsx",
         ]
         pages_dir = FRONTEND_ROOT / "pages"
         for page in expected_pages:
@@ -202,21 +200,18 @@ class TestFrontendFileOrganization:
         main_file = FRONTEND_ROOT / "main.tsx"
         content = main_file.read_text(encoding="utf-8")
 
-        for segment in ['path="knowledge"', 'path="chat"', 'path="profiles"', 'path="workflows"', 'path="missions"', 'path="runs"', 'path="artifacts"']:
+        for segment in ['path="knowledge"', 'path="chat"', 'path="/agents"', 'path="/automations"', 'path="/runs"', 'path="/outputs"']:
             assert segment in content, f"Expected route segment missing from main.tsx: {segment}"
 
-        assert 'path="agent"' not in content
         assert '/executions' not in content
 
     def test_app_shell_primary_navigation_uses_final_labels(self):
         """AppShell should use the final IA labels rather than the legacy agent/execution framing."""
         app_shell = (FRONTEND_ROOT / "pages" / "AppShell.tsx").read_text(encoding="utf-8")
 
-        for label in ["Workspace", "Knowledge", "Chat", "Profiles", "Workflows", "Missions", "Runs", "Artifacts", "Settings"]:
+        for label in ["Knowledge", "Chat", "Agents", "Automations", "Runs", "Outputs", "Settings"]:
             assert label in app_shell, f"Expected navigation label missing from AppShell: {label}"
 
-        assert "Workspace Agent" not in app_shell
-        assert "Agent Executions" not in app_shell
         assert "Legacy Executions" not in app_shell
 
     def test_workspace_websocket_hook_requires_explicit_channels(self):

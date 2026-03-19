@@ -9,7 +9,7 @@ import { useUIStore } from '@/stores/uiStore'
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
 import { getShortcutDisplay } from '@/lib/keyboard'
 import { onQuickKnowledgeOpen, type QuickKnowledgeType } from '@/lib/quick-knowledge'
-import { artifactsRoute, catalogRoute, chatRoute, dashboardRoute, knowledgeRoute, missionsRoute, profilesRoute, runsRoute, searchRoute, workflowsRoute } from '@/lib/routes'
+import { agentsRoute, outputsRoute, automationsRoute, chatRoute, dashboardRoute, knowledgeRoute, runsRoute, searchRoute } from '@/lib/routes'
 import CommandPalette from '@/components/shared/CommandPalette'
 import CreateDispatcher from '@/components/knowledge/create/CreateDispatcher'
 import KnowledgeTypeGrid from '@/components/knowledge/KnowledgeTypeGrid'
@@ -17,7 +17,7 @@ import { ModeToggle } from '@/components/mode-toggle'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { PrimaryNavCollapsed } from '@/components/layout/PrimaryNavCollapsed'
 import { PrimaryNavExpanded } from '@/components/layout/PrimaryNavExpanded'
-import { PendingApprovalsBell } from '@/components/layout/PendingApprovalsBell'
+// PendingApprovalsBell removed — approvals handled inline in chat
 import { WorkspaceInsightsRail, type WorkspaceInsightSource } from '@/components/layout/WorkspaceInsightsRail'
 import { getWorkspaceIcon, type WorkspaceInfo } from '@/components/layout/WorkspaceSwitcher'
 
@@ -208,34 +208,22 @@ export default function AppShell() {
         description: 'Durable execution records and current run activity.',
       }
     }
-    if (location.pathname.includes('/profiles')) {
+    if (location.pathname.includes('/agents')) {
       return {
-        title: 'Profiles',
-        description: 'Reusable worker definitions, prompts, and capability bundles.',
+        title: 'Agents',
+        description: 'Agent definitions that power interactive and autonomous workflows.',
       }
     }
-    if (location.pathname.includes('/workflows')) {
+    if (location.pathname.includes('/automations')) {
       return {
-        title: 'Workflows',
-        description: 'Composable execution graphs and orchestration definitions.',
+        title: 'Automations',
+        description: 'Automated workflows that run agents on triggers and schedules.',
       }
     }
-    if (location.pathname.includes('/missions')) {
+    if (location.pathname.includes('/outputs')) {
       return {
-        title: 'Missions',
-        description: 'Packaged autonomous work that assembles workflows, profiles, and triggers.',
-      }
-    }
-    if (location.pathname.includes('/catalog')) {
-      return {
-        title: 'Catalog',
-        description: 'Browse and clone pre-built profiles, workflows, and missions.',
-      }
-    }
-    if (location.pathname.includes('/artifacts')) {
-      return {
-        title: 'Artifacts',
-        description: 'Persistent outputs produced by workspace runs and missions.',
+        title: 'Outputs',
+        description: 'Persistent outputs produced by workspace runs and automations.',
       }
     }
     if (location.pathname.includes('/knowledge/')) {
@@ -262,12 +250,10 @@ export default function AppShell() {
     knowledgeItem: (knowledgeId: string) => `/w/${workspaceId}/knowledge/${knowledgeId}`,
     chat: chatRoute(workspaceId),
     chatConversation: (conversationId: string) => chatRoute(workspaceId, conversationId),
-    profiles: profilesRoute(),
-    workflows: workflowsRoute(),
-    missions: missionsRoute(),
+    agents: agentsRoute(),
+    automations: automationsRoute(),
     runs: runsRoute(),
-    artifacts: artifactsRoute(),
-    catalog: catalogRoute(),
+    outputs: outputsRoute(),
     settings: '/settings',
   }), [workspaceId])
 
@@ -278,11 +264,9 @@ export default function AppShell() {
   const isWorkspaceAgentPage = location.pathname.includes('/chat')
   const isKnowledgePage = location.pathname.includes('/knowledge/')
   const isRunsPage = location.pathname.includes('/runs')
-  const isProfilesPage = location.pathname.includes('/profiles')
-  const isWorkflowsPage = location.pathname.includes('/workflows')
-  const isMissionsPage = location.pathname.includes('/missions')
-  const isArtifactsPage = location.pathname.includes('/artifacts')
-  const isCatalogPage = location.pathname.includes('/catalog')
+  const isAgentsPage = location.pathname.includes('/agents')
+  const isAutomationsPage = location.pathname.includes('/automations')
+  const isOutputsPage = location.pathname.includes('/outputs')
   const isPrimarySurface = (
     isDashboard
     || isKnowledgeBoardPage
@@ -291,11 +275,9 @@ export default function AppShell() {
     || isWorkspaceAgentPage
     || isKnowledgePage
     || isRunsPage
-    || isProfilesPage
-    || isWorkflowsPage
-    || isMissionsPage
-    || isArtifactsPage
-    || isCatalogPage
+    || isAgentsPage
+    || isAutomationsPage
+    || isOutputsPage
   )
 
   return (
@@ -392,7 +374,6 @@ export default function AppShell() {
             </div>
           )}
 
-          <PendingApprovalsBell />
           <ModeToggle />
         </header>
 

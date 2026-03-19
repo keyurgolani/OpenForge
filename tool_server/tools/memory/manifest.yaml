@@ -1,0 +1,15 @@
+category: memory
+description: "Agent memory and workspace knowledge access"
+tools:
+  - name: memory.store
+    description: "Store a memory for later recall"
+    risk_category: safe
+    confirm_by_default: false
+  - name: memory.recall
+    description: "Recall stored memories by query"
+    risk_category: safe
+    confirm_by_default: false
+  - name: memory.forget
+    description: "Delete a stored memory"
+    risk_category: moderate
+    confirm_by_default: false

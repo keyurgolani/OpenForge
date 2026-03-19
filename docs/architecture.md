@@ -1,77 +1,44 @@
 # Architecture
 
-This document describes the technical architecture of OpenForge, covering the system components, data flow, domain model, and key design decisions.
+This document describes the technical architecture of OpenForge, covering the system components, execution pipelines, domain model, and key design decisions.
 
 ## System Overview
 
-OpenForge is a distributed application composed of six services that communicate over HTTP, WebSocket, and Redis pub/sub:
+OpenForge is a distributed application composed of seven services that communicate over HTTP, WebSocket, and Redis pub/sub:
 
-```
-                    ┌─────────────────────────────────┐
-                    │       Browser (React SPA)        │
-                    │   http://localhost:3100           │
-                    └──────────────┬──────────────────┘
-                                   │ HTTP + WebSocket
-                                   ▼
-┌──────────────────────────────────────────────────────────────┐
-│                    OpenForge Backend                          │
-│              FastAPI + Python 3.11 (:3000)                    │
-│                                                              │
-│  ┌─────────┐  ┌─────────────┐  ┌──────────┐  ┌───────────┐ │
-│  │   API   │  │  Execution  │  │ Services │  │  WebSocket │ │
-│  │ Routes  │  │   Engine    │  │  Layer   │  │  Manager   │ │
-│  └────┬────┘  └──────┬──────┘  └────┬─────┘  └─────┬─────┘ │
-│       │              │              │               │        │
-│       └──────────────┴──────────────┴───────────────┘        │
-│                          │                                    │
-└──────────────────────────┼────────────────────────────────────┘
-                           │
-          ┌────────────────┼────────────────┐
-          │                │                │
-          ▼                ▼                ▼
-   ┌────────────┐  ┌────────────┐   ┌────────────┐
-   │ PostgreSQL │  │   Qdrant   │   │   Redis    │
-   │    :5432   │  │   :6333    │   │   :6379    │
-   │            │  │            │   │            │
-   │ Relational │  │  Vector    │   │ Pub/Sub    │
-   │   Data     │  │ Embeddings │   │ Task Queue │
-   └────────────┘  └────────────┘   │ Sessions   │
-                                    └──────┬─────┘
-                                           │
-                           ┌───────────────┼───────────────┐
-                           │               │               │
-                           ▼               ▼               ▼
-                    ┌────────────┐  ┌────────────┐  ┌────────────┐
-                    │   Celery   │  │    Tool    │  │  SearXNG   │
-                    │   Worker   │  │   Server   │  │   :8080    │
-                    │            │  │   :8001    │  │            │
-                    │ Background │  │  50+ Tools │  │ Web Search │
-                    │   Tasks    │  │            │  │            │
-                    └────────────┘  └────────────┘  └────────────┘
-```
+- **Backend (openforge)** — FastAPI application serving the REST API, WebSocket connections, and coordinating all business logic
+- **Frontend** — React 19 SPA served by the backend in production, or via Vite dev server in development
+- **Tool Server** — Lightweight FastAPI microservice providing sandboxed tool execution
+- **PostgreSQL** — Primary relational database for all structured data
+- **Qdrant** — Vector database for semantic search, visual search, and agent memory
+- **Redis** — Message broker (Celery), real-time event pub/sub, HITL coordination, session cache
+- **SearXNG** — Self-hosted meta-search engine for web search capabilities
+- **Celery Worker** — Background task processor sharing the backend codebase
 
 ## Services
 
-### Backend (openforge)
+### Backend
 
-The main application server built with **FastAPI**. Handles:
+The main application server built with **FastAPI** (Python 3.11). Handles:
 
 - REST API endpoints for all CRUD operations
 - WebSocket connections for real-time chat streaming
 - Database management (PostgreSQL via async SQLAlchemy + Alembic migrations)
 - Vector database operations (Qdrant for embeddings)
 - LLM provider integration (via LiteLLM for unified interface)
-- Agent execution engine for chat interactions
-- Workflow runtime coordinator for multi-step processes
+- Agent blueprint compilation and registry
+- Strategy-based execution (chat, researcher, reviewer, builder, watcher, coordinator)
 - Knowledge processing pipeline (chunking, embedding, indexing)
 - Authentication and session management
 
 **Key directories:**
+
 - `api/` — HTTP route handlers (thin layer, delegates to services)
-- `core/` — Core business logic (embedding, search, context assembly, LLM gateway)
-- `services/` — Application services (knowledge processing, LLM management, conversations)
-- `runtime/` — Execution engines (agent execution, workflow coordinator, HITL)
-- `domains/` — Domain-driven services (profiles, workflows, missions, triggers, runs, artifacts, knowledge graph, retrieval, prompts, policies, catalog, evaluation)
+- `core/` — Core business logic (embedding, search, context assembly, LLM gateway, prompt resolution)
+- `services/` — Application services (knowledge processing, LLM management, conversations, automation config)
+- `runtime/` — Execution engines (chat_handler, strategy_executor, tool_loop, handoff_engine, agent_registry)
+- `runtime/strategies/` — Strategy plugins (chat, researcher, reviewer, builder, watcher, coordinator)
+- `domains/` — Domain-driven services (agents, automations, knowledge, retrieval, runs, outputs, common)
 - `db/` — Database models, migrations, and clients (PostgreSQL, Qdrant, Redis)
 - `worker/` — Celery task definitions
 - `middleware/` — HTTP middleware (authentication)
@@ -83,7 +50,7 @@ A separate Python process running **Celery** with a solo pool for asyncio compat
 
 - Agent execution tasks (long-running LLM interactions)
 - Knowledge processing (embedding generation, content extraction)
-- Workflow step execution
+- Automation runs
 - Background intelligence generation
 
 The worker shares the same codebase as the backend but runs tasks asynchronously. Redis serves as the message broker.
@@ -92,28 +59,30 @@ The worker shares the same codebase as the backend but runs tasks asynchronously
 
 A lightweight **FastAPI** microservice (Python 3.12) that provides sandboxed tool execution. Features:
 
-- 50+ built-in tools across 11 categories
+- 50+ built-in tools across 10 categories
 - Auto-discovery of tool categories on startup
 - Security layer (path traversal guards, command blocking, URL validation)
 - Untrusted content boundary for external HTTP responses
 - Tool aliasing to handle common naming mistakes
 - Skill management (install/remove/search via skills CLI)
 
-**Tool categories:** Filesystem, Shell, Git, Language (code analysis), Workspace (knowledge/chat access), Memory, HTTP, Agent (delegation), Task, Skills
+**Tool categories:** filesystem, shell, git, language (code analysis), workspace (knowledge/chat access), memory, http, agent (delegation), task, skills
 
 **Protocol:** Every tool implements a `BaseTool` abstract class with a standard interface: `id`, `category`, `display_name`, `description`, `input_schema`, `risk_level`, and `execute(params, context)`.
 
 ### PostgreSQL
 
 Primary relational database (v16) storing all structured data:
+
 - Configuration and settings
 - LLM provider configurations (with encrypted API keys)
 - Workspaces, conversations, and messages
 - Knowledge metadata and processing state
-- Domain entities (profiles, workflows, missions, triggers, runs, artifacts)
-- Knowledge graph (entities, relationships, provenance)
-- Prompts, policies, and evaluation data
-- Audit logs and usage records
+- Agents (blueprints, compiled specs, profiles)
+- Automations (trigger config, budget config, output routing)
+- Runs and run steps
+- Outputs (versioned artifacts with lineage)
+- Approval requests and audit logs
 
 ### Qdrant
 
@@ -129,79 +98,133 @@ Vector database (v1.13.2) storing embeddings for semantic search:
 ### Redis
 
 In-memory data store (v7) used for:
+
 - Celery task broker and result backend
-- Pub/sub for real-time event streaming (agent events → WebSocket)
+- Pub/sub for real-time event streaming (agent events to WebSocket)
 - HITL (human-in-the-loop) approval coordination between processes
-- Ephemeral agent memory storage
+- Agent execution cancellation signals
+- Stream state caching for reconnecting clients
 - Session caching
 
 ### SearXNG
 
 Self-hosted meta-search engine providing web search capabilities to the `http.search_web` tool. Runs internally with no external tracking.
 
-## Data Flow
+## Agent Execution Pipeline
 
-### Chat Pipeline
+### Blueprint to Execution
 
 ```
-User Message
-    │
-    ▼
-1. Create Message record in PostgreSQL
-2. Create AgentExecution record
-3. Enqueue Celery task (or run inline)
-    │
-    ▼
-4. Agent Execution Engine:
-   a. Load workspace, conversation, and agent profile
-   b. Retrieve relevant knowledge from Qdrant (semantic search)
-   c. Assemble context within token budget:
-      - System prompt: ~12% of context window
-      - Conversation history: ~70% (sliding window, always keeps last 4 messages)
-      - Output headroom: ~18%
-   d. Call LLM with tools via LiteLLM
-   e. Stream response tokens to Redis pub/sub
-   f. If tool call needed:
-      - Check tool permissions and risk level
-      - If approval required → create HITL request, wait for human
-      - Execute tool via Tool Server HTTP call
-      - Feed result back to LLM, repeat
-   g. Persist final response as Message record
-    │
-    ▼
-5. Redis pub/sub → WebSocket Manager → Browser
-   (real-time streaming of tokens, thinking, tool calls)
+Agent Blueprint (YAML + Markdown)
+    |
+    v
+1. Parse agent.md (frontmatter + body)
+    |
+    v
+2. AgentBlueprintCompiler:
+   a. Check idempotency (source_md_hash)
+   b. Upsert system profile
+   c. Build workspace directory for system prompt
+   d. Create CompiledAgentSpec (immutable)
+   e. Persist CompiledAgentSpecModel with version
+   f. Update agent.active_spec_id
+    |
+    v
+3. AgentRegistry resolves spec at runtime:
+   a. resolve_for_workspace() — find workspace's default agent
+   b. resolve(slug=...) — find agent by slug
+    |
+    v
+4. Execution path depends on context:
+
+   Interactive Chat (ChatHandler):
+     a. Resolve agent via agent_registry
+     b. Load tools (built-in + MCP)
+     c. Assemble context (system prompt + history + attachments + mentions)
+     d. Resolve LLM provider for workspace
+     e. Execute tool_loop (LLM call + tool dispatch + HITL cycle)
+     f. Stream events via Redis pub/sub to WebSocket
+     g. Persist assistant message with timeline
+
+   Strategy Run (StrategyExecutor):
+     a. Lookup strategy from registry (fallback to "chat")
+     b. Create RunModel
+     c. Build RunContext with provider config
+     d. Execute run_strategy_loop:
+        - plan() — strategy generates execution plan
+        - execute_step() — strategy executes each step
+        - should_continue() — strategy decides whether to continue
+        - aggregate() — strategy combines results
+     e. Persist run output and transition status
 ```
 
-### Knowledge Processing Pipeline
+### Strategy Plugin System
+
+Strategies define how agents execute. Each strategy implements the `AgentStrategy` protocol:
+
+| Method | Purpose |
+|--------|---------|
+| `plan(ctx)` | Generate an execution plan (list of steps) |
+| `execute_step(ctx, step)` | Execute a single step |
+| `should_continue(ctx, latest)` | Decide whether to continue after a step |
+| `aggregate(ctx)` | Combine results from all steps |
+
+**Built-in strategies:**
+
+| Strategy | Behavior |
+|----------|----------|
+| **chat** | Interactive conversation with tool loop. Single-step, loop-driven. |
+| **researcher** | Plan-driven research with evidence gathering and synthesis. |
+| **reviewer** | Code/document review with structured feedback. |
+| **builder** | Multi-step artifact construction (code, documents, reports). |
+| **watcher** | Monitoring loop that observes and reacts to changes. |
+| **coordinator** | Orchestrates multiple sub-agents via handoff. |
+
+Strategies are registered in a global registry. The `strategy` field in an agent blueprint selects which strategy to use.
+
+### Tool Loop
+
+The tool loop (`runtime/tool_loop.py`) is the core LLM interaction cycle used by both `ChatHandler` and strategy steps:
+
+1. Call LLM with messages and tool definitions
+2. If LLM returns tool calls:
+   a. Check tool permissions via PolicyEngine
+   b. If approval required, create HITL request and wait
+   c. Execute tool via Tool Server or MCP
+   d. Feed tool result back to LLM
+   e. Repeat
+3. If LLM returns text, return the response
+4. Enforce rate limits and iteration caps
+
+## Knowledge Pipeline
 
 ```
 Upload/Create Knowledge
-    │
-    ▼
+    |
+    v
 1. Store metadata in PostgreSQL
 2. Extract text content:
-   - PDFs → PDF processor
-   - DOCX → Document processor
-   - XLSX → Sheet processor
-   - PPTX → Slides processor
-   - Images → CLIP embeddings + optional OCR
-   - Audio → Whisper transcription
-   - Bookmarks → Web content extraction
-    │
-    ▼
+   - PDFs -> PDF processor
+   - DOCX -> Document processor
+   - XLSX -> Sheet processor
+   - PPTX -> Slides processor
+   - Images -> CLIP embeddings + optional OCR
+   - Audio -> Whisper transcription
+   - Bookmarks -> Web content extraction
+    |
+    v
 3. Chunk text into ~512-token segments
-    │
-    ▼
+    |
+    v
 4. Generate embeddings for each chunk:
    - Dense vector (384-dim BGE-small)
    - Sparse BM25 vector (for keyword matching)
    - Summary vector (for document-level matching)
-    │
-    ▼
+    |
+    v
 5. Index in Qdrant with metadata payload
-    │
-    ▼
+    |
+    v
 6. (Optional) Generate AI intelligence:
    - Summary, tags, key insights
    - Store back in PostgreSQL
@@ -211,124 +234,102 @@ Upload/Create Knowledge
 
 ```
 Search Query
-    │
-    ▼
+    |
+    v
 1. Embed query with BGE-small (384-dim)
-    │
-    ▼
+    |
+    v
 2. Four-representation search in Qdrant:
    a. Dense vector search (semantic similarity)
    b. Sparse BM25 search (keyword matching)
    c. Summary vector search (document-level)
    d. Reciprocal Rank Fusion (RRF) to combine results
-    │
-    ▼
+    |
+    v
 3. (Optional) Cross-encoder reranking (ms-marco-MiniLM-L-6-v2)
-    │
-    ▼
+    |
+    v
 4. Filter by workspace, type, tags, score threshold
-    │
-    ▼
+    |
+    v
 5. Context expansion (retrieve surrounding chunks)
-    │
-    ▼
+    |
+    v
 6. Return ranked results with metadata
 ```
 
-### Workflow Execution Pipeline
-
-```
-Trigger fires (schedule, interval, event, or manual launch)
-    │
-    ▼
-1. Runtime Coordinator creates a Run record
-    │
-    ▼
-2. For each node in the workflow graph:
-   a. Create RunStep record
-   b. Look up executor in the node executor registry
-   c. Execute node (LLM call, tool execution, routing decision, etc.)
-   d. Create checkpoint for durability
-   e. Emit runtime events
-   f. If approval node → pause and wait for HITL
-   g. If fan-out → spawn parallel branches
-   h. If join → wait for all branches to complete
-    │
-    ▼
-3. On completion:
-   a. Update Run status
-   b. Emit artifacts
-   c. Record metrics (tokens, cost, duration)
-```
-
 ## Domain Model
+
+### 7 Backend Domains
+
+| Domain | Purpose |
+|--------|---------|
+| **agents** | Agent blueprints, compilation, profiles, specs |
+| **automations** | Automation definitions with trigger, budget, and output config |
+| **knowledge** | Knowledge item management (via existing services) |
+| **retrieval** | Search, evidence building, retrieval tracing |
+| **runs** | Execution tracking (runs, run steps, checkpoints, events) |
+| **outputs** | Versioned output artifacts with lineage and sinks |
+| **common** | Shared enums, utilities, and base types |
 
 ### Core Entities
 
 ```
 Workspace
- ├── Knowledge (notes, bookmarks, gists, documents, PDFs, images, audio, etc.)
- ├── Conversations
- │    └── Messages (with attachments, tool calls, thinking)
- └── Settings overrides
+ +-- Knowledge (notes, bookmarks, gists, documents, PDFs, images, audio, etc.)
+ +-- Conversations
+ |    +-- Messages (with attachments, tool calls, thinking, timeline)
+ +-- Settings overrides
 
-Profile (Agent Profile)
- ├── System Prompt
- ├── Capability Bundles (collections of tools/abilities)
- ├── Model Policy (LLM selection constraints)
- ├── Memory Policy (context assembly rules)
- ├── Safety Policy (behavioral constraints)
- └── Output Contract (expected output format)
+Agent (workspace-agnostic)
+ +-- Blueprint (YAML frontmatter + Markdown system prompt)
+ +-- Compiled Specs (versioned immutable snapshots)
+ +-- Profile (auto-generated from compilation)
+ +-- Strategy (chat, researcher, reviewer, builder, watcher, coordinator)
+ +-- Tools (allowed categories, blocked IDs, confirmation requirements)
 
-Workflow Definition
- ├── Workflow Versions (versioned executable snapshots)
- │    ├── Workflow Nodes (LLM, tool, router, fan-out, join, approval, artifact, etc.)
- │    └── Workflow Edges (directed connections with conditions)
- └── Input/Output Schemas
-
-Mission Definition
- ├── Workflow (the execution graph)
- ├── Default Profiles
- ├── Triggers (schedule, interval, event)
- ├── Budget Policy (resource limits)
- └── Approval Policy
+Automation
+ +-- Agent reference (by slug)
+ +-- Trigger Config (manual, cron, interval, event)
+ +-- Budget Config (rate limits, token limits, cooldowns)
+ +-- Output Routing Config (artifact types)
 
 Run (execution instance)
- ├── Run Steps (individual node executions)
- ├── Checkpoints (state snapshots for durability)
- ├── Runtime Events (execution log)
- └── Emitted Artifacts
+ +-- Run Steps (individual step executions)
+ +-- Checkpoints (state snapshots for durability)
+ +-- Runtime Events (execution log)
+ +-- Emitted Outputs
 
-Artifact (durable output)
- ├── Versions (content history)
- ├── Lineage Links (provenance to runs, missions, knowledge)
- └── Sinks (publication destinations)
-
-Knowledge Graph
- ├── Entities (extracted from knowledge)
- ├── Relationships (between entities)
- ├── Mentions (where entities/relationships appear)
- └── Provenance (source tracking)
+Output (durable result)
+ +-- Versions (content history)
+ +-- Lineage Links (provenance to runs, automations, knowledge)
+ +-- Sinks (publication destinations)
 ```
 
 ### Entity Relationships
 
 ```
-Mission ──references──▶ Workflow
-Mission ──references──▶ Profile (default)
-Mission ──owns──▶ Trigger
-Trigger ──fires──▶ Run
-Run ──executes──▶ Workflow Version
-Run ──owns──▶ Run Steps
-Run ──emits──▶ Artifacts
-Run ──creates──▶ Checkpoints
-Workflow ──contains──▶ Nodes + Edges
-Profile ──uses──▶ Capability Bundle, Model Policy, Memory Policy, Safety Policy
-Knowledge ──embedded in──▶ Qdrant vectors
-Knowledge ──extracted to──▶ Entities + Relationships (Knowledge Graph)
+Agent --compiled into--> CompiledAgentSpec
+Agent --has--> AgentProfile
+Automation --references--> Agent (by slug)
+Automation --triggers--> Run
+Run --executes via--> Strategy
+Run --owns--> Run Steps
+Run --emits--> Outputs
+Output --has--> Versions
+Knowledge --embedded in--> Qdrant vectors
 ```
 
 ## Key Design Decisions
+
+### Blueprint-Driven Agents
+Agents are defined as `.md` files with YAML frontmatter (identity, strategy, model, tools, retrieval) and a Markdown body (system prompt, constraints). This format is human-readable, version-controllable, and diff-friendly. Blueprints are compiled into immutable `CompiledAgentSpec` objects with hash-based idempotency.
+
+### Strategy Plugin Architecture
+The runtime uses a strategy pattern for agent execution. Each strategy implements `plan`, `execute_step`, `should_continue`, and `aggregate`. This decouples execution behavior from the agent definition and makes it straightforward to add new execution modes without modifying the core runtime.
+
+### Workspace-Agnostic Agents
+Agents are not scoped to a workspace. They can access knowledge from any workspace through cross-workspace search. This enables agents that serve as domain experts across multiple knowledge bases.
 
 ### Async-First Architecture
 The entire backend uses async I/O — asyncpg for PostgreSQL, async httpx for tool server calls, and async WebSocket handling. This maximizes throughput for concurrent users and long-running LLM calls.
@@ -336,43 +337,38 @@ The entire backend uses async I/O — asyncpg for PostgreSQL, async httpx for to
 ### Hybrid Search (Dense + Sparse)
 Search uses four-representation retrieval combining dense semantic vectors, sparse BM25 keyword vectors, and document-level summary vectors, merged via Reciprocal Rank Fusion. This provides both semantic understanding and keyword precision.
 
-### Durable Workflow Execution
-Every workflow execution creates persistent Run, RunStep, and Checkpoint records. This enables resumability after failures or interruptions, full auditability of what happened, and replay/comparison of past executions.
-
-### Workspace Isolation
-All user data is scoped to workspaces. Knowledge, conversations, search results, and model configurations are isolated per workspace. Cross-workspace interaction is only possible through explicit agent delegation.
-
 ### Tool Server Separation
 Tools run in a separate microservice with security boundaries (path traversal guards, command blocking, content boundary wrapping). This isolates potentially dangerous operations from the main application.
 
 ### Event-Driven Streaming
 Agent responses stream via Redis pub/sub bridged to WebSocket connections. This decouples the Celery worker (which runs the LLM call) from the web server (which serves the WebSocket), enabling horizontal scaling.
 
-### Pluggable Node Executors
-The workflow runtime uses a registry pattern for node executors. Each node type (LLM, tool, router, fan-out, join, etc.) has its own executor class, making it straightforward to add new node types without modifying the core runtime.
-
 ### Virtual LLM Providers
 Beyond standard providers (OpenAI, Anthropic, etc.), OpenForge supports virtual providers — router (load balancing), council (multi-model ensemble), and optimizer (prompt optimization) — that compose standard providers into higher-level abstractions.
 
-## Security
+## Security Model
 
 ### API Key Encryption
-All LLM provider API keys are encrypted at rest using Fernet symmetric encryption. The encryption key is configurable and should be persisted across restarts.
+All LLM provider API keys are encrypted at rest using Fernet symmetric encryption. The encryption key is configurable and must be persisted across restarts.
 
 ### Authentication
 Optional password-based authentication with JWT sessions. When `ADMIN_PASSWORD` is set, all API routes (except health and auth endpoints) require a valid session cookie. When unset, authentication is disabled (suitable for local/trusted networks).
 
 ### Tool Security
 The tool server enforces:
+
 - **Path traversal protection** — All file paths are resolved and validated to stay within workspace boundaries
 - **Command blocking** — Dangerous shell commands (rm -rf, dd, mkfs, shutdown, etc.) are blocked by pattern matching
 - **URL validation** — Only HTTP/HTTPS protocols are allowed
 - **Content boundary** — External HTTP responses are wrapped in `<untrusted_content>` tags to prevent prompt injection
 
+### Tool Permissions
+Per-tool permission levels (allow, block, require approval) are configurable. Each tool declares a default risk level (low, medium, high, critical). The PolicyEngine evaluates permissions before every tool execution in the tool loop.
+
 ### CORS
 Configurable CORS origins via the `CORS_ORIGINS` setting. Defaults to allow all origins (`*`) for local development.
 
-## Technology Stack Summary
+## Technology Stack
 
 | Layer | Technology |
 |-------|-----------|

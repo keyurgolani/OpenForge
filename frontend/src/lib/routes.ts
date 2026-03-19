@@ -2,7 +2,7 @@
  * Canonical frontend route definitions.
  *
  * Workspace-specific pages (Knowledge, Chat, Search) live under /w/:workspaceId.
- * Domain entities (Profiles, Workflows, Missions, Runs, Artifacts, Catalog) are
+ * Domain entities (Agents, Automations, Runs, Outputs) are
  * workspace-agnostic and live at the top level.
  */
 
@@ -23,11 +23,7 @@ export const ROUTES = {
   SETTINGS_MODELS_AUDIO: '/settings/models/audio',
   SETTINGS_MODELS_CLIP: '/settings/models/clip',
   SETTINGS_MODELS_PDF: '/settings/models/pdf',
-  SETTINGS_PROMPTS: '/settings/prompts',
-  SETTINGS_POLICIES: '/settings/policies',
-  SETTINGS_APPROVALS: '/settings/approvals',
   SETTINGS_PIPELINES: '/settings/pipelines',
-  SETTINGS_BUNDLES: '/settings/bundles',
   SETTINGS_SKILLS: '/settings/skills',
   SETTINGS_MCP: '/settings/mcp',
   SETTINGS_AUDIT: '/settings/audit',
@@ -45,20 +41,20 @@ export const ROUTES = {
   CHAT: `${WORKSPACE_PREFIX}/chat`,
   CHAT_CONVERSATION: `${WORKSPACE_PREFIX}/chat/:conversationId`,
   SEARCH: `${WORKSPACE_PREFIX}/search`,
-  OPERATOR: `${WORKSPACE_PREFIX}/operator`,
 
   // Domain entity routes (workspace-agnostic)
-  PROFILES: '/profiles',
-  PROFILE_DETAIL: '/profiles/:profileId',
-  WORKFLOWS: '/workflows',
-  WORKFLOW_DETAIL: '/workflows/:workflowId',
-  MISSIONS: '/missions',
-  MISSION_DETAIL: '/missions/:missionId',
+  AGENTS: '/agents',
+  AGENT_DETAIL: '/agents/:agentId',
+  AUTOMATIONS: '/automations',
+  AUTOMATION_DETAIL: '/automations/:automationId',
   RUNS: '/runs',
   RUN_DETAIL: '/runs/:runId',
-  ARTIFACTS: '/artifacts',
-  ARTIFACT_DETAIL: '/artifacts/:artifactId',
-  CATALOG: '/catalog',
+  OUTPUTS: '/outputs',
+  OUTPUT_DETAIL: '/outputs/:outputId',
+  /** @deprecated Use OUTPUTS */
+  ARTIFACTS: '/outputs',
+  /** @deprecated Use OUTPUT_DETAIL */
+  ARTIFACT_DETAIL: '/outputs/:outputId',
 } as const;
 
 export function routeWithParams(
@@ -102,25 +98,18 @@ export function searchRoute(workspaceId: string): string {
   return routeWithParams(ROUTES.SEARCH, { workspaceId });
 }
 
-export function profilesRoute(profileId?: string): string {
-  if (profileId) {
-    return routeWithParams(ROUTES.PROFILE_DETAIL, { profileId });
+export function agentsRoute(agentId?: string): string {
+  if (agentId) {
+    return routeWithParams(ROUTES.AGENT_DETAIL, { agentId });
   }
-  return ROUTES.PROFILES;
+  return ROUTES.AGENTS;
 }
 
-export function workflowsRoute(workflowId?: string): string {
-  if (workflowId) {
-    return routeWithParams(ROUTES.WORKFLOW_DETAIL, { workflowId });
+export function automationsRoute(automationId?: string): string {
+  if (automationId) {
+    return routeWithParams(ROUTES.AUTOMATION_DETAIL, { automationId });
   }
-  return ROUTES.WORKFLOWS;
-}
-
-export function missionsRoute(missionId?: string): string {
-  if (missionId) {
-    return routeWithParams(ROUTES.MISSION_DETAIL, { missionId });
-  }
-  return ROUTES.MISSIONS;
+  return ROUTES.AUTOMATIONS;
 }
 
 export function runsRoute(runId?: string): string {
@@ -130,19 +119,16 @@ export function runsRoute(runId?: string): string {
   return ROUTES.RUNS;
 }
 
-export function artifactsRoute(artifactId?: string): string {
-  if (artifactId) {
-    return routeWithParams(ROUTES.ARTIFACT_DETAIL, { artifactId });
+export function outputsRoute(outputId?: string): string {
+  if (outputId) {
+    return routeWithParams(ROUTES.OUTPUT_DETAIL, { outputId });
   }
-  return ROUTES.ARTIFACTS;
+  return ROUTES.OUTPUTS;
 }
 
-export function catalogRoute(): string {
-  return ROUTES.CATALOG;
-}
-
-export function operatorRoute(workspaceId: string): string {
-  return routeWithParams(ROUTES.OPERATOR, { workspaceId });
+/** @deprecated Use outputsRoute instead */
+export function artifactsRoute(artifactId?: string): string {
+  return outputsRoute(artifactId);
 }
 
 export default ROUTES;

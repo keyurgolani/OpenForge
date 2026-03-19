@@ -1,10 +1,8 @@
 """Artifact domain database model exports."""
 
-from openforge.db.models import ArtifactLinkModel, ArtifactModel, ArtifactSinkModel, ArtifactVersionModel
+from openforge.db.models import ArtifactModel, ArtifactVersionModel
 
 __all__ = [
     "ArtifactModel",
     "ArtifactVersionModel",
-    "ArtifactLinkModel",
-    "ArtifactSinkModel",
 ]

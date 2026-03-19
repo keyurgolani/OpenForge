@@ -15,10 +15,6 @@ function resolveLegacySettingsRoute(searchParams: URLSearchParams): string {
   const tabToRoute: Record<string, string> = {
     workspaces: '/settings/workspaces',
     llm: '/settings/models/providers',
-    prompts: '/settings/prompts',
-    policies: '/settings/policies',
-    approvals: '/settings/approvals',
-    hitl: '/settings/approvals',
     jobs: '/settings/pipelines',
     tools: '/settings/tools',
     skills: '/settings/skills',

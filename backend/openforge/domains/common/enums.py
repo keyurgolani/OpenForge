@@ -2,7 +2,7 @@
 Common domain enums.
 
 These enums define the standard statuses, modes, and types used across
-all domain packages. They align with the canonical product vocabulary.
+all domain packages.
 """
 
 from enum import Enum
@@ -10,7 +10,7 @@ from enum import Enum
 
 class DomainStatus(str, Enum):
     """Lifecycle statuses for domain entities."""
-    
+
     DRAFT = "draft"
     ACTIVE = "active"
     ARCHIVED = "archived"
@@ -19,7 +19,7 @@ class DomainStatus(str, Enum):
 
 class ExecutionStatus(str, Enum):
     """Execution statuses for runs and runtime objects."""
-    
+
     PENDING = "pending"
     QUEUED = "queued"
     RUNNING = "running"
@@ -33,33 +33,15 @@ class ExecutionStatus(str, Enum):
     TIMEOUT = "timeout"
 
 
-class ExecutionMode(str, Enum):
-    """Execution modes for missions and workflows."""
-    
-    AUTONOMOUS = "autonomous"  # Full autonomy, no approvals required
-    SUPERVISED = "supervised"  # Human approval at key decision points
-    INTERACTIVE = "interactive"  # Human in the loop throughout
-    MANUAL = "manual"  # Step-by-step manual execution
-
-
 class TriggerType(str, Enum):
     """Types of triggers for automation."""
 
-    MANUAL = "manual"  # Manually triggered
-    CRON = "cron"  # Cron-based scheduled trigger
-    INTERVAL = "interval"  # Fixed-interval recurring trigger
-    EVENT = "event"  # Internal event-based trigger
-    HEARTBEAT = "heartbeat"  # Periodic heartbeat for objective-loop execution
-    WEBHOOK = "webhook"  # External webhook trigger
-
-
-class MissionHealthStatus(str, Enum):
-    """Health status for mission health computation."""
-
-    HEALTHY = "healthy"
-    DEGRADED = "degraded"
-    FAILING = "failing"
-    UNKNOWN = "unknown"
+    MANUAL = "manual"
+    CRON = "cron"
+    INTERVAL = "interval"
+    EVENT = "event"
+    HEARTBEAT = "heartbeat"
+    WEBHOOK = "webhook"
 
 
 class ArtifactType(str, Enum):
@@ -85,47 +67,37 @@ class ArtifactType(str, Enum):
     OTHER = "other"
 
 
-class Visibility(str, Enum):
-    """Visibility levels for entities."""
-    
-    PRIVATE = "private"  # Only visible to creator
-    WORKSPACE = "workspace"  # Visible to workspace members
-    ORGANIZATION = "organization"  # Visible to organization members
-    PUBLIC = "public"  # Publicly visible
+class AgentMode(str, Enum):
+    """Operational modes for agents."""
+
+    INTERACTIVE = "interactive"
+    AUTONOMOUS = "autonomous"
+    SUPERVISED = "supervised"
 
 
-class OwnershipSource(str, Enum):
-    """Ownership/source types for entities."""
-    
-    USER = "user"  # Created by a user
-    SYSTEM = "system"  # System-provided
-    TEMPLATE = "template"  # Created from a template
+class AgentHealthStatus(str, Enum):
+    """Health status for agent health computation."""
+
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    FAILING = "failing"
+    UNKNOWN = "unknown"
 
 
-class NodeType(str, Enum):
-    """Types of nodes in a workflow graph."""
-    
-    LLM = "llm"  # LLM inference node
-    TOOL = "tool"  # Tool execution node
-    ROUTER = "router"  # Conditional routing node
-    APPROVAL = "approval"  # Human approval node
-    ARTIFACT = "artifact"  # Artifact generation node
-    DELEGATE_CALL = "delegate_call"  # Bounded child-run delegation
-    HANDOFF = "handoff"  # Transfer control to another path or target
-    FANOUT = "fanout"  # Parallel child-run branching
-    SUBWORKFLOW = "subworkflow"  # Nested workflow node
-    JOIN = "join"  # Reducer/join node
-    REDUCE = "reduce"  # Reduce normalized branch outputs
-    TERMINAL = "terminal"  # Terminal completion/failure node
-    INPUT = "input"  # Input node
-    OUTPUT = "output"  # Output node
-    TRANSFORM = "transform"  # Data transformation node
+class AutomationStatus(str, Enum):
+    """Lifecycle statuses for automations."""
+
+    DRAFT = "draft"
+    ACTIVE = "active"
+    PAUSED = "paused"
+    DISABLED = "disabled"
+    FAILED = "failed"
+    ARCHIVED = "archived"
 
 
-class ProfileRole(str, Enum):
-    """Roles that profiles can play."""
-    
-    WORKER = "worker"  # General purpose worker
-    ORCHESTRATOR = "orchestrator"  # Coordinates other profiles
-    SPECIALIST = "specialist"  # Domain-specific specialist
-    REVIEWER = "reviewer"  # Reviews and validates outputs
+class CompilationStatus(str, Enum):
+    """Status of blueprint compilation."""
+
+    PENDING = "pending"
+    SUCCESS = "success"
+    FAILED = "failed"

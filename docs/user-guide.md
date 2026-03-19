@@ -4,37 +4,30 @@ A complete step-by-step walkthrough of every feature in OpenForge. Whether you'r
 
 ## Table of Contents
 
-- [First-Time Setup (Onboarding)](#first-time-setup-onboarding)
+- [Getting Started](#getting-started)
 - [Workspaces](#workspaces)
 - [Knowledge Management](#knowledge-management)
 - [Chat and Conversations](#chat-and-conversations)
 - [Search](#search)
-- [Agent Profiles](#agent-profiles)
-- [Workflows](#workflows)
-- [Missions](#missions)
+- [Agents](#agents)
+- [Automations](#automations)
 - [Runs](#runs)
-- [Artifacts](#artifacts)
-- [Catalog](#catalog)
+- [Outputs](#outputs)
 - [Tools and Skills](#tools-and-skills)
 - [MCP Servers](#mcp-servers)
 - [Approvals (Human-in-the-Loop)](#approvals-human-in-the-loop)
-- [Operator Dashboard](#operator-dashboard)
 - [Settings](#settings)
 - [Keyboard Shortcuts](#keyboard-shortcuts)
 
 ---
 
-## First-Time Setup (Onboarding)
+## Getting Started
 
-When you first open OpenForge, the onboarding wizard guides you through initial configuration.
+Getting started with OpenForge takes three steps:
 
-### Step 1: Welcome Screen
+### Step 1: Set Up an LLM Provider
 
-The wizard opens with a welcome screen introducing OpenForge. Click **Next** to begin.
-
-### Step 2: Add an LLM Provider
-
-OpenForge needs at least one LLM (Large Language Model) provider to power its AI features. Choose from:
+OpenForge needs at least one LLM provider to power its AI features. The onboarding wizard guides you through this on first launch. Choose from:
 
 | Provider | What You Need |
 |----------|--------------|
@@ -50,45 +43,19 @@ OpenForge needs at least one LLM (Large Language Model) provider to power its AI
 | **ZhipuAI** | API key from open.bigmodel.cn |
 | **HuggingFace** | API key from huggingface.co |
 | **Ollama** | Local Ollama instance URL (no API key needed) |
-| **Custom** | Any OpenAI-compatible API endpoint |
+| **Custom** | Any OpenAI-compatible or Anthropic-compatible API endpoint |
 
-1. Select your provider from the grid
-2. Enter your API key (or URL for local providers)
-3. Click **Test Connection** to verify it works
-4. Click **Next** to proceed
+After adding a provider, configure model assignments for different capabilities (chat, vision, embedding, audio, CLIP, PDF).
 
-> **Tip:** You can add more providers later from Settings. Ollama is a great free option for running models locally.
+> **Tip:** Ollama is a great free option for running models locally.
 
-### Step 3: Configure Model Assignments
+### Step 2: Create a Workspace
 
-The wizard walks you through assigning models for different capabilities:
+A workspace is your organizational container. Think of it like a project folder that keeps your knowledge, conversations, and settings separate. Enter a name, optionally add a description, and you're ready to go.
 
-- **Chat Model** — The primary model for conversations (required)
-- **Vision Model** — For analyzing images (optional)
-- **Embedding Model** — For semantic search (uses built-in local model by default)
-- **Speech-to-Text** — For audio transcription (optional)
-- **Text-to-Speech** — For audio generation (optional)
-- **CLIP Model** — For visual/image search (uses built-in local model by default)
-- **PDF Model** — For PDF text extraction (optional)
+### Step 3: Start Chatting
 
-For each model type, select which provider and model to use. The defaults work well for most setups.
-
-### Step 4: Create Your First Workspace
-
-A workspace is your organizational container. Think of it like a project folder that keeps your knowledge, conversations, and settings separate.
-
-1. Enter a name for your workspace (e.g., "Research", "Work", "Personal")
-2. Optionally add a description
-3. Click **Create**
-
-### Step 5: Automation Preferences
-
-Choose whether to enable automatic features:
-
-- **Knowledge Intelligence** — Automatically generate summaries, tags, and insights for new knowledge items
-- **Bookmark Extraction** — Automatically extract content from bookmarked URLs
-
-Both are recommended for the best experience. Click **Finish** to complete setup.
+Navigate to Chat in your workspace, type a message, and press Enter. The AI agent will search your knowledge base for relevant context and generate a grounded response.
 
 ---
 
@@ -100,12 +67,12 @@ Workspaces are the top-level organizational unit in OpenForge. Each workspace ha
 
 1. Go to **Settings > Workspaces**
 2. Click **Create Workspace**
-3. Enter a name and optional description
+3. Enter a name, optional description, and choose an icon
 4. Click **Create**
 
 ### Switching Workspaces
 
-Use the **workspace switcher** in the top-left corner of the sidebar to switch between workspaces. Each workspace maintains its own:
+Use the **workspace switcher** in the sidebar to switch between workspaces. Each workspace maintains its own:
 
 - Knowledge base
 - Conversations
@@ -175,7 +142,7 @@ When you save knowledge, OpenForge automatically:
 Each knowledge type has a dedicated editor:
 
 - **Notes** — Rich text editor with formatting toolbar
-- **Gists** — Code editor with syntax highlighting for multiple languages (JavaScript, Python, JSON, HTML, CSS, Markdown, SQL)
+- **Gists** — Code editor with syntax highlighting for multiple languages
 - **Bookmarks** — URL display with extracted content view and re-extraction option
 - **PDFs/Documents/Sheets/Slides** — File preview with extracted text display
 - **Images** — Image viewer with metadata
@@ -239,7 +206,10 @@ Override the default model for a specific message:
 3. Your message will be processed by that model
 
 #### Prompt Optimization
-Toggle prompt optimization to have the agent refine its prompts for better results.
+Toggle prompt optimization to have the optimizer agent refine prompts before the main agent processes them.
+
+#### Workspace Mentions
+Mention another workspace with `@workspace-name` to instruct the agent to delegate cross-workspace queries via the `agent.invoke` tool.
 
 ### Managing Conversations
 
@@ -269,9 +239,7 @@ OpenForge provides powerful search across all your knowledge.
 2. Enter your query in the search bar
 3. Results are ranked by semantic relevance (not just keyword matching)
 
-Search returns results from:
-- Knowledge items (all types)
-- Chat conversation history
+Search uses hybrid retrieval (dense vectors + sparse BM25 + summary vectors) combined via Reciprocal Rank Fusion, with optional cross-encoder reranking.
 
 You can filter results by knowledge type using the filter chips.
 
@@ -289,204 +257,210 @@ For research workflows, the search page supports:
 
 ---
 
-## Agent Profiles
+## Agents
 
-Profiles define how AI agents behave. Think of a profile as a "personality and skill set" for an agent.
+Agents are the AI actors in OpenForge. Each agent is defined by a blueprint and compiled into an executable specification.
 
-### What a Profile Contains
+### Agent Blueprints
 
-| Component | Purpose |
-|-----------|---------|
-| **Name & Description** | Human-readable identity |
-| **Role** | The agent's role (e.g., "researcher", "writer", "analyst") |
-| **System Prompt** | Instructions that shape the agent's behavior |
-| **Capability Bundles** | Collections of tools and abilities the agent can use |
-| **Model Policy** | Which LLM model the agent should use and constraints |
-| **Memory Policy** | How the agent manages context and conversation history |
-| **Safety Policy** | Rules and constraints for safe behavior |
-| **Output Contract** | Expected output format and behavior |
+An agent blueprint is a file in `agent.md` format — YAML frontmatter for configuration, Markdown body for the system prompt:
 
-### Creating a Profile
+```markdown
+---
+name: Research Assistant
+slug: research-assistant
+mode: interactive
+strategy: researcher
+model:
+  allow_override: true
+memory:
+  history_limit: 20
+  strategy: sliding_window
+retrieval:
+  enabled: true
+  limit: 5
+tools:
+  - workspace.search
+  - http.search_web
+  - http.fetch_page
+---
+You are a research assistant specializing in evidence-based analysis.
 
-1. Navigate to **Profiles**
-2. Click **Create Profile**
-3. Fill in the name, description, and role
-4. Configure the system prompt — this is the most important part, as it defines how the agent thinks and responds
-5. Optionally attach capability bundles, policies, and contracts
-6. Click **Create**
+When given a research question, search the knowledge base and web for relevant
+sources, synthesize findings, and present a well-structured analysis with citations.
 
-### Using Profiles
+## Constraints
+- Always provide sources when referencing knowledge content
+- Distinguish between knowledge-base facts and web-sourced information
+```
 
-Profiles are referenced by workflows and missions to determine which agent behavior to use at each step. OpenForge includes built-in system profiles:
+### Blueprint Fields
 
-- **Workspace Agent** — The default chat agent for conversations
-- **Router Agent** — Routes requests to the best-suited agent
-- **Council Agent** — Coordinates multiple agents for complex decisions
-- **Optimizer Agent** — Optimizes prompts and responses
+| Field | Purpose |
+|-------|---------|
+| `name` | Human-readable agent name |
+| `slug` | Unique identifier |
+| `strategy` | Execution strategy (chat, researcher, reviewer, builder, watcher, coordinator) |
+| `mode` | Interaction mode (interactive or autonomous) |
+| `model` | Model preferences (default model, provider, temperature, max_tokens) |
+| `memory` | History management (limit, strategy, attachment support) |
+| `retrieval` | Knowledge retrieval settings (enabled, limit, score threshold) |
+| `output` | Output settings (streaming, structured output, citations) |
+| `tools` | List of allowed tools (by ID or with per-tool config) |
+| `confirm_before` | Tools that require human confirmation |
+| `constraints` | Behavioral rules (extracted from `## Constraints` section) |
+
+### Agent Templates
+
+OpenForge provides default agent templates when creating new workspaces. Each workspace gets a default agent that is automatically compiled and registered.
+
+### Agent Compilation
+
+When an agent blueprint is saved, the compiler:
+
+1. Parses the YAML frontmatter and Markdown body
+2. Computes a SHA-256 hash for idempotency
+3. Upserts a system profile
+4. Builds the system prompt with workspace directory
+5. Creates an immutable `CompiledAgentSpec`
+6. Persists the spec with a version number
+7. Updates the agent's `active_spec_id`
+
+If the blueprint hasn't changed (same hash), compilation is skipped.
+
+### Strategies
+
+The `strategy` field determines how the agent executes:
+
+| Strategy | Best For |
+|----------|----------|
+| **chat** | General-purpose conversation with tool use |
+| **researcher** | Multi-step research with evidence gathering |
+| **reviewer** | Code or document review with structured feedback |
+| **builder** | Multi-step artifact construction |
+| **watcher** | Monitoring and reactive workflows |
+| **coordinator** | Orchestrating multiple sub-agents |
+
+### Managing Agents
+
+1. Navigate to **Agents** (top-level, not workspace-scoped)
+2. View all registered agents
+3. Click an agent to see its detail page (blueprint, compiled specs, runs)
+4. Edit the blueprint to change behavior — recompilation happens automatically
 
 ---
 
-## Workflows
+## Automations
 
-Workflows are composable execution graphs that define multi-step AI processes.
+Automations combine an agent with scheduling, resource limits, and output routing to create repeatable, unattended workflows.
 
-### What is a Workflow?
-
-A workflow is a directed graph of nodes and edges that describes how work flows from one step to the next. Think of it as a flowchart for AI operations.
-
-### Node Types
-
-| Node Type | Purpose |
-|-----------|---------|
-| **LLM** | Call a language model with context |
-| **Tool** | Execute a tool (file operations, web search, etc.) |
-| **Router** | Route execution based on conditions |
-| **Fan-out** | Split into parallel execution branches |
-| **Join** | Wait for all parallel branches to complete |
-| **Reduce** | Aggregate results from parallel branches |
-| **Approval** | Pause and wait for human approval |
-| **Artifact** | Emit a durable output artifact |
-| **Delegate** | Call another workflow |
-| **Subworkflow** | Inline another workflow |
-| **Handoff** | Delegate to a different agent profile |
-
-### Creating a Workflow
-
-1. Navigate to **Workflows**
-2. Click **Create Workflow**
-3. Define the workflow name, description, and configuration
-4. Add nodes and edges to build the execution graph
-5. Configure each node's parameters
-6. Save the workflow
-
-### Workflow Versioning
-
-Workflows support versioning. Each time you modify a workflow, you can create a new version while keeping the previous one. This lets you:
-- Roll back to earlier versions if needed
-- Compare versions side by side
-- Track the evolution of your workflows
-
----
-
-## Missions
-
-Missions are the highest-level autonomous unit in OpenForge. A mission packages together a workflow, agent profiles, and triggers into a deployable unit.
-
-### What Makes Up a Mission?
+### What Makes Up an Automation?
 
 | Component | Purpose |
 |-----------|---------|
-| **Workflow** | The execution graph to run |
-| **Default Profiles** | Agent profiles to use during execution |
-| **Triggers** | When and how the mission should run |
-| **Budget Policy** | Resource limits (max runs per day, concurrent runs, token limits) |
-| **Approval Policy** | Whether human approval is required before execution |
-| **Autonomy Mode** | Supervised (requires approval) or autonomous (runs independently) |
+| **Agent** | The agent (by slug) that executes the automation |
+| **Trigger Config** | When and how the automation should run |
+| **Budget Config** | Resource limits (max runs per day, concurrent runs, token limits, failure cooldowns) |
+| **Output Routing** | Which types of artifacts the automation should produce |
 
-### Creating a Mission
+### Trigger Types
 
-1. Navigate to **Missions**
-2. Click **Create Mission**
-3. Assign a workflow and default profiles
-4. Configure triggers (see below)
-5. Set budget and approval policies
-6. Click **Create**
+| Type | Description |
+|------|-------------|
+| **Manual** | Triggered on demand via the UI or API |
+| **Schedule** | Runs on a cron expression (e.g., `0 9 * * 1` for every Monday at 9am) |
+| **Interval** | Runs every N seconds |
+| **Event** | Runs in response to system events (e.g., knowledge updated) |
 
-### Mission Lifecycle
+### Budget Policies
 
-Missions have a lifecycle:
+Budgets prevent runaway automation execution:
+
+- **max_runs_per_day** — Maximum number of runs per 24-hour period
+- **max_concurrent_runs** — Maximum runs executing simultaneously
+- **max_token_budget_per_day** — Total token consumption limit per day
+- **cooldown_seconds_after_failure** — Wait time before retrying after a failure
+
+### Creating an Automation
+
+1. Navigate to **Automations** (top-level)
+2. Click **Create Automation**
+3. Select the agent to run
+4. Configure the trigger (manual, cron, interval, or event)
+5. Set budget limits
+6. Configure output routing
+7. Click **Create**
+
+### Automation Lifecycle
+
 - **Draft** — Being configured, not yet active
 - **Active** — Running according to triggers
 - **Paused** — Temporarily stopped
 - **Disabled** — Permanently stopped
 
-### Mission Health
-
-The mission detail page shows health metrics:
-- Last run time and status
-- Success/failure rates
-- Associated artifacts
-- Trigger history
-
 ---
 
 ## Runs
 
-A run is a single execution instance of a workflow or mission.
+A run is a single execution instance — whether from an interactive chat session, a strategy execution, or an automation trigger.
 
 ### Viewing Runs
 
-1. Navigate to **Runs**
+1. Navigate to **Runs** (top-level)
 2. Browse the list of all executions
-3. Filter by status (pending, running, completed, failed) or type (workflow run, mission run)
+3. Filter by status (pending, running, completed, failed)
 
-> **Note:** The runs list auto-refreshes every 5 seconds to show real-time status updates.
+> **Note:** The runs list auto-refreshes to show real-time status updates.
 
 ### Run Detail Page
 
 Click any run to see its full details:
 
-- **Steps** — Tree view of every step the run executed
-- **Artifacts** — Any outputs the run produced
+- **Steps** — Individual steps the run executed
+- **Outputs** — Any artifacts the run produced
 - **Events** — Runtime events and logs
-- **Lineage** — Which workflow or mission spawned this run
-- **Checkpoints** — Saved state snapshots for durability
 - **Cost & Tokens** — Token consumption and estimated cost
 
 ### Resuming Runs
 
-If a run was paused (e.g., waiting for approval), you can resume it from its detail page.
+If a run was paused (e.g., waiting for HITL approval), it resumes automatically once the approval is resolved.
 
 ---
 
-## Artifacts
+## Outputs
 
-Artifacts are the durable outputs produced by missions, workflows, and manual creation.
+Outputs are the durable results produced by agent runs, automations, or manual creation. They were previously called "artifacts" in the codebase.
 
-### What is an Artifact?
+### What is an Output?
 
-An artifact is any meaningful output — a document, analysis, report, code, or dataset. Artifacts are first-class objects with:
+An output is any meaningful result — a document, analysis, report, code, or dataset. Outputs are first-class objects with:
 
 - **Versioning** — Every material change creates a new version
-- **Lineage** — Links back to the run, workflow, or mission that created it
+- **Lineage** — Links back to the run, automation, or agent that created it
 - **Status Lifecycle** — Draft > Active > Superseded or Archived
-- **Visibility** — Private, workspace-visible, export-ready, or hidden
 - **Tags** — For organization and discovery
+- **Sinks** — Configurable publication destinations
 
-### Creating an Artifact
+### Creating an Output
 
-1. Navigate to **Artifacts**
-2. Click **Create Artifact**
+1. Navigate to **Outputs** (top-level)
+2. Click **Create Output**
 3. Enter title, summary, content, and type
 4. Set status and visibility
 5. Click **Create**
 
-Artifacts are also automatically created by workflow/mission runs that include artifact-emitting nodes.
+Outputs are also automatically created by automation runs and strategy executions that emit artifacts.
 
-### Viewing Artifact History
+### Viewing Output History
 
-Each artifact maintains a full version history. View previous versions and compare changes from the artifact detail page.
+Each output maintains a full version history. View previous versions and compare changes from the output detail page.
 
----
+### Output Lineage
 
-## Catalog
-
-The catalog is a curated library of pre-built templates you can use as starting points.
-
-### Browsing the Catalog
-
-1. Navigate to **Catalog**
-2. Browse available templates by type: Profiles, Workflows, or Missions
-3. Toggle **Featured** to see highlighted templates
-4. Each template shows a description, difficulty level, and tags
-
-### Cloning from Catalog
-
-1. Find a template you want to use
-2. Click **Clone**
-3. OpenForge checks prerequisites (e.g., required providers configured)
-4. If all prerequisites are met, the template is cloned into your workspace
-5. Customize the cloned item as needed
+Outputs track their provenance:
+- Which run produced them
+- Which automation or agent was responsible
+- Which knowledge items were referenced
 
 ---
 
@@ -494,22 +468,22 @@ The catalog is a curated library of pre-built templates you can use as starting 
 
 ### Built-in Tools
 
-OpenForge comes with 50+ built-in tools organized into categories:
+OpenForge comes with 50+ built-in tools organized into 10 categories:
 
 | Category | Tools | Purpose |
 |----------|-------|---------|
-| **Filesystem** | read_file, write_file, list_directory, search_files, file_info, move_file, delete_file | Work with files in your workspace |
-| **Shell** | execute, execute_python | Run shell commands and Python scripts |
-| **Git** | status, log, diff, add, commit, init | Version control operations |
-| **Language** | parse_ast, find_definition, find_references, apply_diff | Code analysis and modification |
-| **Workspace** | search, save_knowledge, list_knowledge, delete_knowledge, list_chats, read_chat | Access your knowledge base and chat history |
-| **Memory** | store, recall, forget | Ephemeral and persistent memory for agents |
-| **HTTP** | get, post, fetch_page, search_web | Web access and search (via SearXNG) |
-| **Agent** | invoke | Delegate tasks to other agents |
-| **Task** | create_plan, get_plan, update_step | Task and plan management |
-| **Skills** | install, list_installed, read, remove, search | Manage custom skills |
+| **filesystem** | read_file, write_file, list_directory, search_files, file_info, move_file, delete_file | Work with files |
+| **shell** | execute, execute_python | Run shell commands and Python scripts |
+| **git** | status, log, diff, add, commit, init | Version control operations |
+| **language** | parse_ast, find_definition, find_references, apply_diff | Code analysis and modification |
+| **workspace** | search, save_knowledge, list_knowledge, delete_knowledge, list_chats, read_chat | Access knowledge and chat history |
+| **memory** | store, recall, forget | Ephemeral and persistent memory for agents |
+| **http** | get, post, fetch_page, search_web | Web access and search (via SearXNG) |
+| **agent** | invoke | Delegate tasks to other agents |
+| **task** | create_plan, get_plan, update_step | Task and plan management |
+| **skills** | install, list_installed, read, remove, search | Manage custom skills |
 
-Tools are automatically available to agents during conversations. The agent decides which tools to use based on your request.
+Tools are automatically available to agents during conversations. The agent decides which tools to use based on your request. Individual tools can be allowed, blocked, or gated by an agent's `tools` and `confirm_before` blueprint fields.
 
 ### Skills
 
@@ -528,11 +502,14 @@ Skills are script files with a `SKILL.md` descriptor. When installed, they becom
 
 ### Tool Permissions
 
-Control which tools agents can use:
+Control which tools agents can use from **Settings > Tools**:
 
-1. Go to **Settings > Policies**
-2. Set tool permissions: **Allow**, **Block**, or **Require Approval**
-3. Each tool has a default risk level (low, medium, high, critical) that determines approval requirements
+| Permission Level | Behavior |
+|-----------------|----------|
+| **Default** | Uses the tool's built-in risk level |
+| **Allowed** | Tool executes without any approval |
+| **Approval** | Tool pauses and waits for human approval before executing |
+| **Blocked** | Tool is disabled and cannot be used |
 
 ---
 
@@ -544,7 +521,7 @@ MCP (Model Context Protocol) servers let you connect external tool providers to 
 
 1. Go to **Settings > MCP**
 2. Click **Add Server**
-3. Enter the server URL and authentication details
+3. Enter the server URL, transport type, and authentication details
 4. Click **Discover** to auto-detect available tools
 5. Configure per-tool overrides (enable/disable, risk level)
 
@@ -559,48 +536,20 @@ MCP servers expose additional tools that agents can use. This lets you:
 
 ## Approvals (Human-in-the-Loop)
 
-OpenForge supports human-in-the-loop (HITL) approval workflows for high-risk operations.
+OpenForge supports human-in-the-loop (HITL) approval for high-risk operations.
 
 ### How It Works
 
-1. An agent encounters a tool call that requires approval (based on risk level or policy)
+1. An agent encounters a tool call that requires approval (based on risk level or permission config)
 2. The agent pauses and creates an approval request
-3. You see a notification (bell icon in the top bar shows pending count)
+3. You see a notification in the chat timeline
 4. Review the request — see what tool, parameters, and context
 5. **Approve** to let the agent proceed, or **Deny** to block the action
 6. The agent resumes (or adjusts its approach if denied)
 
-### Managing Approvals
-
-- **Settings > Approvals** — View all pending and resolved approval requests
-- **Operator Dashboard** — The approval inbox widget shows pending requests for quick action
-
 ### Configuring What Requires Approval
 
-In **Settings > Policies**, you can:
-- Set specific tools to always require approval
-- Configure risk level thresholds
-- Simulate policy execution to test your rules
-
----
-
-## Operator Dashboard
-
-The operator dashboard provides a workspace-level overview of operations and health.
-
-### Accessing the Dashboard
-
-Navigate to **Operator** in your workspace sidebar.
-
-### Dashboard Widgets
-
-| Widget | What It Shows |
-|--------|--------------|
-| **Approval Inbox** | Pending HITL requests requiring your attention |
-| **Cost Hotspots** | Token consumption and estimated costs by model/provider |
-| **Failure Rollup** | Analysis of failures grouped by type or object |
-| **Evaluation Runs** | Quality and performance evaluation results |
-| **Mission Health** | Status and health metrics for active missions |
+In agent blueprints, use the `confirm_before` field to list tools that should require confirmation. In Settings, configure global tool permission overrides.
 
 ---
 
@@ -610,7 +559,7 @@ Access settings from the gear icon or navigate to `/settings`.
 
 ### Workspaces Tab
 
-Create, edit, merge, and delete workspaces.
+Create, edit, merge, and delete workspaces. Configure workspace icons and descriptions.
 
 ### AI Models Tab
 
@@ -624,30 +573,12 @@ Configure LLM providers and model assignments:
 - **CLIP** — Configure the visual search model (local by default)
 - **PDF** — Configure the PDF processing model
 
-### Prompts Tab
-
-Manage prompt templates:
-- View and edit system prompts
-- Version history for each prompt
-- Preview prompts with variable substitution
-
-### Policies Tab
-
-Configure tool permissions and safety policies:
-- Set per-tool permission levels
-- Create approval policies
-- Simulate policy execution
-
-### Approvals Tab
-
-View pending and resolved approval requests.
-
 ### Pipelines (Jobs) Tab
 
 Manage background task scheduling:
-- View scheduled tasks
+- View scheduled tasks (knowledge embedding, intelligence generation, maintenance)
 - Run tasks manually
-- Check task execution history
+- Configure automation preferences (auto-intelligence, auto-bookmark extraction)
 
 ### Skills Tab
 
@@ -706,13 +637,15 @@ Press **Cmd/Ctrl + K** to open the command palette, which lets you:
 
 4. **Try different models** — Use the model override feature in chat to compare responses from different LLMs.
 
-5. **Explore the catalog** — Pre-built templates give you a head start with common workflows and mission patterns.
+5. **Explore agent strategies** — Different strategies (researcher, builder, reviewer) produce very different behaviors. Match the strategy to your task.
 
-6. **Set up HITL for safety** — Configure approval policies for high-risk tools to maintain control while still benefiting from automation.
+6. **Set up automations for repetitive work** — If you find yourself doing the same research or analysis regularly, create an automation with appropriate triggers and budgets.
 
-7. **Monitor costs** — Use the operator dashboard to track token usage and costs across providers.
+7. **Use HITL for safety** — Configure `confirm_before` in agent blueprints for high-risk tools to maintain control while still benefiting from automation.
 
-8. **Use workspaces for separation** — Create different workspaces for different projects to keep knowledge bases focused and search results relevant.
+8. **Monitor costs** — Check the runs list to track token usage and costs across providers.
+
+9. **Use workspaces for separation** — Create different workspaces for different projects to keep knowledge bases focused and search results relevant.
 
 ---
 

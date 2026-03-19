@@ -4,7 +4,7 @@
 
 import type { ExecutionStatus } from './common';
 
-export type RunType = 'workflow' | 'mission' | 'step' | 'subworkflow';
+export type RunType = 'strategy' | 'step' | string;
 
 export interface Run {
   id: string;

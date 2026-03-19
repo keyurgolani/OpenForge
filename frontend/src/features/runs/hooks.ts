@@ -13,6 +13,8 @@ interface RunQueryOptions {
   limit?: number
   status?: ExecutionStatus
   runType?: RunType
+  agentId?: string
+  automationId?: string
 }
 
 interface RunStepsResponse {
@@ -30,10 +32,10 @@ interface RunEventsResponse {
   total: number
 }
 
-export function useRunsQuery({ limit = 100, status, runType }: RunQueryOptions = {}) {
+export function useRunsQuery({ limit = 100, status, runType, agentId, automationId }: RunQueryOptions = {}) {
   return useQuery<RunsResponse>({
-    queryKey: ['runs', limit, status ?? 'all', runType ?? 'all'],
-    queryFn: () => listRuns({ limit, status, run_type: runType }),
+    queryKey: ['runs', limit, status ?? 'all', runType ?? 'all', agentId ?? 'all', automationId ?? 'all'],
+    queryFn: () => listRuns({ limit, status, run_type: runType, agent_id: agentId, automation_id: automationId }),
   })
 }
 

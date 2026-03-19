@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ArrowLeft, FileOutput, GitBranch, PauseCircle, Timer, Waypoints } from 'lucide-react'
-import { Link, useParams } from 'react-router-dom'
+import { AlertTriangle, ArrowLeft, FileOutput, GitBranch, PauseCircle, RotateCcw, Timer, Waypoints } from 'lucide-react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/shared/Card'
 import ErrorState from '@/components/shared/ErrorState'
@@ -17,7 +17,8 @@ import {
   useRunStepsQuery,
 } from '@/features/runs'
 import { formatDateTime, formatDuration, truncateText } from '@/lib/formatters'
-import { artifactsRoute, runsRoute, workflowsRoute } from '@/lib/routes'
+import { replayRun } from '@/lib/api'
+import { agentsRoute, outputsRoute, runsRoute } from '@/lib/routes'
 import type { Run, RuntimeEvent } from '@/types/runs'
 
 function formatJson(value: unknown): string {
@@ -68,6 +69,7 @@ export function groupRunsByJoinGroup(runs: Run[]): Array<{ joinGroupId: string; 
 
 export default function RunDetailPage() {
   const { runId = '' } = useParams<{ runId: string }>()
+  const navigate = useNavigate()
   const { data: run, isLoading, error } = useRunQuery(runId)
   const { data: stepsData } = useRunStepsQuery(runId)
   const { data: lineage } = useRunLineageQuery(runId)
@@ -78,6 +80,19 @@ export default function RunDetailPage() {
   const checkpoints = checkpointsData?.checkpoints ?? []
   const events = eventsData?.events ?? []
   const [selectedStepId, setSelectedStepId] = useState<string>('')
+  const [replaying, setReplaying] = useState(false)
+
+  const handleReplay = async (stepIndex: number) => {
+    setReplaying(true)
+    try {
+      const newRun = await replayRun(runId, stepIndex)
+      navigate(runsRoute(newRun.id))
+    } catch {
+      // Toast will handle the error via interceptor
+    } finally {
+      setReplaying(false)
+    }
+  }
 
   useEffect(() => {
     if (steps.length === 0) {
@@ -109,7 +124,7 @@ export default function RunDetailPage() {
     <div className="space-y-6 p-6">
       <PageHeader
         title={`Run ${truncateText(run.id, 16)}`}
-        description="Inspect durable execution state, follow step lineage, and review interrupts, checkpoints, and emitted artifacts."
+        description="Inspect durable execution state, follow step lineage, and review interrupts, checkpoints, and emitted outputs."
         actions={(
           <div className="flex flex-wrap items-center gap-2">
             <Link
@@ -119,13 +134,13 @@ export default function RunDetailPage() {
               <ArrowLeft className="h-4 w-4" />
               Back to Runs
             </Link>
-            {run.workflow_id ? (
+            {typeof run.composite_metadata?.agent_id === 'string' ? (
               <Link
-                to={workflowsRoute(run.workflow_id)}
+                to={agentsRoute(run.composite_metadata.agent_id as string)}
                 className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
               >
                 <GitBranch className="h-4 w-4" />
-                Workflow
+                Agent
               </Link>
             ) : null}
           </div>
@@ -158,15 +173,15 @@ export default function RunDetailPage() {
           <Card glass padding="lg">
             <CardContent className="grid gap-4 md:grid-cols-2">
               <div>
-                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Workflow</p>
+                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Agent</p>
                 <p className="mt-1 text-sm font-medium text-foreground">
-                  {run.workflow_id ? truncateText(run.workflow_id, 24) : 'No workflow attached'}
+                  {typeof run.composite_metadata?.agent_slug === 'string' ? run.composite_metadata.agent_slug : 'N/A'}
                 </p>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Workflow version</p>
+                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Strategy</p>
                 <p className="mt-1 text-sm font-medium text-foreground">
-                  {run.workflow_version_id ? truncateText(run.workflow_version_id, 24) : 'Unspecified'}
+                  {typeof run.composite_metadata?.strategy === 'string' ? run.composite_metadata.strategy : 'Unspecified'}
                 </p>
               </div>
               <div>
@@ -223,7 +238,21 @@ export default function RunDetailPage() {
                         Step {step.step_index} • started {step.started_at ? formatDateTime(step.started_at) : 'not recorded'}
                       </p>
                     </div>
-                    <StatusBadge status={step.status} />
+                    <div className="flex items-center gap-2">
+                      {step.checkpoint_id && (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-background/40 px-2 py-1 text-[10px] text-muted-foreground transition hover:text-accent hover:border-accent/40"
+                          onClick={(e) => { e.stopPropagation(); handleReplay(step.step_index) }}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); handleReplay(step.step_index) } }}
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                          {replaying ? 'Replaying...' : 'Replay'}
+                        </span>
+                      )}
+                      <StatusBadge status={step.status} />
+                    </div>
                   </div>
                   <div className="mt-3 grid gap-2 text-xs text-muted-foreground/85 sm:grid-cols-3">
                     <div>
@@ -451,21 +480,21 @@ export default function RunDetailPage() {
           </Card>
         </Section>
 
-        <Section title="Artifacts and events" description="Artifact emission and runtime events feed later observability and operator UX.">
+        <Section title="Outputs and events" description="Output emission and runtime events feed later observability and operator UX.">
           <div className="space-y-4">
             <Card glass>
               <CardHeader>
-                <CardTitle as="h2">Artifacts</CardTitle>
-                <CardDescription>Artifact IDs emitted by this run.</CardDescription>
+                <CardTitle as="h2">Outputs</CardTitle>
+                <CardDescription>Output IDs emitted by this run.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
                 {artifactIds.length === 0 ? (
-                  <p className="text-muted-foreground/80">No artifact emission recorded.</p>
+                  <p className="text-muted-foreground/80">No output emission recorded.</p>
                 ) : artifactIds.map((artifactId) => (
                   <Link
                     key={artifactId}
                     className="flex items-center gap-2 rounded-xl border border-border/60 bg-background/35 px-3 py-2 transition hover:border-accent/35 hover:text-accent"
-                    to={artifactsRoute(artifactId)}
+                    to={outputsRoute(artifactId)}
                   >
                     <FileOutput className="h-4 w-4" />
                     {truncateText(artifactId, 20)}

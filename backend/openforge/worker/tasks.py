@@ -27,68 +27,6 @@ def execute_agent_task(self, execution_id: str, **kwargs):
         loop.close()
 
 
-@celery_app.task(name="workflow.execute_run", bind=True, max_retries=0)
-def execute_workflow_run_task(self, run_id: str):
-    """Celery task that executes a pending workflow run via the runtime coordinator."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(_run_workflow(run_id))
-    except Exception as exc:
-        logger.error("Workflow run task %s failed: %s", run_id, exc)
-        loop.run_until_complete(_mark_run_failed(run_id, str(exc)))
-        raise
-    finally:
-        loop.close()
-
-
-async def _run_workflow(run_id: str):
-    """Async wrapper that creates a DB session and executes the workflow run."""
-    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-    from openforge.config import get_settings
-    from openforge.core.llm_gateway import LLMGateway
-    from openforge.domains.artifacts.service import ArtifactService
-    from openforge.domains.policies.approval_service import ApprovalService
-    from openforge.domains.workflows.service import WorkflowService
-    from openforge.runtime.checkpoint_store import CheckpointStore
-    from openforge.runtime.coordinator import RuntimeCoordinator
-    from openforge.runtime.event_publisher import EventPublisher
-    from openforge.runtime.profile_registry import profile_registry
-    from openforge.services.llm_service import LLMService
-
-    _register_system_profiles()
-
-    settings = get_settings()
-    worker_engine = create_async_engine(
-        settings.database_url, echo=False, pool_size=5, max_overflow=10,
-    )
-    WorkerSession = async_sessionmaker(
-        worker_engine, class_=AsyncSession, expire_on_commit=False,
-    )
-    try:
-        async with WorkerSession() as db:
-            await profile_registry.ensure_system_profiles(db)
-            await profile_registry.load_profiles(db)
-
-            llm_service = LLMService()
-            llm_gateway = LLMGateway()
-
-            coordinator = RuntimeCoordinator(
-                db=db,
-                workflow_service=WorkflowService(db),
-                artifact_service=ArtifactService(db),
-                approval_service=ApprovalService(db),
-                checkpoint_store=CheckpointStore(db),
-                event_publisher=EventPublisher(db),
-                profile_registry=profile_registry,
-                llm_service=llm_service,
-                llm_gateway=llm_gateway,
-            )
-            await coordinator.execute_existing_run(UUID(run_id))
-    finally:
-        await worker_engine.dispose()
-
-
 async def _mark_run_failed(run_id: str, error_message: str):
     """Mark a run record as failed after a crash."""
     try:
@@ -112,36 +50,36 @@ async def _mark_run_failed(run_id: str, error_message: str):
         logger.warning("Failed to mark run %s as failed: %s", run_id, exc)
 
 
-def _register_system_profiles():
-    """Ensure system profiles are registered in this process."""
-    from openforge.runtime.profile_registry import profile_registry
+@celery_app.task(name="strategy.execute", bind=True, max_retries=0)
+def execute_agent_strategy(self, run_id: str):
+    """Celery task that executes an agent strategy run."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(_run_strategy(run_id))
+    except Exception as exc:
+        logger.error("Strategy run task %s failed: %s", run_id, exc)
+        loop.run_until_complete(_mark_run_failed(run_id, str(exc)))
+        raise
+    finally:
+        loop.close()
 
-    if not profile_registry.list_all():
-        profile_registry.register_system_profiles()
 
-
-async def _run_agent(execution_id: str, **kwargs):
-    """Async wrapper that sets up DB session and runs the engine."""
+async def _run_strategy(run_id: str):
+    """Async wrapper that resolves the agent spec and executes the strategy."""
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
     from openforge.config import get_settings
-    from openforge.runtime.execution_engine import agent_engine
-    from openforge.runtime.profile_registry import profile_registry
+    from openforge.core.llm_gateway import LLMGateway
+    from openforge.db.models import RunModel, AutomationModel, AgentModel, CompiledAgentSpecModel
+    from openforge.domains.agents.compiled_spec import CompiledAgentSpec
+    from openforge.integrations.tools.dispatcher import tool_dispatcher
+    from openforge.runtime.checkpoint_store import CheckpointStore
+    from openforge.runtime.event_publisher import EventPublisher
+    from openforge.runtime.strategy_executor import StrategyExecutor
+    from openforge.runtime.strategies.registry import strategy_registry
 
-    _register_system_profiles()
+    strategy_registry.load_builtins()
 
-    agent_id = kwargs.get("agent_id", "workspace_agent")
-    agent = profile_registry.get(agent_id) or profile_registry.get_default()
-
-    # Apply workspace overrides if provided
-    if kwargs.get("agent_enabled") is not None:
-        agent = agent.merge_workspace_overrides(
-            agent_enabled=kwargs.get("agent_enabled", True),
-            agent_tool_categories=kwargs.get("agent_tool_categories", []),
-            agent_max_tool_loops=kwargs.get("agent_max_tool_loops", 20),
-        )
-
-    # Create a fresh engine bound to THIS event loop to avoid asyncpg
-    # "another operation is in progress" errors from cross-loop pool reuse.
     settings = get_settings()
     worker_engine = create_async_engine(
         settings.database_url, echo=False, pool_size=5, max_overflow=10,
@@ -151,16 +89,72 @@ async def _run_agent(execution_id: str, **kwargs):
     )
     try:
         async with WorkerSession() as db:
-            await profile_registry.ensure_system_profiles(db)
-            await profile_registry.load_profiles(db)
-            agent = profile_registry.get(agent_id) or profile_registry.get_default()
-            await agent_engine.run(
+            run = await db.get(RunModel, UUID(run_id))
+            if run is None:
+                raise RuntimeError(f"Run {run_id} not found")
+
+            # Resolve the CompiledAgentSpec from run metadata
+            metadata = run.composite_metadata or {}
+            spec: CompiledAgentSpec | None = None
+
+            automation_id = metadata.get("automation_id")
+            agent_id = metadata.get("agent_id")
+
+            if automation_id:
+                from openforge.db.models import AutomationModel
+                automation = await db.get(AutomationModel, UUID(automation_id))
+                if automation and automation.agent_id:
+                    agent_id = str(automation.agent_id)
+
+            if agent_id:
+                agent = await db.get(AgentModel, UUID(agent_id))
+                if agent and agent.active_spec_id:
+                    spec_model = await db.get(CompiledAgentSpecModel, agent.active_spec_id)
+                    if spec_model and spec_model.resolved_config:
+                        spec = CompiledAgentSpec(**spec_model.resolved_config)
+
+            if spec is None:
+                raise RuntimeError(f"Cannot resolve CompiledAgentSpec for run {run_id}")
+
+            executor = StrategyExecutor(
+                db=db,
+                event_publisher=EventPublisher(db),
+                checkpoint_store=CheckpointStore(db),
+                tool_dispatcher=tool_dispatcher,
+                llm_gateway=LLMGateway(),
+            )
+            await executor.execute(
+                spec,
+                run.input_payload or {},
+                workspace_id=run.workspace_id,
+                run_id=run.id,
+                run_type=run.run_type or "strategy",
+            )
+    finally:
+        await worker_engine.dispose()
+
+
+async def _run_agent(execution_id: str, **kwargs):
+    """Async wrapper that sets up DB session and runs the chat handler."""
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+    from openforge.config import get_settings
+    from openforge.runtime.chat_handler import chat_handler
+
+    settings = get_settings()
+    worker_engine = create_async_engine(
+        settings.database_url, echo=False, pool_size=5, max_overflow=10,
+    )
+    WorkerSession = async_sessionmaker(
+        worker_engine, class_=AsyncSession, expire_on_commit=False,
+    )
+    try:
+        async with WorkerSession() as db:
+            await chat_handler.run(
                 execution_id=execution_id,
                 workspace_id=UUID(kwargs["workspace_id"]),
                 conversation_id=UUID(kwargs["conversation_id"]),
                 user_content=kwargs["user_message"],
                 db=db,
-                agent=agent,
                 attachment_ids=kwargs.get("attachment_ids"),
                 provider_id=kwargs.get("provider_id"),
                 model_id=kwargs.get("model_id"),

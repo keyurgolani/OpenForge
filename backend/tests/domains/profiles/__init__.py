@@ -1,1 +1,0 @@
-"""Profile domain tests."""

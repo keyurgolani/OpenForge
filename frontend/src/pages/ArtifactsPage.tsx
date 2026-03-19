@@ -82,7 +82,7 @@ export default function ArtifactsPage() {
     return <ErrorState message="Artifacts could not be loaded from the canonical domain API." />
   }
 
-  const artifacts = data?.artifacts ?? []
+  const artifacts = data?.outputs ?? []
   const hasFilters = Boolean(search.trim()) || artifactType !== 'all' || status !== 'all' || visibility !== 'all'
 
   return (
@@ -230,7 +230,7 @@ export default function ArtifactsPage() {
       ) : (
         <div className="grid gap-4 xl:grid-cols-2">
           {artifacts.map((artifact) => (
-            <ArtifactCard key={artifact.id} artifact={artifact} />
+            <ArtifactCard key={artifact.id} output={artifact} />
           ))}
         </div>
       )}

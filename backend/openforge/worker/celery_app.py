@@ -2,7 +2,6 @@
 
 import logging
 from celery import Celery
-from celery.signals import worker_init
 from openforge.common.config import get_settings
 
 logger = logging.getLogger("openforge.worker")
@@ -27,12 +26,3 @@ celery_app.conf.update(
 
 # Auto-discover tasks
 celery_app.autodiscover_tasks(["openforge.worker"])
-
-
-@worker_init.connect
-def register_system_profiles(**_kwargs):
-    """Register system profiles when the Celery worker starts."""
-    from openforge.runtime.profile_registry import profile_registry
-
-    profile_registry.register_system_profiles()
-    logger.info("Celery worker: registered %d system profiles.", len(profile_registry.list_all()))

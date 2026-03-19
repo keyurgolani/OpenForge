@@ -5,24 +5,24 @@ from uuid import uuid4
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from openforge.domains.artifacts.router import get_artifact_service
+from openforge.domains.outputs.router import get_output_service
 from openforge.domains.router_registry import register_domain_routers
 
 
 class ArtifactStubService:
-    async def list_artifacts(self, skip: int = 0, limit: int = 100, workspace_id=None, **_kwargs):
+    async def list_outputs(self, skip: int = 0, limit: int = 100, workspace_id=None, **_kwargs):
         return [], 0
 
-    async def get_artifact(self, _identifier):
+    async def get_output(self, _identifier):
         return None
 
-    async def create_artifact(self, payload: dict):
+    async def create_output(self, payload: dict):
         return {"id": str(uuid4()), **payload, "version": 1}
 
-    async def update_artifact(self, _identifier, payload: dict):
+    async def update_output(self, _identifier, payload: dict):
         return {"id": str(uuid4()), **payload, "version": 1}
 
-    async def delete_artifact(self, _identifier):
+    async def delete_output(self, _identifier):
         return True
 
     async def list_versions(self, artifact_id):
@@ -196,7 +196,7 @@ class ArtifactStubService:
 def create_client() -> TestClient:
     app = FastAPI()
     register_domain_routers(app)
-    app.dependency_overrides[get_artifact_service] = lambda: ArtifactStubService()
+    app.dependency_overrides[get_output_service] = lambda: ArtifactStubService()
     return TestClient(app)
 
 
@@ -204,7 +204,7 @@ def test_artifact_versions_endpoint_returns_expected_shape() -> None:
     client = create_client()
     artifact_id = str(uuid4())
 
-    response = client.get(f"/api/v1/artifacts/{artifact_id}/versions")
+    response = client.get(f"/api/v1/outputs/{artifact_id}/versions")
 
     assert response.status_code == 200
     payload = response.json()
@@ -217,7 +217,7 @@ def test_artifact_lineage_endpoint_returns_grouped_links() -> None:
     client = create_client()
     artifact_id = str(uuid4())
 
-    response = client.get(f"/api/v1/artifacts/{artifact_id}/lineage")
+    response = client.get(f"/api/v1/outputs/{artifact_id}/lineage")
 
     assert response.status_code == 200
     payload = response.json()
@@ -229,7 +229,7 @@ def test_artifact_sinks_endpoint_returns_sink_state() -> None:
     client = create_client()
     artifact_id = str(uuid4())
 
-    response = client.get(f"/api/v1/artifacts/{artifact_id}/sinks")
+    response = client.get(f"/api/v1/outputs/{artifact_id}/sinks")
 
     assert response.status_code == 200
     payload = response.json()

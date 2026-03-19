@@ -21,7 +21,6 @@ import {
   Pencil,
   Trash2,
   Zap,
-  BookOpen,
 } from 'lucide-react';
 import {
   ContextMenu,
@@ -74,12 +73,10 @@ interface PrimaryNavExpandedProps {
     knowledgeItem: (id: string) => string;
     chat: string;
     chatConversation: (id: string) => string;
-    profiles: string;
-    workflows: string;
-    missions: string;
+    agents: string;
+    automations: string;
     runs: string;
-    artifacts: string;
-    catalog: string;
+    outputs: string;
     settings: string;
   };
   onCreateWorkspace?: () => void;
@@ -286,22 +283,16 @@ export function PrimaryNavExpanded({
           <div className="flex-1 min-h-0 flex flex-col px-4 pt-3 pb-2">
             <nav className="flex flex-col flex-1 min-h-0 gap-1">
               <NavItem
-                to={routes.profiles}
+                to={routes.agents}
                 icon={<Bot className="w-4 h-4" />}
-                label="Profiles"
-                isActive={isActive('/profiles')}
+                label="Agents"
+                isActive={isActive('/agents')}
               />
               <NavItem
-                to={routes.workflows}
-                icon={<Folder className="w-4 h-4" />}
-                label="Workflows"
-                isActive={isActive('/workflows')}
-              />
-              <NavItem
-                to={routes.missions}
+                to={routes.automations}
                 icon={<Zap className="w-4 h-4" />}
-                label="Missions"
-                isActive={isActive('/missions')}
+                label="Automations"
+                isActive={isActive('/automations')}
               />
 
               {/* Runs with expandable active runs */}
@@ -361,16 +352,10 @@ export function PrimaryNavExpanded({
               </div>
 
               <NavItem
-                to={routes.artifacts}
+                to={routes.outputs}
                 icon={<FileText className="w-4 h-4" />}
-                label="Artifacts"
-                isActive={isActive('/artifacts')}
-              />
-              <NavItem
-                to={routes.catalog}
-                icon={<BookOpen className="w-4 h-4" />}
-                label="Catalog"
-                isActive={isActive('/catalog')}
+                label="Outputs"
+                isActive={isActive('/outputs')}
               />
             </nav>
           </div>
@@ -405,7 +390,7 @@ export function PrimaryNavExpanded({
               >
                 Settings
               </p>
-              <p className="text-[11px] text-muted-foreground truncate">Providers, prompts & more</p>
+              <p className="text-[11px] text-muted-foreground truncate">Providers, tools & more</p>
             </div>
           </Link>
         </div>

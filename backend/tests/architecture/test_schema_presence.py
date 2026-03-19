@@ -1,89 +1,42 @@
-"""
-Core domain schema and package presence tests.
-"""
+"""Core domain schema and package presence tests."""
 
-from importlib import import_module
-
-from openforge.db.base import Base
 from openforge.db.models import (
-    AgentProfileModel,
-    ArtifactModel,
-    MissionDefinitionModel,
+    AgentModel,
+    AutomationModel,
     RunModel,
+    ArtifactModel,
     TriggerDefinitionModel,
-    WorkflowDefinitionModel,
 )
 
 
-def test_db_base_module_exists():
-    """The shared SQLAlchemy declarative base must be importable."""
-    assert Base is not None
-
-
-def test_domain_tables_exist():
-    """Core domain tables should be present in the DB model layer."""
+def test_core_domain_tables():
     expected = {
-        AgentProfileModel: "agent_profiles",
-        WorkflowDefinitionModel: "workflow_definitions",
-        MissionDefinitionModel: "mission_definitions",
-        TriggerDefinitionModel: "trigger_definitions",
+        AgentModel: "agents",
+        AutomationModel: "automations",
         RunModel: "runs",
         ArtifactModel: "artifacts",
+        TriggerDefinitionModel: "trigger_definitions",
     }
-
     for model, table_name in expected.items():
-        assert hasattr(model, "__tablename__")
-        assert model.__tablename__ == table_name
+        assert model.__tablename__ == table_name, f"{model.__name__} table mismatch"
 
 
-def test_domain_models_have_expected_fields():
-    """Core domain models should expose the contract fields."""
-    assert hasattr(AgentProfileModel, "name")
-    assert hasattr(AgentProfileModel, "slug")
-    assert hasattr(AgentProfileModel, "role")
-    assert hasattr(AgentProfileModel, "status")
+def test_agent_model_fields():
+    assert hasattr(AgentModel, "slug")
+    assert hasattr(AgentModel, "blueprint_md")
+    assert hasattr(AgentModel, "active_spec_id")
+    assert hasattr(AgentModel, "compilation_status")
 
-    assert hasattr(WorkflowDefinitionModel, "entry_node")
-    assert hasattr(WorkflowDefinitionModel, "state_schema")
-    assert hasattr(WorkflowDefinitionModel, "nodes")
-    assert hasattr(WorkflowDefinitionModel, "edges")
-    assert hasattr(WorkflowDefinitionModel, "default_input_schema")
-    assert hasattr(WorkflowDefinitionModel, "default_output_schema")
 
-    assert hasattr(MissionDefinitionModel, "workflow_id")
-    assert hasattr(MissionDefinitionModel, "default_profile_ids")
-    assert hasattr(MissionDefinitionModel, "default_trigger_ids")
-    assert hasattr(MissionDefinitionModel, "autonomy_mode")
+def test_automation_model_fields():
+    assert hasattr(AutomationModel, "agent_id")
+    assert hasattr(AutomationModel, "trigger_config")
+    assert hasattr(AutomationModel, "budget_config")
 
-    assert hasattr(TriggerDefinitionModel, "trigger_type")
-    assert hasattr(TriggerDefinitionModel, "target_type")
-    assert hasattr(TriggerDefinitionModel, "target_id")
 
-    assert hasattr(RunModel, "run_type")
+def test_run_model_fields():
     assert hasattr(RunModel, "workspace_id")
-    assert hasattr(RunModel, "state_snapshot")
+    assert hasattr(RunModel, "run_type")
+    assert hasattr(RunModel, "status")
     assert hasattr(RunModel, "input_payload")
     assert hasattr(RunModel, "output_payload")
-
-    assert hasattr(ArtifactModel, "artifact_type")
-    assert hasattr(ArtifactModel, "workspace_id")
-    assert hasattr(ArtifactModel, "source_run_id")
-    assert hasattr(ArtifactModel, "source_mission_id")
-    assert hasattr(ArtifactModel, "title")
-
-
-def test_domain_package_model_modules_are_importable():
-    """Each core domain package should expose an importable models module."""
-    module_names = [
-        "openforge.domains.profiles.models",
-        "openforge.domains.workflows.models",
-        "openforge.domains.missions.models",
-        "openforge.domains.triggers.models",
-        "openforge.domains.runs.models",
-        "openforge.domains.artifacts.models",
-        "openforge.domains.knowledge.models",
-    ]
-
-    for module_name in module_names:
-        module = import_module(module_name)
-        assert module is not None

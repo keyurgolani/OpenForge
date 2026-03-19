@@ -1,4 +1,4 @@
-export type SettingsTab = 'workspaces' | 'llm' | 'prompts' | 'policies' | 'approvals' | 'jobs' | 'skills' | 'mcp' | 'audit' | 'export' | 'import'
+export type SettingsTab = 'workspaces' | 'llm' | 'jobs' | 'skills' | 'mcp' | 'audit' | 'export' | 'import'
 
 export type WorkspaceRow = {
     id: string; name: string; description: string | null

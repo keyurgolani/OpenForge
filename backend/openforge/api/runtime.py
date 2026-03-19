@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from openforge.db.models import Workspace
 from openforge.db.postgres import get_db
-from openforge.runtime.execution_engine import agent_engine
+from openforge.runtime.chat_handler import chat_handler
 
 router = APIRouter()
 
@@ -31,6 +31,17 @@ class DelegationResponse(BaseModel):
     response: str
     timeline: list
     conversation_id: Optional[str] = None
+
+
+class TransferRequest(BaseModel):
+    target_agent_slug: str
+    workspace_id: str
+    conversation_id: str
+
+
+class TransferResponse(BaseModel):
+    transferred: bool
+    target_agent: str
 
 
 @router.post("/delegations/invoke", response_model=DelegationResponse)
@@ -58,7 +69,7 @@ async def invoke_delegation(req: DelegationRequest, db: AsyncSession = Depends(g
             parent_workspace_id = None
 
     try:
-        result = await agent_engine.execute_subagent(
+        result = await chat_handler.execute_subagent(
             workspace_id=workspace_id,
             instruction=req.instruction,
             db=db,
@@ -72,3 +83,30 @@ async def invoke_delegation(req: DelegationRequest, db: AsyncSession = Depends(g
         return DelegationResponse(**result)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Delegation execution failed: {exc}") from exc
+
+
+@router.post("/delegations/transfer", response_model=TransferResponse)
+async def transfer_delegation(req: TransferRequest, db: AsyncSession = Depends(get_db)):
+    """Swarm-style transfer: switch the active agent for a conversation."""
+    try:
+        workspace_id = UUID(req.workspace_id)
+        conversation_id = UUID(req.conversation_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid UUID") from exc
+
+    from openforge.runtime.handoff_engine import handoff_engine
+
+    try:
+        result = await handoff_engine.transfer_to(
+            db=db,
+            target_agent_slug=req.target_agent_slug,
+            workspace_id=workspace_id,
+            conversation_id=conversation_id,
+            messages=[],
+        )
+        return TransferResponse(
+            transferred=result.get("transferred", False),
+            target_agent=result.get("target_agent", req.target_agent_slug),
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Transfer failed: {exc}") from exc

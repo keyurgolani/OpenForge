@@ -1,0 +1,15 @@
+category: task
+description: "Task planning and tracking"
+tools:
+  - name: task.create_plan
+    description: "Create a structured task plan"
+    risk_category: safe
+    confirm_by_default: false
+  - name: task.get_plan
+    description: "Get details of a task plan"
+    risk_category: safe
+    confirm_by_default: false
+  - name: task.update_step
+    description: "Update the status of a task step"
+    risk_category: safe
+    confirm_by_default: false

@@ -14,17 +14,17 @@ from openforge.schemas.settings import OnboardingState
 _STEP_ORDER = (
     "welcome",
     "providers_setup",
-    "models_chat",
-    "models_vision",
-    "models_embedding",
-    "models_stt",
-    "models_tts",
-    "models_clip",
-    "models_pdf",
     "workspace_create",
-    "automation_preferences",
     "complete",
 )
+
+# Steps from the old 12-step flow that are no longer used.
+# If a user is on one of these, redirect them forward.
+_LEGACY_STEPS = {
+    "models_chat", "models_vision", "models_embedding",
+    "models_stt", "models_tts", "models_clip", "models_pdf",
+    "automation_preferences",
+}
 
 # Build transitions: each step can go forward or backward one step.
 # Model steps (except chat) can also skip forward to the next step.
@@ -55,6 +55,12 @@ class OnboardingService:
             return self._serialize(state)
 
         current_step = state.current_step or "welcome"
+
+        # Handle users stuck on legacy steps from the old 12-step flow
+        if current_step in _LEGACY_STEPS:
+            current_step = "workspace_create"
+            state.current_step = current_step
+
         if normalized_step != current_step and normalized_step not in _VALID_TRANSITIONS.get(current_step, set()):
             raise HTTPException(
                 status_code=400,

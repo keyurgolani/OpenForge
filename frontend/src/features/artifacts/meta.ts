@@ -46,7 +46,8 @@ const LINK_TARGET_LABELS: Record<ArtifactObjectType, string> = {
   knowledge: 'Knowledge',
   entity: 'Entity',
   relationship: 'Relationship',
-  artifact: 'Artifact',
+  artifact: 'Output',
+  output: 'Output',
 }
 
 export function getArtifactTypeLabel(type: ArtifactType): string {
@@ -81,7 +82,8 @@ export function getArtifactSourceChips(artifact: Artifact): string[] {
 export function getArtifactLinkHref(link: ArtifactLink): string | null {
   switch (link.target_type) {
     case 'artifact':
-      return `/artifacts/${link.target_id}`
+    case 'output':
+      return `/outputs/${link.target_id}`
     case 'knowledge':
       return `/knowledge/${link.target_id}`
     case 'run':

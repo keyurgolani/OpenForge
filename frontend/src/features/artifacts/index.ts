@@ -1,10 +1,6 @@
 /**
- * Artifacts feature exports.
+ * Backward-compatible re-exports from the outputs feature module.
+ * New code should import from '@/features/outputs' directly.
  */
 
-export * from './hooks'
-export * from './meta'
-export * from './components/ArtifactCard'
-export * from './components/ArtifactFilters'
-export * from './components/ArtifactLineagePanel'
-export * from './components/ArtifactVersionHistory'
+export * from '../outputs'

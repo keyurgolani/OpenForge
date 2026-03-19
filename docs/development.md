@@ -53,7 +53,7 @@ uvicorn openforge.main:app --reload --port 3000
 # Frontend (terminal 2)
 cd frontend
 npm install
-npm run dev   # → http://localhost:5173 (proxies /api to port 3000)
+npm run dev   # -> http://localhost:5173 (proxies /api to port 3000)
 
 # Tool Server (terminal 3)
 cd tool_server
@@ -79,7 +79,8 @@ OpenForge/
 │       │   ├── embedding.py        # Text and image embedding
 │       │   ├── llm_gateway.py      # Unified LLM interface
 │       │   ├── search_engine.py    # Hybrid search (dense + sparse)
-│       │   └── context_assembler.py # Token budget management
+│       │   ├── context_assembler.py # Token budget management
+│       │   └── prompt_resolution.py # Prompt template resolution
 │       ├── db/                     # Database layer
 │       │   ├── models.py           # SQLAlchemy models (all entities)
 │       │   ├── postgres.py         # Database engine and migrations
@@ -87,32 +88,66 @@ OpenForge/
 │       │   ├── redis_client.py     # Redis client
 │       │   └── migrations/         # Alembic migration scripts
 │       ├── domains/                # Domain-driven business logic
-│       │   ├── profiles/           # Agent profiles
-│       │   ├── workflows/          # Workflow definitions
-│       │   ├── missions/           # Mission definitions
-│       │   ├── triggers/           # Trigger definitions
-│       │   ├── runs/               # Run execution tracking
-│       │   ├── artifacts/          # Output artifacts
+│       │   ├── agents/             # Agent blueprints, compiler, specs
+│       │   │   ├── blueprint.py    # Blueprint parsing (YAML+MD)
+│       │   │   ├── compiler.py     # Blueprint → CompiledAgentSpec
+│       │   │   ├── compiled_spec.py # Immutable spec model
+│       │   │   ├── models.py       # Agent DB models
+│       │   │   ├── service.py      # Agent CRUD
+│       │   │   ├── router.py       # API routes
+│       │   │   ├── schemas.py      # Pydantic schemas
+│       │   │   └── types.py        # Domain types
+│       │   ├── automations/        # Automation definitions
+│       │   │   ├── blueprint.py    # Trigger, budget, output config
+│       │   │   ├── compiler.py     # Automation compilation
+│       │   │   ├── compiled_spec.py # Compiled automation spec
+│       │   │   ├── models.py       # Automation DB models
+│       │   │   ├── service.py      # Automation CRUD
+│       │   │   ├── router.py       # API routes
+│       │   │   ├── schemas.py      # Pydantic schemas
+│       │   │   └── types.py        # Domain types
 │       │   ├── knowledge/          # Knowledge management
-│       │   ├── graph/              # Knowledge graph
 │       │   ├── retrieval/          # Search and evidence
-│       │   ├── prompts/            # Managed prompts
-│       │   ├── policies/           # Trust and permissions
-│       │   ├── catalog/            # Curated template library
+│       │   ├── runs/               # Run execution tracking
+│       │   ├── outputs/            # Versioned output artifacts
+│       │   │   ├── versioning.py   # Version management
+│       │   │   ├── lineage.py      # Provenance tracking
+│       │   │   ├── publishing.py   # Publishing logic
+│       │   │   ├── sinks.py        # Output destination routing
+│       │   │   └── service.py      # Output CRUD
 │       │   └── common/             # Shared domain utilities
 │       ├── integrations/           # External integrations
 │       │   └── tools/              # Tool server HTTP client
 │       ├── middleware/             # HTTP middleware (auth)
 │       ├── runtime/               # Execution engines
-│       │   ├── execution_engine.py # Agent chat execution
-│       │   ├── coordinator.py      # Workflow orchestration
+│       │   ├── chat_handler.py     # Interactive chat execution
+│       │   ├── strategy_executor.py # Strategy-based run execution
+│       │   ├── tool_loop.py        # LLM + tool dispatch cycle
+│       │   ├── agent_registry.py   # Agent resolution at runtime
+│       │   ├── handoff_engine.py   # Agent-to-agent delegation
+│       │   ├── provider_config.py  # LLM provider resolution
 │       │   ├── hitl.py             # Human-in-the-loop approvals
-│       │   ├── profile_registry.py # Agent profile management
-│       │   └── node_executors/     # Workflow node type executors
+│       │   ├── policy.py           # Tool permission engine
+│       │   ├── lifecycle.py        # Run state transitions
+│       │   ├── events.py           # Runtime event types
+│       │   ├── event_publisher.py  # Event broadcasting
+│       │   ├── checkpoint_store.py # Durable state snapshots
+│       │   └── strategies/         # Strategy plugins
+│       │       ├── interface.py    # AgentStrategy protocol + BaseStrategy
+│       │       ├── base_loop.py    # Strategy execution loop
+│       │       ├── registry.py     # Strategy registry
+│       │       ├── chat.py         # Chat strategy
+│       │       ├── researcher.py   # Research strategy
+│       │       ├── reviewer.py     # Review strategy
+│       │       ├── builder.py      # Builder strategy
+│       │       ├── watcher.py      # Watcher strategy
+│       │       └── coordinator_strategy.py # Coordinator strategy
 │       ├── services/              # Application services
 │       │   ├── llm_service.py      # LLM provider management
 │       │   ├── knowledge_processing_service.py  # Knowledge pipeline
 │       │   ├── conversation_service.py          # Chat management
+│       │   ├── workspace_service.py # Workspace management
+│       │   ├── automation_config.py # Automation config service
 │       │   ├── config_service.py   # Configuration store
 │       │   └── mcp_service.py      # MCP server integration
 │       └── worker/                # Celery background tasks
@@ -133,26 +168,37 @@ OpenForge/
 │       │   ├── search/             # Search interface
 │       │   └── ui/                 # Radix-based primitives
 │       ├── pages/                  # Page components
+│       │   ├── AgentsPage.tsx      # Agent list
+│       │   ├── AgentDetailPage.tsx # Agent detail
+│       │   ├── AutomationsPage.tsx # Automation list
+│       │   ├── AutomationDetailPage.tsx # Automation detail
+│       │   ├── RunsPage.tsx        # Run list
+│       │   ├── RunDetailPage.tsx   # Run detail
+│       │   ├── OutputsPage.tsx     # Output list
+│       │   ├── OutputDetailPage.tsx # Output detail
+│       │   ├── DashboardPage.tsx   # Workspace dashboard
+│       │   ├── WorkspaceAgentPage.tsx # Chat interface
+│       │   ├── SearchPage.tsx      # Search
 │       │   └── settings/           # Settings sub-pages
 │       ├── features/               # Domain-specific feature modules
-│       │   ├── artifacts/          # Artifact components and hooks
+│       │   ├── agents/             # Agent components and hooks
+│       │   ├── automations/        # Automation components and hooks
 │       │   ├── runs/               # Run monitoring
-│       │   ├── workflows/          # Workflow management
-│       │   ├── missions/           # Mission management
-│       │   ├── profiles/           # Profile management
-│       │   ├── approvals/          # HITL approval UI
-│       │   ├── observability/      # Cost, failures, telemetry
+│       │   ├── outputs/            # Output management
+│       │   ├── artifacts/          # Legacy artifact support
 │       │   ├── retrieval/          # Evidence building
-│       │   ├── catalog/            # Template browsing
-│       │   ├── policies/           # Policy management
-│       │   ├── prompts/            # Prompt management
 │       │   └── knowledge/          # Knowledge queries
 │       ├── hooks/                  # Custom React hooks
 │       ├── stores/                 # Zustand state management
 │       ├── types/                  # TypeScript type definitions
+│       │   ├── agents.ts           # Agent types
+│       │   ├── automations.ts      # Automation types
+│       │   ├── runs.ts             # Run types
+│       │   └── ...
 │       └── lib/                    # Utilities and API client
 │           ├── api.ts              # API endpoint definitions
 │           ├── routes.ts           # Route definitions
+│           ├── productVocabulary.ts # Product term mapping
 │           └── formatters.ts       # Data formatting utilities
 │
 ├── tool_server/                    # Tool execution microservice
@@ -198,7 +244,8 @@ OpenForge/
 | Shared utilities | `backend/openforge/common/` |
 | Domain business logic | `backend/openforge/domains/{domain}/service.py` |
 | API route handlers | `backend/openforge/api/{resource}.py` (thin — delegates to services) |
-| Execution and orchestration | `backend/openforge/runtime/` |
+| Agent execution logic | `backend/openforge/runtime/` |
+| Strategy plugins | `backend/openforge/runtime/strategies/` |
 | External integrations | `backend/openforge/integrations/` |
 | Database models | `backend/openforge/db/models.py` |
 
@@ -206,8 +253,8 @@ OpenForge/
 - API routes should be thin — validate input, call a service, return the response
 - Domain services should not import from other domains directly
 - New retrieval logic goes in `domains/retrieval/`
-- Meaningful outputs should be modeled as artifacts (not ad-hoc tables)
-- Workflow execution must create durable Run and RunStep records
+- Meaningful outputs should be modeled as outputs (not ad-hoc tables)
+- Agent execution must flow through agent_registry for spec resolution
 
 ### Frontend
 
@@ -227,6 +274,7 @@ OpenForge/
 - Feature modules contain domain-specific components, hooks, and types
 - Shared components are domain-agnostic
 - Layout components are presentational only (no business logic)
+- Domain routes: Agents, Automations, Runs, Outputs are top-level (workspace-agnostic). Knowledge, Chat, Search are workspace-scoped.
 
 ### Tool Server
 
@@ -244,7 +292,100 @@ OpenForge/
 - All file paths must be validated against workspace boundaries
 - External HTTP responses must be wrapped with the content boundary
 
-## Adding a New Tool
+## Domain Development Guide
+
+### Adding a New Domain
+
+1. Create the domain directory:
+   ```
+   backend/openforge/domains/my_domain/
+   ├── __init__.py
+   ├── service.py    # Business logic
+   ├── router.py     # API routes
+   ├── schemas.py    # Pydantic schemas
+   └── types.py      # Domain types
+   ```
+
+2. Add database models to `backend/openforge/db/models.py`
+
+3. Create an Alembic migration:
+   ```bash
+   cd backend
+   alembic revision --autogenerate -m "add my_domain tables"
+   ```
+
+4. Register the router in `backend/openforge/domains/router_registry.py`
+
+### Existing Domains
+
+| Domain | Key Files | Notes |
+|--------|-----------|-------|
+| **agents** | blueprint.py, compiler.py, compiled_spec.py | YAML+MD parsing, compilation pipeline |
+| **automations** | blueprint.py, compiler.py, compiled_spec.py | JSON-based config, trigger/budget/output |
+| **knowledge** | (via services layer) | Knowledge types managed by knowledge_processing_service |
+| **retrieval** | service.py | Hybrid search, evidence building |
+| **runs** | service.py | Run tracking, steps, events |
+| **outputs** | versioning.py, lineage.py, sinks.py, publishing.py | Versioned artifacts with provenance |
+| **common** | enums.py | Shared types and enums |
+
+## Strategy Authoring Guide
+
+To add a new execution strategy:
+
+1. Create a new file in `backend/openforge/runtime/strategies/`:
+
+   ```python
+   from openforge.runtime.strategies.interface import BaseStrategy, RunContext, StepResult
+
+   class MyStrategy(BaseStrategy):
+       @property
+       def name(self) -> str:
+           return "my_strategy"
+
+       async def plan(self, ctx: RunContext) -> dict:
+           # Return a plan with steps
+           return {"steps": [
+               {"action": "analyze"},
+               {"action": "synthesize"},
+           ]}
+
+       async def execute_step(self, ctx: RunContext, step: dict) -> StepResult:
+           action = step.get("action")
+           if action == "analyze":
+               # Do analysis
+               return StepResult(output="analysis done", should_continue=False)
+           elif action == "synthesize":
+               # Do synthesis
+               return StepResult(output="synthesis done", should_continue=False)
+           return StepResult(output="unknown action")
+
+       # should_continue and aggregate use BaseStrategy defaults
+   ```
+
+2. Register in `backend/openforge/runtime/strategies/registry.py`:
+
+   ```python
+   from .my_strategy import MyStrategy
+   strategy_registry.register(MyStrategy())
+   ```
+
+3. Use in agent blueprints:
+   ```yaml
+   strategy: my_strategy
+   ```
+
+### Strategy Lifecycle
+
+- `plan()` returns a list of steps
+- `execute_step()` is called for each step in the plan
+- `should_continue()` is checked after each step (return `True` to repeat, `False` to advance)
+- `aggregate()` combines all step results into a final output
+
+For loop-driven strategies (like chat), return a single-step plan and use `should_continue` to control the loop.
+
+## Tool Development Guide
+
+### Adding a New Tool
 
 1. Create a directory under `tool_server/tools/`:
    ```
@@ -286,27 +427,23 @@ OpenForge/
    curl -X POST http://localhost:3100/api/v1/tools/sync
    ```
 
-## Adding a New Domain
+## Settings Tab Pattern
 
-1. Create the domain directory:
+To add a new settings tab:
+
+1. Create a tab component in `frontend/src/pages/settings/{tab_name}/`:
    ```
-   backend/openforge/domains/my_domain/
-   ├── __init__.py
-   ├── service.py    # Business logic
-   ├── router.py     # API routes
-   ├── schemas.py    # Pydantic schemas
-   └── types.py      # Domain types
+   frontend/src/pages/settings/my_tab/
+   └── MyTab.tsx
    ```
 
-2. Add database models to `backend/openforge/db/models.py`
+2. Register the tab in `frontend/src/pages/settings/constants.ts`:
+   - Add to the `SETTINGS_TABS` array
+   - Add to the `toSettingsTab` normalization function if needed
 
-3. Create an Alembic migration:
-   ```bash
-   cd backend
-   alembic revision --autogenerate -m "add my_domain tables"
-   ```
+3. Add the tab to the settings router in `frontend/src/pages/settings/index.tsx`
 
-4. Register the router in `backend/openforge/api/router_registry.py`
+4. Add the tab to the layout in `frontend/src/pages/settings/SettingsLayout.tsx`
 
 ## Database Migrations
 
@@ -322,6 +459,28 @@ To run migrations manually:
 ```bash
 cd backend
 alembic upgrade head
+```
+
+## Testing
+
+### Backend Tests
+
+```bash
+cd backend
+python -m pytest tests/ -v
+```
+
+Key test directories:
+- `tests/architecture/` — Schema presence, regression, release smoke tests
+- `tests/domains/agents/` — Agent blueprint, compiler, service tests
+- `tests/domains/automations/` — Automation service tests
+- `tests/runtime/` — Strategy, tool loop, chat handler, agent registry tests
+
+### Frontend Tests
+
+```bash
+cd frontend
+npm test
 ```
 
 ## Contributing

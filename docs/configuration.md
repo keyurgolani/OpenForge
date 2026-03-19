@@ -60,12 +60,28 @@ These settings are configured through the PostgreSQL `config` table and managed 
 | Auto-generate Intelligence | Configurable during onboarding | Automatically generate summaries, tags, and insights for new knowledge items. |
 | Bookmark Content Extraction | Configurable during onboarding | Automatically extract content from bookmarked URLs. |
 
+### Chat
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Trash Retention | 30 days | How long deleted conversations remain in trash before permanent deletion. Configurable 1-365 days. |
+
 ### LLM Provider Configuration
 
 LLM providers are configured through the Settings UI:
 
-1. **Provider Setup** — Add providers with API keys/URLs
-2. **Model Assignments** — Assign specific models to capabilities:
+1. **Provider Setup** — Add providers with API keys/URLs. Supported providers:
+   - OpenAI, Anthropic, Google Gemini, Groq, DeepSeek, Mistral, OpenRouter, xAI, Cohere, ZhipuAI, HuggingFace
+   - Ollama (local, no API key required)
+   - Custom OpenAI-compatible endpoints
+   - Custom Anthropic-compatible endpoints
+
+2. **Virtual Providers** — Create composite providers:
+   - **Router** — Load balance across multiple providers
+   - **Council** — Multi-model ensemble for consensus responses
+   - **Optimizer** — Prompt optimization before execution
+
+3. **Model Assignments** — Assign specific models to capabilities:
    - Chat (primary conversation model)
    - Vision (image analysis)
    - Embedding (text embeddings — local BGE-small by default)
@@ -76,15 +92,18 @@ LLM providers are configured through the Settings UI:
 
 ### Tool Permissions
 
-Tool permissions are configured in Settings > Policies:
+Tool permissions are configured in Settings (tool permission overrides):
 
 | Permission Level | Behavior |
 |-----------------|----------|
-| **Allow** | Tool executes without any approval |
-| **Block** | Tool is disabled and cannot be used |
-| **Require Approval** | Tool pauses and waits for human approval before executing |
+| **Default** | Uses the tool's built-in risk level |
+| **Allowed** | Tool executes without any approval |
+| **Approval** | Tool pauses and waits for human approval before executing |
+| **Blocked** | Tool is disabled and cannot be used |
 
 Each tool has a default risk level (`low`, `medium`, `high`, `critical`) that informs the default permission.
+
+Agent blueprints can also specify per-agent tool restrictions via the `tools` and `confirm_before` fields.
 
 ## Internal Configuration
 
@@ -114,8 +133,8 @@ The default `docker-compose.yml` defines these services:
 
 | Service | Port | Description |
 |---------|------|-------------|
-| `openforge` | 3100 (host) → 3000 (container) | Main backend + frontend |
-| `celery-worker` | — | Background task worker |
+| `openforge` | 3100 (host) -> 3000 (container) | Main backend + frontend |
+| `celery-worker` | -- | Background task worker |
 | `tool-server` | 8001 (internal) | Tool execution microservice |
 | `postgres` | 5432 (internal) | PostgreSQL database |
 | `qdrant` | 6333 (internal) | Qdrant vector database |

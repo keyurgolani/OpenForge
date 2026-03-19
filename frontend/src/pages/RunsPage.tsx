@@ -10,20 +10,17 @@ import StatusBadge from '@/components/shared/StatusBadge'
 import { useRunsQuery } from '@/features/runs'
 import { formatDateTime, formatRelativeTime, truncateText } from '@/lib/formatters'
 import { EMPTY_STATE_COPY, getDescription, getLabel } from '@/lib/productVocabulary'
-import { runsRoute, workflowsRoute } from '@/lib/routes'
+import { runsRoute, agentsRoute } from '@/lib/routes'
 import type { ExecutionStatus } from '@/types/common'
-import type { RunType } from '@/types/runs'
 
 export default function RunsPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | ExecutionStatus>('all')
-  const [runTypeFilter, setRunTypeFilter] = useState<'all' | RunType>('all')
   const { data, isLoading, error } = useRunsQuery({
     status: statusFilter === 'all' ? undefined : statusFilter,
-    runType: runTypeFilter === 'all' ? undefined : runTypeFilter,
   })
 
   if (isLoading) {
-    return <LoadingState label="Loading runs…" />
+    return <LoadingState label="Loading runs..." />
   }
 
   if (error) {
@@ -54,31 +51,19 @@ export default function RunsPage() {
             <Filter className="h-4 w-4 text-accent" />
             Runtime filters
           </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="space-y-2 text-sm">
-              <span className="text-muted-foreground">Status</span>
-              <select className="input w-full" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | ExecutionStatus)}>
-                <option value="all">All statuses</option>
-                <option value="running">Running</option>
-                <option value="waiting_approval">Waiting approval</option>
-                <option value="interrupted">Interrupted</option>
-                <option value="retrying">Retrying</option>
-                <option value="failed">Failed</option>
-                <option value="completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
-            </label>
-            <label className="space-y-2 text-sm">
-              <span className="text-muted-foreground">Run type</span>
-              <select className="input w-full" value={runTypeFilter} onChange={(event) => setRunTypeFilter(event.target.value as 'all' | RunType)}>
-                <option value="all">All run types</option>
-                <option value="workflow">Workflow</option>
-                <option value="subworkflow">Subworkflow</option>
-                <option value="mission">Mission</option>
-                <option value="step">Step</option>
-              </select>
-            </label>
-          </div>
+          <label className="space-y-2 text-sm max-w-xs">
+            <span className="text-muted-foreground">Status</span>
+            <select className="input w-full" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | ExecutionStatus)}>
+              <option value="all">All statuses</option>
+              <option value="running">Running</option>
+              <option value="waiting_approval">Waiting approval</option>
+              <option value="interrupted">Interrupted</option>
+              <option value="retrying">Retrying</option>
+              <option value="failed">Failed</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </label>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
@@ -105,7 +90,7 @@ export default function RunsPage() {
           title={emptyCopy.title}
           description={emptyCopy.description}
           actionLabel={emptyCopy.cta}
-          actionHint="Runs track every workflow and mission execution with full step lineage, checkpoints, and artifact outputs."
+          actionHint="Runs track every agent execution with full step lineage, checkpoints, and outputs."
           icon={<Boxes className="h-5 w-5" />}
         />
       ) : (
@@ -116,45 +101,47 @@ export default function RunsPage() {
                 <th className="px-4 py-3 font-medium">Run</th>
                 <th className="px-4 py-3 font-medium">Type</th>
                 <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Origin</th>
-                <th className="px-4 py-3 font-medium">Current node</th>
+                <th className="px-4 py-3 font-medium">Agent</th>
                 <th className="px-4 py-3 font-medium">Started</th>
                 <th className="px-4 py-3 font-medium">Completed</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/40">
-              {sortedRuns.map((run) => (
-                <tr key={run.id} className="text-sm text-foreground">
-                  <td className="px-4 py-3">
-                    <div className="min-w-0">
-                      <Link className="font-medium transition hover:text-accent" to={runsRoute(run.id)}>
-                        {truncateText(run.id, 18)}
-                      </Link>
-                      <p className="mt-1 text-xs text-muted-foreground/80">Updated {formatRelativeTime(run.updated_at ?? run.started_at)}</p>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground/90">{run.run_type}</td>
-                  <td className="px-4 py-3"><StatusBadge status={run.status} /></td>
-                  <td className="px-4 py-3 text-muted-foreground/90">
-                    {run.workflow_id ? (
-                      <Link className="transition hover:text-accent" to={workflowsRoute(run.workflow_id)}>
-                        {truncateText(run.workflow_id, 14)}
-                      </Link>
-                    ) : 'No workflow'}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground/90">{run.current_node_id ? truncateText(run.current_node_id, 14) : 'Not assigned'}</td>
-                  <td className="px-4 py-3 text-muted-foreground/90">{run.started_at ? formatDateTime(run.started_at) : 'Not started'}</td>
-                  <td className="px-4 py-3 text-muted-foreground/90">
-                    <div className="flex items-center justify-between gap-3">
-                      <span>{run.completed_at ? formatDateTime(run.completed_at) : 'In progress'}</span>
-                      <Link className="inline-flex items-center gap-1 text-xs text-accent transition hover:text-accent/80" to={runsRoute(run.id)}>
-                        Inspect
-                        <ArrowRight className="h-3.5 w-3.5" />
-                      </Link>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {sortedRuns.map((run) => {
+                const agentSlug = typeof run.composite_metadata?.agent_slug === 'string' ? run.composite_metadata.agent_slug : null
+                const agentId = typeof run.composite_metadata?.agent_id === 'string' ? run.composite_metadata.agent_id : null
+                return (
+                  <tr key={run.id} className="text-sm text-foreground">
+                    <td className="px-4 py-3">
+                      <div className="min-w-0">
+                        <Link className="font-medium transition hover:text-accent" to={runsRoute(run.id)}>
+                          {truncateText(run.id, 18)}
+                        </Link>
+                        <p className="mt-1 text-xs text-muted-foreground/80">Updated {formatRelativeTime(run.updated_at ?? run.started_at)}</p>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground/90">{run.run_type}</td>
+                    <td className="px-4 py-3"><StatusBadge status={run.status} /></td>
+                    <td className="px-4 py-3 text-muted-foreground/90">
+                      {agentId ? (
+                        <Link className="transition hover:text-accent" to={agentsRoute(agentId)}>
+                          {agentSlug ?? truncateText(agentId, 14)}
+                        </Link>
+                      ) : agentSlug ?? 'N/A'}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground/90">{run.started_at ? formatDateTime(run.started_at) : 'Not started'}</td>
+                    <td className="px-4 py-3 text-muted-foreground/90">
+                      <div className="flex items-center justify-between gap-3">
+                        <span>{run.completed_at ? formatDateTime(run.completed_at) : 'In progress'}</span>
+                        <Link className="inline-flex items-center gap-1 text-xs text-accent transition hover:text-accent/80" to={runsRoute(run.id)}>
+                          Inspect
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </Link>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

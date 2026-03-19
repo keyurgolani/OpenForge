@@ -14,7 +14,6 @@ import {
   FileText,
   Settings,
   Zap,
-  BookOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ConnectionStatus } from './ConnectionStatus';
@@ -28,12 +27,10 @@ interface PrimaryNavCollapsedProps {
     workspace: string;
     knowledge: string;
     chat: string;
-    profiles: string;
-    workflows: string;
-    missions: string;
+    agents: string;
+    automations: string;
     runs: string;
-    artifacts: string;
-    catalog: string;
+    outputs: string;
     settings: string;
   };
   onExpand?: () => void;
@@ -110,21 +107,15 @@ export function PrimaryNavCollapsed({
       {/* Bottom section: global and workspace-scoped */}
       <div className="h-1/2 flex flex-col items-center py-3 gap-1 glass-card" style={{ boxShadow: 'none' }}>
             <NavIcon
-              to={routes.profiles}
-              title="Profiles"
-              isActive={isActive('/profiles')}
+              to={routes.agents}
+              title="Agents"
+              isActive={isActive('/agents')}
               icon={<Bot className="w-4 h-4" />}
             />
             <NavIcon
-              to={routes.workflows}
-              title="Workflows"
-              isActive={isActive('/workflows')}
-              icon={<Folder className="w-4 h-4" />}
-            />
-            <NavIcon
-              to={routes.missions}
-              title="Missions"
-              isActive={isActive('/missions')}
+              to={routes.automations}
+              title="Automations"
+              isActive={isActive('/automations')}
               icon={<Zap className="w-4 h-4" />}
             />
             <NavIcon
@@ -134,16 +125,10 @@ export function PrimaryNavCollapsed({
               icon={<Activity className="w-4 h-4" />}
             />
             <NavIcon
-              to={routes.artifacts}
-              title="Artifacts"
-              isActive={isActive('/artifacts')}
+              to={routes.outputs}
+              title="Outputs"
+              isActive={isActive('/outputs')}
               icon={<FileText className="w-4 h-4" />}
-            />
-            <NavIcon
-              to={routes.catalog}
-              title="Catalog"
-              isActive={isActive('/catalog')}
-              icon={<BookOpen className="w-4 h-4" />}
             />
 
         <div className="flex-1" />

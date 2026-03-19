@@ -4,13 +4,11 @@ import { useNavigate } from 'react-router-dom'
 import {
     getOnboarding, advanceOnboarding, createProvider,
     testConnection, createWorkspace, listProviders,
-    listSettings, updateSetting, listSchedules, updateSchedule,
 } from '@/lib/api'
-import { Play, FileText, Eye, EyeOff, Loader2, Link, Star, X, Search, CheckCircle2, XCircle, Sliders, Sparkles, ArrowLeft, ArrowRight, Plus, Trash2, MessageSquare, Lock, Brain, Folder, Briefcase, Microscope, BookOpen, Target, Globe, Lightbulb, Wrench, Palette, BarChart3, Rocket, Shield, FlaskConical, Leaf, Key, Settings2, PenLine, Database, Sprout, Mic, SkipForward, Image, Volume2 } from 'lucide-react'
+import { Eye, EyeOff, FileText, Loader2, Search, CheckCircle2, XCircle, Sliders, Sparkles, ArrowLeft, ArrowRight, Plus, Trash2, MessageSquare, Lock, Brain, Folder, Briefcase, Microscope, BookOpen, Target, Globe, Lightbulb, Wrench, Palette, BarChart3, Rocket, Shield, FlaskConical, Leaf, Key, Settings2, PenLine, Database, Sprout } from 'lucide-react'
 import { ProviderIcon } from '@/components/shared/ProviderIcon'
 import { ModelOverrideSelect } from '@/components/shared/ModelOverrideSelect'
 import { isLocalProvider, sanitizeProviderDisplayName } from '@/lib/provider-display'
-import { ModelTypeSelector, type ConfiguredModel } from '@/components/shared/ModelTypeSelector'
 
 const PROVIDERS = [
     { id: 'openai', name: 'OpenAI', color: 'from-emerald-500/20 border-emerald-500/30', needsKey: true, needsUrl: false },
@@ -29,33 +27,7 @@ const PROVIDERS = [
     { id: 'custom-anthropic', name: 'Custom Anthropic-compat.', color: 'from-rose-500/20 border-rose-500/30', needsKey: false, needsUrl: true },
 ]
 
-const STEPS = [
-    'welcome', 'providers_setup',
-    'models_chat', 'models_vision', 'models_embedding',
-    'models_stt', 'models_tts', 'models_clip', 'models_pdf',
-    'workspace_create', 'automation_preferences',
-]
-
-// Model step metadata
-const MODEL_STEPS: Record<string, {
-    configType: 'chat' | 'vision' | 'embedding' | 'stt' | 'tts' | 'clip' | 'pdf'
-    configKey: string
-    title: string
-    description: string
-    icon: typeof MessageSquare
-    required: boolean
-}> = {
-    models_chat: { configType: 'chat', configKey: 'system_chat_models', title: 'Chat Models', description: 'Primary reasoning model for conversations and tasks. At least one chat model is required.', icon: MessageSquare, required: true },
-    models_vision: { configType: 'vision', configKey: 'system_vision_models', title: 'Vision Models', description: 'Models for analyzing images and visual content.', icon: Eye, required: false },
-    models_embedding: { configType: 'embedding', configKey: 'system_embedding_models', title: 'Embedding Models', description: 'Models for semantic search and knowledge indexing. Local models run on your hardware.', icon: Database, required: false },
-    models_stt: { configType: 'stt', configKey: 'system_stt_models', title: 'Speech-to-Text', description: 'Transcribe audio to text. Local Whisper models available via OpenForge Local.', icon: Mic, required: false },
-    models_tts: { configType: 'tts', configKey: 'system_tts_models', title: 'Text-to-Speech', description: 'Generate speech from text. Local Piper and Coqui models available.', icon: Volume2, required: false },
-    models_clip: { configType: 'clip', configKey: 'system_clip_models', title: 'Visual Search (CLIP)', description: 'Generate image embeddings for visual search across your knowledge.', icon: Image, required: false },
-    models_pdf: { configType: 'pdf', configKey: 'system_pdf_models', title: 'PDF Processing', description: 'Layout-aware PDF extraction. Local Marker model available for best results.', icon: FileText, required: false },
-}
-
-const AUTO_KNOWLEDGE_INTELLIGENCE_KEY = 'automation.auto_knowledge_intelligence_enabled'
-const AUTO_BOOKMARK_EXTRACTION_KEY = 'automation.auto_bookmark_content_extraction_enabled'
+const STEPS = ['welcome', 'providers_setup', 'workspace_create']
 
 export default function OnboardingPage() {
     const navigate = useNavigate()
@@ -134,33 +106,10 @@ export default function OnboardingPage() {
                     <WelcomeStep onNext={() => advance.mutate('providers_setup')} loading={advance.isPending} />
                 )}
                 {step === 'providers_setup' && (
-                    <ProvidersSetupStep onNext={() => advance.mutate('models_chat')} onBack={() => advance.mutate('welcome')} loading={advance.isPending} />
+                    <ProvidersSetupStep onNext={() => advance.mutate('workspace_create')} onBack={() => advance.mutate('welcome')} loading={advance.isPending} />
                 )}
-                {Object.keys(MODEL_STEPS).map(stepKey => {
-                    if (step !== stepKey) return null
-                    const meta = MODEL_STEPS[stepKey]
-                    const stepIdx = STEPS.indexOf(stepKey)
-                    const prevStep = STEPS[stepIdx - 1]
-                    const nextStep = STEPS[stepIdx + 1]
-                    return (
-                        <ModelConfigStep
-                            key={stepKey}
-                            meta={meta}
-                            onNext={() => advance.mutate(nextStep)}
-                            onBack={() => advance.mutate(prevStep)}
-                            onSkip={meta.required ? undefined : () => advance.mutate(nextStep)}
-                            loading={advance.isPending}
-                        />
-                    )
-                })}
                 {step === 'workspace_create' && (
                     <WorkspaceCreateStep onNext={async () => {
-                        await advance.mutateAsync('automation_preferences')
-                        qc.invalidateQueries({ queryKey: ['onboarding'] })
-                    }} onBack={() => advance.mutate('models_pdf')} loading={advance.isPending} />
-                )}
-                {step === 'automation_preferences' && (
-                    <AutomationPreferencesStep onNext={async () => {
                         await advance.mutateAsync('complete')
                         window.dispatchEvent(new Event('openforge:onboarding-complete'))
                         qc.fetchQuery({
@@ -169,7 +118,7 @@ export default function OnboardingPage() {
                         }).then((ws: { id: string }[]) => {
                             if (ws.length > 0) navigate(`/w/${ws[0].id}`)
                         })
-                    }} onBack={() => advance.mutate('workspace_create')} loading={advance.isPending} />
+                    }} onBack={() => advance.mutate('providers_setup')} loading={advance.isPending} />
                 )}
             </div>
         </div>
@@ -376,262 +325,6 @@ function ProvidersSetupStep({ onNext, onBack, loading }: { onNext: () => void; o
                 </button>
             </div>
         </div>
-    )
-}
-
-function ModelConfigStep({ meta, onNext, onBack, onSkip, loading }: {
-    meta: typeof MODEL_STEPS[keyof typeof MODEL_STEPS]
-    onNext: () => void
-    onBack: () => void
-    onSkip?: () => void
-    loading: boolean
-}) {
-    const qc = useQueryClient()
-    const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: listSettings })
-
-    const configuredModels: ConfiguredModel[] = (() => {
-        const raw = settings?.find((s: any) => s.key === meta.configKey)?.value
-        if (!raw) return []
-        try { return typeof raw === 'string' ? JSON.parse(raw) : (Array.isArray(raw) ? raw : []) } catch { return [] }
-    })()
-
-    const handleModelsChange = async (models: ConfiguredModel[]) => {
-        await updateSetting(meta.configKey, { value: JSON.stringify(models), category: 'llm' })
-        qc.invalidateQueries({ queryKey: ['settings'] })
-    }
-
-    const Icon = meta.icon
-
-    return (
-        <div className="glass-card shadow-glass-lg p-6 space-y-5 animate-fade-in border border-accent/20">
-            <div className="text-center space-y-2">
-                <div className="w-12 h-12 rounded-2xl bg-accent/20 border border-accent/30 flex items-center justify-center mx-auto">
-                    <Icon className="w-6 h-6 text-accent" />
-                </div>
-                <h2 className="text-lg font-bold">{meta.title}</h2>
-                <p className="text-xs text-muted-foreground">{meta.description}</p>
-                {!meta.required && (
-                    <p className="text-[11px] text-muted-foreground/70 italic">This step is optional — you can configure it later in Settings.</p>
-                )}
-            </div>
-
-            <ModelTypeSelector
-                configType={meta.configType}
-                configuredModels={configuredModels}
-                onModelsChange={handleModelsChange}
-                compact
-            />
-
-            <div className="flex gap-3">
-                <button className="btn-ghost justify-center py-3 px-4" onClick={onBack} disabled={loading}>
-                    <ArrowLeft className="w-4 h-4" /> Back
-                </button>
-                {onSkip && configuredModels.length === 0 ? (
-                    <button
-                        className="btn-ghost flex-1 justify-center py-3 border border-border/50"
-                        onClick={onSkip}
-                        disabled={loading}
-                    >
-                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <SkipForward className="w-4 h-4" />}
-                        Skip
-                    </button>
-                ) : (
-                    <button
-                        className="btn-primary flex-1 justify-center py-3"
-                        onClick={onNext}
-                        disabled={loading || (meta.required && configuredModels.length === 0)}
-                    >
-                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                        {meta.required && configuredModels.length === 0 ? 'Add at least one model' : 'Continue'}
-                        <ArrowRight className="w-4 h-4" />
-                    </button>
-                )}
-            </div>
-        </div>
-    )
-}
-
-const parseBooleanSetting = (value: unknown, fallback: boolean) => {
-    if (typeof value === 'boolean') return value
-    if (typeof value === 'number') return value !== 0
-    if (typeof value === 'string') {
-        const normalized = value.trim().toLowerCase()
-        if (['1', 'true', 'yes', 'on', 'enabled'].includes(normalized)) return true
-        if (['0', 'false', 'no', 'off', 'disabled'].includes(normalized)) return false
-    }
-    return fallback
-}
-
-function AutomationPreferencesStep({ onNext, onBack, loading }: { onNext: () => void | Promise<void>; onBack: () => void; loading: boolean }) {
-    const qc = useQueryClient()
-    const [saving, setSaving] = useState(false)
-    const [error, setError] = useState<string | null>(null)
-    const [autoIntelligenceEnabled, setAutoIntelligenceEnabled] = useState(true)
-    const [autoBookmarkExtractionEnabled, setAutoBookmarkExtractionEnabled] = useState(true)
-    const [scheduledJobsEnabled, setScheduledJobsEnabled] = useState(true)
-    const [initialized, setInitialized] = useState(false)
-
-    const { data: settings = [] } = useQuery<Array<{ key: string; value: unknown }>>({
-        queryKey: ['app-settings'],
-        queryFn: listSettings,
-    })
-    const { data: schedules = [] } = useQuery<Array<{ id: string; enabled: boolean; default_enabled: boolean }>>({
-        queryKey: ['task-schedules'],
-        queryFn: listSchedules,
-    })
-
-    useEffect(() => {
-        if (initialized) return
-        const autoIntelligenceSetting = settings.find(item => item.key === AUTO_KNOWLEDGE_INTELLIGENCE_KEY)
-        const autoBookmarkSetting = settings.find(item => item.key === AUTO_BOOKMARK_EXTRACTION_KEY)
-        const hasEnabledSchedule = schedules.some(schedule => schedule.enabled)
-
-        if (autoIntelligenceSetting) {
-            setAutoIntelligenceEnabled(parseBooleanSetting(autoIntelligenceSetting.value, true))
-        }
-        if (autoBookmarkSetting) {
-            setAutoBookmarkExtractionEnabled(parseBooleanSetting(autoBookmarkSetting.value, true))
-        }
-        if (schedules.length > 0) {
-            setScheduledJobsEnabled(hasEnabledSchedule)
-        }
-        if (settings.length > 0 || schedules.length > 0) {
-            setInitialized(true)
-        }
-    }, [initialized, schedules, settings])
-
-    const apply = async () => {
-        setSaving(true)
-        setError(null)
-        try {
-            await Promise.all([
-                updateSetting(AUTO_KNOWLEDGE_INTELLIGENCE_KEY, {
-                    value: autoIntelligenceEnabled,
-                    category: 'automation',
-                    sensitive: false,
-                }),
-                updateSetting(AUTO_BOOKMARK_EXTRACTION_KEY, {
-                    value: autoBookmarkExtractionEnabled,
-                    category: 'automation',
-                    sensitive: false,
-                }),
-            ])
-
-            if (schedules.length > 0) {
-                await Promise.all(
-                    schedules.map(schedule =>
-                        updateSchedule(schedule.id, {
-                            enabled: scheduledJobsEnabled ? !!schedule.default_enabled : false,
-                        }),
-                    ),
-                )
-            }
-
-            qc.invalidateQueries({ queryKey: ['app-settings'] })
-            qc.invalidateQueries({ queryKey: ['task-schedules'] })
-            await onNext()
-        } catch (reason: unknown) {
-            const err = reason as { response?: { data?: { detail?: string } }; message?: string }
-            setError(err?.response?.data?.detail ?? err?.message ?? 'Failed to save automation preferences')
-        } finally {
-            setSaving(false)
-        }
-    }
-
-    return (
-        <div className="glass-card shadow-glass-lg border border-accent/20 p-8 space-y-6 animate-slide-up">
-            <div>
-                <h2 className="text-xl font-bold mb-1">Automation Preferences</h2>
-                <p className="text-muted-foreground text-sm leading-relaxed">
-                    Choose which background automations run by default. You can fine-tune schedule timing later in Settings.
-                </p>
-            </div>
-
-            <div className="space-y-3">
-                <button
-                    type="button"
-                    className="w-full rounded-xl border border-border/60 bg-muted/20 p-4 text-left"
-                    onClick={() => setAutoIntelligenceEnabled(prev => !prev)}
-                >
-                    <div className="flex items-start gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-accent/15 border border-accent/30 flex items-center justify-center text-accent">
-                            <Star className="w-4 h-4" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium">Automatic Intelligence Generation</p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                                Auto-generate AI title, summary, tags, and insights when new knowledge is created.
-                            </p>
-                        </div>
-                        <TogglePill checked={autoIntelligenceEnabled} />
-                    </div>
-                </button>
-
-                <button
-                    type="button"
-                    className="w-full rounded-xl border border-border/60 bg-muted/20 p-4 text-left"
-                    onClick={() => setAutoBookmarkExtractionEnabled(prev => !prev)}
-                >
-                    <div className="flex items-start gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-blue-500/15 border border-blue-400/30 flex items-center justify-center text-blue-300">
-                            <Link className="w-4 h-4" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium">Automatic Bookmark Content Extraction</p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                                Auto-extract readable content when bookmark knowledge is created or discovered in chat links.
-                            </p>
-                        </div>
-                        <TogglePill checked={autoBookmarkExtractionEnabled} />
-                    </div>
-                </button>
-
-                <button
-                    type="button"
-                    className="w-full rounded-xl border border-border/60 bg-muted/20 p-4 text-left"
-                    onClick={() => setScheduledJobsEnabled(prev => !prev)}
-                >
-                    <div className="flex items-start gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center text-emerald-300">
-                            <Play className="w-4 h-4" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium">Scheduled Jobs</p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                                Keep periodic jobs active. You can change intervals and per-job scheduling from Settings.
-                            </p>
-                        </div>
-                        <TogglePill checked={scheduledJobsEnabled} />
-                    </div>
-                </button>
-            </div>
-
-            {error && (
-                <p className="text-xs text-red-400">{error}</p>
-            )}
-
-            <div className="flex gap-3">
-                <button className="btn-ghost justify-center py-3 px-4" onClick={onBack} disabled={saving || loading}>
-                    <ArrowLeft className="w-4 h-4" /> Back
-                </button>
-                <button className="btn-primary flex-1 justify-center py-3" onClick={apply} disabled={saving || loading}>
-                    {(saving || loading) ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                    Save Preferences & Launch
-                    <ArrowRight className="w-4 h-4" />
-                </button>
-            </div>
-        </div>
-    )
-}
-
-function TogglePill({ checked }: { checked: boolean }) {
-    return (
-        <span
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${checked ? 'bg-accent' : 'bg-muted/70'}`}
-            aria-hidden
-        >
-            <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-5' : 'translate-x-0.5'}`} />
-        </span>
     )
 }
 

@@ -101,23 +101,6 @@ class RunService:
             "created_at": instance.created_at,
         }
 
-    async def _coordinator(self):
-        from openforge.domains.artifacts.service import ArtifactService
-        from openforge.domains.policies.approval_service import ApprovalService
-        from openforge.domains.workflows.service import WorkflowService
-        from openforge.runtime.checkpoint_store import CheckpointStore
-        from openforge.runtime.coordinator import RuntimeCoordinator
-        from openforge.runtime.event_publisher import EventPublisher
-
-        return RuntimeCoordinator(
-            db=self.db,
-            workflow_service=WorkflowService(self.db),
-            artifact_service=ArtifactService(self.db),
-            approval_service=ApprovalService(self.db),
-            checkpoint_store=CheckpointStore(self.db),
-            event_publisher=EventPublisher(self.db),
-        )
-
     async def list_runs(
         self,
         skip: int = 0,
@@ -125,6 +108,8 @@ class RunService:
         workspace_id: UUID | None = None,
         status: str | None = None,
         run_type: str | None = None,
+        agent_id: UUID | None = None,
+        automation_id: UUID | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         query = select(RunModel).order_by(RunModel.created_at.desc())
         count_query = select(func.count()).select_from(RunModel)
@@ -137,6 +122,12 @@ class RunService:
         if run_type is not None:
             query = query.where(RunModel.run_type == run_type)
             count_query = count_query.where(RunModel.run_type == run_type)
+        if agent_id is not None:
+            query = query.where(RunModel.composite_metadata["agent_id"].astext == str(agent_id))
+            count_query = count_query.where(RunModel.composite_metadata["agent_id"].astext == str(agent_id))
+        if automation_id is not None:
+            query = query.where(RunModel.composite_metadata["automation_id"].astext == str(automation_id))
+            count_query = count_query.where(RunModel.composite_metadata["automation_id"].astext == str(automation_id))
         rows = (await self.db.execute(query.offset(skip).limit(limit))).scalars().all()
         total = await self.db.scalar(count_query)
         return [self._serialize_run(row) for row in rows], int(total or 0)
@@ -273,24 +264,55 @@ class RunService:
             "merge_outcomes": merge_outcomes,
         }
 
-    async def start_run(self, run_data: dict[str, Any]) -> dict[str, Any] | None:
-        coordinator = await self._coordinator()
-        run_id = await coordinator.execute_workflow(
-            workflow_id=run_data["workflow_id"],
-            workflow_version_id=run_data.get("workflow_version_id"),
-            input_payload=run_data.get("input_payload", {}),
-            workspace_id=run_data["workspace_id"],
-            parent_run_id=run_data.get("parent_run_id"),
-            spawned_by_step_id=run_data.get("spawned_by_step_id"),
-        )
-        return await self.get_run(run_id)
+    async def replay_from_checkpoint(self, run_id: UUID, from_step: int) -> dict[str, Any] | None:
+        """Create a new run replayed from a checkpoint at the given step index."""
+        original = await self.db.get(RunModel, run_id)
+        if original is None:
+            return None
 
-    async def resume_run(self, run_id: UUID, state_patch: dict[str, Any] | None = None) -> dict[str, Any] | None:
-        coordinator = await self._coordinator()
-        await coordinator.resume_run(run_id, state_patch=state_patch or {})
-        return await self.get_run(run_id)
+        # Find the checkpoint for the step at from_step - 1 (the state before from_step)
+        checkpoint_step_index = max(from_step - 1, 0)
+        steps = await self.list_steps(run_id)
+        target_step = None
+        for step in steps:
+            if step["step_index"] == checkpoint_step_index:
+                target_step = step
+                break
+
+        state_snapshot = {}
+        if target_step and target_step.get("checkpoint_id"):
+            checkpoint = await self.db.get(CheckpointModel, target_step["checkpoint_id"])
+            if checkpoint:
+                state_snapshot = checkpoint.state_snapshot or {}
+        elif from_step == 0:
+            state_snapshot = original.state_snapshot or {}
+
+        new_composite = dict(original.composite_metadata or {})
+        new_composite["replayed_from_run_id"] = str(run_id)
+        new_composite["replayed_from_step"] = from_step
+
+        new_run = RunModel(
+            run_type=original.run_type,
+            workflow_id=original.workflow_id,
+            workflow_version_id=getattr(original, "workflow_version_id", None),
+            mission_id=original.mission_id,
+            parent_run_id=run_id,
+            root_run_id=getattr(original, "root_run_id", None) or run_id,
+            workspace_id=original.workspace_id,
+            status="pending",
+            input_payload=original.input_payload or {},
+            state_snapshot=state_snapshot,
+            composite_metadata=new_composite,
+        )
+        self.db.add(new_run)
+        await self.db.commit()
+        await self.db.refresh(new_run)
+        return self._serialize_run(new_run)
 
     async def cancel_run(self, run_id: UUID) -> dict[str, Any] | None:
-        coordinator = await self._coordinator()
-        await coordinator.cancel_run(run_id)
+        """Cancel a run by setting its status to cancelled."""
+        run = await self.db.get(RunModel, run_id)
+        if run and run.status in ("pending", "queued", "running"):
+            run.status = "cancelled"
+            await self.db.flush()
         return await self.get_run(run_id)

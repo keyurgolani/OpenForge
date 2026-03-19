@@ -225,15 +225,11 @@ export const EMPTY_MCP_FORM = {
 }
 
 // ── Settings tabs ───────────────────────────────────────────────────────────
-export const SETTINGS_TABS: SettingsTab[] = ['workspaces', 'llm', 'prompts', 'policies', 'approvals', 'jobs', 'skills', 'mcp', 'audit', 'export', 'import']
+export const SETTINGS_TABS: SettingsTab[] = ['workspaces', 'llm', 'jobs', 'skills', 'mcp', 'audit', 'export', 'import']
 
 export const toSettingsTab = (value: string | null): SettingsTab => {
     const normalized = value === 'schedules'
         ? 'jobs'
-        : value === 'tools'
-            ? 'policies'
-            : value === 'hitl'
-                ? 'approvals'
-                : value
+        : value
     return SETTINGS_TABS.includes(normalized as SettingsTab) ? (normalized as SettingsTab) : 'workspaces'
 }

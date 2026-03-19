@@ -48,9 +48,19 @@ docker compose exec postgres pg_isready
 **Symptom:** Messages are sent but no response appears.
 
 **Common causes:**
-1. **No LLM provider configured** — Go to Settings > AI Models > Providers and add at least one provider.
+1. **No LLM provider configured** — Go to Settings > AI Models and add at least one provider.
 2. **Invalid API key** — Click "Test Connection" on your provider to verify the key works.
 3. **Celery worker not running** — Check `docker compose logs celery-worker`. The worker must be healthy for background agent execution.
+
+### Agent compilation failed
+
+**Symptom:** Agent shows "compilation failed" status.
+
+**Common causes:**
+1. **Blueprint syntax error** — Check the agent detail page for the `compilation_error` field. Fix the YAML frontmatter or Markdown body.
+2. **Database issue** — Check backend logs for compilation errors: `docker compose logs openforge | grep "compiler"`.
+
+**Fix:** Edit the agent blueprint to fix syntax issues. Compilation re-triggers automatically on save.
 
 ### Responses are slow
 
@@ -73,7 +83,7 @@ docker compose logs tool-server
 
 **Common causes:**
 1. **Tool server not running** — Restart with `docker compose restart tool-server`.
-2. **Tool blocked by policy** — Check Settings > Policies for blocked tools.
+2. **Tool blocked by permission** — Check Settings for blocked tools.
 3. **Workspace path issues** — Ensure workspace volumes are correctly mounted.
 
 ### WebSocket disconnections
@@ -84,6 +94,20 @@ docker compose logs tool-server
 1. **Reverse proxy timeout** — If using nginx, set `proxy_read_timeout 3600s` for the `/ws/` location.
 2. **Network instability** — The frontend auto-reconnects with exponential backoff. Wait a moment.
 3. **Backend restart** — If the backend restarts, WebSocket connections are dropped. Refresh the page.
+
+### Strategy execution errors
+
+**Symptom:** Strategy-based runs (researcher, builder, etc.) fail.
+
+**Common causes:**
+1. **Strategy not registered** — Ensure the strategy name in the blueprint matches a registered strategy. Available: chat, researcher, reviewer, builder, watcher, coordinator.
+2. **Missing provider config** — Strategy runs need a valid LLM provider resolved for the workspace.
+
+**Check:**
+```bash
+docker compose logs openforge | grep "strategy"
+docker compose logs celery-worker | grep "strategy"
+```
 
 ---
 
@@ -119,9 +143,52 @@ docker compose logs openforge | grep -i "upload\|error"
 **Symptom:** Bookmarks are saved but content is not extracted.
 
 **Common causes:**
-1. **Auto-extraction disabled** — Enable it in Settings or during onboarding.
+1. **Auto-extraction disabled** — Enable it in Settings > Pipelines or during onboarding.
 2. **Site blocks crawling** — Some websites block automated content extraction.
 3. **SearXNG not running** — Some extraction flows use the SearXNG service. Check `docker compose logs searxng`.
+
+---
+
+## Automation Issues
+
+### Automation not triggering
+
+**Symptom:** Automation is configured but runs are not being created.
+
+**Common causes:**
+1. **Wrong status** — Automation must be in "active" state. Check if it's still in "draft" or "paused".
+2. **Budget exhausted** — Check if `max_runs_per_day` or `max_concurrent_runs` limits have been reached.
+3. **Cooldown active** — After a failure, the `cooldown_seconds_after_failure` setting may be preventing new runs.
+4. **Agent not found** — The referenced agent slug must exist and have a compiled spec.
+
+### Automation runs failing
+
+**Symptom:** Automation triggers but runs end in "failed" status.
+
+**Check:** View the run detail page for the error message and timeline.
+
+**Common causes:**
+1. **Agent compilation outdated** — Recompile the agent by editing and saving its blueprint.
+2. **Provider not available** — The LLM provider may be down or the API key expired.
+3. **Token budget exceeded** — The automation's `max_token_budget_per_day` may have been reached.
+
+---
+
+## Output Issues
+
+### Outputs not being created
+
+**Symptom:** Runs complete but no outputs appear.
+
+**Common causes:**
+1. **Strategy doesn't emit outputs** — Not all strategies produce outputs. The builder strategy is designed for output creation.
+2. **Output routing not configured** — Check the automation's output routing config.
+
+### Output versioning issues
+
+**Symptom:** Output versions are not being created as expected.
+
+**Fix:** Check the output detail page for version history. Each material change should create a new version. If versions are missing, check the backend logs for errors in the versioning system.
 
 ---
 
@@ -221,6 +288,11 @@ docker compose up -d
 # Rebuild specific service
 docker compose build openforge
 docker compose up -d openforge
+
+# Rebuild tool server after tool changes
+docker compose build tool-server && docker compose up -d tool-server
+# Then sync tools:
+curl -X POST http://localhost:3100/api/v1/tools/sync
 ```
 
 ### Resetting data
@@ -232,7 +304,7 @@ rm -rf ./data
 docker compose up -d
 ```
 
-> **Warning:** This permanently deletes all data including knowledge, conversations, and settings.
+> **Warning:** This permanently deletes all data including knowledge, conversations, agents, automations, and settings.
 
 ### Volume permissions
 

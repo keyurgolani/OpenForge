@@ -1,0 +1,27 @@
+category: git
+description: "Version control operations"
+tools:
+  - name: git.status
+    description: "Show the working tree status"
+    risk_category: safe
+    confirm_by_default: false
+  - name: git.log
+    description: "Show commit logs"
+    risk_category: safe
+    confirm_by_default: false
+  - name: git.diff
+    description: "Show changes between commits or working tree"
+    risk_category: safe
+    confirm_by_default: false
+  - name: git.add
+    description: "Stage files for commit"
+    risk_category: moderate
+    confirm_by_default: false
+  - name: git.commit
+    description: "Create a new commit"
+    risk_category: moderate
+    confirm_by_default: true
+  - name: git.init
+    description: "Initialize a new git repository"
+    risk_category: moderate
+    confirm_by_default: true

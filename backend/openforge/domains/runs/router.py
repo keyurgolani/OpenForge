@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from openforge.db.postgres import get_db
 
@@ -37,6 +37,8 @@ async def list_runs(
     workspace_id: UUID | None = None,
     status: str | None = None,
     run_type: str | None = None,
+    agent_id: UUID | None = None,
+    automation_id: UUID | None = None,
     service: RunService = Depends(get_run_service),
 ):
     list_kwargs = {"skip": skip, "limit": limit}
@@ -46,6 +48,10 @@ async def list_runs(
         list_kwargs["status"] = status
     if run_type is not None:
         list_kwargs["run_type"] = run_type
+    if agent_id is not None:
+        list_kwargs["agent_id"] = agent_id
+    if automation_id is not None:
+        list_kwargs["automation_id"] = automation_id
     runs, total = await service.list_runs(**list_kwargs)
     return {"runs": runs, "total": total}
 
@@ -105,6 +111,18 @@ async def cancel_run(run_id: UUID, service: RunService = Depends(get_run_service
     if not run:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
     return run
+
+
+@router.post("/{run_id}/replay", response_model=RunResponse, status_code=status.HTTP_201_CREATED)
+async def replay_run(
+    run_id: UUID,
+    from_step: int = Query(..., ge=0),
+    service: RunService = Depends(get_run_service),
+):
+    result = await service.replay_from_checkpoint(run_id, from_step)
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+    return result
 
 
 @router.get("/{run_id}/steps", response_model=RunStepListResponse)

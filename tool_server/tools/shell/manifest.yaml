@@ -1,0 +1,11 @@
+category: shell
+description: "Execute shell commands and scripts"
+tools:
+  - name: shell.execute
+    description: "Execute a shell command"
+    risk_category: destructive
+    confirm_by_default: true
+  - name: shell.execute_python
+    description: "Execute a Python script"
+    risk_category: destructive
+    confirm_by_default: true

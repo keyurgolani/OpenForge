@@ -9,7 +9,6 @@ from pathlib import Path
 
 from openforge.common.config import get_settings
 from openforge.services.task_scheduler import task_scheduler
-from openforge.domains.triggers.scheduler import trigger_scheduler
 
 settings = get_settings()
 
@@ -234,18 +233,17 @@ async def lifespan(app: FastAPI):
 
     asyncio.create_task(asyncio.to_thread(_migrate_qdrant_pptx_to_slides))
 
-    # Register system profiles and load persisted profiles
+    # Seed system agents (router, council, optimizer)
     try:
         from openforge.db.postgres import AsyncSessionLocal
-        from openforge.runtime.profile_registry import profile_registry
+        from openforge.domains.agents.service import AgentService
 
-        profile_registry.register_system_profiles()
         async with AsyncSessionLocal() as db:
-            await profile_registry.ensure_system_profiles(db)
-            await profile_registry.load_profiles(db)
-        logger.info("Profile registry initialized.")
+            agent_service = AgentService(db)
+            await agent_service.ensure_system_agents()
+        logger.info("System agents seeded.")
     except Exception as e:
-        logger.warning("Profile registry initialization failed (continuing): %s", e)
+        logger.warning("System agent seeding skipped: %s", e)
 
     # Ensure the OpenForge Local system provider exists.
     try:
@@ -258,29 +256,17 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("OpenForge Local provider seeding skipped: %s", e)
 
-    # Seed the managed prompt catalog and default trust policies.
+    # Seed agent & automation templates
     try:
         from openforge.db.postgres import AsyncSessionLocal
-        from openforge.domains.policies.service import seed_default_policies
-        from openforge.domains.prompts.service import seed_prompt_catalog
+        from openforge.templates import seed_agent_templates, seed_automation_templates
 
         async with AsyncSessionLocal() as db:
-            await seed_prompt_catalog(db)
-            await seed_default_policies(db)
-        logger.info("Prompt and policy catalog seeded.")
+            await seed_agent_templates(db)
+            await seed_automation_templates(db)
+        logger.info("Agent and automation templates seeded.")
     except Exception as e:
-        logger.warning("Prompt/policy seeding skipped: %s", e)
-
-    # Seed curated catalog (profiles, workflows, missions).
-    try:
-        from openforge.db.postgres import AsyncSessionLocal
-        from openforge.domains.catalog.seeder import seed_curated_catalog
-
-        async with AsyncSessionLocal() as db:
-            await seed_curated_catalog(db)
-        logger.info("Curated catalog seeded.")
-    except Exception as e:
-        logger.warning("Catalog seeding skipped: %s", e)
+        logger.warning("Template seeding skipped: %s", e)
 
     # Enable agent mode on all existing workspaces (idempotent)
     try:
@@ -296,28 +282,35 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.debug("Workspace agent_enabled migration skipped: %s", e)
 
-    # Start Redis agent relay (bridges Celery worker events to WebSocket)
-    relay_task = None
+    # Backfill: ensure every workspace has a default AgentModel
     try:
-        from openforge.runtime.stream_events import start_agent_relay
-        relay_task = asyncio.create_task(start_agent_relay())
-        logger.info("Agent relay started.")
+        from openforge.db.postgres import AsyncSessionLocal
+        from openforge.db.models import Workspace
+        from openforge.domains.agents.service import AgentService
+        from sqlalchemy import select as sa_select
+
+        async with AsyncSessionLocal() as db:
+            workspaces = (await db.execute(
+                sa_select(Workspace).where(Workspace.default_agent_id == None)  # noqa: E711
+            )).scalars().all()
+            if workspaces:
+                agent_service = AgentService(db)
+                for ws in workspaces:
+                    try:
+                        agent = await agent_service.ensure_default_agent(ws.name)
+                        ws.default_agent_id = agent["id"]
+                    except Exception as ws_e:
+                        logger.warning("Default agent backfill failed for workspace %s: %s", ws.id, ws_e)
+                await db.commit()
+                logger.info("Backfilled default agents for %d workspaces.", len(workspaces))
     except Exception as e:
-        logger.warning("Agent relay failed to start (continuing): %s", e)
+        logger.warning("Workspace default agent backfill skipped: %s", e)
 
     logger.info("OpenForge ready.")
     await task_scheduler.start()
-    await trigger_scheduler.start()
     yield
 
     logger.info("OpenForge shutting down...")
-    if relay_task:
-        relay_task.cancel()
-        try:
-            await relay_task
-        except asyncio.CancelledError:
-            pass
-    await trigger_scheduler.stop()
     await task_scheduler.stop()
     try:
         from openforge.db.redis_client import close_redis

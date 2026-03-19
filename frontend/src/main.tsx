@@ -16,18 +16,14 @@ const OnboardingPage = lazy(() => import('./pages/OnboardingPage'))
 const AppShell = lazy(() => import('./pages/AppShell'))
 const DashboardPage = lazy(() => import('./pages/DashboardPage'))
 const WorkspaceHome = lazy(() => import('./pages/WorkspaceHome'))
-const ProfilesPage = lazy(() => import('./pages/ProfilesPage'))
-const ProfileDetailPage = lazy(() => import('./pages/ProfileDetailPage'))
-const WorkflowsPage = lazy(() => import('./pages/WorkflowsPage'))
-const WorkflowDetailPage = lazy(() => import('./pages/WorkflowDetailPage'))
-const MissionsPage = lazy(() => import('./pages/MissionsPage'))
-const MissionDetailPage = lazy(() => import('./pages/MissionDetailPage'))
+const AgentsPage = lazy(() => import('./pages/AgentsPage'))
+const AgentDetailPage = lazy(() => import('./pages/AgentDetailPage'))
+const AutomationsPage = lazy(() => import('./pages/AutomationsPage'))
+const AutomationDetailPage = lazy(() => import('./pages/AutomationDetailPage'))
 const RunsPage = lazy(() => import('./pages/RunsPage'))
 const RunDetailPage = lazy(() => import('./pages/RunDetailPage'))
-const ArtifactsPage = lazy(() => import('./pages/ArtifactsPage'))
-const ArtifactDetailPage = lazy(() => import('./pages/ArtifactDetailPage'))
-const CatalogPage = lazy(() => import('./pages/CatalogPage'))
-const OperatorDashboardPage = lazy(() => import('./pages/OperatorDashboardPage'))
+const OutputsPage = lazy(() => import('./pages/OutputsPage'))
+const OutputDetailPage = lazy(() => import('./pages/OutputDetailPage'))
 const EditorDispatcher = lazy(() => import('./components/knowledge/editors/EditorDispatcher'))
 const WorkspaceAgentPage = lazy(() => import('./pages/WorkspaceAgentPage'))
 const SearchPage = lazy(() => import('./pages/SearchPage'))
@@ -43,12 +39,8 @@ const EmbeddingPage = lazy(() => import('./pages/settings/models/embedding/Embed
 const AudioPage = lazy(() => import('./pages/settings/models/audio/AudioPage'))
 const CLIPPage = lazy(() => import('./pages/settings/models/clip/CLIPPage'))
 const PDFPage = lazy(() => import('./pages/settings/models/pdf/PDFPage'))
-const PromptsSettingsPage = lazy(() => import('./pages/settings/prompts/PromptsPage'))
-const PoliciesSettingsPage = lazy(() => import('./pages/settings/policies/PoliciesPage'))
-const ApprovalsSettingsPage = lazy(() => import('./pages/settings/approvals/ApprovalsPage'))
 const PipelinesSettingsPage = lazy(() => import('./pages/settings/pipelines/PipelinesPage'))
 const ToolsSettingsPage = lazy(() => import('./pages/settings/tools/ToolsPage'))
-const BundlesSettingsPage = lazy(() => import('./pages/settings/bundles/BundlesPage'))
 const SkillsSettingsPage = lazy(() => import('./pages/settings/skills/SkillsPage'))
 const MCPSettingsPage = lazy(() => import('./pages/settings/mcp/MCPPage'))
 const AuditSettingsPage = lazy(() => import('./pages/settings/audit/AuditPage'))
@@ -193,11 +185,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                         <WorkspaceAgentPage />
                                     </ErrorBoundary>
                                 } />
-                                <Route path="operator" element={
-                                    <ErrorBoundary>
-                                        <OperatorDashboardPage />
-                                    </ErrorBoundary>
-                                } />
                                 <Route path="search" element={
                                     <ErrorBoundary>
                                         <SearchPage />
@@ -209,17 +196,14 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                     <AppShell />
                                 </ErrorBoundary>
                             }>
-                                <Route path="/profiles" element={<ErrorBoundary><ProfilesPage /></ErrorBoundary>} />
-                                <Route path="/profiles/:profileId" element={<ErrorBoundary><ProfileDetailPage /></ErrorBoundary>} />
-                                <Route path="/workflows" element={<ErrorBoundary><WorkflowsPage /></ErrorBoundary>} />
-                                <Route path="/workflows/:workflowId" element={<ErrorBoundary><WorkflowDetailPage /></ErrorBoundary>} />
-                                <Route path="/missions" element={<ErrorBoundary><MissionsPage /></ErrorBoundary>} />
-                                <Route path="/missions/:missionId" element={<ErrorBoundary><MissionDetailPage /></ErrorBoundary>} />
+                                <Route path="/agents" element={<ErrorBoundary><AgentsPage /></ErrorBoundary>} />
+                                <Route path="/agents/:agentId" element={<ErrorBoundary><AgentDetailPage /></ErrorBoundary>} />
+                                <Route path="/automations" element={<ErrorBoundary><AutomationsPage /></ErrorBoundary>} />
+                                <Route path="/automations/:automationId" element={<ErrorBoundary><AutomationDetailPage /></ErrorBoundary>} />
                                 <Route path="/runs" element={<ErrorBoundary><RunsPage /></ErrorBoundary>} />
                                 <Route path="/runs/:runId" element={<ErrorBoundary><RunDetailPage /></ErrorBoundary>} />
-                                <Route path="/artifacts" element={<ErrorBoundary><ArtifactsPage /></ErrorBoundary>} />
-                                <Route path="/artifacts/:artifactId" element={<ErrorBoundary><ArtifactDetailPage /></ErrorBoundary>} />
-                                <Route path="/catalog" element={<ErrorBoundary><CatalogPage /></ErrorBoundary>} />
+                                <Route path="/outputs" element={<ErrorBoundary><OutputsPage /></ErrorBoundary>} />
+                                <Route path="/outputs/:outputId" element={<ErrorBoundary><OutputDetailPage /></ErrorBoundary>} />
                                 <Route path="/settings" element={<ErrorBoundary><SettingsLayout /></ErrorBoundary>}>
                                     <Route index element={<SettingsIndex />} />
                                     <Route path="workspaces" element={<ErrorBoundary><WorkspacesPage /></ErrorBoundary>} />
@@ -233,11 +217,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                         <Route path="clip" element={<ErrorBoundary><CLIPPage /></ErrorBoundary>} />
                                         <Route path="pdf" element={<ErrorBoundary><PDFPage /></ErrorBoundary>} />
                                     </Route>
-                                    <Route path="prompts" element={<ErrorBoundary><PromptsSettingsPage /></ErrorBoundary>} />
-                                    <Route path="policies" element={<ErrorBoundary><PoliciesSettingsPage /></ErrorBoundary>} />
                                     <Route path="tools" element={<ErrorBoundary><ToolsSettingsPage /></ErrorBoundary>} />
-                                    <Route path="bundles" element={<ErrorBoundary><BundlesSettingsPage /></ErrorBoundary>} />
-                                    <Route path="approvals" element={<ErrorBoundary><ApprovalsSettingsPage /></ErrorBoundary>} />
                                     <Route path="pipelines" element={<ErrorBoundary><PipelinesSettingsPage /></ErrorBoundary>} />
                                     <Route path="skills" element={<ErrorBoundary><SkillsSettingsPage /></ErrorBoundary>} />
                                     <Route path="mcp" element={<ErrorBoundary><MCPSettingsPage /></ErrorBoundary>} />

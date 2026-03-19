@@ -2,29 +2,26 @@ import type { ReactNode } from 'react'
 import { useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
-  BookOpenText, Boxes, FileOutput, MessageSquare, Rocket, Sparkles, Workflow,
-  ArrowRight, Library,
+  BookOpenText, Bot, FileOutput, MessageSquare, Zap, Boxes,
+  ArrowRight,
 } from 'lucide-react'
 
 import ErrorState from '@/components/shared/ErrorState'
 import PageHeader from '@/components/shared/PageHeader'
 import LoadingState from '@/components/shared/LoadingState'
 import StatusBadge from '@/components/shared/StatusBadge'
-import { useArtifactsQuery } from '@/features/artifacts'
+import { useOutputsQuery } from '@/features/outputs'
 import { type KnowledgeSummaryItem, useKnowledgeSummaryQuery } from '@/features/knowledge'
-import { useMissionsQuery } from '@/features/missions'
-import { useProfilesQuery } from '@/features/profiles'
+import { useAgentsQuery } from '@/features/agents'
+import { useAutomationsQuery } from '@/features/automations'
 import { useRunsQuery } from '@/features/runs'
-import { useWorkflowsQuery } from '@/features/workflows'
 import {
-  artifactsRoute,
-  catalogRoute,
+  agentsRoute,
+  outputsRoute,
+  automationsRoute,
   chatRoute,
   knowledgeRoute,
-  missionsRoute,
-  profilesRoute,
   runsRoute,
-  workflowsRoute,
 } from '@/lib/routes'
 
 /* ---------- Knowledge type colour map ---------- */
@@ -88,31 +85,28 @@ function SuggestionLink({ to, children }: { to: string; children: ReactNode }) {
 export default function DashboardPage() {
   const { workspaceId = '' } = useParams<{ workspaceId: string }>()
 
-  const profilesQuery = useProfilesQuery({ limit: 6 })
-  const workflowsQuery = useWorkflowsQuery({ limit: 6 })
-  const missionsQuery = useMissionsQuery({ limit: 6 })
+  const agentsQuery = useAgentsQuery({ limit: 6 })
+  const automationsQuery = useAutomationsQuery({ limit: 6 })
   const runsQuery = useRunsQuery({ limit: 6 })
-  const artifactsQuery = useArtifactsQuery({ limit: 6 })
+  const outputsQuery = useOutputsQuery({ limit: 6 })
   // Fetch a larger page to compute per-type breakdowns client-side
   const knowledgeQuery = useKnowledgeSummaryQuery(workspaceId, 500)
   // Separate recent-only query for the list
   const recentKnowledgeQuery = useKnowledgeSummaryQuery(workspaceId, 6)
 
   const isLoading = [
-    profilesQuery.isLoading,
-    workflowsQuery.isLoading,
-    missionsQuery.isLoading,
+    agentsQuery.isLoading,
+    automationsQuery.isLoading,
     runsQuery.isLoading,
-    artifactsQuery.isLoading,
+    outputsQuery.isLoading,
     knowledgeQuery.isLoading,
   ].some(Boolean)
 
   const firstError = [
-    profilesQuery.error,
-    workflowsQuery.error,
-    missionsQuery.error,
+    agentsQuery.error,
+    automationsQuery.error,
     runsQuery.error,
-    artifactsQuery.error,
+    outputsQuery.error,
     knowledgeQuery.error,
   ].find(Boolean)
 
@@ -136,11 +130,10 @@ export default function DashboardPage() {
 
   const knowledgeTotal = knowledgeQuery.data?.total ?? 0
   const recentItems: KnowledgeSummaryItem[] = recentKnowledgeQuery.data?.knowledge ?? knowledgeQuery.data?.knowledge?.slice(0, 6) ?? []
-  const profilesTotal = profilesQuery.data?.total ?? 0
-  const workflowsTotal = workflowsQuery.data?.total ?? 0
-  const missionsTotal = missionsQuery.data?.total ?? 0
+  const agentsTotal = agentsQuery.data?.total ?? 0
+  const automationsTotal = automationsQuery.data?.total ?? 0
   const runsTotal = runsQuery.data?.total ?? 0
-  const artifactsTotal = artifactsQuery.data?.total ?? 0
+  const outputsTotal = outputsQuery.data?.total ?? 0
 
   return (
     <div className="space-y-6 p-6">
@@ -187,7 +180,7 @@ export default function DashboardPage() {
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-foreground">Recent knowledge</h2>
-                <p className="text-sm text-muted-foreground/90">The latest context available to Chat and workflows.</p>
+                <p className="text-sm text-muted-foreground/90">The latest context available to Chat and agents.</p>
               </div>
               <Link className="text-sm text-accent transition-colors hover:text-accent/80" to={knowledgeRoute(workspaceId)}>
                 Open knowledge
@@ -235,11 +228,10 @@ export default function DashboardPage() {
           <section className="rounded-2xl border border-border/60 bg-card/30 p-5">
             <h2 className="mb-4 text-lg font-semibold text-foreground">Platform</h2>
             <div className="grid grid-cols-2 gap-3">
-              <PlatformCard label="Profiles" value={profilesTotal} icon={<Sparkles className="h-4 w-4" />} to={profilesRoute()} />
-              <PlatformCard label="Workflows" value={workflowsTotal} icon={<Workflow className="h-4 w-4" />} to={workflowsRoute()} />
-              <PlatformCard label="Missions" value={missionsTotal} icon={<Rocket className="h-4 w-4" />} to={missionsRoute()} />
+              <PlatformCard label="Agents" value={agentsTotal} icon={<Bot className="h-4 w-4" />} to={agentsRoute()} />
+              <PlatformCard label="Automations" value={automationsTotal} icon={<Zap className="h-4 w-4" />} to={automationsRoute()} />
               <PlatformCard label="Runs" value={runsTotal} icon={<Boxes className="h-4 w-4" />} to={runsRoute()} />
-              <PlatformCard label="Artifacts" value={artifactsTotal} icon={<FileOutput className="h-4 w-4" />} to={artifactsRoute()} />
+              <PlatformCard label="Outputs" value={outputsTotal} icon={<FileOutput className="h-4 w-4" />} to={outputsRoute()} />
               <PlatformCard label="Conversations" value={0} icon={<MessageSquare className="h-4 w-4" />} to={chatRoute(workspaceId)} />
             </div>
           </section>
@@ -251,8 +243,8 @@ export default function DashboardPage() {
               <p className="text-sm text-muted-foreground/90">Quick actions to get started.</p>
             </div>
             <div className="space-y-2">
-              <SuggestionLink to={catalogRoute()}>
-                <span className="inline-flex items-center gap-2"><Library className="h-4 w-4 text-accent" /> Browse the catalog</span>
+              <SuggestionLink to={agentsRoute()}>
+                <span className="inline-flex items-center gap-2"><Bot className="h-4 w-4 text-accent" /> Create an agent</span>
               </SuggestionLink>
               <SuggestionLink to={chatRoute(workspaceId)}>
                 <span className="inline-flex items-center gap-2"><MessageSquare className="h-4 w-4 text-accent" /> Start a conversation</span>
@@ -260,16 +252,6 @@ export default function DashboardPage() {
               <SuggestionLink to={knowledgeRoute(workspaceId)}>
                 <span className="inline-flex items-center gap-2"><BookOpenText className="h-4 w-4 text-accent" /> Add knowledge</span>
               </SuggestionLink>
-              {profilesTotal === 0 && (
-                <SuggestionLink to={catalogRoute()}>
-                  <span className="inline-flex items-center gap-2"><Sparkles className="h-4 w-4 text-accent" /> Clone a profile from the catalog</span>
-                </SuggestionLink>
-              )}
-              {workflowsTotal === 0 && (
-                <SuggestionLink to={catalogRoute()}>
-                  <span className="inline-flex items-center gap-2"><Workflow className="h-4 w-4 text-accent" /> Clone a workflow from the catalog</span>
-                </SuggestionLink>
-              )}
             </div>
           </section>
         </div>

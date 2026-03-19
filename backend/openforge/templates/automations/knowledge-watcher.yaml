@@ -1,0 +1,18 @@
+name: Knowledge Watcher
+slug: knowledge-watcher
+description: Runs the Change Watcher agent every 6 hours to monitor workspace knowledge for updates and flag changes.
+agent_slug: change-watcher
+trigger_config:
+  type: interval
+  interval_seconds: 21600
+budget_config:
+  max_steps: 15
+  max_tokens: 30000
+  timeout_seconds: 180
+output_config:
+  save_to_knowledge: true
+  artifact_type: alert
+tags:
+  - monitoring
+  - knowledge
+  - template

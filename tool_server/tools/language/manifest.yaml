@@ -1,0 +1,19 @@
+category: language
+description: "Code analysis and transformation"
+tools:
+  - name: language.parse_ast
+    description: "Parse a file into an abstract syntax tree"
+    risk_category: safe
+    confirm_by_default: false
+  - name: language.find_definition
+    description: "Find where a symbol is defined"
+    risk_category: safe
+    confirm_by_default: false
+  - name: language.find_references
+    description: "Find all references to a symbol"
+    risk_category: safe
+    confirm_by_default: false
+  - name: language.apply_diff
+    description: "Apply a code diff/patch to a file"
+    risk_category: moderate
+    confirm_by_default: false

@@ -293,7 +293,7 @@ class ImageProcessor:
 
         try:
             from openforge.core.llm_gateway import llm_gateway
-            from openforge.domains.prompts.service import resolve_prompt_text
+            from openforge.core.prompt_resolution import resolve_prompt_text
             from openforge.services.llm_service import llm_service
 
             provider_name, api_key, model, base_url = (

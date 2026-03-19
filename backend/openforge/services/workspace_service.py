@@ -60,6 +60,17 @@ class WorkspaceService:
         await db.commit()
         await db.refresh(workspace)
 
+        # Create default agent for this workspace
+        try:
+            from openforge.domains.agents.service import AgentService
+            agent_service = AgentService(db)
+            agent = await agent_service.ensure_default_agent(data.name)
+            workspace.default_agent_id = agent["id"]
+            await db.commit()
+            await db.refresh(workspace)
+        except Exception as e:
+            logger.warning("Default agent creation failed for workspace %s: %s", workspace.id, e)
+
         # Create workspace directory
         ws_dir = os.path.join(settings.workspace_root, str(workspace.id))
         os.makedirs(ws_dir, exist_ok=True)

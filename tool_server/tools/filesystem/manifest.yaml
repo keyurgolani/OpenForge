@@ -1,0 +1,31 @@
+category: filesystem
+description: "Read, write, search, and manage files"
+tools:
+  - name: filesystem.read_file
+    description: "Read the contents of a file"
+    risk_category: safe
+    confirm_by_default: false
+  - name: filesystem.write_file
+    description: "Write content to a file"
+    risk_category: moderate
+    confirm_by_default: false
+  - name: filesystem.list_directory
+    description: "List files and directories"
+    risk_category: safe
+    confirm_by_default: false
+  - name: filesystem.search_files
+    description: "Search for files by name or content pattern"
+    risk_category: safe
+    confirm_by_default: false
+  - name: filesystem.file_info
+    description: "Get file metadata (size, type, timestamps)"
+    risk_category: safe
+    confirm_by_default: false
+  - name: filesystem.move_file
+    description: "Move or rename a file"
+    risk_category: moderate
+    confirm_by_default: true
+  - name: filesystem.delete_file
+    description: "Delete a file"
+    risk_category: destructive
+    confirm_by_default: true

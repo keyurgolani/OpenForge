@@ -395,7 +395,7 @@ function MergeWorkspacesSection({ workspaces, onMerged }: { workspaces: Workspac
             {open && (
                 <div className="px-4 pb-4 space-y-3 border-t border-border/40 pt-3">
                     <p className="text-xs text-muted-foreground">
-                        Move all knowledge, conversations, runs, artifacts, and other entities from the source workspace into the target workspace.
+                        Move all knowledge, conversations, runs, outputs, and other entities from the source workspace into the target workspace.
                     </p>
 
                     <div className="grid gap-3 sm:grid-cols-2">

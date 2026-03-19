@@ -12,7 +12,7 @@ import {
     Code2, Zap, Home, ArrowRight, FolderOpen
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { getWorkspaceIcon } from '@/pages/SettingsPage'
+import { getWorkspaceIcon } from '@/pages/settings/constants'
 
 const GROUP_CLASS =
     "[&_[cmdk-group-heading]]:px-4 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.1em] [&_[cmdk-group-heading]]:text-muted-foreground/80 [&_[cmdk-group-heading]]:font-semibold"

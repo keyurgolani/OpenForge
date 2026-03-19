@@ -1,0 +1,27 @@
+category: workspace
+description: "Access workspace knowledge and conversations"
+tools:
+  - name: workspace.search
+    description: "Search the workspace knowledge base"
+    risk_category: safe
+    confirm_by_default: false
+  - name: workspace.save_knowledge
+    description: "Save content to the workspace knowledge base"
+    risk_category: moderate
+    confirm_by_default: false
+  - name: workspace.list_knowledge
+    description: "List knowledge items in the workspace"
+    risk_category: safe
+    confirm_by_default: false
+  - name: workspace.delete_knowledge
+    description: "Delete a knowledge item from the workspace"
+    risk_category: destructive
+    confirm_by_default: true
+  - name: workspace.list_chats
+    description: "List conversations in the workspace"
+    risk_category: safe
+    confirm_by_default: false
+  - name: workspace.read_chat
+    description: "Read a conversation's messages"
+    risk_category: safe
+    confirm_by_default: false

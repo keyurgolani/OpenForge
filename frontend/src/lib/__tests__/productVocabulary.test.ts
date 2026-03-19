@@ -27,7 +27,7 @@ describe('Product Vocabulary', () => {
   });
 
   it('should have empty state copy for all core domains', () => {
-    const required = ['profile', 'workflow', 'mission', 'run', 'artifact'] as const;
+    const required = ['agent', 'automation', 'run', 'output'] as const;
     for (const domain of required) {
       expect(EMPTY_STATE_COPY).toHaveProperty(domain);
       expect(EMPTY_STATE_COPY[domain]).toHaveProperty('title');
@@ -37,7 +37,7 @@ describe('Product Vocabulary', () => {
   });
 
   it('should have labels for all domain nouns', () => {
-    const required = ['profile', 'workflow', 'mission', 'trigger', 'run', 'artifact'] as const;
+    const required = ['agent', 'automation', 'run', 'output'] as const;
     for (const domain of required) {
       expect(DOMAIN_LABELS).toHaveProperty(domain);
       expect(DOMAIN_LABELS_PLURAL).toHaveProperty(domain);
@@ -46,16 +46,14 @@ describe('Product Vocabulary', () => {
   });
 
   it('should define DOMAIN_NOUNS constants', () => {
-    expect(DOMAIN_NOUNS.PROFILE).toBe('profile');
-    expect(DOMAIN_NOUNS.WORKFLOW).toBe('workflow');
-    expect(DOMAIN_NOUNS.MISSION).toBe('mission');
-    expect(DOMAIN_NOUNS.TRIGGER).toBe('trigger');
+    expect(DOMAIN_NOUNS.AGENT).toBe('agent');
+    expect(DOMAIN_NOUNS.AUTOMATION).toBe('automation');
     expect(DOMAIN_NOUNS.RUN).toBe('run');
-    expect(DOMAIN_NOUNS.ARTIFACT).toBe('artifact');
+    expect(DOMAIN_NOUNS.OUTPUT).toBe('output');
   });
 
   it('should have API prefixes for all domains', () => {
-    const required = ['profile', 'workflow', 'mission', 'trigger', 'run', 'artifact'] as const;
+    const required = ['agent', 'automation', 'run', 'output'] as const;
     for (const domain of required) {
       expect(API_PREFIXES).toHaveProperty(domain);
       expect(API_PREFIXES[domain]).toMatch(/^\/api\/v1\//);
@@ -63,7 +61,7 @@ describe('Product Vocabulary', () => {
   });
 
   it('should have route segments for all domains', () => {
-    const required = ['profile', 'workflow', 'mission', 'trigger', 'run', 'artifact'] as const;
+    const required = ['agent', 'automation', 'run', 'output'] as const;
     for (const domain of required) {
       expect(ROUTE_SEGMENTS).toHaveProperty(domain);
       expect(typeof ROUTE_SEGMENTS[domain]).toBe('string');
@@ -72,53 +70,48 @@ describe('Product Vocabulary', () => {
 
   it('should not contain legacy Hand terminology in descriptions', () => {
     const allDescriptions = JSON.stringify(DOMAIN_DESCRIPTIONS).toLowerCase();
-    // Allow "handle" and "handler" but not bare "hand" as a product concept
     expect(allDescriptions).not.toMatch(/\bhand\b/);
   });
 
   it('should have navigation items for core sections', () => {
     const navKeys = NAV_ITEMS.map((item) => item.key);
-    expect(navKeys).toContain('profiles');
-    expect(navKeys).toContain('workflows');
-    expect(navKeys).toContain('missions');
+    expect(navKeys).toContain('agents');
+    expect(navKeys).toContain('automations');
     expect(navKeys).toContain('runs');
-    expect(navKeys).toContain('artifacts');
-    expect(navKeys).toContain('catalog');
+    expect(navKeys).toContain('outputs');
   });
 
   it('should expose correct route keys', () => {
-    expect(ROUTE_KEYS.PROFILES).toBe('/profiles');
-    expect(ROUTE_KEYS.WORKFLOWS).toBe('/workflows');
-    expect(ROUTE_KEYS.MISSIONS).toBe('/missions');
+    expect(ROUTE_KEYS.AGENTS).toBe('/agents');
+    expect(ROUTE_KEYS.AUTOMATIONS).toBe('/automations');
     expect(ROUTE_KEYS.RUNS).toBe('/runs');
-    expect(ROUTE_KEYS.ARTIFACTS).toBe('/artifacts');
-    expect(ROUTE_KEYS.CATALOG).toBe('/catalog');
+    expect(ROUTE_KEYS.OUTPUTS).toBe('/outputs');
   });
 
   it('helper getLabel returns correct labels', () => {
-    expect(getLabel('profile')).toBe('Profile');
-    expect(getLabel('profile', true)).toBe('Profiles');
-    expect(getLabel('mission')).toBe('Mission');
-    expect(getLabel('mission', true)).toBe('Missions');
+    expect(getLabel('agent')).toBe('Agent');
+    expect(getLabel('agent', true)).toBe('Agents');
+    expect(getLabel('automation')).toBe('Automation');
+    expect(getLabel('automation', true)).toBe('Automations');
   });
 
   it('helper getRouteSegment returns correct segments', () => {
-    expect(getRouteSegment('profile')).toBe('profiles');
-    expect(getRouteSegment('workflow')).toBe('workflows');
+    expect(getRouteSegment('agent')).toBe('agents');
+    expect(getRouteSegment('automation')).toBe('automations');
   });
 
   it('helper getApiPrefix returns correct API paths', () => {
-    expect(getApiPrefix('profile')).toBe('/api/v1/profiles');
+    expect(getApiPrefix('agent')).toBe('/api/v1/agents');
     expect(getApiPrefix('run')).toBe('/api/v1/runs');
   });
 
   it('helper getDescription returns non-empty descriptions', () => {
-    expect(getDescription('profile').length).toBeGreaterThan(0);
-    expect(getDescription('workflow').length).toBeGreaterThan(0);
+    expect(getDescription('agent').length).toBeGreaterThan(0);
+    expect(getDescription('automation').length).toBeGreaterThan(0);
   });
 
   it('helper getEmptyStateCopy returns valid copy', () => {
-    const copy = getEmptyStateCopy('profile');
+    const copy = getEmptyStateCopy('agent');
     expect(copy.title).toBeTruthy();
     expect(copy.description).toBeTruthy();
     expect(copy.cta).toBeTruthy();

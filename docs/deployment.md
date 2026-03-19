@@ -92,6 +92,18 @@ curl http://localhost:3100/api/health
 |----------|----------|---------|-------------|
 | `CELERY_WORKERS` | No | `1` | Number of background worker replicas |
 
+## Docker Compose Services
+
+| Service | Port | Description |
+|---------|------|-------------|
+| `openforge` | 3100 (host) -> 3000 (container) | Main backend + frontend |
+| `celery-worker` | -- | Background task worker (agent execution, knowledge processing, automations) |
+| `tool-server` | 8001 (internal) | Tool execution microservice (50+ tools) |
+| `postgres` | 5432 (internal) | PostgreSQL database |
+| `qdrant` | 6333 (internal) | Qdrant vector database |
+| `redis` | 6379 (internal) | Redis message broker and cache |
+| `searxng` | 8080 (internal) | Web search engine |
+
 ## Reverse Proxy (HTTPS)
 
 For production deployments, place OpenForge behind a reverse proxy with HTTPS.
@@ -218,7 +230,7 @@ The Docker Compose configuration sets these memory limits:
 
 | Service | Limit |
 |---------|-------|
-| Backend | 4 GB |
+| Backend (openforge) | 4 GB |
 | Celery Worker | 4 GB (per worker) |
 | PostgreSQL | 512 MB |
 | Qdrant | 1 GB |
@@ -252,6 +264,10 @@ docker compose logs -f tool-server
 docker compose ps
 ```
 
+## Terminology Note
+
+In the codebase, "outputs" and "artifacts" refer to the same concept. The user-facing term is **Outputs** — versioned durable results produced by agent runs, automations, or manual creation. Some internal code and API endpoints may still reference "artifacts" for backward compatibility.
+
 ## Troubleshooting
 
 | Symptom | Likely Cause | Fix |
@@ -264,6 +280,8 @@ docker compose ps
 | Chat not streaming | Redis connection issue | Check `docker compose logs redis` and verify Redis is healthy |
 | Tool execution failures | Tool server not running | Check `docker compose logs tool-server` |
 | Search returns no results | Knowledge not yet indexed | Wait for background processing or trigger reprocessing from the knowledge item |
+| Agent compilation failed | Blueprint syntax error | Check agent detail page for compilation_error |
+| Automation not triggering | Automation in draft/paused state | Verify automation status is "active" |
 
 ---
 

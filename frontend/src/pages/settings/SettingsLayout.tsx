@@ -10,17 +10,13 @@ import { cn } from '@/lib/utils';
 import {
   FolderOpen,
   Bot,
-  Sliders,
-  Settings2,
   Hammer,
-  ShieldAlert,
   Timer,
   Wrench,
   Layers,
   History,
   Upload,
   Download,
-  Package,
 } from 'lucide-react';
 import { SETTINGS_LABELS, SETTINGS_DESCRIPTIONS, type SettingsSection } from '@/lib/productVocabulary';
 
@@ -43,29 +39,9 @@ const SETTINGS_NAV: SettingsNavItem[] = [
     icon: Bot,
   },
   {
-    id: 'prompts',
-    route: '/settings/prompts',
-    icon: Sliders,
-  },
-  {
-    id: 'policies',
-    route: '/settings/policies',
-    icon: Settings2,
-  },
-  {
     id: 'tools',
     route: '/settings/tools',
     icon: Hammer,
-  },
-  {
-    id: 'bundles',
-    route: '/settings/bundles',
-    icon: Package,
-  },
-  {
-    id: 'approvals',
-    route: '/settings/approvals',
-    icon: ShieldAlert,
   },
   {
     id: 'pipelines',

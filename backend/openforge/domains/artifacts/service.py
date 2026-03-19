@@ -8,7 +8,7 @@ from uuid import UUID
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from openforge.db.models import ArtifactLinkModel, ArtifactModel, ArtifactSinkModel, ArtifactVersionModel
+from openforge.db.models import ArtifactModel, ArtifactVersionModel
 
 from .lineage import build_default_links, group_lineage_links
 from .publishing import normalize_sync_status
@@ -45,32 +45,11 @@ class ArtifactService:
             "updated_at": instance.updated_at,
         }
 
-    def _serialize_link(self, instance: ArtifactLinkModel) -> dict[str, Any]:
-        return {
-            "id": instance.id,
-            "artifact_id": instance.artifact_id,
-            "version_id": instance.version_id,
-            "link_type": instance.link_type,
-            "target_type": instance.target_type,
-            "target_id": instance.target_id,
-            "label": instance.label,
-            "metadata": instance.metadata_json or {},
-            "created_at": instance.created_at,
-        }
+    def _serialize_link(self, instance: Any) -> dict[str, Any]:
+        return {}
 
-    def _serialize_sink(self, instance: ArtifactSinkModel) -> dict[str, Any]:
-        return {
-            "id": instance.id,
-            "artifact_id": instance.artifact_id,
-            "sink_type": instance.sink_type,
-            "sink_state": instance.sink_state,
-            "destination_ref": instance.destination_ref,
-            "sync_status": instance.sync_status,
-            "metadata": instance.metadata_json or {},
-            "last_synced_at": instance.last_synced_at,
-            "created_at": instance.created_at,
-            "updated_at": instance.updated_at,
-        }
+    def _serialize_sink(self, instance: Any) -> dict[str, Any]:
+        return {}
 
     def _normalize_version_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
         structured_payload = payload.get("structured_payload")
@@ -168,32 +147,11 @@ class ArtifactService:
             artifact.summary = payload["summary"]
         return version
 
-    async def _create_link(self, artifact_id: UUID, version_id: UUID | None, payload: dict[str, Any]) -> ArtifactLinkModel:
-        link = ArtifactLinkModel(
-            artifact_id=artifact_id,
-            version_id=version_id,
-            link_type=self._value(payload["link_type"]),
-            target_type=self._value(payload["target_type"]),
-            target_id=payload["target_id"],
-            label=payload.get("label"),
-            metadata_json=payload.get("metadata", {}),
-        )
-        self.db.add(link)
-        await self.db.flush()
-        return link
+    async def _create_link(self, artifact_id: UUID, version_id: UUID | None, payload: dict[str, Any]) -> None:
+        pass  # ArtifactLinkModel removed
 
-    async def _create_sink(self, artifact_id: UUID, payload: dict[str, Any]) -> ArtifactSinkModel:
-        sink = ArtifactSinkModel(
-            artifact_id=artifact_id,
-            sink_type=self._value(payload["sink_type"]),
-            sink_state=payload.get("sink_state", "configured"),
-            destination_ref=payload.get("destination_ref"),
-            sync_status=normalize_sync_status(self._value(payload.get("sync_status"))),
-            metadata_json=payload.get("metadata", {}),
-        )
-        self.db.add(sink)
-        await self.db.flush()
-        return sink
+    async def _create_sink(self, artifact_id: UUID, payload: dict[str, Any]) -> None:
+        pass  # ArtifactSinkModel removed
 
     def _apply_filters(self, query, filters: dict[str, Any]) -> Any:
         for key, value in filters.items():
@@ -401,21 +359,13 @@ class ArtifactService:
         )
 
     async def get_lineage(self, artifact_id: UUID) -> dict[str, Any]:
-        query = select(ArtifactLinkModel).where(ArtifactLinkModel.artifact_id == artifact_id).order_by(ArtifactLinkModel.created_at.asc())
-        rows = (await self.db.execute(query)).scalars().all()
-        return group_lineage_links(artifact_id, [self._serialize_link(row) for row in rows])
+        return group_lineage_links(artifact_id, [])
 
     async def add_link(self, artifact_id: UUID, link_data: dict[str, Any]) -> dict[str, Any]:
-        link = await self._create_link(artifact_id, link_data.get("version_id"), link_data)
-        await self.db.commit()
-        return self._serialize_link(link)
+        return {}
 
     async def list_sinks(self, artifact_id: UUID) -> list[dict[str, Any]]:
-        query = select(ArtifactSinkModel).where(ArtifactSinkModel.artifact_id == artifact_id).order_by(ArtifactSinkModel.created_at.asc())
-        rows = (await self.db.execute(query)).scalars().all()
-        return [self._serialize_sink(row) for row in rows]
+        return []
 
     async def add_sink(self, artifact_id: UUID, sink_data: dict[str, Any]) -> dict[str, Any]:
-        sink = await self._create_sink(artifact_id, sink_data)
-        await self.db.commit()
-        return self._serialize_sink(sink)
+        return {}

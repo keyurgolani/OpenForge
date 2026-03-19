@@ -6,12 +6,10 @@
  * identifiers should reference this file to prevent drift.
  *
  * Core Domain Nouns:
- * - PROFILE: Agent Profile - a worker abstraction defining capabilities
- * - WORKFLOW: Workflow Definition - a composable execution graph
- * - MISSION: Mission Definition - a packaged autonomous unit
- * - TRIGGER: Trigger Definition - an automation rule
+ * - AGENT: Agent - an AI worker definition with capabilities and blueprint
+ * - AUTOMATION: Automation - a packaged autonomous agent execution
  * - RUN: Run - an execution instance
- * - ARTIFACT: Artifact - a produced output
+ * - OUTPUT: Output - a produced output
  * - KNOWLEDGE: Knowledge - user-provided context/data
  */
 
@@ -20,14 +18,11 @@
 // =============================================================================
 
 export type DomainNoun =
-  | 'profile'
-  | 'workflow'
-  | 'mission'
-  | 'trigger'
+  | 'agent'
+  | 'automation'
   | 'run'
-  | 'artifact'
-  | 'knowledge'
-  | 'catalog';
+  | 'output'
+  | 'knowledge';
 
 export type DomainStatus =
   | 'draft'
@@ -43,20 +38,11 @@ export type DomainStatus =
   | 'disabled';
 
 export type ExecutionMode =
-  | 'autonomous'
-  | 'supervised'
   | 'interactive'
-  | 'manual';
+  | 'background'
+  | 'hybrid';
 
-export type TriggerType =
-  | 'manual'
-  | 'cron'
-  | 'interval'
-  | 'event'
-  | 'heartbeat'
-  | 'webhook';
-
-export type ArtifactType =
+export type OutputType =
   | 'note'
   | 'document'
   | 'report'
@@ -82,19 +68,20 @@ export type Visibility =
   | 'organization'
   | 'public';
 
+// Backward-compatible alias
+/** @deprecated Use OutputType instead */
+export type ArtifactType = OutputType;
+
 // =============================================================================
 // Domain Constants
 // =============================================================================
 
 export const DOMAIN_NOUNS = {
-  PROFILE: 'profile' as DomainNoun,
-  WORKFLOW: 'workflow' as DomainNoun,
-  MISSION: 'mission' as DomainNoun,
-  TRIGGER: 'trigger' as DomainNoun,
+  AGENT: 'agent' as DomainNoun,
+  AUTOMATION: 'automation' as DomainNoun,
   RUN: 'run' as DomainNoun,
-  ARTIFACT: 'artifact' as DomainNoun,
+  OUTPUT: 'output' as DomainNoun,
   KNOWLEDGE: 'knowledge' as DomainNoun,
-  CATALOG: 'catalog' as DomainNoun,
 };
 
 export const DOMAIN_STATUSES = {
@@ -112,77 +99,61 @@ export const DOMAIN_STATUSES = {
 };
 
 export const EXECUTION_MODES = {
-  AUTONOMOUS: 'autonomous' as ExecutionMode,
-  SUPERVISED: 'supervised' as ExecutionMode,
   INTERACTIVE: 'interactive' as ExecutionMode,
-  MANUAL: 'manual' as ExecutionMode,
+  BACKGROUND: 'background' as ExecutionMode,
+  HYBRID: 'hybrid' as ExecutionMode,
 };
 
-export const TRIGGER_TYPES = {
-  MANUAL: 'manual' as TriggerType,
-  CRON: 'cron' as TriggerType,
-  INTERVAL: 'interval' as TriggerType,
-  EVENT: 'event' as TriggerType,
-  HEARTBEAT: 'heartbeat' as TriggerType,
-  WEBHOOK: 'webhook' as TriggerType,
+export const OUTPUT_TYPES = {
+  NOTE: 'note' as OutputType,
+  DOCUMENT: 'document' as OutputType,
+  REPORT: 'report' as OutputType,
+  PLAN: 'plan' as OutputType,
+  TARGET: 'target' as OutputType,
+  EVIDENCE_PACKET_REF: 'evidence_packet_ref' as OutputType,
+  RESEARCH_BRIEF: 'research_brief' as OutputType,
+  DATASET: 'dataset' as OutputType,
+  ALERT: 'alert' as OutputType,
+  EXPERIMENT_RESULT: 'experiment_result' as OutputType,
+  NOTIFICATION_DRAFT: 'notification_draft' as OutputType,
+  GENERIC_DOCUMENT: 'generic_document' as OutputType,
+  CODE: 'code' as OutputType,
+  DATA: 'data' as OutputType,
+  IMAGE: 'image' as OutputType,
+  SUMMARY: 'summary' as OutputType,
+  INSIGHT: 'insight' as OutputType,
+  OTHER: 'other' as OutputType,
 };
 
-export const ARTIFACT_TYPES = {
-  NOTE: 'note' as ArtifactType,
-  DOCUMENT: 'document' as ArtifactType,
-  REPORT: 'report' as ArtifactType,
-  PLAN: 'plan' as ArtifactType,
-  TARGET: 'target' as ArtifactType,
-  EVIDENCE_PACKET_REF: 'evidence_packet_ref' as ArtifactType,
-  RESEARCH_BRIEF: 'research_brief' as ArtifactType,
-  DATASET: 'dataset' as ArtifactType,
-  ALERT: 'alert' as ArtifactType,
-  EXPERIMENT_RESULT: 'experiment_result' as ArtifactType,
-  NOTIFICATION_DRAFT: 'notification_draft' as ArtifactType,
-  GENERIC_DOCUMENT: 'generic_document' as ArtifactType,
-  CODE: 'code' as ArtifactType,
-  DATA: 'data' as ArtifactType,
-  IMAGE: 'image' as ArtifactType,
-  SUMMARY: 'summary' as ArtifactType,
-  INSIGHT: 'insight' as ArtifactType,
-  OTHER: 'other' as ArtifactType,
-};
+/** @deprecated Use OUTPUT_TYPES instead */
+export const ARTIFACT_TYPES = OUTPUT_TYPES;
 
 // =============================================================================
 // User-Facing Labels
 // =============================================================================
 
 export const DOMAIN_LABELS: Record<DomainNoun, string> = {
-  profile: 'Profile',
-  workflow: 'Workflow',
-  mission: 'Mission',
-  trigger: 'Trigger',
+  agent: 'Agent',
+  automation: 'Automation',
   run: 'Run',
-  artifact: 'Artifact',
+  output: 'Output',
   knowledge: 'Knowledge',
-  catalog: 'Catalog',
 };
 
 export const DOMAIN_LABELS_PLURAL: Record<DomainNoun, string> = {
-  profile: 'Profiles',
-  workflow: 'Workflows',
-  mission: 'Missions',
-  trigger: 'Triggers',
+  agent: 'Agents',
+  automation: 'Automations',
   run: 'Runs',
-  artifact: 'Artifacts',
+  output: 'Outputs',
   knowledge: 'Knowledge',
-  catalog: 'Catalog',
 };
 
 export const DOMAIN_DESCRIPTIONS: Record<DomainNoun, string> = {
-  profile: 'Profiles define the capabilities, prompts, and behaviors of specialist AI workers.',
-  workflow: 'Workflows are composable execution graphs that define how tasks are performed.',
-  mission: 'Missions are packaged autonomous units that combine workflows, profiles, and triggers.',
-  trigger: 'Triggers define when and how missions are automatically executed.',
-  run: 'Runs are execution instances of workflows or missions.',
-  artifact: 'Artifacts are outputs produced by mission runs.',
+  agent: 'Agents define capabilities, blueprints, and behaviors for AI workers.',
+  automation: 'Automations run agents on triggers and schedules.',
+  run: 'Runs are execution instances of agent strategies.',
+  output: 'Outputs are durable results produced by agent runs.',
   knowledge: 'Knowledge is user-provided context and data for AI processing.',
-  catalog: 'Browse and clone pre-built profiles, workflows, and missions.',
 };
 
 // =============================================================================
@@ -193,12 +164,10 @@ export const NAV_ITEMS = [
   { key: 'workspace', label: 'Workspace', route: '/' },
   { key: 'knowledge', label: 'Knowledge', route: '/knowledge' },
   { key: 'chat', label: 'Chat', route: '/chat' },
-  { key: 'profiles', label: 'Profiles', route: '/profiles' },
-  { key: 'workflows', label: 'Workflows', route: '/workflows' },
-  { key: 'missions', label: 'Missions', route: '/missions' },
+  { key: 'agents', label: 'Agents', route: '/agents' },
+  { key: 'automations', label: 'Automations', route: '/automations' },
   { key: 'runs', label: 'Runs', route: '/runs' },
-  { key: 'artifacts', label: 'Artifacts', route: '/artifacts' },
-  { key: 'catalog', label: 'Catalog', route: '/catalog' },
+  { key: 'outputs', label: 'Outputs', route: '/outputs' },
   { key: 'settings', label: 'Settings', route: '/settings' },
 ] as const;
 
@@ -211,12 +180,10 @@ export const ROUTE_KEYS = {
   WORKSPACE: '/',
   KNOWLEDGE: '/knowledge',
   CHAT: '/chat',
-  PROFILES: '/profiles',
-  WORKFLOWS: '/workflows',
-  MISSIONS: '/missions',
+  AGENTS: '/agents',
+  AUTOMATIONS: '/automations',
   RUNS: '/runs',
-  ARTIFACTS: '/artifacts',
-  CATALOG: '/catalog',
+  OUTPUTS: '/outputs',
   SETTINGS: '/settings',
 } as const;
 
@@ -225,25 +192,19 @@ export const ROUTE_KEYS = {
 // =============================================================================
 
 export const ROUTE_SEGMENTS: Record<DomainNoun, string> = {
-  profile: 'profiles',
-  workflow: 'workflows',
-  mission: 'missions',
-  trigger: 'triggers',
+  agent: 'agents',
+  automation: 'automations',
   run: 'runs',
-  artifact: 'artifacts',
+  output: 'outputs',
   knowledge: 'knowledge',
-  catalog: 'catalog',
 };
 
 export const API_PREFIXES: Record<DomainNoun, string> = {
-  profile: '/api/v1/profiles',
-  workflow: '/api/v1/workflows',
-  mission: '/api/v1/missions',
-  trigger: '/api/v1/triggers',
+  agent: '/api/v1/agents',
+  automation: '/api/v1/automations',
   run: '/api/v1/runs',
-  artifact: '/api/v1/artifacts',
+  output: '/api/v1/outputs',
   knowledge: '/api/v1/knowledge',
-  catalog: '/api/v1/catalog',
 };
 
 // =============================================================================
@@ -251,45 +212,30 @@ export const API_PREFIXES: Record<DomainNoun, string> = {
 // =============================================================================
 
 export const EMPTY_STATE_COPY: Record<DomainNoun, { title: string; description: string; cta: string }> = {
-  profile: {
-    title: 'No profiles yet',
-    description: 'Create your first profile to define specialist capabilities and behaviors.',
-    cta: 'Create Profile',
+  agent: {
+    title: 'No agents yet',
+    description: 'Create your first agent to define capabilities and behaviors.',
+    cta: 'Create Agent',
   },
-  workflow: {
-    title: 'No workflows yet',
-    description: 'Build your first workflow to define how tasks are executed.',
-    cta: 'Create Workflow',
-  },
-  mission: {
-    title: 'No missions yet',
-    description: 'Deploy your first mission to run autonomous workflows.',
-    cta: 'Create Mission',
-  },
-  trigger: {
-    title: 'No triggers yet',
-    description: 'Set up triggers to automate mission execution.',
-    cta: 'Create Trigger',
+  automation: {
+    title: 'No automations yet',
+    description: 'Create your first automation to run agents on triggers and schedules.',
+    cta: 'Create Automation',
   },
   run: {
     title: 'No runs yet',
-    description: 'Execute a mission or workflow to see runs here.',
+    description: 'Execute an agent or automation to see runs here.',
     cta: 'Start Run',
   },
-  artifact: {
-    title: 'No artifacts yet',
-    description: 'Artifacts produced by your missions will appear here.',
-    cta: 'View Missions',
+  output: {
+    title: 'No outputs yet',
+    description: 'Outputs produced by your agent runs will appear here.',
+    cta: 'View Agents',
   },
   knowledge: {
     title: 'No knowledge yet',
     description: 'Add documents, notes, and other context for AI processing.',
     cta: 'Add Knowledge',
-  },
-  catalog: {
-    title: 'No catalog items yet',
-    description: 'Pre-built templates will appear here once published.',
-    cta: 'Browse Catalog',
   },
 };
 
@@ -327,11 +273,7 @@ export function getEmptyStateCopy(domain: DomainNoun): { title: string; descript
 export type SettingsSection =
   | 'workspaces'
   | 'models'
-  | 'prompts'
-  | 'policies'
   | 'tools'
-  | 'bundles'
-  | 'approvals'
   | 'pipelines'
   | 'skills'
   | 'mcp'
@@ -351,11 +293,7 @@ export type SettingsModelSubsection =
 export const SETTINGS_LABELS: Record<SettingsSection, string> = {
   workspaces: 'Workspaces',
   models: 'AI Models',
-  prompts: 'Prompts',
-  policies: 'Policies',
   tools: 'Tools',
-  bundles: 'Bundles',
-  approvals: 'Approvals',
   pipelines: 'Pipelines',
   skills: 'Skills',
   mcp: 'MCP Servers',
@@ -367,11 +305,7 @@ export const SETTINGS_LABELS: Record<SettingsSection, string> = {
 export const SETTINGS_DESCRIPTIONS: Record<SettingsSection, string> = {
   workspaces: 'Manage workspaces and their configurations.',
   models: 'Configure AI model providers and model assignments.',
-  prompts: 'Manage prompt templates for profiles.',
-  policies: 'Define execution policies and guardrails.',
   tools: 'View and manage native agent tools and permissions.',
-  bundles: 'Manage capability bundles that define tool access, retrieval, and skill configurations for profiles.',
-  approvals: 'Review and approve pending human-in-the-loop items.',
   pipelines: 'Configure data processing pipelines.',
   skills: 'Manage custom skills and capabilities.',
   mcp: 'Configure Model Context Protocol servers.',
@@ -407,24 +341,23 @@ export const SETTINGS_MODEL_DESCRIPTIONS: Record<SettingsModelSubsection, string
 /**
  * IMPORTANT TERMINOLOGY DECISIONS:
  *
- * 1. "Mission" is the packaged autonomous concept.
- *    - A Mission combines: Workflow + Profile(s) + Trigger(s) + Policies
- *    - Users deploy Missions, not individual Agents
+ * 1. "Agent" is the primary worker abstraction.
+ *    - Agents define capabilities, blueprints, and behaviors
+ *    - Agents power both interactive chat and background automations
  *
- * 2. "Profile" (Agent Profile) is a worker abstraction, NOT the top-level product unit.
- *    - Profiles define capabilities, prompts, and behaviors
- *    - Profiles are used BY Missions, they are not standalone products
+ * 2. "Automation" is the packaged autonomous concept.
+ *    - An Automation combines: Agent + Trigger Config + Budget + Output Config
+ *    - Users deploy Automations for unattended agent execution
  *
- * 3. "Hand" is REJECTED as a product term.
- *    - The term "Hand" is not used in the product vocabulary
- *    - Use "Mission" for autonomous units
+ * 3. "Output" is the durable result produced by agent runs.
+ *    - Outputs are versioned, linkable, and publishable
+ *    - Previously called "Artifact" -- renamed for clarity
  *
- * 4. "Agent" is a generic term for AI behavior, not a specific product noun.
- *    - Use "Profile" when referring to the configuration
- *    - Use "Mission" when referring to the deployed autonomous unit
- *
- * 5. Legacy terms to avoid in new code:
- *    - AgentDefinition → Use AgentProfile or Profile
- *    - AgentSchedule → Use Trigger
- *    - ContinuousTarget → Use Artifact or Mission output
+ * 4. Legacy terms no longer used in the frontend:
+ *    - Profile → replaced by Agent
+ *    - Workflow → removed (agents use strategies directly)
+ *    - Mission → replaced by Automation
+ *    - Trigger → folded into Automation trigger_config
+ *    - Catalog → removed
+ *    - Artifact → replaced by Output
  */
