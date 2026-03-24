@@ -16,24 +16,35 @@ OpenForge brings together a personal knowledge base, semantic search, RAG-powere
 - **Visual search** — Find similar images using CLIP embeddings
 
 ### Chat
+- **Global agent selection** — Chat is workspace-agnostic; select any agent (including workspace-specific agents) for direct conversation
+- **Parameterized input extraction** — The system extracts values for agent input parameters from chat messages, asking follow-up questions when needed
 - **Knowledge-grounded conversations** — The AI retrieves relevant knowledge before every response
 - **Real-time streaming** — Responses stream live with a timeline showing model selection, thinking, tool calls, and context sources
 - **File attachments and audio input** — Attach files or record voice messages with automatic transcription
 - **Model override** — Switch LLM provider/model per message
-- **Export** — Export conversations as JSON, Markdown, or plain text
+- **Prompt optimization** — Optional optimizer agent rewrites prompts before the main agent processes them
 
 ### Agents
-- **Blueprint-based configuration** — Define agents as YAML frontmatter + Markdown body (agent.md files)
+- **Structured definitions** — Agents are defined with explicit fields: identity, LLM config, tools config, memory config, input parameters, output definitions, and a template-driven system prompt
+- **Template engine** — System prompts use a template language with variables, loops, conditionals, and 40+ built-in functions. Hardcoded preamble/postamble sections auto-document inputs, outputs, and application context
+- **Input parameters & output definitions** — Typed input parameters (text, enum, number, boolean) and structured output definitions enable parameterized agents with reliable output extraction
+- **Version snapshots** — Every save creates an immutable version snapshot for audit and rollback
+- **Workspace-agnostic** — Agents exist globally and can access knowledge across all workspaces
+- **Per-tool access control** — Each tool can be set to allowed, HITL (human-in-the-loop approval), or disabled per agent
 - **6 built-in strategies** — chat, researcher, reviewer, builder, watcher, coordinator
-- **Compilation pipeline** — Blueprints are compiled into immutable specs with version tracking
-- **Workspace-agnostic** — Agents can access knowledge across all workspaces
-- **Custom tools and constraints** — Per-agent tool lists, confirmation requirements, and behavioral constraints
 
 ### Automations
-- **Agent + Trigger + Budget + Output** — Combine an agent with trigger configuration, budget limits, and output routing
-- **Trigger types** — Manual, scheduled (cron), interval-based, or event-driven
+- **DAG workflows** — Build multi-agent workflows on a drag-and-drop canvas by wiring agent nodes and sink nodes together
+- **Node wiring** — Connect output variables of one agent to input parameters of another, or fill inputs with static values
+- **Trigger types** — Manual, scheduled (cron), interval-based
 - **Budget policies** — Max runs per day, concurrent run limits, token budgets, failure cooldowns
-- **Lifecycle management** — Draft, active, paused, disabled states
+- **Graph validation** — DAG structure validation before deployment
+
+### Deployments
+- **Live automation instances** — Deploy an automation with concrete input values and an attached trigger
+- **Lifecycle management** — Pause, resume, and tear down deployments
+- **Execution tracking** — Each deployment execution creates a run with full step-by-step history
+- **Celery Beat scheduling** — Cron and interval triggers managed via the deployment scheduler
 
 ### Outputs
 - **Versioned artifacts** — Every material change creates a new version
@@ -106,7 +117,7 @@ Browser (React SPA)
 
 | Component | Role |
 |-----------|------|
-| **Backend** | REST API, WebSocket streaming, LLM integration, agent compilation, knowledge processing |
+| **Backend** | REST API, WebSocket streaming, LLM integration, template engine, agent runtime, knowledge processing |
 | **PostgreSQL** | All structured data — workspaces, knowledge metadata, conversations, agents, automations, runs, outputs |
 | **Qdrant** | Vector embeddings — semantic search (BGE-small 384-dim), visual search (CLIP 512-dim), agent memory |
 | **Redis** | Celery task broker, real-time event pub/sub, HITL coordination, session cache |
@@ -127,10 +138,16 @@ Any information you store in OpenForge. When you add knowledge, OpenForge automa
 A conversation with an AI agent that has access to your knowledge base. The agent searches for relevant context, assembles it within the model's context window, and generates a grounded response. Conversations show a full timeline of agent activity.
 
 ### Agent
-An agent is defined by a blueprint (YAML frontmatter + Markdown body) that specifies its name, strategy, model preferences, tools, retrieval settings, and system prompt. Blueprints are compiled into immutable specs. Agents are workspace-agnostic and can search any workspace's knowledge.
+An agent is a structured definition with explicit fields: identity (name, slug, description, tags), LLM configuration, tool access settings, memory settings, typed input parameters, structured output definitions, and a template-driven system prompt. Every save creates an immutable version snapshot. Agents are workspace-agnostic and can search any workspace's knowledge.
+
+### Chat
+A direct, one-off agent invocation via the conversational UI. The user selects any agent, sends a message, and the system extracts input parameter values from the conversation. Chat is workspace-agnostic — agents can be selected globally.
 
 ### Automation
-An automation combines an agent with a trigger configuration, budget limits, and output routing. Automations run agents on schedules, at intervals, or in response to events, with resource constraints to prevent runaway execution.
+A DAG workflow built by wiring agent nodes and sink nodes together on a canvas. Agent output variables connect to other agents' input parameters. Automations define reusable flows that do nothing until deployed.
+
+### Deployment
+A live instance of an automation, created when a user deploys it with concrete input values and an attached trigger (manual, cron, or interval). Deployments can be paused, resumed, and torn down.
 
 ### Output
 A durable result produced by a run or created manually — a document, report, analysis, code, or dataset. Outputs have versioning, lineage tracking, and a status lifecycle (draft, active, superseded, archived).

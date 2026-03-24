@@ -26,8 +26,10 @@ The main application server built with **FastAPI** (Python 3.11). Handles:
 - Database management (PostgreSQL via async SQLAlchemy + Alembic migrations)
 - Vector database operations (Qdrant for embeddings)
 - LLM provider integration (via LiteLLM for unified interface)
-- Agent blueprint compilation and registry
+- Agent definition management and runtime config building
+- Template engine for system prompt rendering (variables, loops, conditionals, functions)
 - Strategy-based execution (chat, researcher, reviewer, builder, watcher, coordinator)
+- Deployment scheduling via Celery Beat
 - Knowledge processing pipeline (chunking, embedding, indexing)
 - Authentication and session management
 
@@ -36,9 +38,10 @@ The main application server built with **FastAPI** (Python 3.11). Handles:
 - `api/` — HTTP route handlers (thin layer, delegates to services)
 - `core/` — Core business logic (embedding, search, context assembly, LLM gateway, prompt resolution)
 - `services/` — Application services (knowledge processing, LLM management, conversations, automation config)
-- `runtime/` — Execution engines (chat_handler, strategy_executor, tool_loop, handoff_engine, agent_registry)
+- `runtime/` — Execution engines (chat_handler, strategy_executor, tool_loop, handoff_engine, agent_registry, graph_executor, deployment_scheduler, input_extraction)
 - `runtime/strategies/` — Strategy plugins (chat, researcher, reviewer, builder, watcher, coordinator)
-- `domains/` — Domain-driven services (agents, automations, knowledge, retrieval, runs, outputs, common)
+- `runtime/template_engine/` — Template engine (parser, renderer, variable extractor, built-in functions, types)
+- `domains/` — Domain-driven services (agents, automations, deployments, knowledge, retrieval, runs, outputs, common)
 - `db/` — Database models, migrations, and clients (PostgreSQL, Qdrant, Redis)
 - `worker/` — Celery task definitions
 - `middleware/` — HTTP middleware (authentication)
@@ -78,8 +81,9 @@ Primary relational database (v16) storing all structured data:
 - LLM provider configurations (with encrypted API keys)
 - Workspaces, conversations, and messages
 - Knowledge metadata and processing state
-- Agents (blueprints, compiled specs)
-- Automations (trigger config, budget config, output routing)
+- Agent definitions (structured configs, version snapshots)
+- Automations (DAG workflows with node wiring)
+- Deployments (live automation instances with triggers)
 - Runs and run steps
 - Outputs (versioned artifacts with lineage)
 - Approval requests and audit logs
@@ -112,39 +116,52 @@ Self-hosted meta-search engine providing web search capabilities to the `http.se
 
 ## Agent Execution Pipeline
 
-### Blueprint to Execution
+### Definition to Execution
 
 ```
-Agent Blueprint (YAML + Markdown)
+Agent Definition (structured fields)
     |
     v
-1. Parse agent.md (frontmatter + body)
+1. AgentDefinitionModel stores:
+   - Identity: name, slug, description, icon, tags
+   - LLM config: provider, model, temperature, max_tokens, allow_override
+   - Tools config: per-tool access mode (allowed, hitl, disabled)
+   - Memory config: history_limit, attachment_support, auto_bookmark_urls
+   - Parameters: typed input parameters (text, enum, number, boolean)
+   - Output definitions: structured output variables (text, json, number, boolean)
+   - System prompt: template-driven with preamble/postamble
     |
     v
-2. AgentBlueprintCompiler:
-   a. Check idempotency (source_md_hash)
-   b. Upsert system profile
-   c. Build workspace directory for system prompt
-   d. Create CompiledAgentSpec (immutable)
-   e. Persist CompiledAgentSpecModel with version
-   f. Update agent.active_spec_id
+2. On save → immutable AgentDefinitionVersionModel snapshot
     |
     v
-3. AgentRegistry resolves spec at runtime:
-   a. resolve_for_workspace() — find workspace's default agent
-   b. resolve(slug=...) — find agent by slug
+3. At runtime → build_runtime_config():
+   - Resolves provider/model names
+   - Builds allowed_tools and confirm_before_tools lists
+   - Extracts input_schema and output_definitions
+   - Returns AgentRuntimeConfig
     |
     v
-4. Execution path depends on context:
+4. Template engine renders system prompt:
+   - Inject system variables (workspaces, agents, tools, skills, timestamps)
+   - Inject user input values for parameters
+   - Inject output.* namespace for output variable references
+   - Render preamble (agent identity, input/output docs)
+   - Render user's editable section
+   - Render postamble (application context, available agents/skills)
+    |
+    v
+5. Execution path depends on context:
 
    Interactive Chat (ChatHandler):
      a. Resolve agent via agent_registry
-     b. Load tools (built-in + MCP)
-     c. Assemble context (system prompt + history + attachments + mentions)
-     d. Resolve LLM provider for workspace
-     e. Execute tool_loop (LLM call + tool dispatch + HITL cycle)
-     f. Stream events via Redis pub/sub to WebSocket
-     g. Persist assistant message with timeline
+     b. Extract input values from chat message (input_extraction)
+     c. Load tools (built-in + MCP)
+     d. Render system prompt via template engine
+     e. Resolve LLM provider for workspace
+     f. Execute tool_loop (LLM call + tool dispatch + HITL cycle)
+     g. Stream events via Redis pub/sub to WebSocket
+     h. Persist assistant message with timeline
 
    Strategy Run (StrategyExecutor):
      a. Lookup strategy from registry (fallback to "chat")
@@ -156,6 +173,12 @@ Agent Blueprint (YAML + Markdown)
         - should_continue() — strategy decides whether to continue
         - aggregate() — strategy combines results
      e. Persist run output and transition status
+
+   Deployment (GraphExecutor):
+     a. Load automation DAG with node wiring
+     b. Topologically sort nodes
+     c. Execute each agent node, passing wired outputs as inputs
+     d. Route final outputs to sink nodes
 ```
 
 ### Strategy Plugin System
@@ -260,12 +283,13 @@ Search Query
 
 ## Domain Model
 
-### 7 Backend Domains
+### 8 Backend Domains
 
 | Domain | Purpose |
 |--------|---------|
-| **agents** | Agent blueprints, compilation, profiles, specs |
-| **automations** | Automation definitions with trigger, budget, and output config |
+| **agents** | Structured agent definitions, version snapshots, runtime config |
+| **automations** | DAG workflow definitions with node wiring and graph validation |
+| **deployments** | Live automation instances with triggers and scheduling |
 | **knowledge** | Knowledge item management (via existing services) |
 | **retrieval** | Search, evidence building, retrieval tracing |
 | **runs** | Execution tracking (runs, run steps, checkpoints, events) |
@@ -279,20 +303,29 @@ Workspace
  +-- Knowledge (notes, bookmarks, gists, documents, PDFs, images, audio, etc.)
  +-- Conversations
  |    +-- Messages (with attachments, tool calls, thinking, timeline)
+ +-- Workspace Agent (dedicated agent definition, auto-seeded)
  +-- Settings overrides
 
-Agent (workspace-agnostic)
- +-- Blueprint (YAML frontmatter + Markdown system prompt)
- +-- Compiled Specs (versioned immutable snapshots)
- +-- Profile (auto-generated from compilation)
- +-- Strategy (chat, researcher, reviewer, builder, watcher, coordinator)
- +-- Tools (allowed categories, blocked IDs, confirmation requirements)
+Agent Definition (workspace-agnostic)
+ +-- Identity (name, slug, description, icon, tags)
+ +-- LLM Config (provider, model, temperature, max_tokens, allow_override)
+ +-- Tools Config (per-tool access: allowed, hitl, disabled)
+ +-- Memory Config (history_limit, attachment_support, auto_bookmark_urls)
+ +-- Parameters (typed input: text, enum, number, boolean)
+ +-- Output Definitions (structured output: text, json, number, boolean)
+ +-- System Prompt (template-driven with preamble/postamble)
+ +-- Version Snapshots (immutable per-save)
 
-Automation
- +-- Agent reference (by slug)
- +-- Trigger Config (manual, cron, interval, event)
- +-- Budget Config (rate limits, token limits, cooldowns)
- +-- Output Routing Config (artifact types)
+Automation (DAG workflow)
+ +-- Agent Nodes (with input/output port wiring)
+ +-- Sink Nodes (output destinations)
+ +-- Static values and deployment input schema
+
+Deployment (live automation instance)
+ +-- Automation reference
+ +-- Input values (for unfilled parameters)
+ +-- Trigger (manual, cron, interval)
+ +-- Lifecycle (active, paused, torn down)
 
 Run (execution instance)
  +-- Run Steps (individual step executions)
@@ -309,11 +342,12 @@ Output (durable result)
 ### Entity Relationships
 
 ```
-Agent --compiled into--> CompiledAgentSpec
-Agent --has--> AgentProfile
-Automation --references--> Agent (by slug)
-Automation --triggers--> Run
-Run --executes via--> Strategy
+Agent Definition --snapshot on save--> AgentDefinitionVersion
+Agent Definition --build at runtime--> AgentRuntimeConfig
+Automation --wires--> Agent Nodes + Sink Nodes
+Deployment --instantiates--> Automation (with input values + trigger)
+Deployment --creates--> Runs
+Run --executes via--> Strategy or GraphExecutor
 Run --owns--> Run Steps
 Run --emits--> Outputs
 Output --has--> Versions
@@ -322,8 +356,8 @@ Knowledge --embedded in--> Qdrant vectors
 
 ## Key Design Decisions
 
-### Blueprint-Driven Agents
-Agents are defined as `.md` files with YAML frontmatter (identity, strategy, model, tools, retrieval) and a Markdown body (system prompt, constraints). This format is human-readable, version-controllable, and diff-friendly. Blueprints are compiled into immutable `CompiledAgentSpec` objects with hash-based idempotency.
+### Structured Agent Definitions
+Agents are defined with explicit, typed fields (LLM config, tools config, memory config, input parameters, output definitions) rather than free-form markdown parsed into a model. The UI generates appropriate input elements for each field. System prompts use a template engine with variables, loops, conditionals, and built-in functions. Every save creates an immutable version snapshot for audit and rollback.
 
 ### Strategy Plugin Architecture
 The runtime uses a strategy pattern for agent execution. Each strategy implements `plan`, `execute_step`, `should_continue`, and `aggregate`. This decouples execution behavior from the agent definition and makes it straightforward to add new execution modes without modifying the core runtime.

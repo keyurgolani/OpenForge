@@ -52,15 +52,16 @@ docker compose exec postgres pg_isready
 2. **Invalid API key** — Click "Test Connection" on your provider to verify the key works.
 3. **Celery worker not running** — Check `docker compose logs celery-worker`. The worker must be healthy for background agent execution.
 
-### Agent compilation failed
+### Agent save fails
 
-**Symptom:** Agent shows "compilation failed" status.
+**Symptom:** Agent creation or update fails with a validation error.
 
 **Common causes:**
-1. **Blueprint syntax error** — Check the agent detail page for the `compilation_error` field. Fix the YAML frontmatter or Markdown body.
-2. **Database issue** — Check backend logs for compilation errors: `docker compose logs openforge | grep "compiler"`.
+1. **Duplicate slug** — Another agent already uses that slug. Choose a unique one.
+2. **Missing required fields** — Name and slug are required.
+3. **Database issue** — Check backend logs: `docker compose logs openforge | grep "agent"`.
 
-**Fix:** Edit the agent blueprint to fix syntax issues. Compilation re-triggers automatically on save.
+**Fix:** Fix the validation error shown in the UI and try saving again.
 
 ### Responses are slow
 
@@ -156,10 +157,11 @@ docker compose logs openforge | grep -i "upload\|error"
 **Symptom:** Automation is configured but runs are not being created.
 
 **Common causes:**
-1. **Wrong status** — Automation must be in "active" state. Check if it's still in "draft" or "paused".
-2. **Budget exhausted** — Check if `max_runs_per_day` or `max_concurrent_runs` limits have been reached.
-3. **Cooldown active** — After a failure, the `cooldown_seconds_after_failure` setting may be preventing new runs.
-4. **Agent not found** — The referenced agent slug must exist and have a compiled spec.
+1. **Not deployed** — An automation does nothing until you create a deployment with a trigger. Check the Deployments page.
+2. **Deployment paused** — The deployment may be in paused state. Resume it from the Deployments page.
+3. **Budget exhausted** — Check if `max_runs_per_day` or `max_concurrent_runs` limits have been reached.
+4. **Cooldown active** — After a failure, the `cooldown_seconds_after_failure` setting may be preventing new runs.
+5. **Agent not found** — Agent nodes in the automation must reference existing agents.
 
 ### Automation runs failing
 
@@ -168,7 +170,7 @@ docker compose logs openforge | grep -i "upload\|error"
 **Check:** View the run detail page for the error message and timeline.
 
 **Common causes:**
-1. **Agent compilation outdated** — Recompile the agent by editing and saving its blueprint.
+1. **Agent config outdated** — Edit and save the agent to create a new version snapshot.
 2. **Provider not available** — The LLM provider may be down or the API key expired.
 3. **Token budget exceeded** — The automation's `max_token_budget_per_day` may have been reached.
 

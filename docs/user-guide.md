@@ -162,18 +162,20 @@ You can trigger intelligence generation manually from any knowledge item's metad
 
 ## Chat and Conversations
 
-The chat interface is where you interact with AI agents that have access to your knowledge base.
+The chat interface is where you interact with AI agents. Chat is workspace-agnostic — you can select any agent from the global agent list, including workspace-specific agents.
 
 ### Starting a Conversation
 
-1. Navigate to **Chat** in your workspace
-2. Type your message in the input area at the bottom
-3. Press **Enter** to send
+1. Navigate to **Chat** (top-level, not workspace-scoped)
+2. Select an agent from the agent list (includes one workspace agent per workspace)
+3. Optionally select an LLM model override
+4. Type your message and press **Enter**
 
-The AI agent will:
-1. Search your knowledge base for relevant context
-2. Assemble the most relevant information within its context window
-3. Generate a response grounded in your knowledge
+The system will:
+1. Analyze your message to extract values for the agent's input parameters
+2. If required parameters are missing, ask follow-up questions
+3. Search relevant workspaces for knowledge context
+4. Generate a response grounded in your knowledge
 
 ### Conversation Features
 
@@ -259,144 +261,136 @@ For research workflows, the search page supports:
 
 ## Agents
 
-Agents are the AI actors in OpenForge. Each agent is defined by a blueprint and compiled into an executable specification.
+Agents are the AI actors in OpenForge. Each agent is a structured definition with explicit fields configured through the UI.
 
-### Agent Blueprints
-
-An agent blueprint is a file in `agent.md` format — YAML frontmatter for configuration, Markdown body for the system prompt:
-
-```markdown
----
-name: Research Assistant
-slug: research-assistant
-mode: interactive
-strategy: researcher
-model:
-  allow_override: true
-memory:
-  history_limit: 20
-  strategy: sliding_window
-retrieval:
-  enabled: true
-  limit: 5
-tools:
-  - workspace.search
-  - http.search_web
-  - http.fetch_page
----
-You are a research assistant specializing in evidence-based analysis.
-
-When given a research question, search the knowledge base and web for relevant
-sources, synthesize findings, and present a well-structured analysis with citations.
-
-## Constraints
-- Always provide sources when referencing knowledge content
-- Distinguish between knowledge-base facts and web-sourced information
-```
-
-### Blueprint Fields
+### Agent Definition Fields
 
 | Field | Purpose |
 |-------|---------|
-| `name` | Human-readable agent name |
-| `slug` | Unique identifier |
-| `strategy` | Execution strategy (chat, researcher, reviewer, builder, watcher, coordinator) |
-| `mode` | Interaction mode (interactive or autonomous) |
-| `model` | Model preferences (default model, provider, temperature, max_tokens) |
-| `memory` | History management (limit, strategy, attachment support) |
-| `retrieval` | Knowledge retrieval settings (enabled, limit, score threshold) |
-| `output` | Output settings (streaming, structured output, citations) |
-| `tools` | List of allowed tools (by ID or with per-tool config) |
-| `confirm_before` | Tools that require human confirmation |
-| `constraints` | Behavioral rules (extracted from `## Constraints` section) |
+| **Name** | Human-readable agent name |
+| **Slug** | Unique identifier (auto-generated from name) |
+| **Description** | What the agent does |
+| **Tags** | Categorization labels (e.g., "chat", "research", "review") |
+| **System Prompt** | Template-driven instructions (see Template Engine below) |
+| **Input Parameters** | Typed inputs the agent accepts (text, enum, number, boolean) |
+| **Output Definitions** | Structured outputs the agent produces (text, json, number, boolean) |
+| **LLM Config** | Provider, model, temperature, max tokens, allow per-run override |
+| **Tools Config** | Per-tool access: allowed (immediate), HITL (requires approval), or disabled |
+| **Memory Config** | History limit, attachment support, auto-bookmark URLs |
+
+### Creating an Agent
+
+1. Navigate to **Agents** (top-level)
+2. Click **Create Agent**
+3. Enter a name (slug auto-generates)
+4. Add input parameters and output definitions as needed
+5. Write the system prompt using the template editor
+6. Configure LLM, tools, memory, and tags in the siderail
+7. Click **Create**
+
+### Template Engine
+
+System prompts use a template language with three sections:
+
+1. **Preamble** (read-only) — Auto-generated from agent identity, input parameters, and output definitions
+2. **Editable section** — Your custom agent instructions
+3. **Postamble** (read-only) — Auto-generated application context (workspaces, available agents, skills)
+
+**Template syntax available in the editable section:**
+- `{{variable}}` — Insert a variable value
+- `{{system.workspaces}}`, `{{system.tools}}`, `{{system.agents}}` — System-provided lists
+- `{{output.analysis}}` — Reference an output variable inline
+- `{% for item in collection %}...{% endfor %}` — Loop
+- `{% if condition %}...{% endif %}` — Conditional
+- `{# comment #}` — Template comment
+- 40+ built-in functions (string, array, math, utility, type checking)
+
+The template reference sidebar in the editor lists all available variables, functions, and syntax.
+
+### Input Parameters
+
+Each parameter has: name, type (text/enum/number/boolean), required flag, description, default value, and options (for enum). Parameters serve as:
+- Template variables in the system prompt (e.g., `{{topic}}`)
+- Input ports when used as automation nodes
+- Values extracted from chat messages at runtime
+
+### Output Definitions
+
+Each output has: key, type (text/json/number/boolean), label, and description. The preamble automatically documents outputs and the structured response format the LLM must follow.
+
+### Version History
+
+Every save creates an immutable version snapshot. View previous versions from the Timeline section in the siderail. Click any version to see a read-only snapshot of the agent's state at that point.
 
 ### Agent Templates
 
-OpenForge provides default agent templates when creating new workspaces. Each workspace gets a default agent that is automatically compiled and registered.
-
-### Agent Compilation
-
-When an agent blueprint is saved, the compiler:
-
-1. Parses the YAML frontmatter and Markdown body
-2. Computes a SHA-256 hash for idempotency
-3. Upserts a system profile
-4. Builds the system prompt with workspace directory
-5. Creates an immutable `CompiledAgentSpec`
-6. Persists the spec with a version number
-7. Updates the agent's `active_spec_id`
-
-If the blueprint hasn't changed (same hash), compilation is skipped.
-
-### Strategies
-
-The `strategy` field determines how the agent executes:
-
-| Strategy | Best For |
-|----------|----------|
-| **chat** | General-purpose conversation with tool use |
-| **researcher** | Multi-step research with evidence gathering |
-| **reviewer** | Code or document review with structured feedback |
-| **builder** | Multi-step artifact construction |
-| **watcher** | Monitoring and reactive workflows |
-| **coordinator** | Orchestrating multiple sub-agents |
+OpenForge ships with 6 built-in agent templates (Chat Assistant, Deep Researcher, Code Reviewer, Content Builder, Change Watcher, Team Coordinator). Each workspace also gets a dedicated workspace agent seeded at creation.
 
 ### Managing Agents
 
 1. Navigate to **Agents** (top-level, not workspace-scoped)
-2. View all registered agents
-3. Click an agent to see its detail page (blueprint, compiled specs, runs)
-4. Edit the blueprint to change behavior — recompilation happens automatically
+2. View all agents in the table with tags and timestamps
+3. Click an agent to see its detail page (view mode)
+4. Click **Edit** to modify, **Delete** to remove
+5. Changes are saved with version snapshots
 
 ---
 
 ## Automations
 
-Automations combine an agent with scheduling, resource limits, and output routing to create repeatable, unattended workflows.
+Automations are DAG workflows built by wiring agent nodes and sink nodes together on a drag-and-drop canvas.
 
-### What Makes Up an Automation?
+### How Automations Work
 
-| Component | Purpose |
-|-----------|---------|
-| **Agent** | The agent (by slug) that executes the automation |
-| **Trigger Config** | When and how the automation should run |
-| **Budget Config** | Resource limits (max runs per day, concurrent runs, token limits, failure cooldowns) |
-| **Output Routing** | Which types of artifacts the automation should produce |
-
-### Trigger Types
-
-| Type | Description |
-|------|-------------|
-| **Manual** | Triggered on demand via the UI or API |
-| **Schedule** | Runs on a cron expression (e.g., `0 9 * * 1` for every Monday at 9am) |
-| **Interval** | Runs every N seconds |
-| **Event** | Runs in response to system events (e.g., knowledge updated) |
-
-### Budget Policies
-
-Budgets prevent runaway automation execution:
-
-- **max_runs_per_day** — Maximum number of runs per 24-hour period
-- **max_concurrent_runs** — Maximum runs executing simultaneously
-- **max_token_budget_per_day** — Total token consumption limit per day
-- **cooldown_seconds_after_failure** — Wait time before retrying after a failure
+- **Agent nodes** are dragged from the available agents list. Each node's interface is defined by its agent's input parameters (input ports) and output definitions (output ports).
+- **Sink nodes** define what happens with agent outputs (chat, article, knowledge create/update, REST API, notification, log).
+- **Wiring** connects output variables of one agent node to input variables of another, or to sink nodes.
+- **Static values** can fill any agent input instead of wiring it.
+- **Unfilled inputs** become mandatory deployment inputs — the user must provide them when deploying.
 
 ### Creating an Automation
 
 1. Navigate to **Automations** (top-level)
 2. Click **Create Automation**
-3. Select the agent to run
-4. Configure the trigger (manual, cron, interval, or event)
-5. Set budget limits
-6. Configure output routing
+3. Drag agent nodes onto the canvas from the node palette
+4. Wire outputs to inputs between nodes
+5. Add sink nodes for output destinations
+6. Fill static values or leave inputs as deployment parameters
 7. Click **Create**
 
 ### Automation Lifecycle
 
-- **Draft** — Being configured, not yet active
-- **Active** — Running according to triggers
-- **Paused** — Temporarily stopped
-- **Disabled** — Permanently stopped
+An automation definition is a reusable blueprint. It does nothing until deployed. The definition captures the full DAG, all wiring, static values, and the derived deployment input schema.
+
+---
+
+## Deployments
+
+A deployment is a live instance of an automation, created when you deploy it with concrete input values and an attached trigger.
+
+### Creating a Deployment
+
+1. Navigate to the automation detail page
+2. Click **Deploy**
+3. Provide values for all mandatory inputs (unfilled/unwired parameters)
+4. Select a trigger type and configure it
+5. Click **Deploy**
+
+### Trigger Types
+
+| Type | Description |
+|------|-------------|
+| **Manual** | On-demand — click "Run Now" |
+| **Schedule (Cron)** | Fires on a cron expression (e.g., `0 9 * * 1` for every Monday at 9am) |
+| **Interval** | Fires every N seconds/minutes/hours |
+
+### Managing Deployments
+
+1. Navigate to **Deployments** (top-level)
+2. View all active and paused deployments
+3. **Pause** to temporarily stop a deployment
+4. **Resume** to restart a paused deployment
+5. **Tear down** to permanently remove a deployment
 
 ---
 
@@ -476,10 +470,10 @@ OpenForge comes with 50+ built-in tools organized into 10 categories:
 | **shell** | execute, execute_python | Run shell commands and Python scripts |
 | **git** | status, log, diff, add, commit, init | Version control operations |
 | **language** | parse_ast, find_definition, find_references, apply_diff | Code analysis and modification |
-| **workspace** | search, save_knowledge, list_knowledge, delete_knowledge, list_chats, read_chat | Access knowledge and chat history |
+| **workspace** | search, save_knowledge, list_knowledge, delete_knowledge | Access workspace knowledge |
 | **memory** | store, recall, forget | Ephemeral and persistent memory for agents |
 | **http** | get, post, fetch_page, search_web | Web access and search (via SearXNG) |
-| **agent** | invoke | Delegate tasks to other agents |
+| **agent** | invoke, list_chats, read_chat | Delegate tasks to other agents and access chat history |
 | **task** | create_plan, get_plan, update_step | Task and plan management |
 | **skills** | install, list_installed, read, remove, search | Manage custom skills |
 
@@ -549,7 +543,7 @@ OpenForge supports human-in-the-loop (HITL) approval for high-risk operations.
 
 ### Configuring What Requires Approval
 
-In agent blueprints, use the `confirm_before` field to list tools that should require confirmation. In Settings, configure global tool permission overrides.
+On the agent detail page, configure per-tool access in the Tools section of the siderail. Set individual tools to **HITL** mode to require approval before execution. In Settings, configure global tool permission overrides.
 
 ---
 

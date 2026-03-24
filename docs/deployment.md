@@ -280,8 +280,8 @@ In the codebase, "outputs" and "artifacts" refer to the same concept. The user-f
 | Chat not streaming | Redis connection issue | Check `docker compose logs redis` and verify Redis is healthy |
 | Tool execution failures | Tool server not running | Check `docker compose logs tool-server` |
 | Search returns no results | Knowledge not yet indexed | Wait for background processing or trigger reprocessing from the knowledge item |
-| Agent compilation failed | Blueprint syntax error | Check agent detail page for compilation_error |
-| Automation not triggering | Automation in draft/paused state | Verify automation status is "active" |
+| Agent save fails | Validation error (duplicate slug, missing fields) | Fix the error in the UI and retry |
+| Automation not triggering | Automation not deployed | Create a deployment with a trigger attached |
 
 ---
 

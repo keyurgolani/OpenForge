@@ -88,24 +88,23 @@ OpenForge/
 │       │   ├── redis_client.py     # Redis client
 │       │   └── migrations/         # Alembic migration scripts
 │       ├── domains/                # Domain-driven business logic
-│       │   ├── agents/             # Agent blueprints, compiler, specs
-│       │   │   ├── blueprint.py    # Blueprint parsing (YAML+MD)
-│       │   │   ├── compiler.py     # Blueprint → CompiledAgentSpec
-│       │   │   ├── compiled_spec.py # Immutable spec model
-│       │   │   ├── models.py       # Agent DB models
-│       │   │   ├── service.py      # Agent CRUD
-│       │   │   ├── router.py       # API routes
-│       │   │   ├── schemas.py      # Pydantic schemas
-│       │   │   └── types.py        # Domain types
-│       │   ├── automations/        # Automation definitions
+│       │   ├── agents/             # Structured agent definitions
+│       │   │   ├── compiled_spec.py # AgentRuntimeConfig builder
+│       │   │   ├── service.py      # Agent CRUD + version snapshots
+│       │   │   ├── router.py       # API routes (incl. version endpoints)
+│       │   │   └── schemas.py      # Pydantic schemas (structured fields)
+│       │   ├── automations/        # DAG workflow definitions
 │       │   │   ├── blueprint.py    # Trigger, budget, output config
 │       │   │   ├── compiler.py     # Automation compilation
 │       │   │   ├── compiled_spec.py # Compiled automation spec
-│       │   │   ├── models.py       # Automation DB models
+│       │   │   ├── graph_validation.py # DAG structure validation
 │       │   │   ├── service.py      # Automation CRUD
 │       │   │   ├── router.py       # API routes
-│       │   │   ├── schemas.py      # Pydantic schemas
-│       │   │   └── types.py        # Domain types
+│       │   │   └── schemas.py      # Pydantic schemas
+│       │   ├── deployments/        # Live automation instances
+│       │   │   ├── service.py      # Deployment lifecycle management
+│       │   │   ├── router.py       # API routes
+│       │   │   └── schemas.py      # Pydantic schemas
 │       │   ├── knowledge/          # Knowledge management
 │       │   ├── retrieval/          # Search and evidence
 │       │   ├── runs/               # Run execution tracking
@@ -120,10 +119,13 @@ OpenForge/
 │       │   └── tools/              # Tool server HTTP client
 │       ├── middleware/             # HTTP middleware (auth)
 │       ├── runtime/               # Execution engines
-│       │   ├── chat_handler.py     # Interactive chat execution
+│       │   ├── chat_handler.py     # Interactive chat execution (global, workspace-agnostic)
 │       │   ├── strategy_executor.py # Strategy-based run execution
+│       │   ├── graph_executor.py   # DAG workflow execution for deployments
 │       │   ├── tool_loop.py        # LLM + tool dispatch cycle
 │       │   ├── agent_registry.py   # Agent resolution at runtime
+│       │   ├── input_extraction.py # Extract parameter values from chat messages
+│       │   ├── deployment_scheduler.py # Celery Beat polling for deployment triggers
 │       │   ├── handoff_engine.py   # Agent-to-agent delegation
 │       │   ├── provider_config.py  # LLM provider resolution
 │       │   ├── hitl.py             # Human-in-the-loop approvals
@@ -132,6 +134,7 @@ OpenForge/
 │       │   ├── events.py           # Runtime event types
 │       │   ├── event_publisher.py  # Event broadcasting
 │       │   ├── checkpoint_store.py # Durable state snapshots
+│       │   ├── template_engine/    # Template engine (parser, renderer, functions, types)
 │       │   └── strategies/         # Strategy plugins
 │       │       ├── interface.py    # AgentStrategy protocol + BaseStrategy
 │       │       ├── base_loop.py    # Strategy execution loop
@@ -162,22 +165,25 @@ OpenForge/
 │       ├── main.tsx                # App entry point with routing
 │       ├── index.css               # Global styles and theme
 │       ├── components/             # Shared UI components
-│       │   ├── shared/             # Reusable business components
+│       │   ├── shared/             # Reusable business components (PromptTemplateEditor, ConfirmModal, etc.)
 │       │   ├── layout/             # Shell and navigation
+│       │   ├── agents/             # Agent config siderail with accordion sections
+│       │   ├── automations/        # Graph editor, node palette, agent nodes
+│       │   ├── chat/               # Chat UI (composer, timeline, tool cards, streaming, HITL)
 │       │   ├── knowledge/          # Knowledge editors and cards
 │       │   ├── search/             # Search interface
 │       │   └── ui/                 # Radix-based primitives
 │       ├── pages/                  # Page components
-│       │   ├── AgentsPage.tsx      # Agent list
-│       │   ├── AgentDetailPage.tsx # Agent detail
+│       │   ├── AgentsPage.tsx      # Agent list (table view)
+│       │   ├── AgentDetailPage.tsx # Agent detail (create/view/edit modes)
+│       │   ├── AgentChatPage.tsx   # Global chat interface (workspace-agnostic)
 │       │   ├── AutomationsPage.tsx # Automation list
-│       │   ├── AutomationDetailPage.tsx # Automation detail
+│       │   ├── AutomationDetailPage.tsx # Automation detail with graph editor
+│       │   ├── DeploymentsPage.tsx  # Deployment list
+│       │   ├── DeploymentDetailPage.tsx # Deployment detail
 │       │   ├── RunsPage.tsx        # Run list
 │       │   ├── RunDetailPage.tsx   # Run detail
-│       │   ├── OutputsPage.tsx     # Output list
-│       │   ├── OutputDetailPage.tsx # Output detail
 │       │   ├── DashboardPage.tsx   # Workspace dashboard
-│       │   ├── WorkspaceAgentPage.tsx # Chat interface
 │       │   ├── SearchPage.tsx      # Search
 │       │   └── settings/           # Settings sub-pages
 │       ├── features/               # Domain-specific feature modules
@@ -214,10 +220,10 @@ OpenForge/
 │       ├── shell/                  # Command execution (2 tools)
 │       ├── git/                    # Version control (6 tools)
 │       ├── language/               # Code analysis (4 tools)
-│       ├── workspace/              # Knowledge/chat access (6 tools)
+│       ├── workspace/              # Knowledge access (4 tools)
 │       ├── memory/                 # Agent memory (3 tools)
 │       ├── http/                   # Web access (4 tools)
-│       ├── agent/                  # Agent delegation (1 tool)
+│       ├── agent/                  # Agent delegation + chat access (3 tools)
 │       ├── task/                   # Task management (3 tools)
 │       └── skills/                 # Skill management (5 tools)
 │
@@ -274,7 +280,7 @@ OpenForge/
 - Feature modules contain domain-specific components, hooks, and types
 - Shared components are domain-agnostic
 - Layout components are presentational only (no business logic)
-- Domain routes: Agents, Automations, Runs, Outputs are top-level (workspace-agnostic). Knowledge, Chat, Search are workspace-scoped.
+- Domain routes: Agents, Chat, Automations, Deployments, Runs, Outputs are top-level (workspace-agnostic). Knowledge and Search are workspace-scoped.
 
 ### Tool Server
 
@@ -320,8 +326,9 @@ OpenForge/
 
 | Domain | Key Files | Notes |
 |--------|-----------|-------|
-| **agents** | blueprint.py, compiler.py, compiled_spec.py | YAML+MD parsing, compilation pipeline |
-| **automations** | blueprint.py, compiler.py, compiled_spec.py | JSON-based config, trigger/budget/output |
+| **agents** | compiled_spec.py, service.py, schemas.py | Structured definitions, version snapshots, runtime config builder |
+| **automations** | compiler.py, graph_validation.py, service.py | DAG workflows with node wiring and validation |
+| **deployments** | service.py, router.py, schemas.py | Live automation instances with triggers and scheduling |
 | **knowledge** | (via services layer) | Knowledge types managed by knowledge_processing_service |
 | **retrieval** | service.py | Hybrid search, evidence building |
 | **runs** | service.py | Run tracking, steps, events |
