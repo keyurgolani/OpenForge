@@ -1,25 +1,26 @@
-"""Agent registry — resolves AgentModel → CompiledAgentSpec for runtime use."""
+"""Agent registry — resolves AgentModel → AgentRuntimeConfig for runtime use."""
 
 from __future__ import annotations
 
 import logging
+import uuid as _uuid
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from openforge.db.models import AgentModel, CompiledAgentSpecModel, Workspace
-from openforge.domains.agents.compiled_spec import CompiledAgentSpec
+from openforge.db.models import AgentModel, Workspace
+from openforge.domains.agents.compiled_spec import AgentRuntimeConfig, build_runtime_config
 
 logger = logging.getLogger("openforge.runtime.agent_registry")
 
 
 class AgentRegistry:
-    """Resolves agents to their compiled specifications with caching."""
+    """Resolves agents to their runtime configurations with caching."""
 
     def __init__(self) -> None:
-        self._cache: dict[UUID, CompiledAgentSpec] = {}
+        self._cache: dict[UUID, AgentRuntimeConfig] = {}
         self._slug_cache: dict[str, UUID] = {}
 
     async def resolve(
@@ -28,8 +29,8 @@ class AgentRegistry:
         *,
         agent_id: UUID | None = None,
         slug: str | None = None,
-    ) -> CompiledAgentSpec | None:
-        """Resolve an agent to its compiled spec by ID or slug."""
+    ) -> AgentRuntimeConfig | None:
+        """Resolve an agent to its runtime config by ID or slug."""
         # Check cache
         if agent_id and agent_id in self._cache:
             return self._cache[agent_id]
@@ -52,24 +53,27 @@ class AgentRegistry:
         if agent is None:
             return None
 
-        if agent.active_spec_id is None:
-            logger.debug("Agent %s has no active spec", agent.id)
+        if agent.active_version_id is None:
+            logger.debug("Agent %s has no active version", agent.id)
             return None
 
-        # Load compiled spec
-        spec_model = await db.get(CompiledAgentSpecModel, agent.active_spec_id)
-        if spec_model is None:
-            logger.warning("CompiledAgentSpecModel %s not found for agent %s", agent.active_spec_id, agent.id)
-            return None
-
-        resolved_config = spec_model.resolved_config
-        if not resolved_config:
-            return None
-
+        # Build runtime config from structured fields
         try:
-            spec = CompiledAgentSpec(**resolved_config)
+            spec = build_runtime_config(
+                agent_id=agent.id,
+                agent_slug=agent.slug,
+                name=agent.name,
+                version="1",
+                profile_id=_uuid.uuid4(),
+                system_prompt=agent.system_prompt or "",
+                llm_config=agent.llm_config,
+                tools_config=agent.tools_config,
+                memory_config=agent.memory_config,
+                parameters=agent.parameters,
+                output_definitions=agent.output_definitions,
+            )
         except Exception as exc:
-            logger.warning("Failed to deserialize CompiledAgentSpec for agent %s: %s", agent.id, exc)
+            logger.warning("Failed to build AgentRuntimeConfig for agent %s: %s", agent.id, exc)
             return None
 
         # Cache
@@ -81,7 +85,7 @@ class AgentRegistry:
         self,
         db: AsyncSession,
         workspace_id: UUID,
-    ) -> CompiledAgentSpec | None:
+    ) -> AgentRuntimeConfig | None:
         """Resolve the default agent for a workspace via Workspace.default_agent_id."""
         workspace = await db.get(Workspace, workspace_id)
         if workspace is None:
@@ -93,11 +97,10 @@ class AgentRegistry:
         return await self.resolve(db, agent_id=workspace.default_agent_id)
 
     async def list_available_agents(self, db: AsyncSession) -> list[dict[str, Any]]:
-        """List all active agents with compiled specs."""
+        """List all agents that have an active version."""
         result = await db.execute(
             select(AgentModel).where(
-                AgentModel.status == "active",
-                AgentModel.active_spec_id.isnot(None),
+                AgentModel.active_version_id.isnot(None),
             )
         )
         agents = result.scalars().all()
@@ -107,8 +110,8 @@ class AgentRegistry:
                 "slug": agent.slug,
                 "name": agent.name,
                 "description": agent.description,
-                "mode": agent.mode,
                 "icon": agent.icon,
+                "tags": agent.tags or [],
             }
             for agent in agents
         ]

@@ -25,6 +25,8 @@ class TestStrategyExecutor:
         mock_db.get = AsyncMock(return_value=None)
         mock_db.add = MagicMock()
         mock_db.flush = AsyncMock()
+        mock_db.commit = AsyncMock()
+        mock_db.refresh = AsyncMock()
 
         mock_publisher = MagicMock()
         mock_publisher.publish = AsyncMock()
@@ -57,6 +59,8 @@ class TestStrategyExecutor:
         mock_db.get = AsyncMock(return_value=None)
         mock_db.add = MagicMock()
         mock_db.flush = AsyncMock()
+        mock_db.commit = AsyncMock()
+        mock_db.refresh = AsyncMock()
 
         spec = MagicMock()
         spec.agent_id = uuid.uuid4()
@@ -82,6 +86,8 @@ class TestStrategyExecutor:
         mock_db.get = AsyncMock(return_value=None)
         mock_db.add = MagicMock()
         mock_db.flush = AsyncMock()
+        mock_db.commit = AsyncMock()
+        mock_db.refresh = AsyncMock()
 
         mock_publisher = MagicMock()
         mock_publisher.publish = AsyncMock()

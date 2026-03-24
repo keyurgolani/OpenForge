@@ -16,7 +16,12 @@ def coerce_bool_setting(value: Any, default: bool = True) -> bool:
     if isinstance(value, (int, float)):
         return bool(value)
     if isinstance(value, str):
-        return value.lower() in ("true", "1", "yes", "on")
+        lowered = value.lower()
+        if lowered in ("true", "1", "yes", "on", "enabled"):
+            return True
+        if lowered in ("false", "0", "no", "off", "disabled"):
+            return False
+        return default
     return default
 
 

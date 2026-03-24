@@ -9,7 +9,7 @@ import { useUIStore } from '@/stores/uiStore'
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
 import { getShortcutDisplay } from '@/lib/keyboard'
 import { onQuickKnowledgeOpen, type QuickKnowledgeType } from '@/lib/quick-knowledge'
-import { agentsRoute, outputsRoute, automationsRoute, chatRoute, dashboardRoute, knowledgeRoute, runsRoute, searchRoute } from '@/lib/routes'
+import { agentsRoute, outputsRoute, automationsRoute, chatRoute, dashboardRoute, deploymentsRoute, knowledgeRoute, runsRoute, searchRoute } from '@/lib/routes'
 import CommandPalette from '@/components/shared/CommandPalette'
 import CreateDispatcher from '@/components/knowledge/create/CreateDispatcher'
 import KnowledgeTypeGrid from '@/components/knowledge/KnowledgeTypeGrid'
@@ -84,7 +84,7 @@ export default function AppShell() {
     queryKey: ['runs', workspaceId, 'sidebar'],
     queryFn: () => listRuns({ workspace_id: workspaceId, limit: 25 }),
     enabled: !!workspaceId,
-    refetchInterval: 5000,
+    refetchInterval: 30_000,
   })
 
   const workspaces = workspaceData as WorkspaceInfo[]
@@ -187,7 +187,9 @@ export default function AppShell() {
     if (location.pathname.includes('/chat')) {
       return {
         title: 'Chat',
-        description: 'Ask questions, review context, and manage conversations.',
+        description: location.pathname.startsWith('/chat')
+          ? 'Chat with any agent across all workspaces.'
+          : 'Ask questions, review context, and manage conversations.',
       }
     }
     if (location.pathname.includes('/search')) {
@@ -226,6 +228,12 @@ export default function AppShell() {
         description: 'Persistent outputs produced by workspace runs and automations.',
       }
     }
+    if (location.pathname.includes('/deployments')) {
+      return {
+        title: 'Deployments',
+        description: 'Live automation instances.',
+      }
+    }
     if (location.pathname.includes('/knowledge/')) {
       return {
         title: 'Knowledge Details',
@@ -252,6 +260,7 @@ export default function AppShell() {
     chatConversation: (conversationId: string) => chatRoute(workspaceId, conversationId),
     agents: agentsRoute(),
     automations: automationsRoute(),
+    deployments: deploymentsRoute(),
     runs: runsRoute(),
     outputs: outputsRoute(),
     settings: '/settings',
@@ -261,23 +270,25 @@ export default function AppShell() {
   const isKnowledgeBoardPage = location.pathname === knowledgeRoute(workspaceId)
   const isSearchPage = location.pathname.includes('/search')
   const isSettingsPage = location.pathname.includes('/settings')
-  const isWorkspaceAgentPage = location.pathname.includes('/chat')
+  const isAgentChatPage = location.pathname.includes('/chat')
   const isKnowledgePage = location.pathname.includes('/knowledge/')
   const isRunsPage = location.pathname.includes('/runs')
   const isAgentsPage = location.pathname.includes('/agents')
   const isAutomationsPage = location.pathname.includes('/automations')
   const isOutputsPage = location.pathname.includes('/outputs')
+  const isDeploymentsPage = location.pathname.includes('/deployments')
   const isPrimarySurface = (
     isDashboard
     || isKnowledgeBoardPage
     || isSearchPage
     || isSettingsPage
-    || isWorkspaceAgentPage
+    || isAgentChatPage
     || isKnowledgePage
     || isRunsPage
     || isAgentsPage
     || isAutomationsPage
     || isOutputsPage
+    || isDeploymentsPage
   )
 
   return (

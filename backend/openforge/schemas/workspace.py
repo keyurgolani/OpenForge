@@ -63,6 +63,7 @@ class WorkspaceResponse(BaseModel):
     knowledge_intelligence_model: Optional[str] = None
     vision_provider_id: Optional[UUID] = None
     vision_model: Optional[str] = None
+    default_agent_id: Optional[UUID] = None
     sort_order: int
     agent_enabled: bool = True
     agent_tool_categories: list = []

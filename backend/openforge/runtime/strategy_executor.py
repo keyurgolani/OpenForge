@@ -11,7 +11,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openforge.db.models import RunModel
-from openforge.domains.agents.compiled_spec import CompiledAgentSpec
+from openforge.domains.agents.compiled_spec import AgentRuntimeConfig
 from openforge.runtime.events import (
     RUN_COMPLETED,
     RUN_FAILED,
@@ -57,7 +57,7 @@ class StrategyExecutor:
 
     async def execute(
         self,
-        spec: CompiledAgentSpec,
+        spec: AgentRuntimeConfig,
         input_payload: dict[str, Any],
         *,
         workspace_id: UUID | None = None,
@@ -153,7 +153,7 @@ class StrategyExecutor:
         try:
             # 4. Transition to running
             transition_run(run, "running")
-            await self.db.flush()
+            await self.db.commit()
 
             if self.event_publisher:
                 await self.event_publisher.publish(
@@ -173,7 +173,7 @@ class StrategyExecutor:
             # 6. Transition to completed
             transition_run(run, "completed")
             run.output_payload = output
-            await self.db.flush()
+            await self.db.commit()
 
             if self.event_publisher:
                 await self.event_publisher.publish(
@@ -191,7 +191,7 @@ class StrategyExecutor:
 
             try:
                 transition_run(run, "failed", error_message=str(exc))
-                await self.db.flush()
+                await self.db.commit()
             except Exception:
                 logger.warning("Failed to transition run %s to failed state", run_id)
 

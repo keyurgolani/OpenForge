@@ -20,12 +20,14 @@ const AgentsPage = lazy(() => import('./pages/AgentsPage'))
 const AgentDetailPage = lazy(() => import('./pages/AgentDetailPage'))
 const AutomationsPage = lazy(() => import('./pages/AutomationsPage'))
 const AutomationDetailPage = lazy(() => import('./pages/AutomationDetailPage'))
+const DeploymentsPage = lazy(() => import('./pages/DeploymentsPage'))
+const DeploymentDetailPage = lazy(() => import('./pages/DeploymentDetailPage'))
 const RunsPage = lazy(() => import('./pages/RunsPage'))
 const RunDetailPage = lazy(() => import('./pages/RunDetailPage'))
 const OutputsPage = lazy(() => import('./pages/OutputsPage'))
 const OutputDetailPage = lazy(() => import('./pages/OutputDetailPage'))
 const EditorDispatcher = lazy(() => import('./components/knowledge/editors/EditorDispatcher'))
-const WorkspaceAgentPage = lazy(() => import('./pages/WorkspaceAgentPage'))
+const AgentChatPage = lazy(() => import('./pages/AgentChatPage'))
 const SearchPage = lazy(() => import('./pages/SearchPage'))
 // Settings pages
 const SettingsIndex = lazy(() => import('./pages/settings'))
@@ -173,12 +175,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                 } />
                                 <Route path="chat" element={
                                     <ErrorBoundary>
-                                        <WorkspaceAgentPage />
+                                        <AgentChatPage />
                                     </ErrorBoundary>
                                 } />
                                 <Route path="chat/:conversationId" element={
                                     <ErrorBoundary>
-                                        <WorkspaceAgentPage />
+                                        <AgentChatPage />
                                     </ErrorBoundary>
                                 } />
                                 <Route path="search" element={
@@ -192,11 +194,17 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                     <AppShell />
                                 </ErrorBoundary>
                             }>
+                                <Route path="/chat" element={<ErrorBoundary><AgentChatPage /></ErrorBoundary>} />
+                                <Route path="/chat/:conversationId" element={<ErrorBoundary><AgentChatPage /></ErrorBoundary>} />
                                 <Route path="/agents" element={<ErrorBoundary><AgentsPage /></ErrorBoundary>} />
+                                <Route path="/agents/new" element={<ErrorBoundary><AgentDetailPage /></ErrorBoundary>} />
                                 <Route path="/agents/:agentId" element={<ErrorBoundary><AgentDetailPage /></ErrorBoundary>} />
                                 <Route path="/automations" element={<ErrorBoundary><AutomationsPage /></ErrorBoundary>} />
                                 <Route path="/automations/:automationId" element={<ErrorBoundary><AutomationDetailPage /></ErrorBoundary>} />
-                                <Route path="/runs" element={<ErrorBoundary><RunsPage /></ErrorBoundary>} />
+                                <Route path="/deployments" element={<ErrorBoundary><DeploymentsPage /></ErrorBoundary>} />
+                                <Route path="/deployments/:deploymentId" element={<ErrorBoundary><DeploymentDetailPage /></ErrorBoundary>} />
+                                <Route path="/deployments/:deploymentId/runs/:runId" element={<ErrorBoundary><RunDetailPage /></ErrorBoundary>} />
+                                <Route path="/runs" element={<Navigate to="/deployments" replace />} />
                                 <Route path="/runs/:runId" element={<ErrorBoundary><RunDetailPage /></ErrorBoundary>} />
                                 <Route path="/outputs" element={<ErrorBoundary><OutputsPage /></ErrorBoundary>} />
                                 <Route path="/outputs/:outputId" element={<ErrorBoundary><OutputDetailPage /></ErrorBoundary>} />

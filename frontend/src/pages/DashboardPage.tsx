@@ -5,6 +5,7 @@ import {
   BookOpenText, Bot, FileOutput, MessageSquare, Zap, Boxes,
   ArrowRight,
 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 
 import ErrorState from '@/components/shared/ErrorState'
 import PageHeader from '@/components/shared/PageHeader'
@@ -14,14 +15,15 @@ import { useOutputsQuery } from '@/features/outputs'
 import { type KnowledgeSummaryItem, useKnowledgeSummaryQuery } from '@/features/knowledge'
 import { useAgentsQuery } from '@/features/agents'
 import { useAutomationsQuery } from '@/features/automations'
-import { useRunsQuery } from '@/features/runs'
+import { useDeploymentsQuery } from '@/features/deployments'
+import { listGlobalConversations } from '@/lib/api'
 import {
   agentsRoute,
   outputsRoute,
   automationsRoute,
-  chatRoute,
+  globalChatRoute,
+  deploymentsRoute,
   knowledgeRoute,
-  runsRoute,
 } from '@/lib/routes'
 
 /* ---------- Knowledge type colour map ---------- */
@@ -87,17 +89,22 @@ export default function DashboardPage() {
 
   const agentsQuery = useAgentsQuery({ limit: 6 })
   const automationsQuery = useAutomationsQuery({ limit: 6 })
-  const runsQuery = useRunsQuery({ limit: 6 })
+  const deploymentsQuery = useDeploymentsQuery({ limit: 6 })
   const outputsQuery = useOutputsQuery({ limit: 6 })
   // Fetch a larger page to compute per-type breakdowns client-side
   const knowledgeQuery = useKnowledgeSummaryQuery(workspaceId, 500)
   // Separate recent-only query for the list
   const recentKnowledgeQuery = useKnowledgeSummaryQuery(workspaceId, 6)
+  // Fetch global conversation count
+  const conversationsQuery = useQuery({
+    queryKey: ['global-conversations-count'],
+    queryFn: () => listGlobalConversations({ limit: 1 }),
+  })
 
   const isLoading = [
     agentsQuery.isLoading,
     automationsQuery.isLoading,
-    runsQuery.isLoading,
+    deploymentsQuery.isLoading,
     outputsQuery.isLoading,
     knowledgeQuery.isLoading,
   ].some(Boolean)
@@ -105,7 +112,7 @@ export default function DashboardPage() {
   const firstError = [
     agentsQuery.error,
     automationsQuery.error,
-    runsQuery.error,
+    deploymentsQuery.error,
     outputsQuery.error,
     knowledgeQuery.error,
   ].find(Boolean)
@@ -132,8 +139,9 @@ export default function DashboardPage() {
   const recentItems: KnowledgeSummaryItem[] = recentKnowledgeQuery.data?.knowledge ?? knowledgeQuery.data?.knowledge?.slice(0, 6) ?? []
   const agentsTotal = agentsQuery.data?.total ?? 0
   const automationsTotal = automationsQuery.data?.total ?? 0
-  const runsTotal = runsQuery.data?.total ?? 0
+  const deploymentsTotal = deploymentsQuery.data?.total ?? 0
   const outputsTotal = outputsQuery.data?.total ?? 0
+  const conversationsTotal = conversationsQuery.data?.total ?? (conversationsQuery.data?.conversations?.length ?? 0)
 
   return (
     <div className="space-y-6 p-6">
@@ -230,9 +238,9 @@ export default function DashboardPage() {
             <div className="grid grid-cols-2 gap-3">
               <PlatformCard label="Agents" value={agentsTotal} icon={<Bot className="h-4 w-4" />} to={agentsRoute()} />
               <PlatformCard label="Automations" value={automationsTotal} icon={<Zap className="h-4 w-4" />} to={automationsRoute()} />
-              <PlatformCard label="Runs" value={runsTotal} icon={<Boxes className="h-4 w-4" />} to={runsRoute()} />
+              <PlatformCard label="Deployments" value={deploymentsTotal} icon={<Boxes className="h-4 w-4" />} to={deploymentsRoute()} />
               <PlatformCard label="Outputs" value={outputsTotal} icon={<FileOutput className="h-4 w-4" />} to={outputsRoute()} />
-              <PlatformCard label="Conversations" value={0} icon={<MessageSquare className="h-4 w-4" />} to={chatRoute(workspaceId)} />
+              <PlatformCard label="Conversations" value={conversationsTotal} icon={<MessageSquare className="h-4 w-4" />} to={globalChatRoute()} />
             </div>
           </section>
 
@@ -246,7 +254,7 @@ export default function DashboardPage() {
               <SuggestionLink to={agentsRoute()}>
                 <span className="inline-flex items-center gap-2"><Bot className="h-4 w-4 text-accent" /> Create an agent</span>
               </SuggestionLink>
-              <SuggestionLink to={chatRoute(workspaceId)}>
+              <SuggestionLink to={globalChatRoute()}>
                 <span className="inline-flex items-center gap-2"><MessageSquare className="h-4 w-4 text-accent" /> Start a conversation</span>
               </SuggestionLink>
               <SuggestionLink to={knowledgeRoute(workspaceId)}>

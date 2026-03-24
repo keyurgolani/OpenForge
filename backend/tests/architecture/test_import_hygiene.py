@@ -17,7 +17,6 @@ LEGACY_PATHS = {
     "openforge.services.target_service",
     "openforge.api.agent_schedules",
     "openforge.api.agent",
-    "openforge.api.hitl",
     "openforge.api.tool_permissions",
 }
 

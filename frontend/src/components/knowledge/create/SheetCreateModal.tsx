@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Loader2, Save, Upload, X, Table } from 'lucide-react'
 import ModalShell from '@/components/knowledge/shared/ModalShell'
 import TagInput from '@/components/knowledge/shared/TagInput'
-import { uploadKnowledge, updateKnowledge } from '@/lib/api'
+import { uploadKnowledge, updateKnowledge, updateKnowledgeTags } from '@/lib/api'
 import { ACCEPTED_MIMES } from '@/lib/quick-knowledge'
 
 interface SheetCreateModalProps {
@@ -64,12 +64,13 @@ export default function SheetCreateModal({ isOpen, onClose, workspaceId, onCreat
         setError(null)
         try {
             const result = await uploadKnowledge(workspaceId, file)
-            // Persist user-provided title and tags
-            const updates: Record<string, unknown> = {}
-            if (title.trim()) updates.title = title.trim()
-            if (tags.length > 0) updates.tags = tags
-            if (Object.keys(updates).length > 0 && result?.id) {
-                await updateKnowledge(workspaceId, result.id, updates)
+            // Persist user-provided title
+            if (title.trim() && result?.id) {
+                await updateKnowledge(workspaceId, result.id, { title: title.trim() })
+            }
+            // Persist tags via dedicated endpoint
+            if (tags.length > 0 && result?.id) {
+                await updateKnowledgeTags(workspaceId, result.id, tags)
             }
             qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
             onCreated?.(result)

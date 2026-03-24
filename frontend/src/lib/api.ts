@@ -14,7 +14,14 @@ import type {
     OutputVersionsResponse,
 } from '@/types/outputs'
 import type { Checkpoint, Run, RunCompositeDebug, RunLineage, RunStep, RuntimeEvent } from '@/types/runs'
-import type { AgentCreate, AgentUpdate } from '@/types/agents'
+import type {
+    AgentDefinition,
+    AgentDefinitionCreate,
+    AgentDefinitionListResponse,
+    AgentDefinitionUpdate,
+    AgentDefinitionVersion,
+    AgentDefinitionVersionListResponse,
+} from '@/types/agents'
 import type { AutomationCreate, AutomationRunRequest, AutomationUpdate } from '@/types/automations'
 
 const api = axios.create({
@@ -356,6 +363,7 @@ export const listRuns = (params?: {
     run_type?: string
     agent_id?: string
     automation_id?: string
+    deployment_id?: string
 }): Promise<{ runs: Run[]; total: number }> =>
     api.get('/runs', { params }).then(r => r.data)
 export const getRun = (id: string): Promise<Run> => api.get(`/runs/${id}`).then(r => r.data)
@@ -408,19 +416,16 @@ export const addOutputSink = (
 ): Promise<OutputSink> => api.post(`/outputs/${id}/sinks`, data).then(r => r.data)
 
 // ── Agents ──
-export const listAgents = (params?: { status?: string; mode?: string; is_template?: boolean; skip?: number; limit?: number }): Promise<any> =>
+export const listAgents = (params?: { skip?: number; limit?: number }): Promise<AgentDefinitionListResponse> =>
     api.get('/agents', { params }).then(r => r.data)
-export const getAgent = (id: string): Promise<any> => api.get(`/agents/${id}`).then(r => r.data)
-export const createAgent = (data: AgentCreate): Promise<any> => api.post('/agents', data).then(r => r.data)
-export const updateAgent = (id: string, data: AgentUpdate): Promise<any> => api.patch(`/agents/${id}`, data).then(r => r.data)
+export const getAgent = (id: string): Promise<AgentDefinition> => api.get(`/agents/${id}`).then(r => r.data)
+export const createAgent = (data: AgentDefinitionCreate): Promise<AgentDefinition> => api.post('/agents', data).then(r => r.data)
+export const updateAgent = (id: string, data: AgentDefinitionUpdate): Promise<AgentDefinition> => api.patch(`/agents/${id}`, data).then(r => r.data)
 export const deleteAgent = (id: string) => api.delete(`/agents/${id}`)
-export const compileAgent = (id: string): Promise<any> => api.post(`/agents/${id}/compile`).then(r => r.data)
-export const getAgentSpec = (id: string): Promise<any> => api.get(`/agents/${id}/spec`).then(r => r.data)
-export const listAgentSpecs = (id: string): Promise<any> => api.get(`/agents/${id}/specs`).then(r => r.data)
-export const listAgentTemplates = (params?: { skip?: number; limit?: number }): Promise<any> =>
-    api.get('/agents/templates', { params }).then(r => r.data)
-export const cloneAgentTemplate = (id: string, data?: { name?: string; slug?: string }): Promise<any> =>
-    api.post(`/agents/templates/${id}/clone`, data).then(r => r.data)
+export const listAgentVersions = (agentId: string, params?: { skip?: number; limit?: number }): Promise<AgentDefinitionVersionListResponse> =>
+    api.get(`/agents/${agentId}/versions`, { params }).then(r => r.data)
+export const getAgentVersion = (agentId: string, versionId: string): Promise<AgentDefinitionVersion> =>
+    api.get(`/agents/${agentId}/versions/${versionId}`).then(r => r.data)
 
 // ── Automations ──
 export const listAutomations = (params?: { status?: string; agent_id?: string; skip?: number; limit?: number }): Promise<any> =>
@@ -438,5 +443,59 @@ export const runAutomation = (id: string, data: AutomationRunRequest): Promise<a
     api.post(`/automations/${id}/run`, data).then(r => r.data)
 export const listAutomationTemplates = (params?: { skip?: number; limit?: number }): Promise<any> =>
     api.get('/automations/templates', { params }).then(r => r.data)
+
+// --- Automation Graph ---
+export const getAutomationGraph = async (id: string) =>
+    (await api.get(`/automations/${id}/graph`)).data
+export const saveAutomationGraph = async (id: string, graph: { nodes: unknown[]; edges: unknown[]; static_inputs: unknown[] }) =>
+    (await api.put(`/automations/${id}/graph`, graph)).data
+export const getDeploymentSchema = async (id: string) =>
+    (await api.get(`/automations/${id}/deployment-schema`)).data
+
+// --- Deployments ---
+export const deployAutomation = async (automationId: string, data: { workspace_id: string; input_values: Record<string, unknown>; schedule_expression?: string }) =>
+    (await api.post(`/automations/${automationId}/deploy`, data)).data
+export const listDeployments = async (params?: { status?: string; automation_id?: string; workspace_id?: string; skip?: number; limit?: number }) =>
+    (await api.get('/deployments', { params })).data
+export const getDeployment = async (id: string) =>
+    (await api.get(`/deployments/${id}`)).data
+export const pauseDeployment = async (id: string) =>
+    (await api.post(`/deployments/${id}/pause`)).data
+export const resumeDeployment = async (id: string) =>
+    (await api.post(`/deployments/${id}/resume`)).data
+export const teardownDeployment = async (id: string) =>
+    (await api.post(`/deployments/${id}/teardown`)).data
+export const runDeploymentNow = async (id: string) =>
+    (await api.post(`/deployments/${id}/run-now`)).data
+
+// --- Global Chat ---
+export const listGlobalConversations = async (params?: { agent_id?: string; skip?: number; limit?: number; category?: string }) =>
+    (await api.get('/chat/conversations', { params })).data
+export const createGlobalConversation = async (data: { agent_id: string; title?: string }) =>
+    (await api.post('/chat/conversations', data)).data
+export const getGlobalConversation = async (id: string, includeMessages = true) =>
+    (await api.get(`/chat/conversations/${id}`, { params: { include_messages: includeMessages } })).data
+export const updateGlobalConversation = async (id: string, data: { title?: string; title_locked?: boolean; is_pinned?: boolean; is_archived?: boolean }) =>
+    (await api.put(`/chat/conversations/${id}`, data)).data
+export const deleteGlobalConversation = async (id: string) =>
+    api.delete(`/chat/conversations/${id}`)
+export const permanentlyDeleteGlobalConversation = async (id: string) =>
+    api.delete(`/chat/conversations/${id}/permanent`)
+export const bulkTrashGlobalConversations = async (category = 'chats') =>
+    (await api.post('/chat/conversations/bulk/trash', null, { params: { category } })).data
+export const bulkRestoreGlobalConversations = async () =>
+    (await api.post('/chat/conversations/bulk/restore')).data
+export const bulkPermanentlyDeleteGlobalConversations = async () =>
+    (await api.delete('/chat/conversations/bulk/permanent')).data
+export const addGlobalMessage = async (conversationId: string, data: { content: string; role?: string; model_id?: string }) =>
+    (await api.post(`/chat/conversations/${conversationId}/messages`, data)).data
+export const getGlobalConversationStreamState = (cid: string): Promise<any> =>
+    api.get(`/chat/conversations/${cid}/stream-state`).then(r => r.data)
+export const exportGlobalConversation = (cid: string, format = 'json'): Promise<Blob> =>
+    api.get(`/chat/conversations/${cid}/export`, { params: { format }, responseType: 'blob' }).then(r => r.data)
+
+// --- Template Engine ---
+export const getTemplateReference = async () =>
+    (await api.get('/template-engine/reference')).data
 
 export default api

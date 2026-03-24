@@ -136,7 +136,7 @@ class LLMService:
     async def get_provider_for_workspace(
         self,
         db: AsyncSession,
-        workspace_id: UUID,
+        workspace_id: UUID | None,
         provider_id: Optional[Union[UUID, str]] = None,
         model_override: Optional[str] = None,
     ) -> tuple[str, str, str, str | None]:

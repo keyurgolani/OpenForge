@@ -13,6 +13,9 @@ import {
   getAutomationHealth,
   runAutomation,
   listAutomationTemplates,
+  getAutomationGraph,
+  saveAutomationGraph,
+  getDeploymentSchema,
 } from '@/lib/api'
 import type {
   Automation,
@@ -140,5 +143,33 @@ export function useRunAutomation() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['runs'] })
     },
+  })
+}
+
+export function useAutomationGraphQuery(id?: string) {
+  return useQuery({
+    queryKey: ['automation', id, 'graph'],
+    queryFn: () => getAutomationGraph(id as string),
+    enabled: Boolean(id),
+  })
+}
+
+export function useSaveAutomationGraph() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, graph }: { id: string; graph: { nodes: unknown[]; edges: unknown[]; static_inputs: unknown[] } }) =>
+      saveAutomationGraph(id, graph),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['automation', variables.id, 'graph'] })
+      queryClient.invalidateQueries({ queryKey: ['automation', variables.id] })
+    },
+  })
+}
+
+export function useDeploymentSchemaQuery(id?: string) {
+  return useQuery({
+    queryKey: ['automation', id, 'deployment-schema'],
+    queryFn: () => getDeploymentSchema(id as string),
+    enabled: Boolean(id),
   })
 }

@@ -132,7 +132,7 @@ export default function RunsPage() {
                     <td className="px-4 py-3 text-muted-foreground/90">{run.started_at ? formatDateTime(run.started_at) : 'Not started'}</td>
                     <td className="px-4 py-3 text-muted-foreground/90">
                       <div className="flex items-center justify-between gap-3">
-                        <span>{run.completed_at ? formatDateTime(run.completed_at) : 'In progress'}</span>
+                        <span>{run.completed_at ? formatDateTime(run.completed_at) : run.started_at ? 'In progress' : '—'}</span>
                         <Link className="inline-flex items-center gap-1 text-xs text-accent transition hover:text-accent/80" to={runsRoute(run.id)}>
                           Inspect
                           <ArrowRight className="h-3.5 w-3.5" />

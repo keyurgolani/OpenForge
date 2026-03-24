@@ -192,6 +192,7 @@ export default function WorkspaceHome() {
     }
 
     const handleDelete = async (knowledgeId: string) => {
+        if (!confirm('Delete this knowledge item permanently?')) return
         await deleteKnowledge(workspaceId, knowledgeId)
         qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
         setSelected(s => { const n = new Set(s); n.delete(knowledgeId); return n })
@@ -222,6 +223,7 @@ export default function WorkspaceHome() {
     }
 
     const handleBulkDelete = async () => {
+        if (!confirm(`Delete ${selected.size} selected knowledge item${selected.size === 1 ? '' : 's'} permanently?`)) return
         await Promise.all([...selected].map(id => deleteKnowledge(workspaceId, id)))
         qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
         setSelected(new Set())
@@ -264,7 +266,7 @@ export default function WorkspaceHome() {
     const typeMeta = TYPE_OPTS.find(o => o.id === typeFilter)
     const sortMeta = SORT_OPTS.find(o => o.id === sortBy)
     const allKnowledgeItems = data?.knowledge ?? []
-    const pinnedCount = allKnowledgeItems.filter((n: KnowledgeListItem) => n.is_pinned).length
+    const pinnedCount = knowledgeItems.filter((n: KnowledgeListItem) => n.is_pinned).length
     const archivedCount = archivedKnowledgeStats?.total ?? 0
 
     useEffect(() => {
@@ -402,7 +404,7 @@ export default function WorkspaceHome() {
                         <div className="sm:ml-auto flex flex-wrap items-center gap-2">
                             <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs text-foreground/90">
                                 <FileText className="w-3.5 h-3.5" />
-                                {allKnowledgeItems.length} {showArchived ? 'archived shown' : 'shown'}
+                                {knowledgeItems.length} {showArchived ? 'archived shown' : 'shown'}
                             </span>
                             <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs text-foreground/90">
                                 <Pin className="w-3.5 h-3.5 text-amber-300" />
@@ -433,6 +435,21 @@ export default function WorkspaceHome() {
                                 <Inbox className="w-14 h-14 mx-auto mb-4 text-muted-foreground/30" />
                                 <h3 className="text-lg font-semibold mb-2">No knowledge match your search</h3>
                                 <p className="text-muted-foreground text-sm">Try a different search term.</p>
+                            </div>
+                        ) : typeFilter ? (
+                            <div className="text-center py-20">
+                                <Inbox className="w-14 h-14 mx-auto mb-4 text-muted-foreground/30" />
+                                <h3 className="text-lg font-semibold mb-2">No {typeMeta?.label?.toLowerCase() ?? 'items'} found</h3>
+                                <p className="text-muted-foreground text-sm">Create one to get started.</p>
+                                <div className="w-full max-w-2xl mt-6">
+                                    <KnowledgeTypeGrid onSelect={(type) => handleCreate(type)} />
+                                </div>
+                            </div>
+                        ) : showArchived ? (
+                            <div className="text-center py-20">
+                                <Archive className="w-14 h-14 mx-auto mb-4 text-muted-foreground/30" />
+                                <h3 className="text-lg font-semibold mb-2">No archived knowledge</h3>
+                                <p className="text-muted-foreground text-sm">Items you archive will appear here.</p>
                             </div>
                         ) : (
                             <div className="flex flex-col items-center gap-6 py-16">

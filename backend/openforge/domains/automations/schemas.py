@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class AutomationCreate(BaseModel):
-    agent_id: UUID
+    agent_id: Optional[UUID] = None
     name: str = Field(..., min_length=1, max_length=255)
     slug: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = Field(default=None, max_length=2000)
@@ -39,11 +39,12 @@ class AutomationUpdate(BaseModel):
 
 class AutomationResponse(BaseModel):
     id: UUID
-    agent_id: UUID
+    agent_id: Optional[UUID] = None
     name: str
     slug: str
     description: Optional[str]
     active_spec_id: Optional[UUID]
+    graph_version: int = 0
     trigger_config: dict[str, Any] = Field(default_factory=dict)
     budget_config: dict[str, Any] = Field(default_factory=dict)
     output_config: dict[str, Any] = Field(default_factory=dict)
@@ -74,8 +75,8 @@ class AutomationListResponse(BaseModel):
 
 class AutomationCompileResponse(BaseModel):
     automation_id: UUID
-    spec_id: UUID
-    version: int
+    spec_id: Optional[UUID] = None
+    version: int = 0
     compilation_status: str
     compilation_error: Optional[str] = None
 
@@ -89,3 +90,30 @@ class AutomationRunResponse(BaseModel):
     run_id: UUID
     automation_id: UUID
     status: str
+
+
+# Graph schemas
+class GraphNodeInput(BaseModel):
+    node_key: str
+    agent_id: UUID
+    position: dict[str, float] = Field(default_factory=lambda: {"x": 0, "y": 0})
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+class GraphEdgeInput(BaseModel):
+    source_node_key: str
+    source_output_key: str = "output"
+    target_node_key: str
+    target_input_key: str
+
+
+class GraphStaticInput(BaseModel):
+    node_key: str
+    input_key: str
+    static_value: Any = None
+
+
+class SaveGraphRequest(BaseModel):
+    nodes: list[GraphNodeInput]
+    edges: list[GraphEdgeInput] = Field(default_factory=list)
+    static_inputs: list[GraphStaticInput] = Field(default_factory=list)

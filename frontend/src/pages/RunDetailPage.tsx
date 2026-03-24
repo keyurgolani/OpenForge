@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/shared/Card'
 import ErrorState from '@/components/shared/ErrorState'
+import LiveTerminalLog from '@/components/shared/LiveTerminalLog'
 import LoadingState from '@/components/shared/LoadingState'
 import PageHeader from '@/components/shared/PageHeader'
 import Section from '@/components/shared/Section'
@@ -168,6 +169,36 @@ export default function RunDetailPage() {
         ))}
       </div>
 
+      {/* Live execution view for active runs */}
+      {(run.status === 'running' || run.status === 'pending' || run.status === 'queued') && (
+        <Section title="Live execution" description="Real-time strategy execution output.">
+          <div className="h-[400px]">
+            <LiveTerminalLog runId={runId} />
+          </div>
+        </Section>
+      )}
+
+      {/* Output payload for completed runs */}
+      {run.status === 'completed' && run.output_payload && Object.keys(run.output_payload).length > 0 && (
+        <Section title="Run output" description="The output produced by this run.">
+          <Card glass padding="lg">
+            <CardContent>
+              {typeof run.output_payload.output === 'string' ? (
+                <div className="prose prose-invert max-w-none text-sm">
+                  <pre className="whitespace-pre-wrap rounded-xl border border-border/60 bg-background/50 p-4 text-xs text-foreground/90">
+                    {run.output_payload.output}
+                  </pre>
+                </div>
+              ) : (
+                <pre className="overflow-x-auto rounded-xl border border-border/60 bg-background/50 p-4 text-xs text-foreground/90">
+                  {formatJson(run.output_payload)}
+                </pre>
+              )}
+            </CardContent>
+          </Card>
+        </Section>
+      )}
+
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
         <Section title="Run summary" description="The top-level durable record that anchors steps, checkpoints, and child runs.">
           <Card glass padding="lg">
@@ -190,7 +221,7 @@ export default function RunDetailPage() {
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Completed</p>
-                <p className="mt-1 text-sm font-medium text-foreground">{run.completed_at ? formatDateTime(run.completed_at) : 'In progress'}</p>
+                <p className="mt-1 text-sm font-medium text-foreground">{run.completed_at ? formatDateTime(run.completed_at) : run.started_at ? 'In progress' : '—'}</p>
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Merge strategy</p>

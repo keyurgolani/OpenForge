@@ -485,6 +485,8 @@ class KnowledgeProcessingService:
             "scraping"
             if data.type == "bookmark" and has_bookmark_url and not has_initial_content
             else "pending"
+            if has_initial_content and len((data.content or "").strip()) > 20
+            else "done"
         )
 
         knowledge_record = Knowledge(

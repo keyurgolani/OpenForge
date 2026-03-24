@@ -39,8 +39,8 @@ export type DomainStatus =
 
 export type ExecutionMode =
   | 'interactive'
-  | 'background'
-  | 'hybrid';
+  | 'autonomous'
+  | 'supervised';
 
 export type OutputType =
   | 'note'
@@ -96,8 +96,8 @@ export const DOMAIN_STATUSES = {
 
 export const EXECUTION_MODES = {
   INTERACTIVE: 'interactive' as ExecutionMode,
-  BACKGROUND: 'background' as ExecutionMode,
-  HYBRID: 'hybrid' as ExecutionMode,
+  AUTONOMOUS: 'autonomous' as ExecutionMode,
+  SUPERVISED: 'supervised' as ExecutionMode,
 };
 
 export const OUTPUT_TYPES = {

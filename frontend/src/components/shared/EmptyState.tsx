@@ -6,6 +6,7 @@ interface EmptyStateProps {
   description: string
   actionLabel?: string
   actionHint?: string
+  onAction?: () => void
   icon?: ReactNode
 }
 
@@ -14,6 +15,7 @@ export default function EmptyState({
   description,
   actionLabel,
   actionHint,
+  onAction,
   icon,
 }: EmptyStateProps) {
   return (
@@ -24,10 +26,14 @@ export default function EmptyState({
       <h2 className="text-lg font-semibold text-foreground">{title}</h2>
       <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground/90">{description}</p>
       {actionLabel ? (
-        <div className="mt-6 inline-flex flex-col items-center gap-1 rounded-xl border border-border/60 bg-muted/35 px-4 py-3">
+        <button
+          type="button"
+          onClick={onAction}
+          className="mt-6 inline-flex flex-col items-center gap-1 rounded-xl border border-border/60 bg-muted/35 px-4 py-3 transition hover:bg-muted/55 cursor-pointer"
+        >
           <span className="text-xs font-medium uppercase tracking-wide text-accent">{actionLabel}</span>
           {actionHint ? <span className="text-xs text-muted-foreground/80">{actionHint}</span> : null}
-        </div>
+        </button>
       ) : null}
     </div>
   )

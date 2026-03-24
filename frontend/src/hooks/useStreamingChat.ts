@@ -1,8 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { useParams } from 'react-router-dom'
-import { useWorkspaceWebSocket } from './useWorkspaceWebSocket'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useChatWebSocket } from './useChatWebSocket'
 import { useQueryClient } from '@tanstack/react-query'
-import { getConversationStreamState } from '@/lib/api'
+import { getConversationStreamState, getGlobalConversationStreamState } from '@/lib/api'
 
 interface AttachmentProcessed {
     id: string
@@ -69,6 +68,12 @@ export interface TimelineIntermediateResponse {
     content: string
 }
 
+export interface TimelineFollowUpRequest {
+    type: 'follow_up_request'
+    missing_params: string[]
+    question: string
+}
+
 export type TimelineEntry =
     | TimelineModelSelection
     | TimelineThinking
@@ -76,6 +81,7 @@ export type TimelineEntry =
     | TimelinePromptOptimized
     | TimelineAttachmentsProcessed
     | TimelineIntermediateResponse
+    | TimelineFollowUpRequest
 
 interface StreamSnapshot {
     content?: string
@@ -231,6 +237,15 @@ function applyEventToTimeline(timeline: TimelineEntry[], eventType: string, even
             }
             break
         }
+        case 'follow_up_request': {
+            const d = eventData as { missing_inputs?: string[]; missing_params?: string[]; content?: string; question?: string }
+            updated.push({
+                type: 'follow_up_request',
+                missing_params: d.missing_inputs ?? d.missing_params ?? [],
+                question: d.content ?? d.question ?? '',
+            })
+            break
+        }
     }
 
     return updated
@@ -257,10 +272,11 @@ function applyNestedEvent(timeline: TimelineEntry[], scopePath: number[], innerE
     return updated
 }
 
-export function useStreamingChat(conversationId: string | null) {
-    const { workspaceId = '' } = useParams<{ workspaceId: string }>()
-    const { on, send, isConnected } = useWorkspaceWebSocket(workspaceId, 'agent')
+export function useStreamingChat(conversationId: string | null, workspaceId?: string | null) {
+    const { on, send, isConnected } = useChatWebSocket(conversationId)
     const queryClient = useQueryClient()
+    const conversationsQueryKey = useMemo(() => workspaceId ? ['conversations', workspaceId] : ['global-conversations'], [workspaceId])
+    const conversationQueryKey = useMemo(() => workspaceId ? ['conversation'] : ['global-conversation'], [workspaceId])
 
     // ── Jitter-buffer state ────────────────────────────────────────────────────
     const tokenQueueRef = useRef('')
@@ -276,6 +292,12 @@ export function useStreamingChat(conversationId: string | null) {
     const latestThinkingRef = useRef('')
     const timelineRef = useRef<TimelineEntry[]>([])
 
+    const cancelTimeoutCleanupRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const awaitingResponseRef = useRef(false)
+
+    // Pending message: used when a new conversation is created but WS hasn't connected yet
+    const pendingMessageRef = useRef<{ payload: Record<string, unknown> } | null>(null)
+
     const resetStreamState = (interrupted = false) => {
         activeStreamRef.current = false
         tokenQueueRef.current = ''
@@ -288,6 +310,12 @@ export function useStreamingChat(conversationId: string | null) {
         setTimeline([])
         timelineRef.current = []
         latestThinkingRef.current = ''
+        awaitingResponseRef.current = false
+        // Clear any pending cancel timeout
+        if (cancelTimeoutCleanupRef.current) {
+            clearTimeout(cancelTimeoutCleanupRef.current)
+            cancelTimeoutCleanupRef.current = null
+        }
     }
 
     const resumePopulatedRef = useRef(false)
@@ -316,6 +344,37 @@ export function useStreamingChat(conversationId: string | null) {
 
     useEffect(() => {
         resumePopulatedRef.current = false
+        const pendingConvId = pendingMessageRef.current?.payload.conversation_id as string | undefined
+        const keepQueuedStream = Boolean(
+            awaitingResponseRef.current
+            && pendingConvId
+            && pendingConvId === conversationId,
+        )
+
+        // Clear pending message only when switching away from the conversation it
+        // was intended for; keep it when navigating TO the target conversation
+        // (which happens right after a new conversation is created).
+        if (pendingConvId && pendingConvId !== conversationId) {
+            pendingMessageRef.current = null
+        }
+
+        if (keepQueuedStream) {
+            tokenQueueRef.current = ''
+            displayedContentRef.current = ''
+            setStreamingContent('')
+            setIsInterrupted(false)
+            isInterruptedRef.current = false
+            setLastError(null)
+            setTimeline([])
+            timelineRef.current = []
+            latestThinkingRef.current = ''
+            if (cancelTimeoutCleanupRef.current) {
+                clearTimeout(cancelTimeoutCleanupRef.current)
+                cancelTimeoutCleanupRef.current = null
+            }
+            return
+        }
+
         resetStreamState()
     }, [conversationId])
 
@@ -489,32 +548,29 @@ export function useStreamingChat(conversationId: string | null) {
                 const m = msg as { conversation_id: string; message_id: string; interrupted?: boolean }
                 if (m.conversation_id !== conversationId) return
                 resetStreamState(!!m.interrupted)
-                queryClient.invalidateQueries({ queryKey: ['conversation', conversationId] })
-                queryClient.invalidateQueries({ queryKey: ['conversations', workspaceId] })
+                queryClient.invalidateQueries({ queryKey: [...conversationQueryKey, conversationId] })
+                queryClient.invalidateQueries({ queryKey: conversationsQueryKey })
             }),
             on('agent_error', (msg) => {
-                const m = msg as { conversation_id: string; detail: string }
-                if (!m.conversation_id || m.conversation_id === conversationId) {
-                    resetStreamState()
-                    setLastError(m.detail || 'Chat request failed')
-                    if (conversationId) {
-                        queryClient.invalidateQueries({ queryKey: ['conversation', conversationId] })
-                    }
-                    queryClient.invalidateQueries({ queryKey: ['conversations', workspaceId] })
-                }
+                const m = msg as { conversation_id?: string; detail?: string }
+                if (!conversationId || m.conversation_id !== conversationId) return
+
+                resetStreamState()
+                setLastError(m.detail || 'Chat request failed')
+                queryClient.invalidateQueries({ queryKey: [...conversationQueryKey, conversationId] })
+                queryClient.invalidateQueries({ queryKey: conversationsQueryKey })
             }),
             on('conversation_updated', (msg) => {
                 const m = msg as { conversation_id?: string; fields?: string[] }
-                if (!m.conversation_id || !conversationId || m.conversation_id === conversationId) {
-                    queryClient.invalidateQueries({ queryKey: ['conversations', workspaceId] })
-                    if (conversationId && m.conversation_id === conversationId) {
-                        queryClient.invalidateQueries({ queryKey: ['conversation', conversationId] })
-                    }
+                if (!m.conversation_id) return
+                queryClient.invalidateQueries({ queryKey: conversationsQueryKey })
+                if (conversationId && m.conversation_id === conversationId) {
+                    queryClient.invalidateQueries({ queryKey: [...conversationQueryKey, conversationId] })
                 }
             }),
         ]
         return () => unsubs.forEach(u => u())
-    }, [conversationId, on, queryClient, workspaceId])
+    }, [conversationId, on, queryClient, conversationsQueryKey, conversationQueryKey])
 
     const applySnapshot = useCallback((state: {
         content?: string; thinking?: string; timeline?: TimelineEntry[];
@@ -546,19 +602,22 @@ export function useStreamingChat(conversationId: string | null) {
 
     // Stream resume polling
     useEffect(() => {
-        if (!conversationId || !workspaceId) return
+        if (!conversationId) return
 
         let cancelled = false
         let pollTimer: ReturnType<typeof setTimeout> | null = null
         let attempt = 0
-        const MAX_ATTEMPTS = 6
+        const MAX_ATTEMPTS = 12
+        const RETRY_INTERVAL_MS = 1500
 
         const tryResume = async () => {
             if (cancelled || resumePopulatedRef.current) return
             attempt++
 
             try {
-                const state = await getConversationStreamState(workspaceId, conversationId)
+                const state = workspaceId
+                    ? await getConversationStreamState(workspaceId, conversationId)
+                    : await getGlobalConversationStreamState(conversationId)
                 if (cancelled || resumePopulatedRef.current) return
                 if (state?.active) {
                     if (state.content || state.thinking || (Array.isArray(state.timeline) && state.timeline.length > 0)) {
@@ -572,50 +631,124 @@ export function useStreamingChat(conversationId: string | null) {
                     }
                     if (resumePopulatedRef.current) return
                     if (attempt < MAX_ATTEMPTS) {
-                        pollTimer = setTimeout(tryResume, 2000)
+                        pollTimer = setTimeout(tryResume, RETRY_INTERVAL_MS)
                     }
                     return
                 }
-            } catch {
-                // non-critical
-            }
 
-            if (attempt < 3) {
-                pollTimer = setTimeout(tryResume, 1500)
+                // Stream is not active
+                if (awaitingResponseRef.current) {
+                    // We sent a message but backend finished before we caught up
+                    resetStreamState()
+                    queryClient.invalidateQueries({ queryKey: [...conversationQueryKey, conversationId] })
+                    queryClient.invalidateQueries({ queryKey: conversationsQueryKey })
+                }
+                // No active stream and not awaiting — stop polling
+                return
+            } catch {
+                // non-critical — retry on network errors only
+                if (attempt < MAX_ATTEMPTS) {
+                    pollTimer = setTimeout(tryResume, RETRY_INTERVAL_MS)
+                }
             }
         }
 
-        queryClient.invalidateQueries({ queryKey: ['conversation', conversationId] })
-        queryClient.invalidateQueries({ queryKey: ['conversations', workspaceId] })
         tryResume()
 
         return () => {
             cancelled = true
             if (pollTimer) clearTimeout(pollTimer)
         }
-    }, [conversationId, workspaceId, queryClient, applySnapshot, isConnected, send])
+    }, [conversationId, workspaceId, queryClient, conversationsQueryKey, conversationQueryKey, applySnapshot, isConnected, send])
 
     useEffect(() => {
         if (!conversationId || !isConnected) return
         send({ type: 'chat_stream_resume', conversation_id: conversationId })
     }, [isConnected, conversationId, send])
 
+    // Fallback: periodically check stream-state while streaming to detect
+    // completion in case the agent_done WebSocket event was missed.
+    // Also applies stream-state updates from polling so timeline/content
+    // stay up-to-date even if WebSocket relay fails.
+    const isStreamingRef = useRef(false)
+    useEffect(() => { isStreamingRef.current = isStreaming }, [isStreaming])
+
+    useEffect(() => {
+        if (!conversationId) return
+
+        let cancelled = false
+        let consecutiveInactive = 0
+        let lastTimelineLen = 0
+        const POLL_INTERVAL = 5000 // 5 seconds
+        const REQUIRED_INACTIVE_CHECKS = 2 // need 2 consecutive inactive results
+
+        const checkStreamState = async () => {
+            if (cancelled || !isStreamingRef.current) {
+                consecutiveInactive = 0
+                return
+            }
+            try {
+                const state = workspaceId
+                    ? await getConversationStreamState(workspaceId, conversationId)
+                    : await getGlobalConversationStreamState(conversationId)
+                if (cancelled || !isStreamingRef.current) return
+                if (!state?.active) {
+                    consecutiveInactive++
+                    if (consecutiveInactive >= REQUIRED_INACTIVE_CHECKS) {
+                        // Stream is done on the backend but UI is still showing as streaming
+                        resetStreamState()
+                        queryClient.invalidateQueries({ queryKey: [...conversationQueryKey, conversationId] })
+                        queryClient.invalidateQueries({ queryKey: conversationsQueryKey })
+                        consecutiveInactive = 0
+                    }
+                } else {
+                    consecutiveInactive = 0
+                    // Apply stream-state updates from polling if they contain
+                    // new data the WebSocket relay may have missed
+                    const stateTimeline = state.timeline ?? []
+                    if (stateTimeline.length > lastTimelineLen) {
+                        lastTimelineLen = stateTimeline.length
+                        applySnapshot(state)
+                    }
+                }
+            } catch {
+                // non-critical
+            }
+        }
+
+        const timer = setInterval(checkStreamState, POLL_INTERVAL)
+        return () => {
+            cancelled = true
+            clearInterval(timer)
+        }
+    }, [conversationId, workspaceId, queryClient, conversationsQueryKey, conversationQueryKey, applySnapshot])
+
     const sendMessage = useCallback((content: string, options?: SendMessageOptions, conversationOverride?: string) => {
         const targetConversationId = conversationOverride ?? conversationId
         if (!targetConversationId || !content.trim()) return false
-        if (!isConnected) {
-            setLastError('Chat is disconnected. Reconnect and try again.')
-            return false
-        }
-        resetStreamState(false)
-        resumePopulatedRef.current = true
-        setIsStreaming(true)
+
         const payload: Record<string, unknown> = { type: 'chat_message', conversation_id: targetConversationId, content }
         if (options?.provider_id) payload.provider_id = options.provider_id
         if (options?.model_id) payload.model_id = options.model_id
         if (options?.attachment_ids?.length) payload.attachment_ids = options.attachment_ids
         if (options?.mentions?.length) payload.mentions = options.mentions
         if (options?.optimize) payload.optimize = true
+
+        resetStreamState(false)
+        resumePopulatedRef.current = true
+        awaitingResponseRef.current = true
+        setIsStreaming(true)
+
+        if (!isConnected) {
+            // New conversation: WS not connected yet. Queue the message to send when it connects.
+            if (conversationOverride) {
+                pendingMessageRef.current = { payload }
+                return true
+            }
+            setIsStreaming(false)
+            setLastError('Chat is disconnected. Reconnect and try again.')
+            return false
+        }
         const sent = send(payload)
         if (!sent) {
             setIsStreaming(false)
@@ -629,11 +762,43 @@ export function useStreamingChat(conversationId: string | null) {
         setIsInterrupted(true)
         isInterruptedRef.current = true
         activeStreamRef.current = false
+        // Capture displayed content + any remaining queued tokens before clearing
+        const partialContent = (displayedContentRef.current + tokenQueueRef.current).trim()
         tokenQueueRef.current = ''
-        send({ type: 'chat_cancel', conversation_id: conversationId })
-    }, [conversationId, send, isConnected])
+        // Immediately exit streaming visual state so the UI is responsive
+        setIsStreaming(false)
+        send({
+            type: 'chat_cancel',
+            conversation_id: conversationId,
+            ...(partialContent ? { partial_content: partialContent } : {}),
+        })
+        // Safety timeout: if agent_done doesn't arrive within 15s, force-reset
+        // and invalidate queries so the conversation reloads with the final state
+        if (cancelTimeoutCleanupRef.current) clearTimeout(cancelTimeoutCleanupRef.current)
+        cancelTimeoutCleanupRef.current = setTimeout(() => {
+            if (isInterruptedRef.current) {
+                resetStreamState(true)
+                queryClient.invalidateQueries({ queryKey: [...conversationQueryKey, conversationId] })
+                queryClient.invalidateQueries({ queryKey: conversationsQueryKey })
+            }
+            cancelTimeoutCleanupRef.current = null
+        }, 15_000)
+    }, [conversationId, send, isConnected, queryClient, conversationQueryKey, conversationsQueryKey])
 
     const clearLastError = useCallback(() => setLastError(null), [])
+
+    // Flush pending message when WebSocket connects
+    useEffect(() => {
+        if (isConnected && pendingMessageRef.current) {
+            const pending = pendingMessageRef.current
+            pendingMessageRef.current = null
+            const sent = send(pending.payload)
+            if (!sent) {
+                setIsStreaming(false)
+                setLastError('Failed to send message after connection. Please try again.')
+            }
+        }
+    }, [isConnected, send])
 
     return {
         streamingContent,

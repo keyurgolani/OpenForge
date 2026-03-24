@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 if TYPE_CHECKING:
-    from openforge.domains.agents.compiled_spec import CompiledAgentSpec
+    from openforge.domains.agents.compiled_spec import AgentRuntimeConfig
 
 logger = logging.getLogger("openforge.runtime.policy")
 
@@ -255,17 +255,17 @@ class PolicyEngine:
         risk_level: str,
         db: AsyncSession,
         agent: Any = None,
-        agent_spec: "CompiledAgentSpec | None" = None,
+        agent_spec: "AgentRuntimeConfig | None" = None,
     ) -> str:
         # Tool policy table queries removed (domain deleted).
-        # Agent-level overrides via CompiledAgentSpec are the sole policy source.
+        # Agent-level overrides via AgentRuntimeConfig are the sole policy source.
         policies: list[dict[str, Any]] = []
 
         _agent_id: str | None = None
         if agent_spec is not None:
             _agent_id = str(agent_spec.agent_id)
             _approval_tools = list(agent_spec.confirm_before_tools) if agent_spec.confirm_before_tools else []
-            _blocked_tools = list(agent_spec.blocked_tool_ids) if agent_spec.blocked_tool_ids else []
+            _blocked_tools: list[str] = []
             if _approval_tools or _blocked_tools:
                 policies.insert(0, {
                     "id": "agent-spec-override",

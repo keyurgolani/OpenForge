@@ -35,5 +35,5 @@ ENV DATALAB_MODELS_DIR=/models/marker
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD celery -A openforge.worker.celery_app inspect ping -d celery@$HOSTNAME || exit 1
 
-# Use solo pool for asyncio compatibility — one task at a time per worker
-CMD ["celery", "-A", "openforge.worker.celery_app", "worker", "--loglevel=info", "--concurrency=1", "--pool=solo"]
+# Use threads pool for asyncio compatibility with concurrent task support
+CMD ["celery", "-A", "openforge.worker.celery_app", "worker", "--loglevel=info", "--concurrency=4", "--pool=threads"]

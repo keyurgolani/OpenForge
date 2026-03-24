@@ -24,5 +24,13 @@ celery_app.conf.update(
     worker_cancel_long_running_tasks_on_connection_loss=True,
 )
 
+# Deployment scheduler beat schedule
+celery_app.conf.beat_schedule = {
+    "poll-deployments": {
+        "task": "deployment.poll",
+        "schedule": 30.0,
+    },
+}
+
 # Auto-discover tasks
 celery_app.autodiscover_tasks(["openforge.worker"])

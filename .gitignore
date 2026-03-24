@@ -1,4 +1,5 @@
 .claude/
+.worktrees/
 __pycache__/
 *.pyc
 .env
@@ -21,3 +22,4 @@ docs/superpowers/
 static/
 
 .vscode/
+.superpowers/

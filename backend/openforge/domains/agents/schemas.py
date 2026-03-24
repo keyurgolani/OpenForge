@@ -1,4 +1,4 @@
-"""Agent domain API schemas."""
+"""Agent definition domain API schemas."""
 
 from datetime import datetime
 from typing import Any, Optional
@@ -7,93 +7,116 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class AgentCreate(BaseModel):
+class LlmConfigSchema(BaseModel):
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    temperature: float = 0.7
+    max_tokens: int = 2000
+    allow_override: bool = True
+
+
+class ToolConfigSchema(BaseModel):
+    name: str
+    category: str
+    mode: str = Field(default="allowed", pattern="^(allowed|hitl)$")
+
+
+class MemoryConfigSchema(BaseModel):
+    history_limit: int = 20
+    attachment_support: bool = True
+    auto_bookmark_urls: bool = True
+
+
+class ParameterConfigSchema(BaseModel):
+    name: str
+    type: str = Field(default="text", pattern="^(text|enum|number|boolean)$")
+    label: Optional[str] = None
+    description: Optional[str] = None
+    required: bool = True
+    default: Any = None
+    options: list[str] = Field(default_factory=list)
+
+
+class OutputDefinitionSchema(BaseModel):
+    key: str
+    type: str = Field(default="text", pattern="^(text|json|number|boolean)$")
+    label: Optional[str] = None
+    description: Optional[str] = None
+    schema_def: Optional[dict[str, Any]] = Field(default=None, alias="schema")
+
+
+class AgentDefinitionCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     slug: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = Field(default=None, max_length=2000)
-    blueprint_md: Optional[str] = None
-    mode: str = Field(default="interactive", max_length=50)
-    status: str = Field(default="draft", max_length=50)
     icon: Optional[str] = Field(default=None, max_length=100)
-    is_template: bool = False
-    is_system: bool = False
     tags: list[str] = Field(default_factory=list)
+    system_prompt: str = ""
+    llm_config: LlmConfigSchema = Field(default_factory=LlmConfigSchema)
+    tools_config: list[ToolConfigSchema] = Field(default_factory=list)
+    memory_config: MemoryConfigSchema = Field(default_factory=MemoryConfigSchema)
+    parameters: list[ParameterConfigSchema] = Field(default_factory=list)
+    output_definitions: list[OutputDefinitionSchema] = Field(default_factory=list)
 
 
-class AgentUpdate(BaseModel):
+class AgentDefinitionUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=255)
     slug: Optional[str] = Field(default=None, min_length=1, max_length=100)
     description: Optional[str] = Field(default=None, max_length=2000)
-    blueprint_md: Optional[str] = None
-    mode: Optional[str] = Field(default=None, max_length=50)
-    status: Optional[str] = Field(default=None, max_length=50)
     icon: Optional[str] = Field(default=None, max_length=100)
-    is_template: Optional[bool] = None
-    is_system: Optional[bool] = None
     tags: Optional[list[str]] = None
+    system_prompt: Optional[str] = None
+    llm_config: Optional[LlmConfigSchema] = None
+    tools_config: Optional[list[ToolConfigSchema]] = None
+    memory_config: Optional[MemoryConfigSchema] = None
+    parameters: Optional[list[ParameterConfigSchema]] = None
+    output_definitions: Optional[list[OutputDefinitionSchema]] = None
 
 
-class AgentResponse(BaseModel):
+class AgentDefinitionResponse(BaseModel):
     id: UUID
     name: str
     slug: str
     description: Optional[str]
-    blueprint_md: str
-    active_spec_id: Optional[UUID]
-    profile_id: Optional[UUID]
-    mode: str
-    status: str
     icon: Optional[str]
-    is_template: bool
-    is_system: bool
     tags: list[str] = Field(default_factory=list)
-    last_used_at: Optional[datetime]
-    last_error_at: Optional[datetime]
-    health_status: str
-    last_error_summary: Optional[str]
-    compilation_status: str
-    compilation_error: Optional[str]
-    last_compiled_at: Optional[datetime]
+    system_prompt: str
+    llm_config: dict[str, Any] = Field(default_factory=dict)
+    tools_config: list[dict[str, Any]] = Field(default_factory=list)
+    memory_config: dict[str, Any] = Field(default_factory=dict)
+    parameters: list[dict[str, Any]] = Field(default_factory=list)
+    output_definitions: list[dict[str, Any]] = Field(default_factory=list)
+    active_version_id: Optional[UUID]
+    input_schema: list[dict[str, Any]] = Field(default_factory=list)
+    is_parameterized: bool = False
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class AgentListResponse(BaseModel):
-    agents: list[AgentResponse]
+class AgentDefinitionListResponse(BaseModel):
+    agents: list[AgentDefinitionResponse]
     total: int
 
 
-class AgentCompileResponse(BaseModel):
-    agent_id: UUID
-    spec_id: UUID
-    version: int
-    compilation_status: str
-    compilation_error: Optional[str] = None
-
-
-class AgentTemplateCloneRequest(BaseModel):
-    name: Optional[str] = Field(default=None, min_length=1, max_length=255)
-    slug: Optional[str] = Field(default=None, min_length=1, max_length=100)
-
-
-class CompiledSpecResponse(BaseModel):
+class AgentDefinitionVersionResponse(BaseModel):
     id: UUID
     agent_id: UUID
     version: int
-    blueprint_snapshot: dict[str, Any] = Field(default_factory=dict)
-    resolved_config: dict[str, Any] = Field(default_factory=dict)
-    profile_id: Optional[UUID]
-    source_md_hash: str
-    compiler_version: str
-    is_valid: bool
-    validation_errors: list[Any] = Field(default_factory=list)
+    snapshot: dict[str, Any] = Field(default_factory=dict)
     created_at: Optional[datetime]
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class CompiledSpecListResponse(BaseModel):
-    specs: list[CompiledSpecResponse]
+class AgentDefinitionVersionListResponse(BaseModel):
+    versions: list[AgentDefinitionVersionResponse]
     total: int
+
+
+# Backward compat aliases
+AgentCreate = AgentDefinitionCreate
+AgentUpdate = AgentDefinitionUpdate
+AgentResponse = AgentDefinitionResponse
+AgentListResponse = AgentDefinitionListResponse

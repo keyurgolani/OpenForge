@@ -23,6 +23,8 @@ export function useWorkspaceWebSocket(workspaceId: string, channel: 'agent' | 's
     const [isConnected, setIsConnected] = useState(managerRef.current.isConnected)
 
     const connect = useCallback(() => {
+        if (!workspaceId) return
+
         const manager = managerRef.current
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
         const wsUrl = `${protocol}//${window.location.host}/ws/workspace/${workspaceId}/${channel}`

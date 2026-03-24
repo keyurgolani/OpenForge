@@ -28,6 +28,10 @@ class WorkspaceListKnowledgeTool(BaseTool):
         return {
             "type": "object",
             "properties": {
+                "workspace_id": {
+                    "type": "string",
+                    "description": "The UUID of the workspace to list knowledge from. Refer to the application context for available workspace IDs.",
+                },
                 "type": {
                     "type": "string",
                     "enum": ["note", "fleeting", "bookmark", "gist", "image", "audio", "pdf", "document", "sheet", "slides"],
@@ -39,10 +43,14 @@ class WorkspaceListKnowledgeTool(BaseTool):
                     "description": "Maximum number of records to return",
                 },
             },
+            "required": ["workspace_id"],
         }
 
     async def execute(self, params: dict, context: ToolContext) -> ToolResult:
-        url = f"{context.main_app_url}/api/v1/workspaces/{context.workspace_id}/knowledge"
+        workspace_id = params.get("workspace_id")
+        if not workspace_id:
+            return ToolResult(success=False, error="workspace_id is required. Check your system prompt for available workspace IDs.")
+        url = f"{context.main_app_url}/api/v1/workspaces/{workspace_id}/knowledge"
         query: dict = {"page_size": params.get("page_size", 50)}
         if "type" in params:
             query["type"] = params["type"]

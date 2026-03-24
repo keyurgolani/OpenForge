@@ -12,7 +12,6 @@ import {
   MessageSquare,
   Folder,
   Bot,
-  Activity,
   FileText,
   Settings,
   Pin,
@@ -21,6 +20,7 @@ import {
   Pencil,
   Trash2,
   Zap,
+  Rocket,
 } from 'lucide-react';
 import {
   ContextMenu,
@@ -75,6 +75,7 @@ interface PrimaryNavExpandedProps {
     chatConversation: (id: string) => string;
     agents: string;
     automations: string;
+    deployments: string;
     runs: string;
     outputs: string;
     settings: string;
@@ -105,7 +106,6 @@ export function PrimaryNavExpanded({
 }: PrimaryNavExpandedProps) {
   const navigate = useNavigate();
   const [chatSublistOpen, setChatSublistOpen] = useState(true);
-  const [runsSublistOpen, setRunsSublistOpen] = useState(true);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -119,11 +119,6 @@ export function PrimaryNavExpanded({
     const cutoff = Date.now() - 24 * 60 * 60 * 1000;
     return new Date(ts).getTime() >= cutoff;
   });
-
-  // Filter ongoing runs
-  const ongoingRuns = runs.filter((run) =>
-    ['pending', 'queued', 'running', 'waiting_approval', 'interrupted', 'retrying', 'paused'].includes(run.status)
-  ).slice(0, 10);
 
   // Focus rename input when renaming
   useEffect(() => {
@@ -197,54 +192,8 @@ export function PrimaryNavExpanded({
                   isActive={activePath === routes.knowledge}
                 />
 
-                {/* Chat with expandable recent conversations */}
-                <div className="flex flex-col flex-1 min-h-0">
-                  <div className="flex items-center">
-                    <Link
-                      to={routes.chat}
-                      className={cn(
-                        'sidebar-item flex-1',
-                        isActive('/chat') ? 'active' : ''
-                      )}
-                    >
-                      <MessageSquare className="w-4 h-4" /> Chat
-                    </Link>
-                    {recentConversations.length > 0 && (
-                      <button
-                        className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors flex-shrink-0"
-                        onClick={() => setChatSublistOpen((p) => !p)}
-                      >
-                        {chatSublistOpen ? (
-                          <ChevronDown className="w-3 h-3" />
-                        ) : (
-                          <ChevronRight className="w-3 h-3" />
-                        )}
-                      </button>
-                    )}
-                  </div>
-
-                  {chatSublistOpen && recentConversations.length > 0 && (
-                    <SubList label="Recent Chats">
-                      {recentConversations.map((c) => (
-                        <ConversationItem
-                          key={c.id}
-                          conversation={c}
-                          isRenaming={renamingId === c.id}
-                          renameDraft={renameDraft}
-                          renameInputRef={renameInputRef}
-                          isActive={isActive(`/chat/${c.id}`)}
-                          to={routes.chatConversation(c.id)}
-                          onRename={() => beginRename(c.id, c.title)}
-                          onRenameChange={setRenameDraft}
-                          onRenameCommit={commitRename}
-                          onRenameCancel={cancelRename}
-                          onDelete={onDeleteConversation}
-                          onPermanentDelete={onPermanentDeleteConversation}
-                        />
-                      ))}
-                    </SubList>
-                  )}
-                </div>
+                {/* Spacer to push remaining workspace-scoped items up */}
+                <div className="flex-1" />
               </nav>
             </div>
 
@@ -283,6 +232,12 @@ export function PrimaryNavExpanded({
           <div className="flex-1 min-h-0 flex flex-col px-4 pt-3 pb-2">
             <nav className="flex flex-col flex-1 min-h-0 gap-1">
               <NavItem
+                to="/chat"
+                icon={<MessageSquare className="w-4 h-4" />}
+                label="Chat"
+                isActive={isActive('/chat')}
+              />
+              <NavItem
                 to={routes.agents}
                 icon={<Bot className="w-4 h-4" />}
                 label="Agents"
@@ -295,61 +250,12 @@ export function PrimaryNavExpanded({
                 isActive={isActive('/automations')}
               />
 
-              {/* Runs with expandable active runs */}
-              <div className="flex flex-col flex-1 min-h-0">
-                <div className="flex items-center">
-                  <Link
-                    to={routes.runs}
-                    className={cn(
-                      'sidebar-item flex-1',
-                      isActive('/runs') ? 'active' : ''
-                    )}
-                  >
-                    <Activity className="w-4 h-4" /> Runs
-                  </Link>
-                  {ongoingRuns.length > 0 && (
-                    <button
-                      className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors flex-shrink-0"
-                      onClick={() => setRunsSublistOpen((p) => !p)}
-                    >
-                      {runsSublistOpen ? (
-                        <ChevronDown className="w-3 h-3" />
-                      ) : (
-                        <ChevronRight className="w-3 h-3" />
-                      )}
-                    </button>
-                  )}
-                </div>
-
-                {runsSublistOpen && ongoingRuns.length > 0 && (
-                  <SubList label="Active Runs">
-                    {ongoingRuns.map((run) => (
-                      <Link
-                        key={run.id}
-                        to={routes.runs}
-                        className={cn(
-                          'sidebar-item text-xs',
-                          isActive('/runs') ? 'active' : ''
-                        )}
-                      >
-                        <Activity className="w-3 h-3" />
-                        <span className="truncate">
-                          {run.run_type} {run.id.slice(0, 8)}
-                        </span>
-                        {run.status === 'running' && (
-                          <span className="relative flex h-1.5 w-1.5 ml-auto flex-shrink-0">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
-                          </span>
-                        )}
-                        {run.status === 'paused' && (
-                          <span className="flex h-1.5 w-1.5 rounded-full bg-amber-400 ml-auto flex-shrink-0" />
-                        )}
-                      </Link>
-                    ))}
-                  </SubList>
-                )}
-              </div>
+              <NavItem
+                to={routes.deployments}
+                icon={<Rocket className="w-4 h-4" />}
+                label="Deployments"
+                isActive={isActive('/deployments')}
+              />
 
               <NavItem
                 to={routes.outputs}

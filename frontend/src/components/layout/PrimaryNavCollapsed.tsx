@@ -10,10 +10,10 @@ import {
   MessageSquare,
   Folder,
   Bot,
-  Activity,
   FileText,
   Settings,
   Zap,
+  Rocket,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ConnectionStatus } from './ConnectionStatus';
@@ -29,6 +29,7 @@ interface PrimaryNavCollapsedProps {
     chat: string;
     agents: string;
     automations: string;
+    deployments: string;
     runs: string;
     outputs: string;
     settings: string;
@@ -119,10 +120,10 @@ export function PrimaryNavCollapsed({
               icon={<Zap className="w-4 h-4" />}
             />
             <NavIcon
-              to={routes.runs}
-              title="Runs"
-              isActive={isActive('/runs')}
-              icon={<Activity className="w-4 h-4" />}
+              to={routes.deployments}
+              title="Deployments"
+              isActive={isActive('/deployments')}
+              icon={<Rocket className="w-4 h-4" />}
             />
             <NavIcon
               to={routes.outputs}

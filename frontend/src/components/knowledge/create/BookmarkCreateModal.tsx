@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Loader2, Save, Link2 } from 'lucide-react'
 import ModalShell from '@/components/knowledge/shared/ModalShell'
 import TagInput from '@/components/knowledge/shared/TagInput'
-import { createKnowledge } from '@/lib/api'
+import { createKnowledge, updateKnowledgeTags } from '@/lib/api'
 
 interface BookmarkCreateModalProps {
     isOpen: boolean
@@ -46,8 +46,10 @@ export default function BookmarkCreateModal({ isOpen, onClose, workspaceId, onCr
                 url: url.trim(),
                 title: title.trim() || null,
                 content: '',
-                tags,
             })
+            if (tags.length > 0 && result?.id) {
+                await updateKnowledgeTags(workspaceId, result.id, tags)
+            }
             qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
             onCreated?.(result)
             reset()

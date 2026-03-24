@@ -24,12 +24,12 @@ class TestAgentRegistry:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_resolve_by_id_no_active_spec(self):
+    async def test_resolve_by_id_no_active_version(self):
         registry = AgentRegistry()
         mock_agent = MagicMock()
         mock_agent.id = uuid.uuid4()
         mock_agent.slug = "test"
-        mock_agent.active_spec_id = None
+        mock_agent.active_version_id = None
 
         mock_db = MagicMock()
         mock_db.get = AsyncMock(return_value=mock_agent)
@@ -38,44 +38,70 @@ class TestAgentRegistry:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_resolve_by_id_with_spec(self):
+    async def test_resolve_by_id_builds_config(self):
         registry = AgentRegistry()
         agent_id = uuid.uuid4()
-        spec_id = uuid.uuid4()
 
         mock_agent = MagicMock()
         mock_agent.id = agent_id
         mock_agent.slug = "test-agent"
-        mock_agent.active_spec_id = spec_id
-
-        mock_spec = MagicMock()
-        mock_spec.resolved_config = {
-            "agent_id": str(agent_id),
-            "agent_slug": "test-agent",
-            "name": "Test Agent",
-            "version": "1.0.0",
-            "profile_id": str(uuid.uuid4()),
-            "strategy": "chat",
-        }
+        mock_agent.name = "Test Agent"
+        mock_agent.active_version_id = uuid.uuid4()
+        mock_agent.system_prompt = "You are a test agent."
+        mock_agent.llm_config = {"provider": "openai", "model": "gpt-4"}
+        mock_agent.tools_config = [{"name": "search", "category": "web"}]
+        mock_agent.memory_config = {"history_limit": 10}
+        mock_agent.parameters = []
+        mock_agent.output_definitions = [{"key": "output", "type": "text"}]
 
         mock_db = MagicMock()
-
-        async def fake_get(model_cls, obj_id):
-            if obj_id == agent_id:
-                return mock_agent
-            if obj_id == spec_id:
-                return mock_spec
-            return None
-
-        mock_db.get = AsyncMock(side_effect=fake_get)
+        mock_db.get = AsyncMock(return_value=mock_agent)
 
         result = await registry.resolve(mock_db, agent_id=agent_id)
         assert result is not None
         assert result.agent_slug == "test-agent"
+        assert result.name == "Test Agent"
+        assert result.provider_name == "openai"
+        assert result.model_name == "gpt-4"
 
         # Should be cached
         assert agent_id in registry._cache
         assert "test-agent" in registry._slug_cache
+
+    @pytest.mark.asyncio
+    async def test_list_available_agents(self):
+        registry = AgentRegistry()
+
+        agent_with_version = MagicMock()
+        agent_with_version.id = uuid.uuid4()
+        agent_with_version.slug = "active"
+        agent_with_version.name = "Active"
+        agent_with_version.description = "Has active version"
+        agent_with_version.icon = None
+        agent_with_version.active_version_id = uuid.uuid4()
+
+        class _Scalars:
+            def __init__(self, rows):
+                self._rows = rows
+
+            def all(self):
+                return list(self._rows)
+
+        class _Result:
+            def __init__(self, rows):
+                self._rows = rows
+
+            def scalars(self):
+                return _Scalars(self._rows)
+
+        mock_db = MagicMock()
+        mock_db.execute = AsyncMock(return_value=_Result([agent_with_version]))
+
+        agents = await registry.list_available_agents(mock_db)
+
+        assert len(agents) == 1
+        assert agents[0]["slug"] == "active"
+        assert "mode" not in agents[0]
 
     @pytest.mark.asyncio
     async def test_cache_hit(self):

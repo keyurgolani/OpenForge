@@ -25,20 +25,27 @@ class WorkspaceDeleteKnowledgeTool(BaseTool):
         return {
             "type": "object",
             "properties": {
+                "workspace_id": {
+                    "type": "string",
+                    "description": "The UUID of the workspace containing the knowledge record. Refer to the application context for available workspace IDs.",
+                },
                 "knowledge_id": {
                     "type": "string",
                     "description": "The UUID of the knowledge record to delete",
                 },
             },
-            "required": ["knowledge_id"],
+            "required": ["workspace_id", "knowledge_id"],
         }
 
     @property
     def risk_level(self): return "high"
 
     async def execute(self, params: dict, context: ToolContext) -> ToolResult:
+        workspace_id = params.get("workspace_id")
+        if not workspace_id:
+            return ToolResult(success=False, error="workspace_id is required. Check your system prompt for available workspace IDs.")
         knowledge_id = params["knowledge_id"]
-        url = f"{context.main_app_url}/api/v1/workspaces/{context.workspace_id}/knowledge/{knowledge_id}"
+        url = f"{context.main_app_url}/api/v1/workspaces/{workspace_id}/knowledge/{knowledge_id}"
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 resp = await client.delete(url)

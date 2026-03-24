@@ -105,6 +105,16 @@ TOOL_ALIASES: dict[str, str] = {
     "memory.retrieve":              "memory.recall",
     "memory.delete":                "memory.forget",
     "memory.remove":                "memory.forget",
+
+    # Chat tools moved from workspace to agent
+    "workspace.list_chats":         "agent.list_chats",
+    "workspace.read_chat":          "agent.read_chat",
+    "memory.list_conversations":    "agent.list_chats",
+    "memory.read_conversation":     "agent.read_chat",
+
+    # Unprefixed chat shorthands
+    "list_chats":                   "agent.list_chats",
+    "read_chat":                    "agent.read_chat",
 }
 
 
@@ -128,7 +138,16 @@ class ToolRegistry:
         return None
 
     def list_tools(self) -> list[dict]:
-        return [tool.to_metadata() for tool in self._tools.values()]
+        result = []
+        for tool in self._tools.values():
+            meta = tool.to_metadata()
+            manifest = self._manifests.get(tool.id)
+            if manifest:
+                meta["confirm_by_default"] = manifest.get("confirm_by_default", False)
+            else:
+                meta["confirm_by_default"] = False
+            result.append(meta)
+        return result
 
     def auto_discover(self, tools_package_dir: str = "tools") -> None:
         """

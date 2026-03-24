@@ -9,20 +9,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 def test_trust_and_policy_modules_are_importable():
     modules = [
-        "openforge.domains.prompts.models",
-        "openforge.domains.prompts.schemas",
-        "openforge.domains.prompts.service",
-        "openforge.domains.prompts.router",
-        "openforge.domains.prompts.types",
-        "openforge.domains.prompts.rendering",
-        "openforge.domains.prompts.seed",
-        "openforge.domains.policies.models",
-        "openforge.domains.policies.schemas",
-        "openforge.domains.policies.service",
-        "openforge.domains.policies.router",
-        "openforge.domains.policies.types",
-        "openforge.domains.policies.evaluator",
-        "openforge.domains.policies.approval_service",
         "openforge.runtime.trust_boundaries",
         "openforge.runtime.input_preparation",
     ]
@@ -34,6 +20,8 @@ def test_trust_and_policy_modules_are_importable():
 
 def test_prompt_catalogue_is_no_longer_the_home_of_managed_prompt_bodies():
     catalogue_file = PROJECT_ROOT / "backend" / "openforge" / "core" / "prompt_catalogue.py"
+    if not catalogue_file.exists():
+        return  # File has been fully removed, which satisfies this guardrail
     content = catalogue_file.read_text(encoding="utf-8")
 
     forbidden_fragments = [

@@ -36,11 +36,19 @@ export const ROUTES = {
   CHAT_CONVERSATION: `${WORKSPACE_PREFIX}/chat/:conversationId`,
   SEARCH: `${WORKSPACE_PREFIX}/search`,
 
+  // Global chat routes
+  CHAT_GLOBAL: '/chat',
+  CHAT_GLOBAL_CONVERSATION: '/chat/:conversationId',
+
   // Domain entity routes (workspace-agnostic)
   AGENTS: '/agents',
+  AGENT_CREATE: '/agents/new',
   AGENT_DETAIL: '/agents/:agentId',
   AUTOMATIONS: '/automations',
   AUTOMATION_DETAIL: '/automations/:automationId',
+  DEPLOYMENTS: '/deployments',
+  DEPLOYMENT_DETAIL: '/deployments/:deploymentId',
+  DEPLOYMENT_RUN_DETAIL: '/deployments/:deploymentId/runs/:runId',
   RUNS: '/runs',
   RUN_DETAIL: '/runs/:runId',
   OUTPUTS: '/outputs',
@@ -88,6 +96,13 @@ export function searchRoute(workspaceId: string): string {
   return routeWithParams(ROUTES.SEARCH, { workspaceId });
 }
 
+export function globalChatRoute(conversationId?: string): string {
+  if (conversationId) {
+    return routeWithParams(ROUTES.CHAT_GLOBAL_CONVERSATION, { conversationId });
+  }
+  return ROUTES.CHAT_GLOBAL;
+}
+
 export function agentsRoute(agentId?: string): string {
   if (agentId) {
     return routeWithParams(ROUTES.AGENT_DETAIL, { agentId });
@@ -95,11 +110,26 @@ export function agentsRoute(agentId?: string): string {
   return ROUTES.AGENTS;
 }
 
+export function agentCreateRoute(): string {
+  return ROUTES.AGENT_CREATE;
+}
+
 export function automationsRoute(automationId?: string): string {
   if (automationId) {
     return routeWithParams(ROUTES.AUTOMATION_DETAIL, { automationId });
   }
   return ROUTES.AUTOMATIONS;
+}
+
+export function deploymentsRoute(deploymentId?: string): string {
+  if (deploymentId) {
+    return routeWithParams(ROUTES.DEPLOYMENT_DETAIL, { deploymentId });
+  }
+  return ROUTES.DEPLOYMENTS;
+}
+
+export function deploymentRunRoute(deploymentId: string, runId: string): string {
+  return routeWithParams(ROUTES.DEPLOYMENT_RUN_DETAIL, { deploymentId, runId });
 }
 
 export function runsRoute(runId?: string): string {

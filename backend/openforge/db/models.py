@@ -181,8 +181,11 @@ class Conversation(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    workspace_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    workspace_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True
+    )
+    agent_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True
     )
     title: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     title_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -386,8 +389,8 @@ class AgentExecution(Base):
     __tablename__ = "agent_executions"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    workspace_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    workspace_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True
     )
     conversation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False
@@ -560,6 +563,9 @@ class RunModel(Base):
     parent_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     root_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     spawned_by_step_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    deployment_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("deployments.id", ondelete="SET NULL"), nullable=True, index=True,
+    )
     workspace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(50), default="pending")
     state_snapshot: Mapped[dict] = mapped_column(JSONB, default=dict)
@@ -996,51 +1002,38 @@ class FailureEventModel(Base):
 # =============================================================================
 
 
-class AgentModel(Base):
-    """Agent - a workspace-agnostic AI assistant with blueprint-defined behavior."""
+class AgentDefinitionModel(Base):
+    """Agent definition — a workspace-agnostic AI assistant with structured config."""
     __tablename__ = "agents"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    blueprint_md: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    active_spec_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+    icon: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    tags: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    system_prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    llm_config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    tools_config: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    memory_config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    parameters: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    output_definitions: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    active_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("compiled_agent_specs.id", ondelete="SET NULL", use_alter=True),
         nullable=True,
         index=True,
     )
-    profile_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("agent_profiles.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-    mode: Mapped[str] = mapped_column(String(50), nullable=False, default="interactive")
-    status: Mapped[str] = mapped_column(String(50), nullable=False, default="draft")
-    icon: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    is_template: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    tags: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
-    last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_error_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    health_status: Mapped[str] = mapped_column(String(50), nullable=False, default="unknown")
-    last_error_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    compilation_status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
-    compilation_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    last_compiled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
 
-    __table_args__ = (
-        Index("idx_agents_status", "status"),
-        Index("idx_agents_mode", "mode"),
-    )
+
+# Backward-compat alias — existing code imports AgentModel
+AgentModel = AgentDefinitionModel
 
 
-class CompiledAgentSpecModel(Base):
-    """Compiled agent specification - immutable snapshot of resolved agent config."""
+class AgentDefinitionVersionModel(Base):
+    """Immutable snapshot of a compiled agent configuration (version)."""
     __tablename__ = "compiled_agent_specs"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -1051,17 +1044,7 @@ class CompiledAgentSpecModel(Base):
         index=True,
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    blueprint_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    resolved_config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    profile_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("agent_profiles.id", ondelete="SET NULL"),
-        nullable=True,
-    )
-    source_md_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    compiler_version: Mapped[str] = mapped_column(String(20), nullable=False, default="1.0.0")
-    is_valid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    validation_errors: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
 
     __table_args__ = (
@@ -1069,17 +1052,22 @@ class CompiledAgentSpecModel(Base):
     )
 
 
+# Backward-compat alias — existing code imports CompiledAgentSpecModel
+CompiledAgentSpecModel = AgentDefinitionVersionModel
+
+
 class AutomationModel(Base):
     """Automation - a workspace-agnostic agent-powered background task."""
     __tablename__ = "automations"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    agent_id: Mapped[uuid.UUID] = mapped_column(
+    agent_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("agents.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
+    graph_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -1115,6 +1103,38 @@ class AutomationModel(Base):
     )
 
 
+class DeploymentModel(Base):
+    """A live, deployed instance of an automation with baked-in inputs."""
+    __tablename__ = "deployments"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    automation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("automations.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    agent_spec_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("compiled_agent_specs.id", ondelete="SET NULL"), nullable=True, index=True,
+    )
+    automation_spec_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("compiled_automation_specs.id", ondelete="SET NULL"), nullable=True, index=True,
+    )
+    deployed_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    input_values: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="active", index=True)
+    trigger_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("trigger_definitions.id", ondelete="SET NULL"), nullable=True,
+    )
+    last_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_success_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_failure_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+    torn_down_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class CompiledAutomationSpecModel(Base):
     """Compiled automation specification - immutable snapshot of resolved automation config."""
     __tablename__ = "compiled_automation_specs"
@@ -1138,6 +1158,8 @@ class CompiledAutomationSpecModel(Base):
         ForeignKey("trigger_definitions.id", ondelete="SET NULL"),
         nullable=True,
     )
+    graph_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    node_specs: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     compiler_version: Mapped[str] = mapped_column(String(20), nullable=False, default="1.0.0")
     is_valid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     validation_errors: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
@@ -1145,6 +1167,72 @@ class CompiledAutomationSpecModel(Base):
 
     __table_args__ = (
         UniqueConstraint("automation_id", "version", name="uq_compiled_automation_specs_automation_version"),
+    )
+
+
+class AutomationNodeModel(Base):
+    """A single agent node in an automation DAG."""
+    __tablename__ = "automation_nodes"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    automation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("automations.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    agent_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False,
+    )
+    node_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    position_x: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    position_y: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+
+    __table_args__ = (
+        UniqueConstraint("automation_id", "node_key", name="uq_automation_nodes_automation_node_key"),
+    )
+
+
+class AutomationEdgeModel(Base):
+    """A wire between two nodes in an automation DAG."""
+    __tablename__ = "automation_edges"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    automation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("automations.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    source_node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("automation_nodes.id", ondelete="CASCADE"), nullable=False,
+    )
+    source_output_key: Mapped[str] = mapped_column(String(100), nullable=False, default="output")
+    target_node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("automation_nodes.id", ondelete="CASCADE"), nullable=False,
+    )
+    target_input_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+
+    __table_args__ = (
+        UniqueConstraint("automation_id", "target_node_id", "target_input_key", name="uq_automation_edges_target_input"),
+    )
+
+
+class AutomationNodeInputModel(Base):
+    """A static input value pre-filled on the canvas for a node."""
+    __tablename__ = "automation_node_inputs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    automation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("automations.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("automation_nodes.id", ondelete="CASCADE"), nullable=False,
+    )
+    input_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    static_value: Mapped[dict] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+
+    __table_args__ = (
+        UniqueConstraint("node_id", "input_key", name="uq_automation_node_inputs_node_input"),
     )
 
 

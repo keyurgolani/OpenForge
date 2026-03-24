@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Loader2, Save, Maximize2 } from 'lucide-react'
 import ModalShell from '@/components/knowledge/shared/ModalShell'
 import TagInput from '@/components/knowledge/shared/TagInput'
-import { createKnowledge } from '@/lib/api'
+import { createKnowledge, updateKnowledgeTags } from '@/lib/api'
 
 interface NoteCreateModalProps {
     isOpen: boolean
@@ -36,6 +36,10 @@ export default function NoteCreateModal({ isOpen, onClose, workspaceId, onCreate
     }
 
     const handleSave = async () => {
+        if (!title.trim() && !content.trim()) {
+            setError('Please enter a title or some content.')
+            return
+        }
         setSaving(true)
         setError(null)
         try {
@@ -43,8 +47,10 @@ export default function NoteCreateModal({ isOpen, onClose, workspaceId, onCreate
                 type: 'note',
                 title: title.trim() || null,
                 content,
-                tags,
             })
+            if (tags.length > 0 && result?.id) {
+                await updateKnowledgeTags(workspaceId, result.id, tags)
+            }
             qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
             onCreated?.(result)
             reset()
@@ -57,6 +63,10 @@ export default function NoteCreateModal({ isOpen, onClose, workspaceId, onCreate
     }
 
     const handleExpand = async () => {
+        if (!title.trim() && !content.trim()) {
+            setError('Please enter a title or some content.')
+            return
+        }
         setSaving(true)
         setError(null)
         try {
@@ -64,8 +74,10 @@ export default function NoteCreateModal({ isOpen, onClose, workspaceId, onCreate
                 type: 'note',
                 title: title.trim() || null,
                 content,
-                tags,
             })
+            if (tags.length > 0 && result?.id) {
+                await updateKnowledgeTags(workspaceId, result.id, tags)
+            }
             qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
             onCreated?.(result)
             reset()

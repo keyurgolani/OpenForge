@@ -39,6 +39,7 @@ async def list_runs(
     run_type: str | None = None,
     agent_id: UUID | None = None,
     automation_id: UUID | None = None,
+    deployment_id: UUID | None = None,
     service: RunService = Depends(get_run_service),
 ):
     list_kwargs = {"skip": skip, "limit": limit}
@@ -52,6 +53,8 @@ async def list_runs(
         list_kwargs["agent_id"] = agent_id
     if automation_id is not None:
         list_kwargs["automation_id"] = automation_id
+    if deployment_id is not None:
+        list_kwargs["deployment_id"] = deployment_id
     runs, total = await service.list_runs(**list_kwargs)
     return {"runs": runs, "total": total}
 

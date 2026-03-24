@@ -14,6 +14,7 @@ from .outputs.router import router as outputs_router
 from .knowledge.router import global_router as knowledge_global_router
 from .knowledge.router import router as knowledge_router
 from .retrieval.router import router as retrieval_router
+from .deployments.router import deploy_router, listing_router as deployments_listing_router
 from .runs.router import router as runs_router
 
 
@@ -30,6 +31,18 @@ def register_domain_routers(app: FastAPI) -> None:
         automations_router,
         prefix=API_PREFIXES[DomainNoun.AUTOMATION],
         tags=["automations"],
+    )
+
+    app.include_router(
+        deploy_router,
+        prefix=API_PREFIXES[DomainNoun.AUTOMATION] + "/{automation_id}/deploy",
+        tags=["deployments"],
+    )
+
+    app.include_router(
+        deployments_listing_router,
+        prefix=API_PREFIXES[DomainNoun.DEPLOYMENT],
+        tags=["deployments"],
     )
 
     app.include_router(

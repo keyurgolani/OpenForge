@@ -1,6 +1,6 @@
 import { Bookmark, ExternalLink, Globe } from 'lucide-react'
 import type { KnowledgeListItem } from './types'
-import { TagRow, PinIndicator, formatTimestamp, ProcessingSkeleton } from './shared'
+import { TagRow, PinIndicator, formatTimestamp, ProcessingSkeleton, mdPreview } from './shared'
 
 function extractDomain(url: string | null): string | null {
     if (!url) return null
@@ -87,9 +87,10 @@ export function BookmarkCard({ item, slim, isProcessing }: { item: KnowledgeList
             {isProcessing && !item.content_preview ? (
                 <ProcessingSkeleton lines={2} />
             ) : item.content_preview ? (
-                <p className="text-[11px] text-foreground/55 line-clamp-2 leading-relaxed">
-                    {item.content_preview}
-                </p>
+                <div
+                    className="text-[11px] text-foreground/55 line-clamp-2 leading-relaxed prose prose-invert prose-p:my-0 prose-headings:my-0 prose-headings:text-[11px] prose-li:my-0 prose-ul:my-0 max-w-none"
+                    dangerouslySetInnerHTML={{ __html: mdPreview.render(item.content_preview) }}
+                />
             ) : null}
 
             {!slim && (

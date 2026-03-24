@@ -51,7 +51,9 @@ export default {
     				'3': 'hsl(var(--chart-3))',
     				'4': 'hsl(var(--chart-4))',
     				'5': 'hsl(var(--chart-5))'
-    			}
+    			},
+    			success: 'hsl(var(--success))',
+    			warning: 'hsl(var(--warning))'
     		},
     		borderRadius: {
     			lg: 'var(--radius)',
@@ -97,7 +99,8 @@ export default {
     			'slide-in-right': 'slideInRight 300ms cubic-bezier(0.32, 0.72, 0, 1) forwards',
     			'scale-in': 'scaleIn 400ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
     			blink: 'blink 1s step-end infinite',
-    			blob: 'blob 7s infinite'
+    			blob: 'blob 7s infinite',
+    			'cursor-pulse': 'cursor-pulse 600ms ease-in-out infinite'
     		},
     		keyframes: {
     			fadeIn: {
@@ -156,6 +159,10 @@ export default {
     				'100%': {
     					transform: 'translate(0px, 0px) scale(1)'
     				}
+    			},
+    			'cursor-pulse': {
+    				'0%, 100%': { opacity: '1' },
+    				'50%': { opacity: '0.3' }
     			}
     		},
     		transitionTimingFunction: {

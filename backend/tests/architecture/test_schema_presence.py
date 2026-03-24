@@ -23,9 +23,10 @@ def test_core_domain_tables():
 
 def test_agent_model_fields():
     assert hasattr(AgentModel, "slug")
-    assert hasattr(AgentModel, "blueprint_md")
-    assert hasattr(AgentModel, "active_spec_id")
-    assert hasattr(AgentModel, "compilation_status")
+    assert hasattr(AgentModel, "system_prompt")
+    assert hasattr(AgentModel, "llm_config")
+    assert hasattr(AgentModel, "tools_config")
+    assert hasattr(AgentModel, "active_version_id")
 
 
 def test_automation_model_fields():

@@ -56,4 +56,4 @@ class EventPublisher:
             redis = await get_redis()
             await redis.publish(f"runtime:{payload['run_id']}", json.dumps(payload, default=str))
         except Exception as exc:  # pragma: no cover - best effort relay
-            logger.debug("Runtime event redis publish skipped: %s", exc)
+            logger.warning("Runtime event redis publish skipped: %s", exc)

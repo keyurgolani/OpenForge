@@ -34,6 +34,9 @@
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
+    --success: 142 71% 45%;
+    --warning: 38 92% 50%;
+
     --ring: 220 95% 45%;
 
     --radius: 1rem;
@@ -139,6 +142,9 @@
 
     --destructive: 0 75% 60%;
     --destructive-foreground: 0 0% 100%;
+
+    --success: 142 71% 45%;
+    --warning: 38 92% 50%;
 
     --ring: 192 100% 68%;
 

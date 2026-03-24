@@ -1,72 +1,101 @@
 /**
- * Agent domain types
+ * Agent definition domain types
  */
 
-export type AgentMode = 'interactive' | 'background' | 'hybrid';
-export type AgentStatus = 'draft' | 'active' | 'archived';
+export interface LlmConfig {
+  provider: string | null;
+  model: string | null;
+  temperature: number;
+  max_tokens: number;
+  allow_override: boolean;
+}
 
-export interface Agent {
+export interface ToolConfig {
+  name: string;
+  category: string;
+  mode: 'allowed' | 'hitl';
+}
+
+export interface MemoryConfig {
+  history_limit: number;
+  attachment_support: boolean;
+  auto_bookmark_urls: boolean;
+}
+
+export interface ParameterConfig {
+  name: string;
+  type: 'text' | 'enum' | 'number' | 'boolean';
+  label: string | null;
+  description: string | null;
+  required: boolean;
+  default: unknown;
+  options: string[];
+}
+
+export interface OutputDefinition {
+  key: string;
+  type: 'text' | 'json' | 'number' | 'boolean';
+  label?: string;
+  description?: string;
+  schema?: Record<string, unknown>;
+}
+
+export interface AgentDefinition {
   id: string;
   name: string;
   slug: string;
   description: string | null;
-  blueprint_md: string;
-  active_spec_id: string | null;
-  profile_id: string | null;
-  mode: AgentMode;
-  status: AgentStatus;
   icon: string | null;
-  is_template: boolean;
-  is_system: boolean;
   tags: string[];
-  last_used_at: string | null;
-  last_error_at: string | null;
-  health_status: string;
-  last_error_summary: string | null;
-  compilation_status: string;
-  compilation_error: string | null;
-  last_compiled_at: string | null;
+  system_prompt: string;
+  llm_config: LlmConfig;
+  tools_config: ToolConfig[];
+  memory_config: MemoryConfig;
+  parameters: ParameterConfig[];
+  output_definitions: OutputDefinition[];
+  active_version_id: string | null;
+  input_schema: ParameterConfig[];
+  is_parameterized: boolean;
   created_at: string;
   updated_at: string;
 }
 
-export interface AgentCreate {
+export interface AgentDefinitionCreate {
   name: string;
   slug: string;
   description?: string;
-  blueprint_md?: string;
-  mode?: AgentMode;
-  status?: string;
   icon?: string;
-  is_template?: boolean;
   tags?: string[];
+  system_prompt?: string;
+  llm_config?: Partial<LlmConfig>;
+  tools_config?: ToolConfig[];
+  memory_config?: Partial<MemoryConfig>;
+  parameters?: ParameterConfig[];
+  output_definitions?: OutputDefinition[];
 }
 
-export interface AgentUpdate extends Partial<AgentCreate> {}
+export interface AgentDefinitionUpdate extends Partial<AgentDefinitionCreate> {}
 
-export interface AgentListResponse {
-  agents: Agent[];
+export interface AgentDefinitionListResponse {
+  agents: AgentDefinition[];
   total: number;
 }
 
-export interface AgentCompileResponse {
-  agent_id: string;
-  spec_id: string;
-  version: number;
-  compilation_status: string;
-  compilation_error: string | null;
-}
-
-export interface CompiledSpec {
+export interface AgentDefinitionVersion {
   id: string;
   agent_id: string;
   version: number;
-  blueprint_snapshot: Record<string, unknown>;
-  resolved_config: Record<string, unknown>;
-  profile_id: string | null;
-  source_md_hash: string;
-  compiler_version: string;
-  is_valid: boolean;
-  validation_errors: unknown[];
+  snapshot: Record<string, unknown>;
   created_at: string;
 }
+
+export interface AgentDefinitionVersionListResponse {
+  versions: AgentDefinitionVersion[];
+  total: number;
+}
+
+// Backward compat aliases
+export type Agent = AgentDefinition;
+export type AgentCreate = AgentDefinitionCreate;
+export type AgentUpdate = AgentDefinitionUpdate;
+export type AgentListResponse = AgentDefinitionListResponse;

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import {
     Wrench, CheckCircle2, XCircle, Loader2,
     File, Folder, Terminal, Globe, BookOpen, MessageSquare, Circle,
@@ -15,21 +15,39 @@ interface ToolResult {
     error?: string
 }
 
+interface HITLInfo {
+    hitl_id: string
+    action_summary: string
+    risk_level: string
+    status: 'pending' | 'approved' | 'denied'
+    resolution_note?: string | null
+}
+
 interface ToolCallCardProps {
     callId: string
     toolName: string
     arguments: Record<string, unknown>
     result?: ToolResult
     isRunning: boolean
+    hitl?: HITLInfo | null
+    nestedTimeline?: unknown[] | null
+    delegatedConversationId?: string | null
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
+function unwrapUntrustedContent(value: string): string {
+    const match = value.match(/^<untrusted_content\b[^>]*>\s*([\s\S]*?)\s*<\/untrusted_content>$/i)
+    return match ? match[1].trim() : value
+}
+
 function tryParseJSON(val: unknown): unknown {
-    if (typeof val === 'string') {
-        try { return JSON.parse(val) } catch { return val }
-    }
-    return val
+    if (typeof val !== 'string') return val
+
+    const normalized = unwrapUntrustedContent(val).trim()
+    if (!normalized) return normalized
+
+    try { return JSON.parse(normalized) } catch { return normalized }
 }
 
 function formatBytes(bytes: number): string {
@@ -50,6 +68,30 @@ function humanizeKey(key: string): string {
 
 function truncate(s: string, max = 60): string {
     return s.length > max ? s.slice(0, max) + '…' : s
+}
+
+const TOOL_OUTPUT_PREVIEW_MAX_LINES = 12
+const TOOL_OUTPUT_PREVIEW_MAX_CHARS = 1400
+
+function buildOutputPreview(content: string): { text: string; truncated: boolean } {
+    if (!content) return { text: content, truncated: false }
+
+    let next = content
+    let truncated = false
+    const lines = next.split('\n')
+
+    if (lines.length > TOOL_OUTPUT_PREVIEW_MAX_LINES) {
+        next = lines.slice(0, TOOL_OUTPUT_PREVIEW_MAX_LINES).join('\n')
+        truncated = true
+    }
+
+    if (next.length > TOOL_OUTPUT_PREVIEW_MAX_CHARS) {
+        next = next.slice(0, TOOL_OUTPUT_PREVIEW_MAX_CHARS).trimEnd()
+        truncated = true
+    }
+
+    if (truncated) next = `${next}\n…`
+    return { text: next, truncated }
 }
 
 // ── Header hint: primary arg shown inline in the collapsed toggle ─────────────
@@ -163,7 +205,7 @@ function FileListOutput({ items }: { items: Array<{ name: string; type: string; 
 }
 
 function SearchResultsOutput({ results }: {
-    results: Array<{ title: string; chunk_text?: string; knowledge_type?: string; score?: number; knowledge_id?: string; conversation_id?: string }>
+    results: Array<{ title: string; chunk_text?: string; snippet?: string; knowledge_type?: string; score?: number; knowledge_id?: string; conversation_id?: string }>
 }) {
     if (results.length === 0) return <span className="text-[11px] text-muted-foreground/50 italic">No results found</span>
     return (
@@ -181,8 +223,8 @@ function SearchResultsOutput({ results }: {
                             )}
                         </div>
                     </div>
-                    {r.chunk_text && (
-                        <p className="text-[10px] leading-relaxed text-muted-foreground/65 line-clamp-2">{r.chunk_text}</p>
+                    {(r.chunk_text || r.snippet) && (
+                        <p className="text-[10px] leading-relaxed text-muted-foreground/65 line-clamp-2">{r.chunk_text ?? r.snippet}</p>
                     )}
                 </div>
             ))}
@@ -250,9 +292,7 @@ function HttpOutput({ data }: { data: { status: number; body: string; headers?: 
                 <span className="text-[10px] text-muted-foreground/50">{isOk ? 'OK' : 'Error'}</span>
             </div>
             {data.body && (
-                <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-muted/30 px-2 py-1.5 text-[11px] text-foreground/70 max-h-48 font-mono">
-                    {data.body}
-                </pre>
+                <ExpandablePre content={data.body} className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-muted/30 px-2 py-1.5 text-[11px] text-foreground/70 max-h-48 font-mono" />
             )}
         </div>
     )
@@ -391,12 +431,31 @@ function DiffOutput({ content }: { content: string }) {
     )
 }
 
-function TerminalOutput({ content }: { content: string }) {
+function ExpandablePre({ content, className }: { content: string; className: string }) {
+    const [expanded, setExpanded] = useState(false)
+    const preview = useMemo(() => buildOutputPreview(content), [content])
+    const displayContent = expanded ? content : preview.text
+
     return (
-        <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-[#0d0d0d] border border-border/20 px-3 py-2 text-[11px] text-green-300/80 font-mono max-h-64">
-            {content}
-        </pre>
+        <div className="space-y-1.5">
+            <pre className={className}>
+                {displayContent}
+            </pre>
+            {preview.truncated && (
+                <button
+                    type="button"
+                    className="text-[10px] text-muted-foreground/60 hover:text-foreground/80 transition-colors"
+                    onClick={() => setExpanded(prev => !prev)}
+                >
+                    {expanded ? 'Show less output' : 'Show full output'}
+                </button>
+            )}
+        </div>
     )
+}
+
+function TerminalOutput({ content }: { content: string }) {
+    return <ExpandablePre content={content} className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-[#0d0d0d] border border-border/20 px-3 py-2 text-[11px] text-green-300/80 font-mono max-h-64" />
 }
 
 function StringOutput({ content, toolName }: { content: string; toolName: string }) {
@@ -411,11 +470,7 @@ function StringOutput({ content, toolName }: { content: string; toolName: string
     }
     // File content → code block
     if (toolName === 'filesystem.read_file' || toolName === 'skills.read') {
-        return (
-            <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-muted/25 px-2 py-1.5 text-[11px] text-foreground/75 font-mono max-h-64">
-                {content}
-            </pre>
-        )
+        return <ExpandablePre content={content} className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-muted/25 px-2 py-1.5 text-[11px] text-foreground/75 font-mono max-h-64" />
     }
     // Simple single-line success message
     if (!content.includes('\n')) {
@@ -425,11 +480,7 @@ function StringOutput({ content, toolName }: { content: string; toolName: string
     if (category === 'git') {
         return <TerminalOutput content={content} />
     }
-    return (
-        <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-muted/25 px-2 py-1.5 text-[11px] text-foreground/70 max-h-48">
-            {content}
-        </pre>
-    )
+    return <ExpandablePre content={content} className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-muted/25 px-2 py-1.5 text-[11px] text-foreground/70 max-h-48" />
 }
 
 // ── Generic key/value tree — no raw JSON ─────────────────────────────────────
@@ -458,9 +509,7 @@ function KeyValueOutput({ obj, depth = 0 }: { obj: Record<string, unknown>; dept
                         ) : isArr ? (
                             <ArrayOutput items={v as unknown[]} depth={depth} />
                         ) : isLongStr ? (
-                            <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-muted/25 px-2 py-1.5 text-[11px] text-foreground/70 max-h-32">
-                                {String(v)}
-                            </pre>
+                            <ExpandablePre content={String(v)} className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-muted/25 px-2 py-1.5 text-[11px] text-foreground/70 max-h-32" />
                         ) : (
                             <PrimitiveValue val={v} />
                         )}
@@ -634,7 +683,7 @@ function CategoryIcon({ category }: { category: string }) {
 
 // ── Main card ─────────────────────────────────────────────────────────────────
 
-export function ToolCallCard({ callId: _callId, toolName, arguments: args, result, isRunning }: ToolCallCardProps) {
+export function ToolCallCard({ callId: _callId, toolName, arguments: args, result, isRunning, hitl, nestedTimeline: _nestedTimeline, delegatedConversationId: _delegatedConversationId }: ToolCallCardProps) {
     const [isExpanded, setIsExpanded] = useState(isRunning)
     const [userInteracted, setUserInteracted] = useState(false)
     const wasRunning = useRef(isRunning)
@@ -664,14 +713,17 @@ export function ToolCallCard({ callId: _callId, toolName, arguments: args, resul
     const action = toolName.split('.').slice(1).join('.')
     const hint = getHeaderHint(toolName, args)
 
-    const statusIcon = isRunning
+    const hitlPending = hitl?.status === 'pending'
+    const statusIcon = hitlPending
+        ? <User className="h-3 w-3 text-amber-400 animate-pulse" />
+        : isRunning
         ? <Loader2 className="h-3 w-3 animate-spin text-accent/70" />
         : result?.success
             ? <CheckCircle2 className="h-3 w-3 text-emerald-400" />
             : <XCircle className="h-3 w-3 text-red-400" />
 
     const hasArgs = Object.entries(args).filter(([k]) => !SKIP_KEYS.has(k)).length > 0
-    const hasDetails = hasArgs || result !== undefined
+    const hasDetails = hasArgs || result !== undefined || !!hitl
 
     return (
         <TimelineBadge
@@ -698,6 +750,21 @@ export function ToolCallCard({ callId: _callId, toolName, arguments: args, resul
             </>}
         >
             {hasArgs && <InputSection toolName={toolName} args={args} />}
+
+            {hitl && (
+                <div className="space-y-1">
+                    <div className="text-[10px] uppercase tracking-wide font-medium text-muted-foreground/50">Approval</div>
+                    <div className={`flex items-center gap-1.5 text-[11px] ${
+                        hitl.status === 'approved' ? 'text-emerald-400' : hitl.status === 'denied' ? 'text-red-400' : 'text-amber-400'
+                    }`}>
+                        {hitl.status === 'approved' ? <CheckCircle2 className="h-3 w-3" /> : hitl.status === 'denied' ? <XCircle className="h-3 w-3" /> : <Loader2 className="h-3 w-3 animate-spin" />}
+                        <span className="font-medium capitalize">{hitl.status}</span>
+                        {hitl.risk_level && <span className="text-muted-foreground/50 text-[10px]">({hitl.risk_level} risk)</span>}
+                    </div>
+                    {hitl.action_summary && <p className="text-[10px] text-muted-foreground/60">{hitl.action_summary}</p>}
+                    {hitl.resolution_note && <p className="text-[10px] text-muted-foreground/50 italic">{hitl.resolution_note}</p>}
+                </div>
+            )}
 
             {result !== undefined && (
                 <div className="space-y-1.5">

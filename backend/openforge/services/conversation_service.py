@@ -486,7 +486,7 @@ class ConversationService:
 
         # Schedule title refresh only after commit so the latest assistant turn
         # is visible to the background title-generation session.
-        if should_auto_title and auto_title_workspace_id is not None:
+        if should_auto_title:
             import asyncio
             asyncio.create_task(
                 self._auto_title(auto_title_workspace_id, conversation_id)
@@ -514,7 +514,7 @@ class ConversationService:
     async def refresh_conversation_title(
         self,
         db: AsyncSession,
-        workspace_id: UUID,
+        workspace_id: UUID | None,
         conversation_id: UUID,
         *,
         provider_name: str | None = None,
@@ -683,17 +683,18 @@ class ConversationService:
 
         conv.title = next_title
         await db.commit()
-        await ws_manager.send_to_workspace(
-            str(workspace_id),
-            {
-                "type": "conversation_updated",
-                "conversation_id": str(conversation_id),
-                "fields": ["title"],
-            },
-        )
+        event = {
+            "type": "conversation_updated",
+            "conversation_id": str(conversation_id),
+            "fields": ["title"],
+        }
+        if workspace_id is None:
+            await ws_manager.send_to_conversation(str(conversation_id), event)
+        else:
+            await ws_manager.send_to_workspace(str(workspace_id), event)
         return next_title
 
-    async def _auto_title(self, workspace_id: UUID, conversation_id: UUID):
+    async def _auto_title(self, workspace_id: UUID | None, conversation_id: UUID):
         try:
             from openforge.db.postgres import AsyncSessionLocal
 

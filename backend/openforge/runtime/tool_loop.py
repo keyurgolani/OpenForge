@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -14,7 +15,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from openforge.domains.agents.compiled_spec import CompiledAgentSpec
+from openforge.domains.agents.compiled_spec import AgentRuntimeConfig
 
 if TYPE_CHECKING:
     from openforge.runtime.chat_handler import LoadedTools
@@ -25,8 +26,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("openforge.runtime.tool_loop")
 
-_MAX_LLM_TOOL_RESULT_CHARS = 4_000
+_MAX_LLM_TOOL_RESULT_CHARS = 12_000
 _TOOL_NAME_SEP = "__"
+_TIMELINE_TEXT_OUTPUT_CHARS = 2_000
+_TIMELINE_UNTRUSTED_TEXT_CHARS = 4_000
+_UNTRUSTED_CONTENT_RE = re.compile(r"^\s*<untrusted_content\b[^>]*>\s*([\s\S]*?)\s*</untrusted_content>\s*$", re.IGNORECASE)
 
 
 def _tool_id_to_fn_name(tool_id: str) -> str:
@@ -41,12 +45,48 @@ def _truncate_text(value: str, limit: int) -> str:
     return value if len(value) <= limit else value[:limit] + "..."
 
 
+def _unwrap_untrusted_content(value: str) -> str | None:
+    match = _UNTRUSTED_CONTENT_RE.match(value)
+    return match.group(1).strip() if match else None
+
+
+def _try_parse_json(value: str) -> Any | None:
+    try:
+        return json.loads(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _prepare_timeline_output(output: Any) -> Any:
+    if output is None:
+        return None
+
+    if isinstance(output, (dict, list, bool, int, float)):
+        return output
+
+    if isinstance(output, str):
+        unwrapped = _unwrap_untrusted_content(output)
+        if unwrapped is not None:
+            parsed_unwrapped = _try_parse_json(unwrapped)
+            if parsed_unwrapped is not None:
+                return parsed_unwrapped
+            return _truncate_text(unwrapped, _TIMELINE_UNTRUSTED_TEXT_CHARS)
+
+        parsed = _try_parse_json(output)
+        if parsed is not None:
+            return parsed
+
+        return _truncate_text(output, _TIMELINE_TEXT_OUTPUT_CHARS)
+
+    return _truncate_text(str(output), _TIMELINE_TEXT_OUTPUT_CHARS)
+
+
 @dataclass
 class ToolLoopContext:
-    workspace_id: UUID
+    workspace_id: UUID | None
     conversation_id: UUID | None
     execution_id: str
-    agent_spec: CompiledAgentSpec | None = None
+    agent_spec: AgentRuntimeConfig | None = None
     tools: LoadedTools | None = None
     rate_limiter: ToolCallRateLimiter | None = None
     policy_engine: PolicyEngine | None = None
@@ -86,6 +126,7 @@ async def execute_tool_loop(
     max_iterations: int = 20,
     llm_gateway: LLMGateway | None = None,
     tool_dispatcher: ToolDispatcher | None = None,
+    result: ToolLoopResult | None = None,
 ) -> ToolLoopResult:
     """Run the ReAct tool loop: LLM → tool calls → execute → append → repeat.
 
@@ -99,6 +140,8 @@ async def execute_tool_loop(
         max_iterations: Maximum tool loop iterations.
         llm_gateway: LLM gateway instance.
         tool_dispatcher: Tool dispatcher instance.
+        result: Optional pre-created result object. When provided, callbacks can
+            reference it to read accumulated state during execution.
 
     Returns:
         ToolLoopResult with response, thinking, tool calls, timeline.
@@ -106,8 +149,12 @@ async def execute_tool_loop(
     if callbacks is None:
         callbacks = ToolLoopCallbacks()
 
-    result = ToolLoopResult(messages=messages)
-    all_tool_calls: list[dict[str, Any]] = []
+    if result is None:
+        result = ToolLoopResult(messages=messages)
+    else:
+        result.messages = messages
+    # Use result.tool_calls directly so callers can observe live state
+    all_tool_calls = result.tool_calls
     tool_calls_count = 0
 
     for iteration_index in range(max_iterations):
@@ -319,7 +366,7 @@ async def execute_tool_loop(
             tool_result = await tool_dispatcher.execute(
                 tool_id=tool_id,
                 params=arguments,
-                workspace_id=str(ctx.workspace_id),
+                workspace_id=str(ctx.workspace_id) if ctx.workspace_id else "",
                 execution_id=ctx.execution_id,
                 conversation_id=str(ctx.conversation_id or ""),
                 agent_id=str(ctx.agent_spec.agent_id) if ctx.agent_spec else "",
@@ -342,11 +389,7 @@ async def execute_tool_loop(
                 result_content += f"\n\n[User guidance]: {hitl_note}"
 
             result.timeline[entry_idx]["success"] = tool_result.get("success", False)
-            result.timeline[entry_idx]["output"] = (
-                _truncate_text(json.dumps(output_for_timeline, default=str), 2000)
-                if isinstance(output_for_timeline, (dict, list))
-                else (_truncate_text(str(output_for_timeline), 2000) if output_for_timeline is not None else None)
-            )
+            result.timeline[entry_idx]["output"] = _prepare_timeline_output(output_for_timeline)
             result.timeline[entry_idx]["error"] = tool_result.get("error")
             result.timeline[entry_idx]["duration_ms"] = duration_ms
 
@@ -359,7 +402,8 @@ async def execute_tool_loop(
                     result.timeline[entry_idx]["delegated_conversation_id"] = nested.get("conversation_id")
 
             if callbacks.on_tool_result:
-                await callbacks.on_tool_result(call_id, tool_id, tool_result.get("success", False), None)
+                _te = result.timeline[entry_idx]
+                await callbacks.on_tool_result(call_id, tool_id, tool_result.get("success", False), tool_result.get("error"), _te.get("output"), _te.get("duration_ms"), _te.get("nested_timeline"), _te.get("delegated_conversation_id"))
 
             tool_results_for_messages.append({"tool_call_id": call_id, "content": result_content})
 

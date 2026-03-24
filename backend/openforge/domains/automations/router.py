@@ -16,6 +16,7 @@ from .schemas import (
     AutomationRunRequest,
     AutomationRunResponse,
     AutomationUpdate,
+    SaveGraphRequest,
 )
 from .service import AutomationService
 
@@ -170,6 +171,48 @@ async def get_active_spec(
     return spec
 
 
+# ── Graph endpoints ──
+
+
+@router.get("/{automation_id}/graph")
+async def get_graph(
+    automation_id: UUID,
+    service: AutomationService = Depends(get_automation_service),
+):
+    graph = await service.get_graph(automation_id)
+    if not graph:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Automation not found")
+    return graph
+
+
+@router.put("/{automation_id}/graph")
+async def save_graph(
+    automation_id: UUID,
+    req: SaveGraphRequest,
+    service: AutomationService = Depends(get_automation_service),
+):
+    try:
+        return await service.save_graph(
+            automation_id,
+            nodes=[n.model_dump() for n in req.nodes],
+            edges=[e.model_dump() for e in req.edges],
+            static_inputs=[s.model_dump() for s in req.static_inputs],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.get("/{automation_id}/deployment-schema")
+async def get_deployment_schema(
+    automation_id: UUID,
+    service: AutomationService = Depends(get_automation_service),
+):
+    schema = await service.get_deployment_schema(automation_id)
+    if schema is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Automation not found")
+    return {"deployment_input_schema": schema}
+
+
 # ── Run trigger endpoint ──
 
 
@@ -191,23 +234,32 @@ async def run_automation(
     if not automation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Automation not found")
 
-    if automation.status not in ("active", "draft"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Automation is {automation.status}, cannot run")
+    auto_status = automation["status"]
+    if auto_status not in ("active", "draft"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Automation is {auto_status}, cannot run")
 
-    if automation.active_spec_id is None:
+    if automation.get("active_spec_id") is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Automation has no compiled spec")
 
     run_id = _uuid.uuid4()
+
+    # Build composite metadata — detect multi-node automations
+    composite_metadata: dict = {
+        "automation_id": str(automation["id"]),
+    }
+    if automation.get("agent_id"):
+        composite_metadata["agent_id"] = str(automation["agent_id"])
+    if automation.get("graph_version", 0) > 0:
+        composite_metadata["is_multi_node"] = True
+        composite_metadata["automation_spec_id"] = str(automation["active_spec_id"])
+
     run = RunModel(
         id=run_id,
         run_type="automation",
         workspace_id=req.workspace_id,
         status="pending",
         input_payload=req.input_payload,
-        composite_metadata={
-            "automation_id": str(automation.id),
-            "agent_id": str(automation.agent_id),
-        },
+        composite_metadata=composite_metadata,
     )
     db.add(run)
     await db.commit()
@@ -222,6 +274,6 @@ async def run_automation(
 
     return AutomationRunResponse(
         run_id=run_id,
-        automation_id=automation.id,
+        automation_id=automation["id"],
         status="pending",
     )

@@ -48,7 +48,7 @@ def sample_agent():
     agent = MagicMock()
     agent.id = uuid4()
     agent.slug = "test-agent"
-    agent.active_spec_id = uuid4()
+    agent.active_version_id = uuid4()
     return agent
 
 
@@ -74,7 +74,7 @@ class TestAutomationBlueprintCompiler:
     async def test_compile_fails_if_agent_has_no_spec(self, mock_db, sample_automation, sample_blueprint):
         agent = MagicMock()
         agent.slug = "no-spec-agent"
-        agent.active_spec_id = None
+        agent.active_version_id = None
 
         compiler = AutomationBlueprintCompiler(mock_db)
         with pytest.raises(ValueError, match="no active compiled spec"):

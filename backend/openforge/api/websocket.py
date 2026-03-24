@@ -1,9 +1,14 @@
 from fastapi import WebSocket, WebSocketDisconnect, APIRouter
-from typing import Dict
+from typing import Dict, Set
+import asyncio as _asyncio_mod
 import json
 import logging
 
 logger = logging.getLogger("openforge.ws")
+
+# Strong references to background relay tasks to prevent garbage collection.
+# Tasks remove themselves via a done-callback.
+_background_tasks: Set[_asyncio_mod.Task] = set()
 
 # Channel constants
 CHANNEL_AGENT = "agent"
@@ -40,6 +45,8 @@ class WorkspaceConnectionManager:
     def __init__(self):
         # workspace_id -> channel -> [WebSocket]
         self.active_connections: Dict[str, Dict[str, list[WebSocket]]] = {}
+        # conversation_id -> [WebSocket] (per-conversation connections)
+        self.conversation_connections: Dict[str, list[WebSocket]] = {}
         # settings connections (no workspace scope)
         self.settings_connections: list[WebSocket] = []
 
@@ -70,6 +77,47 @@ class WorkspaceConnectionManager:
             if not self.active_connections[workspace_id]:
                 del self.active_connections[workspace_id]
         logger.info(f"WebSocket disconnected for workspace {workspace_id} channel={channel}")
+
+    async def connect_conversation(self, websocket: WebSocket, conversation_id: str):
+        """Connect a WebSocket scoped to a specific conversation."""
+        await websocket.accept()
+        if conversation_id not in self.conversation_connections:
+            self.conversation_connections[conversation_id] = []
+        self.conversation_connections[conversation_id].append(websocket)
+        logger.info(
+            f"Conversation WebSocket connected for {conversation_id}. "
+            f"Total: {len(self.conversation_connections[conversation_id])}"
+        )
+
+    def disconnect_conversation(self, websocket: WebSocket, conversation_id: str):
+        """Disconnect a WebSocket from a conversation."""
+        conns = self.conversation_connections.get(conversation_id, [])
+        try:
+            conns.remove(websocket)
+        except ValueError:
+            pass
+        if not conns:
+            self.conversation_connections.pop(conversation_id, None)
+        logger.info(f"Conversation WebSocket disconnected for {conversation_id}")
+
+    async def send_to_conversation(self, conversation_id: str, message: dict):
+        """Send a message to all connections for a specific conversation."""
+        conns = self.conversation_connections.get(conversation_id)
+        if not conns:
+            return
+        dead: list[WebSocket] = []
+        for conn in conns:
+            try:
+                await conn.send_json(message)
+            except Exception:
+                dead.append(conn)
+        for conn in dead:
+            try:
+                conns.remove(conn)
+            except ValueError:
+                pass
+        if not conns:
+            self.conversation_connections.pop(conversation_id, None)
 
     async def connect_settings(self, websocket: WebSocket):
         """Connect a WebSocket for settings/system status."""
@@ -187,8 +235,8 @@ def _cleanup_log_tasks(websocket: WebSocket):
 
 # ── Helper: handle chat_message ──
 
-async def _handle_chat_message(websocket: WebSocket, workspace_id: str, data: dict):
-    """Process a chat_message from any workspace-scoped endpoint."""
+async def _handle_chat_message(websocket: WebSocket, workspace_id: str | None, data: dict):
+    """Process a chat_message from a workspace-scoped or per-conversation endpoint."""
     from openforge.config import get_settings
     settings = get_settings()
 
@@ -223,7 +271,7 @@ async def _handle_chat_message(websocket: WebSocket, workspace_id: str, data: di
     _use_celery = settings.use_celery_agents
     if _use_celery:
         try:
-            await _dispatch_celery_agent(
+            _exec_id = await _dispatch_celery_agent(
                 workspace_id=_wid,
                 conversation_id=_cid,
                 content=_content,
@@ -233,6 +281,10 @@ async def _handle_chat_message(websocket: WebSocket, workspace_id: str, data: di
                 mentions=_mentions,
                 optimize=_optimize,
             )
+            # Start background relay: subscribe to Redis and forward events to WebSocket
+            _task = _asyncio.create_task(_relay_agent_events(websocket, _wid, _exec_id, conversation_id=_cid))
+            _background_tasks.add(_task)
+            _task.add_done_callback(_background_tasks.discard)
         except Exception as _celery_err:
             logger.warning("Celery dispatch failed, falling back to inline: %s", _celery_err)
             _use_celery = False
@@ -243,7 +295,7 @@ async def _handle_chat_message(websocket: WebSocket, workspace_id: str, data: di
         async def _run_agent():
             async with AsyncSessionLocal() as db:
                 await chat_handler.run(
-                    workspace_id=UUID(_wid),
+                    workspace_id=UUID(_wid) if _wid else None,
                     conversation_id=UUID(_cid),
                     user_content=_content,
                     db=db,
@@ -259,8 +311,8 @@ async def _handle_chat_message(websocket: WebSocket, workspace_id: str, data: di
 
 # ── Helper: handle chat_stream_resume ──
 
-async def _handle_chat_stream_resume(websocket: WebSocket, workspace_id: str, data: dict):
-    """Process a chat_stream_resume from any workspace-scoped endpoint."""
+async def _handle_chat_stream_resume(websocket: WebSocket, workspace_id: str | None, data: dict):
+    """Process a chat_stream_resume from a workspace-scoped or per-conversation endpoint."""
     from uuid import UUID
     from openforge.runtime.chat_handler import chat_handler
 
@@ -278,7 +330,7 @@ async def _handle_chat_stream_resume(websocket: WebSocket, workspace_id: str, da
 
     await chat_handler.send_stream_snapshot(
         websocket=websocket,
-        workspace_id=UUID(workspace_id),
+        workspace_id=UUID(workspace_id) if workspace_id else None,
         conversation_id=target_conversation_id,
     )
 
@@ -294,21 +346,26 @@ async def _handle_chat_cancel(data: dict):
     from uuid import UUID
     from openforge.runtime.chat_handler import chat_handler
     try:
+        # Store partial content from the frontend as fallback
+        partial_content = data.get("partial_content")
+        if partial_content:
+            chat_handler.store_cancel_content(UUID(conversation_id), partial_content)
         chat_handler.cancel(UUID(conversation_id))
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Local cancel failed for %s: %s", conversation_id, exc)
 
     # Publish cancel via Redis so both inline and Celery workers receive it
     try:
         from openforge.db.redis_client import get_redis
         import json as _json
         redis = await get_redis()
-        await redis.publish(
+        subscribers = await redis.publish(
             f"agent_cancel:{conversation_id}",
             _json.dumps({"conversation_id": conversation_id}),
         )
-    except Exception:
-        pass
+        logger.info("Cancel published for %s, %d subscribers received", conversation_id, subscribers)
+    except Exception as exc:
+        logger.error("Redis cancel publish failed for %s: %s", conversation_id, exc)
 
     # Also publish cancel to the execution_chain_id channel
     # so nested subagents across HTTP boundaries get cancelled
@@ -334,6 +391,23 @@ async def _handle_chat_cancel(data: dict):
                 )
     except Exception:
         pass
+
+    # Schedule a force-cancel fallback: if execution is still running after
+    # 15 seconds, force-mark it as cancelled so the frontend can recover.
+    import asyncio as _cancel_asyncio
+
+    async def _force_cancel_fallback():
+        await _cancel_asyncio.sleep(15)
+        try:
+            cancelled = await chat_handler.force_cancel_execution(UUID(conversation_id))
+            if cancelled:
+                logger.info("Force-cancelled stuck execution for conversation %s", conversation_id)
+        except Exception as exc:
+            logger.warning("Force-cancel fallback failed for %s: %s", conversation_id, exc)
+
+    _fc_task = _cancel_asyncio.create_task(_force_cancel_fallback())
+    _background_tasks.add(_fc_task)
+    _fc_task.add_done_callback(_background_tasks.discard)
 
 
 # ── 1. Agent channel: ws/workspace/{workspace_id}/agent ──
@@ -373,6 +447,70 @@ async def workspace_agent_websocket(websocket: WebSocket, workspace_id: str):
     except Exception as e:
         logger.error(f"WebSocket error for workspace {workspace_id} agent channel: {e}")
         ws_manager.disconnect(websocket, workspace_id, CHANNEL_AGENT)
+
+
+# ── 1b. Per-conversation agent channel: ws/chat/{conversation_id}/agent ──
+# Same capabilities as workspace agent channel but scoped to a single conversation.
+# Used by global (workspace-agnostic) chat and can also be used by workspace chat.
+
+@ws_router.websocket("/ws/chat/{conversation_id}/agent")
+async def conversation_agent_websocket(websocket: WebSocket, conversation_id: str):
+    if not await _ws_auth_check(websocket):
+        return
+    await ws_manager.connect_conversation(websocket, conversation_id)
+
+    # Resolve workspace_id from the conversation record so workspace-scoped
+    # conversations retain their context when using the per-conversation endpoint.
+    resolved_workspace_id: str | None = None
+    try:
+        from uuid import UUID as _UUID
+        from openforge.db.postgres import AsyncSessionLocal
+        from openforge.db.models import Conversation
+        async with AsyncSessionLocal() as _resolve_db:
+            _conv = await _resolve_db.get(Conversation, _UUID(conversation_id))
+            if _conv and _conv.workspace_id:
+                resolved_workspace_id = str(_conv.workspace_id)
+    except Exception as _resolve_err:
+        logger.warning(
+            "Failed to resolve workspace_id for conversation %s: %s",
+            conversation_id, _resolve_err,
+        )
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+            msg_type = data.get("type")
+
+            if msg_type == "chat_message":
+                # Inject conversation_id from URL if not in payload
+                if "conversation_id" not in data:
+                    data["conversation_id"] = conversation_id
+                await _handle_chat_message(websocket, resolved_workspace_id, data)
+
+            elif msg_type == "chat_stream_resume":
+                if "conversation_id" not in data:
+                    data["conversation_id"] = conversation_id
+                await _handle_chat_stream_resume(websocket, resolved_workspace_id, data)
+
+            elif msg_type == "chat_cancel":
+                if "conversation_id" not in data:
+                    data["conversation_id"] = conversation_id
+                await _handle_chat_cancel(data)
+
+            elif msg_type == "ping":
+                await ws_manager.send_to_connection(websocket, {"type": "pong"})
+
+            else:
+                await ws_manager.send_to_connection(websocket, {
+                    "type": "error",
+                    "detail": f"Unknown message type for conversation agent channel: {msg_type}"
+                })
+
+    except WebSocketDisconnect:
+        ws_manager.disconnect_conversation(websocket, conversation_id)
+    except Exception as e:
+        logger.error(f"WebSocket error for conversation {conversation_id} agent channel: {e}")
+        ws_manager.disconnect_conversation(websocket, conversation_id)
 
 
 # ── 2. System channel: ws/workspace/{workspace_id}/system ──
@@ -454,7 +592,7 @@ async def settings_websocket(websocket: WebSocket):
 
 async def _dispatch_celery_agent(
     *,
-    workspace_id: str,
+    workspace_id: str | None,
     conversation_id: str,
     content: str,
     attachment_ids: list,
@@ -462,20 +600,28 @@ async def _dispatch_celery_agent(
     model_id: str | None,
     mentions: list,
     optimize: bool = False,
-) -> None:
-    """Create an execution record and dispatch to Celery."""
+) -> str:
+    """Create an execution record and dispatch to Celery. Returns execution_id."""
     import uuid as _uuid
     from uuid import UUID
     from openforge.db.postgres import AsyncSessionLocal
-    from openforge.db.models import AgentExecution
+    from openforge.db.models import AgentExecution, Conversation
     from openforge.runtime.agent_registry import agent_registry
 
     execution_id = str(_uuid.uuid4())
 
     async with AsyncSessionLocal() as db:
-        # Resolve agent for workspace via agent_registry
-        agent_spec = await agent_registry.resolve_for_workspace(db, UUID(workspace_id))
-        agent_id = str(agent_spec.agent_id) if agent_spec else "workspace_agent"
+        # Resolve agent: workspace-scoped or from conversation's agent_id
+        agent_id = "workspace_agent"
+        if workspace_id:
+            agent_spec = await agent_registry.resolve_for_workspace(db, UUID(workspace_id))
+            if agent_spec:
+                agent_id = str(agent_spec.agent_id)
+        else:
+            # Global chat: resolve from conversation's agent_id
+            conversation = await db.get(Conversation, UUID(conversation_id))
+            if conversation and conversation.agent_id:
+                agent_id = str(conversation.agent_id)
 
         # Persist user message before queuing so it's visible on page refresh
         from openforge.services.conversation_service import conversation_service
@@ -488,18 +634,18 @@ async def _dispatch_celery_agent(
         # Create execution record
         db.add(AgentExecution(
             id=UUID(execution_id),
-            workspace_id=UUID(workspace_id),
+            workspace_id=UUID(workspace_id) if workspace_id else None,
             conversation_id=UUID(conversation_id),
             agent_id=agent_id,
             status="queued",
         ))
         await db.commit()
 
-    # Dispatch to Celery
+    # Dispatch to Celery (empty string workspace_id signals global to worker)
     from openforge.worker.tasks import execute_agent_task
     execute_agent_task.delay(
         execution_id=execution_id,
-        workspace_id=workspace_id,
+        workspace_id=workspace_id or "",
         conversation_id=conversation_id,
         user_message=content,
         attachment_ids=attachment_ids,
@@ -508,6 +654,68 @@ async def _dispatch_celery_agent(
         mentions=mentions,
         optimize=optimize,
     )
+    return execution_id
+
+
+async def _relay_agent_events(
+    websocket: WebSocket,
+    workspace_id: str | None,
+    execution_id: str,
+    *,
+    conversation_id: str | None = None,
+) -> None:
+    """Subscribe to Redis channel ``agent:{execution_id}`` and relay events
+    to the WebSocket client.  Mirrors the run_terminal relay pattern."""
+    import asyncio
+    try:
+        import redis.asyncio as aioredis
+        from openforge.common.config import get_settings
+
+        settings = get_settings()
+        redis = aioredis.from_url(settings.redis_url, decode_responses=True)
+        pubsub = redis.pubsub()
+        channel = f"agent:{execution_id}"
+        await pubsub.subscribe(channel)
+
+        try:
+            async for message in pubsub.listen():
+                if message["type"] == "message":
+                    data = None
+                    event_type = ""
+                    try:
+                        data = json.loads(message["data"])
+                        event_type = data.get("type", "")
+                    except Exception as parse_err:
+                        logger.warning("Failed to parse relay event for execution %s: %s", execution_id, parse_err)
+                        continue
+
+                    try:
+                        # Route to workspace connections if workspace-scoped
+                        if workspace_id:
+                            await ws_manager.send_to_workspace(workspace_id, data)
+                        # Route to per-conversation connections
+                        if conversation_id:
+                            await ws_manager.send_to_conversation(conversation_id, data)
+                    except Exception as relay_err:
+                        logger.warning(
+                            "Failed to relay %s event for execution %s (conv=%s): %s",
+                            event_type, execution_id, conversation_id, relay_err,
+                        )
+
+                    # Stop relay when stream is done
+                    if event_type in ("agent_done", "agent_error", "execution_completed"):
+                        break
+        except asyncio.CancelledError:
+            pass
+        finally:
+            try:
+                await pubsub.unsubscribe(channel)
+                await pubsub.aclose()
+                await redis.aclose()
+            except Exception:
+                pass
+    except Exception as exc:
+        logger.warning("Agent event relay failed for execution %s: %s", execution_id, exc)
 
 
 # ── Run terminal WebSocket ────────────────────────────────────────────────────

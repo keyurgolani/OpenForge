@@ -51,12 +51,9 @@ class ChatStrategy(BaseStrategy):
         if spec.tools_enabled and ctx.tool_dispatcher:
             try:
                 raw_tools = await ctx.tool_dispatcher.list_tools()
-                if spec.allowed_tool_categories:
-                    allowed = set(spec.allowed_tool_categories) | {"agent"}
-                    raw_tools = [t for t in raw_tools if t.get("category") in allowed]
-                if spec.blocked_tool_ids:
-                    blocked = set(spec.blocked_tool_ids)
-                    raw_tools = [t for t in raw_tools if t["id"] not in blocked]
+                if spec.allowed_tools is not None:
+                    allowed = set(spec.allowed_tools)
+                    raw_tools = [t for t in raw_tools if t["id"] in allowed]
 
                 from openforge.runtime.chat_handler import _tool_id_to_fn_name, _tools_to_openai_schema
 

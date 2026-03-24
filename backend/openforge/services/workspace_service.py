@@ -28,6 +28,7 @@ def _to_response(workspace: Workspace, knowledge_count: int = 0, conv_count: int
         knowledge_intelligence_model=workspace.knowledge_intelligence_model,
         vision_provider_id=workspace.vision_provider_id,
         vision_model=workspace.vision_model,
+        default_agent_id=workspace.default_agent_id,
         sort_order=workspace.sort_order,
         agent_enabled=workspace.agent_enabled,
         agent_tool_categories=list(workspace.agent_tool_categories or []),

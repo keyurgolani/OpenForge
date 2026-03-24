@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import MarkdownIt from 'markdown-it'
 import { Brain, ChevronRight, Sparkles, Paperclip } from 'lucide-react'
 import type {
     TimelineEntry,
@@ -7,9 +8,12 @@ import type {
     TimelinePromptOptimized,
     TimelineAttachmentsProcessed,
     TimelineIntermediateResponse,
+    TimelineFollowUpRequest,
 } from '@/hooks/useStreamingChat'
 import { ToolCallCard } from '@/components/shared/ToolCallCard'
 import { TimelineBadge } from '@/components/shared/TimelineBadge'
+
+const timelineMd = new MarkdownIt({ html: false, linkify: true, breaks: true })
 
 /**
  * Extract displayable thought segments from streaming thinking text.
@@ -196,14 +200,17 @@ export function TimelineRenderer({ timeline, isLive = false }: { timeline: Timel
                         return null
                     case 'thinking': {
                         const e = entry as TimelineThinking
-                        const isActive = isLive && (e.done === false || (e.done == null && !e.durationMs))
+                        const durationMs = e.durationMs ?? (e as any).duration_ms
+                        const isActive = isLive && (e.done === false || (e.done == null && !durationMs))
 
                         if (isActive) {
                             return (
                                 <div key={idx} className="flex items-center gap-2 px-1 py-1">
                                     <Brain className="h-3.5 w-3.5 text-accent/60 animate-pulse flex-shrink-0" />
                                     <div className="flex-1 min-w-0">
-                                        <ThinkingTicker content={e.content} isStreaming />
+                                        <span className="thinking-shimmer text-sm font-medium">
+                                            Reasoning in progress…
+                                        </span>
                                     </div>
                                 </div>
                             )
@@ -218,12 +225,12 @@ export function TimelineRenderer({ timeline, isLive = false }: { timeline: Timel
                                     className="flex items-center gap-1.5 text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors py-0.5"
                                 >
                                     <ChevronRight className={`h-3 w-3 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
-                                    <span>Thought{(e.durationMs ?? (e as any).duration_ms) != null ? ` ${((e.durationMs ?? (e as any).duration_ms) / 1000).toFixed(1)} seconds` : ''}</span>
+                                    <span>Thought{durationMs != null ? ` ${((durationMs) / 1000).toFixed(1)} seconds` : ''}</span>
                                 </button>
                                 {isOpen && (
-                                    <pre className="whitespace-pre-wrap break-words text-xs text-foreground/60 leading-relaxed mt-1 ml-4.5">
-                                        {e.content}
-                                    </pre>
+                                    <div className="mt-1 ml-4.5 rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-xs text-muted-foreground/70">
+                                        Reasoning content is hidden for user-facing chats.
+                                    </div>
                                 )}
                             </div>
                         )
@@ -245,6 +252,9 @@ export function TimelineRenderer({ timeline, isLive = false }: { timeline: Timel
                                 arguments={e.arguments}
                                 result={result}
                                 isRunning={e.success == null}
+                                hitl={e.hitl}
+                                nestedTimeline={e.nested_timeline}
+                                delegatedConversationId={e.delegated_conversation_id}
                             />
                         )
                     }
@@ -333,9 +343,23 @@ export function TimelineRenderer({ timeline, isLive = false }: { timeline: Timel
                                     <div className="px-4 py-2 mt-1">
                                         <div
                                             className="markdown-content text-sm"
-                                            dangerouslySetInnerHTML={{ __html: e.content }}
+                                            dangerouslySetInnerHTML={{ __html: timelineMd.render(e.content) }}
                                         />
                                     </div>
+                                )}
+                            </div>
+                        )
+                    }
+                    case 'follow_up_request': {
+                        const e = entry as TimelineFollowUpRequest
+                        return (
+                            <div key={idx} className="flex items-center gap-1.5 text-xs text-amber-400/80 py-0.5 px-1">
+                                <Sparkles className="h-3 w-3" />
+                                <span>Awaiting input</span>
+                                {e.missing_params.length > 0 && (
+                                    <span className="text-[10px] text-muted-foreground/60 ml-1">
+                                        ({e.missing_params.join(', ')})
+                                    </span>
                                 )}
                             </div>
                         )

@@ -9,17 +9,12 @@ from openforge.db.models import Base
 VERSIONS_DIR = Path(__file__).resolve().parents[2] / "openforge" / "db" / "migrations" / "versions"
 EXPECTED_MIGRATIONS = [
     "001_initial_schema.py",
-    "002_domain_tables.py",
-    "003_trust_foundations.py",
-    "004_retrieval_reset.py",
-    "005_graph_foundation.py",
-    "006_profile_core.py",
-    "007_artifact_unification.py",
-    "008_workflow_runtime.py",
-    "009_composite_workflows.py",
-    "010_missions_triggers.py",
-    "011_catalog_metadata.py",
-    "012_observability_evaluation.py",
+    "002_wave3_drop_deprecated_tables.py",
+    "003_add_deployments_table.py",
+    "004_automation_graph_tables.py",
+    "005_global_agent_chat.py",
+    "006_nullable_execution_workspace.py",
+    "007_agent_definition_restructure.py",
 ]
 
 

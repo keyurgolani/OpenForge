@@ -6,55 +6,58 @@ import {
   createAgent,
   updateAgent,
   deleteAgent,
-  compileAgent,
-  listAgentSpecs,
-  listAgentTemplates,
-  cloneAgentTemplate,
+  listAgentVersions,
+  getAgentVersion,
 } from '@/lib/api'
-import type { Agent, AgentCreate, AgentListResponse, AgentUpdate, CompiledSpec } from '@/types/agents'
+import type {
+  AgentDefinition,
+  AgentDefinitionCreate,
+  AgentDefinitionListResponse,
+  AgentDefinitionUpdate,
+  AgentDefinitionVersion,
+  AgentDefinitionVersionListResponse,
+} from '@/types/agents'
 
 interface AgentsQueryOptions {
-  status?: string
-  mode?: string
-  is_template?: boolean
   skip?: number
   limit?: number
 }
 
 export function useAgentsQuery(options: AgentsQueryOptions = {}) {
-  return useQuery<AgentListResponse>({
+  return useQuery<AgentDefinitionListResponse>({
     queryKey: ['agents', options],
     queryFn: () => listAgents(options),
   })
 }
 
 export function useAgentQuery(id?: string) {
-  return useQuery<Agent>({
+  return useQuery<AgentDefinition>({
     queryKey: ['agent', id],
     queryFn: () => getAgent(id as string),
     enabled: Boolean(id),
   })
 }
 
-export function useAgentTemplatesQuery(params?: { skip?: number; limit?: number }) {
-  return useQuery<AgentListResponse>({
-    queryKey: ['agents', 'templates', params],
-    queryFn: () => listAgentTemplates(params),
+export function useAgentVersionsQuery(agentId: string) {
+  return useQuery<AgentDefinitionVersionListResponse>({
+    queryKey: ['agent', agentId, 'versions'],
+    queryFn: () => listAgentVersions(agentId),
+    enabled: Boolean(agentId),
   })
 }
 
-export function useAgentSpecsQuery(id?: string) {
-  return useQuery<{ specs: CompiledSpec[]; total: number }>({
-    queryKey: ['agent', id, 'specs'],
-    queryFn: () => listAgentSpecs(id as string),
-    enabled: Boolean(id),
+export function useAgentVersionQuery(agentId: string, versionId: string) {
+  return useQuery<AgentDefinitionVersion>({
+    queryKey: ['agent', agentId, 'version', versionId],
+    queryFn: () => getAgentVersion(agentId, versionId),
+    enabled: Boolean(agentId) && Boolean(versionId),
   })
 }
 
 export function useCreateAgent() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (data: AgentCreate) => createAgent(data),
+    mutationFn: (data: AgentDefinitionCreate) => createAgent(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agents'] })
     },
@@ -64,7 +67,7 @@ export function useCreateAgent() {
 export function useUpdateAgent() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: AgentUpdate }) => updateAgent(id, data),
+    mutationFn: ({ id, data }: { id: string; data: AgentDefinitionUpdate }) => updateAgent(id, data),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['agents'] })
       queryClient.invalidateQueries({ queryKey: ['agent', variables.id] })
@@ -76,28 +79,6 @@ export function useDeleteAgent() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => deleteAgent(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agents'] })
-    },
-  })
-}
-
-export function useCompileAgent() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (id: string) => compileAgent(id),
-    onSuccess: (_data, id) => {
-      queryClient.invalidateQueries({ queryKey: ['agent', id] })
-      queryClient.invalidateQueries({ queryKey: ['agent', id, 'specs'] })
-    },
-  })
-}
-
-export function useCloneAgentTemplate() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data?: { name?: string; slug?: string } }) =>
-      cloneAgentTemplate(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agents'] })
     },

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Filter, Plus, Zap } from 'lucide-react'
+import { ArrowRight, Filter, GitBranch, Plus, Zap } from 'lucide-react'
 
 import EmptyState from '@/components/shared/EmptyState'
 import ErrorState from '@/components/shared/ErrorState'
@@ -39,9 +39,9 @@ export default function AutomationsPage() {
   const getAgentName = (agentId: string) => agents.find(a => a.id === agentId)?.name ?? agentId.slice(0, 12)
 
   const handleCreate = async () => {
-    if (!createForm.agent_id || !createForm.name || !createForm.slug) return
+    if (!createForm.name || !createForm.slug) return
     await createAutomation.mutateAsync({
-      agent_id: createForm.agent_id,
+      agent_id: createForm.agent_id || undefined,
       name: createForm.name,
       slug: createForm.slug,
       description: createForm.description || undefined,
@@ -72,22 +72,22 @@ export default function AutomationsPage() {
           <div className="grid gap-3 md:grid-cols-2">
             <label className="space-y-1 text-sm">
               <span className="text-muted-foreground">Agent</span>
-              <select className="input w-full" value={createForm.agent_id} onChange={e => setCreateForm(p => ({ ...p, agent_id: e.target.value }))}>
-                <option value="">Select an agent...</option>
+              <select id="create-agent" name="agent_id" className="input w-full" value={createForm.agent_id} onChange={e => setCreateForm(p => ({ ...p, agent_id: e.target.value }))}>
+                <option value="">None (Multi-node graph)</option>
                 {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
             </label>
             <label className="space-y-1 text-sm">
               <span className="text-muted-foreground">Name</span>
-              <input className="input w-full" value={createForm.name} onChange={e => setCreateForm(p => ({ ...p, name: e.target.value }))} placeholder="My Automation" />
+              <input id="create-automation-name" name="name" className="input w-full" value={createForm.name} onChange={e => { const name = e.target.value; setCreateForm(p => ({ ...p, name, slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') })); }} placeholder="My Automation" />
             </label>
             <label className="space-y-1 text-sm">
               <span className="text-muted-foreground">Slug</span>
-              <input className="input w-full" value={createForm.slug} onChange={e => setCreateForm(p => ({ ...p, slug: e.target.value }))} placeholder="my-automation" />
+              <input id="create-automation-slug" name="slug" className="input w-full" value={createForm.slug} onChange={e => setCreateForm(p => ({ ...p, slug: e.target.value }))} placeholder="my-automation" />
             </label>
             <label className="space-y-1 text-sm">
               <span className="text-muted-foreground">Description</span>
-              <input className="input w-full" value={createForm.description} onChange={e => setCreateForm(p => ({ ...p, description: e.target.value }))} placeholder="Optional description" />
+              <input id="create-automation-description" name="description" className="input w-full" value={createForm.description} onChange={e => setCreateForm(p => ({ ...p, description: e.target.value }))} placeholder="Optional description" />
             </label>
           </div>
           <div className="flex gap-2">
@@ -107,7 +107,7 @@ export default function AutomationsPage() {
         <div className="grid gap-3 md:grid-cols-2">
           <label className="space-y-2 text-sm">
             <span className="text-muted-foreground">Status</span>
-            <select className="input w-full" value={statusFilter} onChange={e => setStatusFilter(e.target.value as 'all' | AutomationStatus)}>
+            <select id="filter-automation-status" name="filter-status" className="input w-full" value={statusFilter} onChange={e => setStatusFilter(e.target.value as 'all' | AutomationStatus)}>
               <option value="all">All statuses</option>
               <option value="draft">Draft</option>
               <option value="active">Active</option>
@@ -118,7 +118,7 @@ export default function AutomationsPage() {
           </label>
           <label className="space-y-2 text-sm">
             <span className="text-muted-foreground">Agent</span>
-            <select className="input w-full" value={agentFilter} onChange={e => setAgentFilter(e.target.value)}>
+            <select id="filter-automation-agent" name="filter-agent" className="input w-full" value={agentFilter} onChange={e => setAgentFilter(e.target.value)}>
               <option value="all">All agents</option>
               {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
@@ -132,6 +132,7 @@ export default function AutomationsPage() {
           title="No automations yet"
           description="Create your first automation to run agents on triggers and schedules."
           actionLabel="Create Automation"
+          onAction={() => setShowCreate(true)}
           icon={<Zap className="h-5 w-5" />}
         />
       ) : (
@@ -140,7 +141,7 @@ export default function AutomationsPage() {
             <thead className="bg-background/35">
               <tr className="text-left text-[11px] uppercase tracking-[0.12em] text-muted-foreground/75">
                 <th className="px-4 py-3 font-medium">Automation</th>
-                <th className="px-4 py-3 font-medium">Agent</th>
+                <th className="px-4 py-3 font-medium">Agents</th>
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Health</th>
                 <th className="px-4 py-3 font-medium">Last Run</th>
@@ -159,9 +160,19 @@ export default function AutomationsPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <Link className="text-xs text-accent transition hover:text-accent/80" to={agentsRoute(automation.agent_id)}>
-                      {getAgentName(automation.agent_id)}
-                    </Link>
+                    {automation.graph_version > 0 ? (
+                      <span className="text-xs text-muted-foreground">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-accent/10 text-accent px-2 py-0.5">
+                          <GitBranch className="w-3 h-3" /> Graph v{automation.graph_version}
+                        </span>
+                      </span>
+                    ) : automation.agent_id ? (
+                      <Link className="text-xs text-accent transition hover:text-accent/80" to={agentsRoute(automation.agent_id)}>
+                        {getAgentName(automation.agent_id)}
+                      </Link>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">No agents</span>
+                    )}
                   </td>
                   <td className="px-4 py-3"><StatusBadge status={automation.status} /></td>
                   <td className="px-4 py-3"><StatusBadge status={automation.health_status} /></td>

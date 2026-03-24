@@ -15,12 +15,10 @@ def test_domain_registry_owns_retrieval_prompt_policy_and_knowledge_routes() -> 
 
     expected_fragments = [
         "from .knowledge.router import",
-        "from .prompts.router import",
-        "from .policies.router import",
         "from .retrieval.router import",
+        "from .agents.router import",
+        "from .automations.router import",
         'prefix="/api/v1/workspaces"',
-        'prefix="/api/v1/prompts"',
-        'prefix="/api/v1/policies"',
         'prefix="/api/v1/retrieval"',
     ]
 
@@ -35,8 +33,6 @@ def test_transitional_api_router_no_longer_mounts_domain_owned_routes() -> None:
         "knowledge.router",
         "knowledge.knowledge_global_router",
         "knowledge_upload.router",
-        "prompts_router",
-        "policies_router",
         "retrieval_router",
     ]
 

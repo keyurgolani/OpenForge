@@ -28,6 +28,10 @@ class SaveKnowledgeTool(BaseTool):
         return {
             "type": "object",
             "properties": {
+                "workspace_id": {
+                    "type": "string",
+                    "description": "The UUID of the workspace to save knowledge to. Refer to the application context for available workspace IDs.",
+                },
                 "title": {"type": "string", "description": "Title for the knowledge record"},
                 "content": {"type": "string", "description": "Content to save"},
                 "type": {
@@ -37,14 +41,17 @@ class SaveKnowledgeTool(BaseTool):
                     "description": "Knowledge type: note (notes/documents), fleeting (quick temporary thought), gist (code snippet)",
                 },
             },
-            "required": ["title", "content"],
+            "required": ["workspace_id", "title", "content"],
         }
 
     @property
     def risk_level(self): return "medium"
 
     async def execute(self, params: dict, context: ToolContext) -> ToolResult:
-        url = f"{context.main_app_url}/api/v1/workspaces/{context.workspace_id}/knowledge"
+        workspace_id = params.get("workspace_id")
+        if not workspace_id:
+            return ToolResult(success=False, error="workspace_id is required. Check your system prompt for available workspace IDs.")
+        url = f"{context.main_app_url}/api/v1/workspaces/{workspace_id}/knowledge"
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 resp = await client.post(url, json={

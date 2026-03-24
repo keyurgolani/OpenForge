@@ -9,7 +9,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from openforge.domains.agents.compiled_spec import CompiledAgentSpec
+from openforge.domains.agents.compiled_spec import AgentRuntimeConfig
 
 if TYPE_CHECKING:
     from openforge.runtime.provider_config import ProviderConfig
@@ -35,7 +35,7 @@ class RunContext:
     """Mutable execution context passed to strategy methods."""
 
     run_id: UUID
-    agent_spec: CompiledAgentSpec
+    agent_spec: AgentRuntimeConfig
     db: AsyncSession
     workspace_id: UUID | None
     input_payload: dict[str, Any]

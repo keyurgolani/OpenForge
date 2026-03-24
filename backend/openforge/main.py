@@ -306,6 +306,29 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Workspace default agent backfill skipped: %s", e)
 
+    # Clean up orphaned execution records from previous runs
+    try:
+        from openforge.db.postgres import AsyncSessionLocal
+        from openforge.db.models import AgentExecution
+        from sqlalchemy import update
+        from datetime import datetime as dt_cls, timezone as tz_cls
+
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                update(AgentExecution)
+                .where(AgentExecution.status.in_(["queued", "running"]))
+                .values(
+                    status="failed",
+                    error_message="Execution interrupted by server restart",
+                    completed_at=dt_cls.now(tz_cls.utc),
+                )
+            )
+            if result.rowcount:
+                await db.commit()
+                logger.info("Cleaned up %d orphaned execution records.", result.rowcount)
+    except Exception as e:
+        logger.warning("Orphaned execution cleanup failed: %s", e)
+
     logger.info("OpenForge ready.")
     await task_scheduler.start()
     yield

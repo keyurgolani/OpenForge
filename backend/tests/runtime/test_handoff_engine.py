@@ -29,7 +29,7 @@ class TestHandoffEngine:
         assert "not found" in result.get("error", "").lower()
 
     @pytest.mark.asyncio
-    async def test_transfer_via_profile_registry(self):
+    async def test_transfer_via_agent_registry(self):
         engine = HandoffEngine()
         mock_conversation = MagicMock()
         mock_conversation.subagent_agent_id = None
@@ -39,18 +39,15 @@ class TestHandoffEngine:
         mock_db.commit = AsyncMock()
 
         with patch("openforge.runtime.handoff_engine.agent_registry") as mock_agent_reg:
-            mock_agent_reg.resolve = AsyncMock(return_value=None)
+            mock_agent_reg.resolve = AsyncMock(return_value=MagicMock())
 
-            with patch("openforge.runtime.profile_registry.profile_registry") as mock_prof_reg:
-                mock_prof_reg.get.return_value = MagicMock()
-
-                result = await engine.transfer_to(
-                    db=mock_db,
-                    target_agent_slug="test-agent",
-                    workspace_id=uuid.uuid4(),
-                    conversation_id=uuid.uuid4(),
-                    messages=[],
-                )
+            result = await engine.transfer_to(
+                db=mock_db,
+                target_agent_slug="test-agent",
+                workspace_id=uuid.uuid4(),
+                conversation_id=uuid.uuid4(),
+                messages=[],
+            )
 
         assert result["transferred"] is True
         assert result["target_agent"] == "test-agent"

@@ -13,6 +13,7 @@ class DomainNoun(StrEnum):
     RUN = "run"
     OUTPUT = "output"
     KNOWLEDGE = "knowledge"
+    DEPLOYMENT = "deployment"
 
 
 DOMAIN_LABELS: dict[DomainNoun, str] = {
@@ -21,6 +22,7 @@ DOMAIN_LABELS: dict[DomainNoun, str] = {
     DomainNoun.RUN: "Run",
     DomainNoun.OUTPUT: "Output",
     DomainNoun.KNOWLEDGE: "Knowledge",
+    DomainNoun.DEPLOYMENT: "Deployment",
 }
 
 DOMAIN_LABELS_PLURAL: dict[DomainNoun, str] = {
@@ -29,6 +31,7 @@ DOMAIN_LABELS_PLURAL: dict[DomainNoun, str] = {
     DomainNoun.RUN: "Runs",
     DomainNoun.OUTPUT: "Outputs",
     DomainNoun.KNOWLEDGE: "Knowledge",
+    DomainNoun.DEPLOYMENT: "Deployments",
 }
 
 DOMAIN_DESCRIPTIONS: dict[DomainNoun, str] = {
@@ -37,6 +40,7 @@ DOMAIN_DESCRIPTIONS: dict[DomainNoun, str] = {
     DomainNoun.RUN: "Runs are durable execution instances.",
     DomainNoun.OUTPUT: "Outputs are persistent results produced by runs.",
     DomainNoun.KNOWLEDGE: "Knowledge is user-provided context and source material.",
+    DomainNoun.DEPLOYMENT: "Deployments are live instances of automations with baked-in inputs.",
 }
 
 ROUTE_SEGMENTS: dict[DomainNoun, str] = {

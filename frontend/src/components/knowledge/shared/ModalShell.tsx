@@ -62,6 +62,9 @@ export default function ModalShell({
                                 transition={{ duration: 0.2, ease: 'easeOut' }}
                             >
                                 {/* Header */}
+                                <Dialog.Description className="sr-only">
+                                    {title}
+                                </Dialog.Description>
                                 <div className="flex items-center justify-between px-6 py-4 border-b border-border/40">
                                     <Dialog.Title className="text-lg font-semibold text-foreground">
                                         {title}

@@ -135,7 +135,7 @@ export default function NoteEditor({ knowledge, workspaceId }: NoteEditorProps) 
         <EditorShell
             toolbar={
                 <EditorToolbar
-                    onBack={() => navigate(`/w/${workspaceId}`)}
+                    onBack={() => navigate(`/w/${workspaceId}/knowledge`)}
                     title={knowledge.title || knowledge.ai_title || 'Untitled Note'}
                     saveStatus={saveStatus}
                     actions={

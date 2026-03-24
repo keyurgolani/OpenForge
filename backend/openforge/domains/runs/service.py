@@ -110,6 +110,7 @@ class RunService:
         run_type: str | None = None,
         agent_id: UUID | None = None,
         automation_id: UUID | None = None,
+        deployment_id: UUID | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         query = select(RunModel).order_by(RunModel.created_at.desc())
         count_query = select(func.count()).select_from(RunModel)
@@ -128,6 +129,9 @@ class RunService:
         if automation_id is not None:
             query = query.where(RunModel.composite_metadata["automation_id"].astext == str(automation_id))
             count_query = count_query.where(RunModel.composite_metadata["automation_id"].astext == str(automation_id))
+        if deployment_id is not None:
+            query = query.where(RunModel.deployment_id == deployment_id)
+            count_query = count_query.where(RunModel.deployment_id == deployment_id)
         rows = (await self.db.execute(query.offset(skip).limit(limit))).scalars().all()
         total = await self.db.scalar(count_query)
         return [self._serialize_run(row) for row in rows], int(total or 0)

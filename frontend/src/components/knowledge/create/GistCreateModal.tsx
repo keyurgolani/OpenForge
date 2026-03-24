@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Loader2, Save, Maximize2 } from 'lucide-react'
 import ModalShell from '@/components/knowledge/shared/ModalShell'
 import TagInput from '@/components/knowledge/shared/TagInput'
-import { createKnowledge } from '@/lib/api'
+import { createKnowledge, updateKnowledgeTags } from '@/lib/api'
 
 const GIST_LANGUAGES = [
     'TypeScript', 'JavaScript', 'Python', 'Go', 'Rust',
@@ -47,14 +47,20 @@ export default function GistCreateModal({ isOpen, onClose, workspaceId, onCreate
         title: title.trim() || null,
         content: code,
         gist_language: language,
-        tags,
     })
 
     const handleSave = async () => {
+        if (!code.trim()) {
+            setError('Please enter some code.')
+            return
+        }
         setSaving(true)
         setError(null)
         try {
             const result = await createKnowledge(workspaceId, buildPayload())
+            if (tags.length > 0 && result?.id) {
+                await updateKnowledgeTags(workspaceId, result.id, tags)
+            }
             qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
             onCreated?.(result)
             reset()
@@ -67,10 +73,17 @@ export default function GistCreateModal({ isOpen, onClose, workspaceId, onCreate
     }
 
     const handleExpand = async () => {
+        if (!code.trim()) {
+            setError('Please enter some code.')
+            return
+        }
         setSaving(true)
         setError(null)
         try {
             const result = await createKnowledge(workspaceId, buildPayload())
+            if (tags.length > 0 && result?.id) {
+                await updateKnowledgeTags(workspaceId, result.id, tags)
+            }
             qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
             onCreated?.(result)
             reset()

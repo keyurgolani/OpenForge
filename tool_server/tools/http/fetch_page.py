@@ -4,7 +4,13 @@ from protocol import BaseTool, ToolContext, ToolResult
 from security import security
 from content_boundary import wrap_untrusted
 
-# Patterns to strip before text extraction
+try:
+    import trafilatura
+    _HAS_TRAFILATURA = True
+except ImportError:
+    _HAS_TRAFILATURA = False
+
+# Fallback patterns to strip before text extraction
 _SCRIPT_RE = re.compile(r"<script[^>]*>.*?</script>", re.DOTALL | re.IGNORECASE)
 _STYLE_RE = re.compile(r"<style[^>]*>.*?</style>", re.DOTALL | re.IGNORECASE)
 _TAG_RE = re.compile(r"<[^>]+>")
@@ -12,11 +18,29 @@ _BLANK_RE = re.compile(r"\n{3,}")
 
 
 def _strip_html(html: str) -> str:
+    """Basic regex fallback for HTML stripping."""
     text = _SCRIPT_RE.sub("", html)
     text = _STYLE_RE.sub("", text)
     text = _TAG_RE.sub(" ", text)
     text = _BLANK_RE.sub("\n\n", text)
     return text.strip()
+
+
+def _extract_content(html: str, url: str) -> str:
+    """Extract readable content from HTML using trafilatura with regex fallback."""
+    if _HAS_TRAFILATURA:
+        extracted = trafilatura.extract(
+            html,
+            url=url,
+            include_links=True,
+            include_tables=True,
+            favor_recall=True,
+            deduplicate=True,
+        )
+        if extracted and len(extracted.strip()) > 100:
+            return extracted.strip()
+    # Fallback to basic regex stripping
+    return _strip_html(html)
 
 
 class FetchPageTool(BaseTool):
@@ -59,10 +83,24 @@ class FetchPageTool(BaseTool):
             async with httpx.AsyncClient(
                 timeout=timeout,
                 follow_redirects=True,
-                headers={"User-Agent": "Mozilla/5.0 OpenForge/1.0"},
+                headers={
+                    "User-Agent": "Mozilla/5.0 (compatible; OpenForge/1.0; +https://openforge.dev)",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Accept-Language": "en-US,en;q=0.9",
+                },
             ) as client:
                 resp = await client.get(url)
-            text = _strip_html(resp.text)
+            text = _extract_content(resp.text, url)
+            if not text or len(text.strip()) < 50:
+                return ToolResult(
+                    success=True,
+                    output=wrap_untrusted(
+                        "Page returned minimal text content. The site may require "
+                        "JavaScript to render, or the page may be empty. Try a "
+                        "different URL or use search_web to find alternative sources.",
+                        url,
+                    ),
+                )
             wrapped = wrap_untrusted(text, url)
             return self._maybe_truncate("", wrapped)
         except Exception as exc:

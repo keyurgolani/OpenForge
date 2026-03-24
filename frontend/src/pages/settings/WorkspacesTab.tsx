@@ -35,23 +35,45 @@ function WorkspaceCard({ workspace: ws, providers, onDeleted, onSaved }: {
 
     const { data: settings = [] } = useQuery({ queryKey: ['settings'], queryFn: listSettings })
 
-    // Build combined model lists from per-type system configs
+    // Build model lists from provider enabled_models, enriched by system configs
     const chatModels = useMemo(() => {
+        // Try system config first
         const raw = (settings as { key: string; value: unknown }[]).find(s => s.key === 'system_chat_models')?.value
-        if (!Array.isArray(raw)) return []
-        return (raw as { provider_id: string; model_id: string; model_name: string }[]).map(m => {
-            const p = providers.find(pr => pr.id === m.provider_id)
-            return { value: `${m.provider_id}:${m.model_id}`, label: `${p ? sanitizeProviderDisplayName(p.display_name) : 'Unknown'} / ${m.model_name}`, provider_id: m.provider_id, model_id: m.model_id }
-        })
+        if (Array.isArray(raw) && raw.length > 0) {
+            return (raw as { provider_id: string; model_id: string; model_name: string }[]).map(m => {
+                const p = providers.find(pr => pr.id === m.provider_id)
+                return { value: `${m.provider_id}:${m.model_id}`, label: `${p ? sanitizeProviderDisplayName(p.display_name) : 'Unknown'} / ${m.model_name}`, provider_id: m.provider_id, model_id: m.model_id }
+            })
+        }
+        // Fall back to all enabled_models from all providers
+        return providers.flatMap(p =>
+            (p.enabled_models ?? []).map(m => ({
+                value: `${p.id}:${m.id}`,
+                label: `${sanitizeProviderDisplayName(p.display_name)} / ${m.name}`,
+                provider_id: p.id,
+                model_id: m.id,
+            }))
+        )
     }, [settings, providers])
 
     const visionModels = useMemo(() => {
+        // Try system config first
         const raw = (settings as { key: string; value: unknown }[]).find(s => s.key === 'system_vision_models')?.value
-        if (!Array.isArray(raw)) return []
-        return (raw as { provider_id: string; model_id: string; model_name: string }[]).map(m => {
-            const p = providers.find(pr => pr.id === m.provider_id)
-            return { value: `${m.provider_id}:${m.model_id}`, label: `${p ? sanitizeProviderDisplayName(p.display_name) : 'Unknown'} / ${m.model_name}`, provider_id: m.provider_id, model_id: m.model_id }
-        })
+        if (Array.isArray(raw) && raw.length > 0) {
+            return (raw as { provider_id: string; model_id: string; model_name: string }[]).map(m => {
+                const p = providers.find(pr => pr.id === m.provider_id)
+                return { value: `${m.provider_id}:${m.model_id}`, label: `${p ? sanitizeProviderDisplayName(p.display_name) : 'Unknown'} / ${m.model_name}`, provider_id: m.provider_id, model_id: m.model_id }
+            })
+        }
+        // Fall back to all enabled_models from all providers
+        return providers.flatMap(p =>
+            (p.enabled_models ?? []).map(m => ({
+                value: `${p.id}:${m.id}`,
+                label: `${sanitizeProviderDisplayName(p.display_name)} / ${m.name}`,
+                provider_id: p.id,
+                model_id: m.id,
+            }))
+        )
     }, [settings, providers])
 
     // Combined chat value for select

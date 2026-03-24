@@ -18,7 +18,7 @@ class TestDomainModelPresence:
 
     def test_agent_model_has_required_fields(self):
         from openforge.db.models import AgentModel
-        required = {"id", "name", "slug", "status", "created_at"}
+        required = {"id", "name", "slug", "system_prompt", "llm_config", "active_version_id", "created_at"}
         actual = {c.name for c in AgentModel.__table__.columns}
         assert required.issubset(actual), f"Missing fields: {required - actual}"
 

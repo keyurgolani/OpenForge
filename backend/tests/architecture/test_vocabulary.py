@@ -86,7 +86,7 @@ def test_public_chat_and_delegation_surfaces_do_not_use_subagent_term():
         project_root / "backend" / "openforge" / "schemas" / "conversation.py",
         project_root / "backend" / "openforge" / "api" / "conversations.py",
         project_root / "frontend" / "src" / "lib" / "api.ts",
-        project_root / "frontend" / "src" / "pages" / "WorkspaceAgentPage.tsx",
+        project_root / "frontend" / "src" / "pages" / "AgentChatPage.tsx",
         project_root / "frontend" / "src" / "hooks" / "useStreamingChat.ts",
         project_root / "frontend" / "src" / "components" / "shared" / "TimelineBadge.tsx",
     ]
