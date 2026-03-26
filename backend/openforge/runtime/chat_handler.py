@@ -837,7 +837,6 @@ class ChatHandler:
         provider_id: str | None = None,
         model_id: str | None = None,
         mentions: list[dict[str, Any]] | None = None,
-        optimize: bool = False,
     ) -> None:
         """Main chat execution loop.
 
@@ -894,8 +893,15 @@ class ChatHandler:
             return
 
         conversation = await db.get(Conversation, conversation_id)
-        if conversation is None or conversation.workspace_id != workspace_id or conversation.is_archived:
+        if conversation is None or conversation.workspace_id != workspace_id:
             await self._publish(execution_id, workspace_id, "agent_error", conversation_id=conversation_id, detail="Conversation not found")
+            self._cancel_events.pop(str(conversation_id), None)
+            self._cancel_content.pop(str(conversation_id), None)
+            for channel_key, subscription in cancel_subscriptions:
+                await self._teardown_cancel_listener(subscription, channel_key)
+            return
+        if conversation.is_archived:
+            await self._publish(execution_id, workspace_id, "agent_error", conversation_id=conversation_id, detail="Conversation is archived. Restore it to continue chatting.")
             self._cancel_events.pop(str(conversation_id), None)
             self._cancel_content.pop(str(conversation_id), None)
             for channel_key, subscription in cancel_subscriptions:
@@ -919,7 +925,7 @@ class ChatHandler:
         )
         user_message = latest_user_result.scalar_one_or_none()
         if user_message is None:
-            user_message = await conversation_service.add_message(db, conversation_id, role="user", content=user_content, provider_metadata={"optimize": True} if optimize else None)
+            user_message = await conversation_service.add_message(db, conversation_id, role="user", content=user_content)
 
         resolved_provider_id = provider_id or agent.provider_override_id
         resolved_model_id = model_id or agent.model_override
@@ -950,8 +956,15 @@ class ChatHandler:
                     base_url=base_url,
                 )
                 input_values = extraction.get("extracted", {}) or {}
-                if not extraction.get("all_filled"):
-                    follow_up = (extraction.get("follow_up") or "I need a few more details before I can continue.").strip()
+
+                # When extraction fails (empty/unparseable LLM response), skip
+                # the follow-up loop and let the agent handle input gathering
+                # conversationally using its system prompt which already lists
+                # the expected input variables.
+                if extraction.get("extraction_failed"):
+                    logger.info("Input extraction failed; falling through to agent execution")
+                elif not extraction.get("all_filled") and extraction.get("follow_up"):
+                    follow_up = extraction["follow_up"].strip()
                     follow_up_message = await conversation_service.add_message(
                         db,
                         conversation_id,
@@ -1132,104 +1145,32 @@ class ChatHandler:
             else:
                 system_prompt = getattr(agent, 'system_prompt', None) or "You are a helpful AI assistant."
 
-            # ── Build preamble via template rendering ──
+            from openforge.runtime.prompt_context import ExecutionContext, build_preamble, build_postamble
 
-            _PREAMBLE_TEMPLATE = (
-                "# Agent: {{system.agent_name}}\n"
-                "You are **{{system.agent_name}}**"
-                "{% if system.agent_description %}"
-                " — {{system.agent_description}}."
-                "{% else %}"
-                ", an AI agent in OpenForge."
-                "{% endif %}\n"
-                "You are running on the **OpenForge** platform."
-                "{% if system.input_schema %}\n\n"
-                "## Input Variables\n"
-                "{% for p in system.input_schema %}"
-                "- `{{p.name}}` ({{p.type}}"
-                "{% if p.required %}, required{% endif %}"
-                ")"
-                "{% if p.description %} — {{p.description}}{% endif %}\n"
-                "{% endfor %}"
-                "{% endif %}"
-                "{% if system.output_definitions %}\n\n"
-                "## Output Variables\n"
-                "You MUST structure your final response so the system can extract these output variables:\n"
-                "{% for out in system.output_definitions %}"
-                "- `{{out.key}}` ({{out.type}})"
-                "{% if out.label %} — {{out.label}}{% endif %}\n"
-                "{% endfor %}\n"
-                "Wrap your structured output in a fenced block:\n"
-                "```output\n{\n"
-                "{% for out in system.output_definitions %}"
-                "  \"{{out.key}}\": <{{out.type}} value>"
-                "{% if not loop.last %},{% endif %}\n"
-                "{% endfor %}"
-                "}\n```"
-                "{% endif %}"
+            preamble = build_preamble(
+                agent_name=all_template_vars.get("system.agent_name", "Assistant"),
+                agent_description=all_template_vars.get("system.agent_description", ""),
+                context=ExecutionContext.CHAT,
+                input_values=input_values if input_values else None,
+                output_definitions=output_defs or None,
             )
-            preamble = render_template(_PREAMBLE_TEMPLATE, all_template_vars).output.strip()
 
-            # ── Build postamble via template rendering ──
-            # Add workspace context and optimization flag to template vars
-            if workspace_id is None:
-                ws_context = (
-                    "You are running in a workspace-agnostic context. "
-                    "When using workspace tools, you MUST pass the `workspace_id` parameter."
-                )
-            else:
-                ws_context = (
-                    f"You are operating in workspace `{workspace_id}`. "
-                    "Workspace tools default to this workspace, but you can pass a different `workspace_id`."
-                )
-            all_template_vars["system.workspace_context"] = ws_context
-            all_template_vars["system.tools_enabled"] = agent.tools_enabled
-            all_template_vars["system.optimize"] = optimize and agent.id != "optimizer_agent"
-
-            _POSTAMBLE_TEMPLATE = (
-                "# OpenForge Application Context\n\n"
-                "{% if system.workspaces %}"
-                "## Available Workspaces\n"
-                "{{system.workspace_context}}\n"
-                "{% for ws in system.workspaces %}"
-                "- **{{ws.name}}** (id: `{{ws.id}}`"
-                "{% if ws.knowledge_count %}, {{ws.knowledge_count}} knowledge items{% endif %}"
-                ")"
-                "{% if ws.description %}: {{ws.description}}{% endif %}\n"
-                "{% endfor %}\n"
-                "{% endif %}"
-                "{% if contains(system.tools, \"agent.invoke\") %}\n"
-                "## Available Agents\n"
-                "You can invoke these agents via the `agent.invoke` tool:\n"
-                "{% for ag in system.agents %}"
-                "- **{{ag.slug}}**{% if ag.tags %} [{{join(ag.tags, \", \")}}]{% endif %}: {{ag.description}}\n"
-                "{% endfor %}\n"
-                "{% endif %}"
-                "{% if system.tools_enabled == false %}\n"
-                "## Tooling disabled\n"
-                "Do not claim to search workspace knowledge or use tools. "
-                "Respond using conversation context and model knowledge only.\n"
-                "{% endif %}"
-                "{% if system.skills %}\n"
-                "## Available Skills\n"
-                "If there are relevant skills, use tools to read the skills to enhance your ability to tackle the request.\n"
-                "{% for sk in system.skills %}"
-                "- `{{sk.name}}`: {{sk.description}}\n"
-                "{% endfor %}"
-                "{% endif %}"
-                "{% if system.optimize %}\n"
-                "## Prompt optimization required\n"
-                "Before doing anything else, call `agent.invoke` with `agent_id=\"optimizer_agent\"` "
-                "and the user's exact message as `instruction`. Use the optimized result instead of the original prompt.\n"
-                "{% endif %}"
+            postamble = build_postamble(
+                workspace_id=workspace_id,
+                workspaces_data=workspaces_data,
+                agents_data=agents_data,
+                tools_data=tools_data,
+                skills_data=skills_data,
+                tools_enabled=agent.tools_enabled,
             )
-            postamble = render_template(_POSTAMBLE_TEMPLATE, all_template_vars).output.strip()
 
             # ── Assemble final system prompt: preamble + user prompt + postamble ──
             final_parts = [preamble, system_prompt]
             if postamble:
                 final_parts.append(postamble)
             system_prompt = "\n\n---\n\n".join(final_parts)
+
+            logger.debug("Postamble rendered: %d chars", len(postamble))
 
             context_parts = [part for part in [attachment_context, url_context, mention_context] if part]
             loop_messages = context_assembler.assemble(
@@ -1282,6 +1223,11 @@ class ChatHandler:
             if _agent_spec is None and hasattr(agent, '_spec'):
                 _agent_spec = agent._spec
 
+            # Determine default workspace for global chat auto-injection
+            _default_ws_id: str | None = None
+            if workspace_id is None and workspaces_data and len(workspaces_data) == 1:
+                _default_ws_id = str(workspaces_data[0]["id"])
+
             loop_ctx = ToolLoopContext(
                 workspace_id=workspace_id,
                 conversation_id=conversation_id,
@@ -1293,6 +1239,7 @@ class ChatHandler:
                 hitl_service=hitl_service,
                 cancel_event=cancel_event,
                 db=db,
+                default_workspace_id=_default_ws_id,
             )
 
             def _effective_content() -> str:
@@ -1390,6 +1337,12 @@ class ChatHandler:
                 except Exception as exc:
                     logger.warning("Final summary turn failed: %s", exc)
                 final_response = full_response[intermediate_response_total:].strip() if intermediate_response_total > 0 else full_response.strip()
+
+            # Fallback: if response is still empty but we had intermediate
+            # responses, use the full accumulated response so the user sees
+            # something rather than a blank message.
+            if not final_response.strip() and intermediate_response_total > 0:
+                final_response = full_response.strip()
 
             generation_ms = int((time.perf_counter() - generation_started) * 1000)
             # If cancelled with empty backend response, use frontend's partial content as fallback

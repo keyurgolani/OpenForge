@@ -336,8 +336,8 @@ async def lifespan(app: FastAPI):
     logger.info("OpenForge shutting down...")
     await task_scheduler.stop()
     try:
-        from openforge.db.redis_client import close_redis
-        await close_redis()
+        from openforge.db.redis_client import close_all_redis
+        await close_all_redis()
     except Exception:
         pass
     try:

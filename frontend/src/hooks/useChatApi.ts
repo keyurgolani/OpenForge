@@ -69,7 +69,7 @@ export function useChatApi(workspaceId: string | null | undefined) {
                 return res?.conversations ?? res ?? []
             },
             createConversation: (data?: { agent_id?: string; title?: string }) =>
-                createGlobalConversation({ agent_id: data?.agent_id ?? '', title: data?.title }),
+                createGlobalConversation({ agent_id: data?.agent_id || undefined, title: data?.title }),
             getConversation: (cid: string) =>
                 getGlobalConversation(cid),
             updateConversation: (cid: string, data: { title?: string; title_locked?: boolean; is_pinned?: boolean; is_archived?: boolean }) =>

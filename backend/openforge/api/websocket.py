@@ -246,7 +246,6 @@ async def _handle_chat_message(websocket: WebSocket, workspace_id: str | None, d
     provider_id = data.get("provider_id")
     model_id = data.get("model_id")
     mentions = data.get("mentions", [])
-    optimize = data.get("optimize", False)
     if not conversation_id or not content:
         await ws_manager.send_to_connection(websocket, {
             "type": "chat_error",
@@ -265,8 +264,7 @@ async def _handle_chat_message(websocket: WebSocket, workspace_id: str | None, d
     _pid = provider_id
     _mid = model_id
     _mentions = mentions
-    _optimize = optimize
-    logger.info("DEBUG WS chat_message: optimize=%s use_celery=%s", _optimize, settings.use_celery_agents)
+    logger.info("DEBUG WS chat_message: use_celery=%s", settings.use_celery_agents)
 
     _use_celery = settings.use_celery_agents
     if _use_celery:
@@ -279,7 +277,6 @@ async def _handle_chat_message(websocket: WebSocket, workspace_id: str | None, d
                 provider_id=_pid,
                 model_id=_mid,
                 mentions=_mentions,
-                optimize=_optimize,
             )
             # Start background relay: subscribe to Redis and forward events to WebSocket
             _task = _asyncio.create_task(_relay_agent_events(websocket, _wid, _exec_id, conversation_id=_cid))
@@ -303,7 +300,6 @@ async def _handle_chat_message(websocket: WebSocket, workspace_id: str | None, d
                     provider_id=_pid,
                     model_id=_mid,
                     mentions=_mentions,
-                    optimize=_optimize,
                 )
 
         _asyncio.create_task(_run_agent())
@@ -599,7 +595,6 @@ async def _dispatch_celery_agent(
     provider_id: str | None,
     model_id: str | None,
     mentions: list,
-    optimize: bool = False,
 ) -> str:
     """Create an execution record and dispatch to Celery. Returns execution_id."""
     import uuid as _uuid
@@ -625,10 +620,8 @@ async def _dispatch_celery_agent(
 
         # Persist user message before queuing so it's visible on page refresh
         from openforge.services.conversation_service import conversation_service
-        _user_metadata = {"optimize": True} if optimize else None
         await conversation_service.add_message(
             db, UUID(conversation_id), role="user", content=content,
-            provider_metadata=_user_metadata,
         )
 
         # Create execution record
@@ -652,7 +645,6 @@ async def _dispatch_celery_agent(
         provider_id=provider_id,
         model_id=model_id,
         mentions=mentions,
-        optimize=optimize,
     )
     return execution_id
 

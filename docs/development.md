@@ -134,6 +134,7 @@ OpenForge/
 │       │   ├── events.py           # Runtime event types
 │       │   ├── event_publisher.py  # Event broadcasting
 │       │   ├── checkpoint_store.py # Durable state snapshots
+│       │   ├── prompt_context.py   # Context-aware preamble/postamble (CHAT vs AUTOMATION)
 │       │   ├── template_engine/    # Template engine (parser, renderer, functions, types)
 │       │   └── strategies/         # Strategy plugins
 │       │       ├── interface.py    # AgentStrategy protocol + BaseStrategy
@@ -154,6 +155,7 @@ OpenForge/
 │       │   ├── config_service.py   # Configuration store
 │       │   └── mcp_service.py      # MCP server integration
 │       └── worker/                # Celery background tasks
+│           ├── autoscale.py        # Logarithmic worker autoscaler
 │           ├── celery_app.py       # Celery configuration
 │           └── tasks.py            # Task definitions
 │

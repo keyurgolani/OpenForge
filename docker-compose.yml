@@ -67,7 +67,6 @@ services:
         condition: service_started
     restart: unless-stopped
     deploy:
-      replicas: ${CELERY_WORKERS:-1}
       resources:
         limits:
           memory: 4G

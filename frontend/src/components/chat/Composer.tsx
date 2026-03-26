@@ -1,6 +1,7 @@
-import { useRef, useState, useCallback, KeyboardEvent } from 'react'
+import { useRef, useState, useCallback, useEffect, KeyboardEvent } from 'react'
 import { Send, Square, Paperclip } from 'lucide-react'
 import { AttachmentChip } from './AttachmentChip'
+import { ComposerModelPicker, type ModelPickerOption } from './ComposerModelPicker'
 import type { AgentPhase } from '@/hooks/chat/useAgentPhase'
 
 interface ComposerAttachment {
@@ -19,13 +20,25 @@ interface ComposerProps {
   isStreaming: boolean
   attachments?: ComposerAttachment[]
   disabled?: boolean
+  modelOptions?: ModelPickerOption[]
+  selectedModelKey?: string
+  onModelSelect?: (key: string) => void
+  defaultModelLabel?: string
 }
 
-export function Composer({ onSend, onCancel, onAttach, onRemoveAttachment, phase, isStreaming, attachments = [], disabled }: ComposerProps) {
+export function Composer({ onSend, onCancel, onAttach, onRemoveAttachment, phase, isStreaming, attachments = [], disabled, modelOptions, selectedModelKey, onModelSelect, defaultModelLabel }: ComposerProps) {
   const [value, setValue] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const isActive = phase !== 'idle' && phase !== 'complete' && phase !== 'error'
+  const composerDisabled = disabled || (isActive && phase !== 'awaiting_approval')
+
+  // Auto-focus textarea when it becomes enabled
+  useEffect(() => {
+    if (!composerDisabled && textareaRef.current) {
+      textareaRef.current.focus()
+    }
+  }, [composerDisabled])
 
   const handleSend = useCallback(() => {
     const trimmed = value.trim()
@@ -59,49 +72,66 @@ export function Composer({ onSend, onCancel, onAttach, onRemoveAttachment, phase
   }
 
   return (
-    <div className="px-8 pb-5 pt-4 bg-gradient-to-t from-card/60 to-transparent backdrop-blur-[18px] border-t border-border">
-      {attachments.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-2">
-          {attachments.map((att) => (
-            <AttachmentChip key={att.id} filename={att.filename} size={att.size} onRemove={onRemoveAttachment ? () => onRemoveAttachment(att.id) : undefined} />
-          ))}
-        </div>
-      )}
-      <div
-        className="flex items-end gap-2.5 chat-composer-panel rounded-lg px-3.5 py-2.5"
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={handleFileDrop}
-      >
-        <textarea
-          ref={textareaRef}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onInput={handleInput}
-          placeholder="Message..."
-          disabled={disabled || (isActive && phase !== 'awaiting_approval')}
-          rows={1}
-          className="flex-1 bg-transparent border-none outline-none resize-none text-sm text-foreground placeholder:text-muted-foreground/60 leading-relaxed max-h-[160px]"
-          aria-label="Chat message input"
-        />
-        <div className="flex gap-1.5 items-center flex-shrink-0">
-          {onAttach && (
-            <>
-              <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) onAttach(Array.from(e.target.files)) }} />
-              <button onClick={() => fileInputRef.current?.click()} className="w-8 h-8 rounded-sm btn-ghost flex items-center justify-center" aria-label="Attach file">
-                <Paperclip className="w-4 h-4 text-muted-foreground" />
-              </button>
-            </>
-          )}
-          {isActive && onCancel ? (
-            <button onClick={onCancel} className="w-8 h-8 rounded-sm btn-ghost flex items-center justify-center" aria-label="Stop generation">
-              <Square className="w-4 h-4 text-muted-foreground" />
-            </button>
-          ) : (
-            <button onClick={handleSend} disabled={!value.trim() || isActive} className="w-8 h-8 rounded-sm btn-primary flex items-center justify-center disabled:opacity-40" aria-label="Send message">
-              <Send className="w-4 h-4" />
-            </button>
-          )}
+    <div className="chat-composer-shell pointer-events-none z-20 px-4 py-1 md:px-6 md:py-1.5 pb-3">
+      <div className="pointer-events-auto">
+        {attachments.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-2 px-2">
+            {attachments.map((att) => (
+              <AttachmentChip key={att.id} filename={att.filename} size={att.size} onRemove={onRemoveAttachment ? () => onRemoveAttachment(att.id) : undefined} />
+            ))}
+          </div>
+        )}
+        <div
+          className="chat-composer-panel"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={handleFileDrop}
+        >
+          <div className="flex items-end gap-2.5">
+            <textarea
+              ref={textareaRef}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onInput={handleInput}
+              placeholder="Message..."
+              disabled={composerDisabled}
+              rows={1}
+              className="chat-composer-textarea"
+              aria-label="Chat message input"
+            />
+            <div className="flex gap-1.5 items-center flex-shrink-0 pb-0.5">
+              {modelOptions && modelOptions.length > 0 && onModelSelect && (
+                <ComposerModelPicker
+                  options={modelOptions}
+                  selectedKey={selectedModelKey ?? ''}
+                  onSelect={onModelSelect}
+                  defaultLabel={defaultModelLabel}
+                />
+              )}
+              {onAttach && (
+                <>
+                  <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) onAttach(Array.from(e.target.files)) }} />
+                  <button onClick={() => fileInputRef.current?.click()} className="chat-control-pill h-9 min-w-9 justify-center" aria-label="Attach file">
+                    <Paperclip className="w-4 h-4" />
+                  </button>
+                </>
+              )}
+              {isActive && onCancel ? (
+                <button onClick={onCancel} className="chat-control-pill h-9 min-w-9 justify-center" aria-label="Stop generation">
+                  <Square className="w-4 h-4" />
+                </button>
+              ) : (
+                <button
+                  onClick={handleSend}
+                  disabled={!value.trim() || isActive}
+                  className="chat-send-button disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Send message"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

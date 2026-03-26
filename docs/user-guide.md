@@ -290,9 +290,9 @@ Agents are the AI actors in OpenForge. Each agent is a structured definition wit
 
 ### Template Engine
 
-System prompts use a template language with three sections:
+System prompts use a template language with three sections. The preamble automatically adapts based on execution context (interactive chat vs automation node):
 
-1. **Preamble** (read-only) — Auto-generated from agent identity, input parameters, and output definitions
+1. **Preamble** (read-only) — Auto-generated from agent identity, input parameters, and output definitions. In chat mode, guides conversational output. In automation mode, enforces structured JSON output matching output definitions.
 2. **Editable section** — Your custom agent instructions
 3. **Postamble** (read-only) — Auto-generated application context (workspaces, available agents, skills)
 

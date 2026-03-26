@@ -1,4 +1,4 @@
-import { FileText } from 'lucide-react'
+import { User, FileText } from 'lucide-react'
 
 interface Attachment {
   filename: string
@@ -14,12 +14,9 @@ interface UserMessageCardProps {
 
 export function UserMessageCard({ content, userInitial, attachments, timestamp }: UserMessageCardProps) {
   return (
-    <div className="flex gap-3 items-start">
-      <div className="w-7 h-7 rounded-full bg-accent/15 border border-accent/25 flex-shrink-0 flex items-center justify-center text-[11px] text-accent font-semibold">
-        {userInitial}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="bg-accent/6 border border-accent/12 rounded-lg px-4 py-3 text-foreground text-sm leading-relaxed">
+    <div className="flex gap-2 items-start justify-end">
+      <div className="max-w-[90%]">
+        <div className="chat-bubble-user px-4 py-3 text-foreground text-sm leading-relaxed">
           {content}
           {attachments && attachments.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-2">
@@ -33,10 +30,13 @@ export function UserMessageCard({ content, userInitial, attachments, timestamp }
           )}
         </div>
         {timestamp && (
-          <div className="text-[11px] text-muted-foreground/50 mt-1 ml-1 opacity-0 hover:opacity-100 transition-opacity">
+          <div className="chat-message-meta text-[11px] text-muted-foreground/50 mt-1 mr-1 text-right opacity-0 hover:opacity-100 transition-opacity">
             {timestamp}
           </div>
         )}
+      </div>
+      <div className="chat-avatar w-7 h-7 rounded-full bg-accent/24 border border-accent/35 flex-shrink-0 flex items-center justify-center">
+        <User className="w-3.5 h-3.5 text-accent" />
       </div>
     </div>
   )

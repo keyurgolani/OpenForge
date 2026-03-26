@@ -41,7 +41,7 @@ OpenForge is configured through environment variables defined in the `.env` file
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `CELERY_WORKERS` | No | `1` | Number of Celery worker container replicas. Increase for higher background task throughput. |
+| `CELERY_WORKERS` | No | `1` | Number of Celery worker container replicas. Increase for higher background task throughput. Each worker auto-scales concurrency using a logarithmic autoscaler. |
 
 ## Application Settings
 

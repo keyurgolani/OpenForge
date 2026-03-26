@@ -4,7 +4,15 @@ export function partitionForRender(text: string): {
 } {
   if (!text) return { stable: '', active: '' }
 
-  const lastSafeBreak = text.lastIndexOf('\n\n')
+  // Find the last safe split point — prefer \n\n (paragraph), fallback to \n (line)
+  let lastSafeBreak = text.lastIndexOf('\n\n')
+
+  // If no paragraph break yet, try splitting at the last newline instead.
+  // This lets markdown render for all complete lines during streaming.
+  if (lastSafeBreak === -1) {
+    lastSafeBreak = text.lastIndexOf('\n')
+  }
+
   if (lastSafeBreak === -1) return { stable: '', active: text }
 
   const stableCandidate = text.slice(0, lastSafeBreak)

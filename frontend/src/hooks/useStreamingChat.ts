@@ -102,7 +102,6 @@ interface SendMessageOptions {
     model_id?: string
     attachment_ids?: string[]
     mentions?: Mention[]
-    optimize?: boolean
 }
 
 // ── Helper: apply an event to a timeline array (used for both root and nested) ──
@@ -679,7 +678,8 @@ export function useStreamingChat(conversationId: string | null, workspaceId?: st
         let cancelled = false
         let consecutiveInactive = 0
         let lastTimelineLen = 0
-        const POLL_INTERVAL = 5000 // 5 seconds
+        let lastContentLen = 0
+        const POLL_INTERVAL = 1500 // 1.5 seconds for responsive streaming
         const REQUIRED_INACTIVE_CHECKS = 2 // need 2 consecutive inactive results
 
         const checkStreamState = async () => {
@@ -706,8 +706,10 @@ export function useStreamingChat(conversationId: string | null, workspaceId?: st
                     // Apply stream-state updates from polling if they contain
                     // new data the WebSocket relay may have missed
                     const stateTimeline = state.timeline ?? []
-                    if (stateTimeline.length > lastTimelineLen) {
+                    const stateContentLen = (state.content ?? '').length
+                    if (stateTimeline.length > lastTimelineLen || stateContentLen > lastContentLen) {
                         lastTimelineLen = stateTimeline.length
+                        lastContentLen = stateContentLen
                         applySnapshot(state)
                     }
                 }
@@ -732,7 +734,6 @@ export function useStreamingChat(conversationId: string | null, workspaceId?: st
         if (options?.model_id) payload.model_id = options.model_id
         if (options?.attachment_ids?.length) payload.attachment_ids = options.attachment_ids
         if (options?.mentions?.length) payload.mentions = options.mentions
-        if (options?.optimize) payload.optimize = true
 
         resetStreamState(false)
         resumePopulatedRef.current = true
@@ -810,5 +811,6 @@ export function useStreamingChat(conversationId: string | null, workspaceId?: st
         isConnected,
         lastError,
         clearLastError,
+        onWsEvent: on,
     }
 }

@@ -789,8 +789,31 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid;
     z-index: 1;
+    border: 1px solid hsla(var(--border) / 0.4);
+    background: hsl(var(--background));
+  }
+
+  .chat-workflow-step--thinking .chat-timeline-dot {
+    border-color: hsla(240, 6%, 50%, 0.45);
+    background: hsl(var(--background));
+  }
+  .chat-workflow-step-live.chat-workflow-step--thinking .chat-timeline-dot {
+    animation: of-agent-glow 1.25s ease-in-out infinite;
+    border-color: hsla(var(--accent) / 0.5);
+    background: hsl(var(--background));
+  }
+  .chat-workflow-step--tool .chat-timeline-dot {
+    border-color: hsla(197, 79%, 50%, 0.45);
+    background: hsl(var(--background));
+  }
+  .chat-workflow-step--hitl .chat-timeline-dot {
+    border-color: hsla(38, 92%, 50%, 0.45);
+    background: hsl(var(--background));
+  }
+  .chat-workflow-step--delegated .chat-timeline-dot {
+    border-color: hsla(271, 91%, 65%, 0.45);
+    background: hsl(var(--background));
   }
 
   .chat-llm-inline {

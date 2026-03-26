@@ -36,4 +36,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD celery -A openforge.worker.celery_app inspect ping -d celery@$HOSTNAME || exit 1
 
 # Use threads pool for asyncio compatibility with concurrent task support
-CMD ["celery", "-A", "openforge.worker.celery_app", "worker", "--loglevel=info", "--concurrency=4", "--pool=threads"]
+CMD ["celery", "-A", "openforge.worker.celery_app", "worker", "--loglevel=info", "--pool=threads", "--autoscale=16,4"]

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AgentEmitter } from '@/hooks/chat/useAgentStream'
+import { extractSentences } from '@/lib/thought-extractor'
 
 export type AgentPhase =
   | 'idle'
@@ -11,8 +12,8 @@ export type AgentPhase =
   | 'complete'
   | 'error'
 
-export interface TimelineItem {
-  type: 'tool_call' | 'hitl'
+export interface ToolCallTimelineItem {
+  type: 'tool_call'
   call_id: string
   tool_name: string
   arguments: Record<string, unknown>
@@ -24,6 +25,16 @@ export interface TimelineItem {
   duration_ms?: number | null
   nested_timeline?: TimelineItem[] | null
 }
+
+export interface ThinkingTimelineItem {
+  type: 'thinking'
+  id: string
+  status: 'running' | 'complete'
+  duration_ms: number | null
+  sentences: string[]
+}
+
+export type TimelineItem = ToolCallTimelineItem | ThinkingTimelineItem
 
 /**
  * useAgentPhase coordinates with useThoughtQueue via handleThoughtsDrained.
@@ -38,8 +49,29 @@ export function useAgentPhase(emitter: AgentEmitter) {
   const phaseRef = useRef<AgentPhase>('idle')
   const thinkingStartRef = useRef<number>(0)
   const tokenBufferRef = useRef<string[]>([])
+  const thinkingTextRef = useRef('')
+  const thinkingIdCounter = useRef(0)
 
   useEffect(() => { phaseRef.current = phase }, [phase])
+
+  /** Finalize the current active thinking entry in the timeline */
+  const finalizeActiveThinking = useCallback(() => {
+    const now = Date.now()
+    // Extract all sentences from accumulated thinking text
+    const { sentences, remainder } = extractSentences(thinkingTextRef.current)
+    const allSentences = remainder.trim()
+      ? [...sentences, remainder.trim()]
+      : sentences
+    thinkingTextRef.current = ''
+    setTimeline((prev) => {
+      const last = prev[prev.length - 1]
+      if (last?.type === 'thinking' && last.status === 'running') {
+        const dur = thinkingStartRef.current ? now - thinkingStartRef.current : null
+        return [...prev.slice(0, -1), { ...last, status: 'complete' as const, duration_ms: dur, sentences: allSentences }]
+      }
+      return prev
+    })
+  }, [])
 
   // Called by useThoughtQueue when drain completes — release buffered tokens
   const handleThoughtsDrained = useCallback(() => {
@@ -52,16 +84,30 @@ export function useAgentPhase(emitter: AgentEmitter) {
   }, [emitter])
 
   useEffect(() => {
-    const onThinking = () => {
+    const onThinking = (text: string) => {
+      thinkingTextRef.current += text
       if (phaseRef.current === 'idle' || phaseRef.current === 'tool_calling') {
-        if (!thinkingStartRef.current) thinkingStartRef.current = Date.now()
+        thinkingStartRef.current = Date.now()
         setPhase('thinking')
+        // Add a running thinking entry to the timeline
+        thinkingIdCounter.current++
+        setTimeline((prev) => [
+          ...prev,
+          {
+            type: 'thinking' as const,
+            id: `thinking-${thinkingIdCounter.current}`,
+            status: 'running' as const,
+            duration_ms: null,
+            sentences: [],
+          },
+        ])
       }
     }
 
     const onToken = (token: string) => {
       if (phaseRef.current === 'thinking') {
         // Thinking just ended, tokens arriving — transition to draining
+        finalizeActiveThinking()
         if (thinkingStartRef.current) {
           setThinkingDuration(Date.now() - thinkingStartRef.current)
         }
@@ -80,23 +126,26 @@ export function useAgentPhase(emitter: AgentEmitter) {
     }
 
     const onToolCallStart = (data: { call_id: string; tool_name: string; arguments: Record<string, unknown> }) => {
+      // Finalize any active thinking block
+      finalizeActiveThinking()
       if (thinkingStartRef.current && phaseRef.current === 'thinking') {
         setThinkingDuration(Date.now() - thinkingStartRef.current)
       }
+      thinkingStartRef.current = 0
       setPhase('tool_calling')
       setTimeline((prev) => [...prev, {
-        type: 'tool_call',
+        type: 'tool_call' as const,
         call_id: data.call_id,
         tool_name: data.tool_name,
         arguments: data.arguments,
-        status: 'running',
+        status: 'running' as const,
         hitl: null,
       }])
     }
 
     const onToolCallResult = (data: { call_id: string; success: boolean; output?: unknown; error?: string | null; duration_ms?: number | null }) => {
       setTimeline((prev) => prev.map((item) =>
-        item.call_id === data.call_id
+        item.type === 'tool_call' && item.call_id === data.call_id
           ? { ...item, status: data.success ? 'complete' as const : 'error' as const, success: data.success, output: data.output, error: data.error, duration_ms: data.duration_ms }
           : item
       ))
@@ -105,7 +154,7 @@ export function useAgentPhase(emitter: AgentEmitter) {
     const onHitlRequest = (data: { call_id: string; hitl_id: string; action_summary: string; risk_level: string }) => {
       setPhase('awaiting_approval')
       setTimeline((prev) => prev.map((item) =>
-        item.call_id === data.call_id
+        item.type === 'tool_call' && item.call_id === data.call_id
           ? { ...item, status: 'awaiting_approval' as const, hitl: { hitl_id: data.hitl_id, action_summary: data.action_summary, risk_level: data.risk_level, status: 'pending' } }
           : item
       ))
@@ -114,26 +163,99 @@ export function useAgentPhase(emitter: AgentEmitter) {
     const onHitlResolved = (data: { call_id: string; hitl_id: string; approved: boolean; resolution_note?: string | null }) => {
       setPhase('tool_calling')
       setTimeline((prev) => prev.map((item) =>
-        item.call_id === data.call_id
+        item.type === 'tool_call' && item.call_id === data.call_id
           ? { ...item, status: (data.approved ? 'approved' : 'denied') as 'approved' | 'denied', hitl: item.hitl ? { ...item.hitl, status: data.approved ? 'approved' : 'denied', resolution_note: data.resolution_note ?? null } : null }
           : item
       ))
     }
 
     const onDone = () => {
+      finalizeActiveThinking()
       setPhase('complete')
     }
 
     const onError = () => {
+      finalizeActiveThinking()
       setPhase('error')
     }
 
     const onIntermediateResponse = () => {
-      // Reset for next iteration
+      // Reset thinking and token state for next iteration,
+      // but KEEP the timeline — tool calls and thinking blocks persist across iterations
       thinkingStartRef.current = 0
       setThinkingDuration(null)
-      setTimeline([])
       tokenBufferRef.current = []
+      thinkingTextRef.current = ''
+    }
+
+    const onSnapshot = (data: { content: string; thinking: string; timeline: unknown[] }) => {
+      // Reconstruct timeline from snapshot data
+      const snapshotTimeline = Array.isArray(data.timeline) ? data.timeline : []
+      const reconstructed: TimelineItem[] = []
+
+      for (const e of snapshotTimeline) {
+        const entry = e as Record<string, unknown>
+        if (entry.type === 'thinking') {
+          reconstructed.push({
+            type: 'thinking' as const,
+            id: `snap-thinking-${reconstructed.length}`,
+            status: 'complete' as const,
+            duration_ms: (entry.duration_ms ?? entry.durationMs ?? null) as number | null,
+            sentences: typeof entry.content === 'string'
+              ? entry.content.split(/(?<=[.!?])\s+/).filter(Boolean)
+              : [],
+          })
+        } else if (entry.type === 'tool_call') {
+          reconstructed.push({
+            type: 'tool_call' as const,
+            call_id: (entry.call_id as string) ?? '',
+            tool_name: (entry.tool_name as string) ?? '',
+            arguments: (entry.arguments as Record<string, unknown>) ?? {},
+            status: entry.success === true ? 'complete' as const
+              : entry.success === false ? 'error' as const
+              : entry.hitl ? 'awaiting_approval' as const
+              : (entry.output !== undefined || entry.error) ? (entry.success === false ? 'error' as const : 'complete' as const)
+              : 'running' as const,
+            hitl: (entry.hitl as ToolCallTimelineItem['hitl']) ?? null,
+            success: (entry.success as boolean | null) ?? null,
+            output: entry.output ?? undefined,
+            error: (entry.error as string | null) ?? null,
+            duration_ms: (entry.duration_ms as number | null) ?? null,
+            nested_timeline: (entry.nested_timeline as TimelineItem[] | null) ?? null,
+          })
+        }
+      }
+
+      setTimeline(reconstructed)
+
+      // Determine phase from snapshot state
+      const hasContent = !!data.content
+      const hasRunningTool = reconstructed.some(t => t.type === 'tool_call' && t.status === 'running')
+      const hasAwaitingApproval = reconstructed.some(t => t.type === 'tool_call' && t.status === 'awaiting_approval')
+
+      if (hasAwaitingApproval) {
+        setPhase('awaiting_approval')
+      } else if (hasContent) {
+        setPhase('responding')
+      } else if (hasRunningTool) {
+        setPhase('tool_calling')
+      } else if (reconstructed.length > 0) {
+        setPhase('thinking')
+      } else if (data.thinking) {
+        setPhase('thinking')
+        // Add a running thinking entry for the active thinking block
+        thinkingStartRef.current = Date.now()
+        thinkingIdCounter.current++
+        setTimeline([{
+          type: 'thinking' as const,
+          id: `snap-active-${thinkingIdCounter.current}`,
+          status: 'running' as const,
+          duration_ms: null,
+          sentences: [],
+        }])
+      } else {
+        setPhase('thinking')
+      }
     }
 
     emitter.on('thinking_chunk', onThinking)
@@ -145,6 +267,7 @@ export function useAgentPhase(emitter: AgentEmitter) {
     emitter.on('done', onDone)
     emitter.on('error', onError)
     emitter.on('intermediate_response', onIntermediateResponse)
+    emitter.on('snapshot', onSnapshot)
 
     return () => {
       emitter.off('thinking_chunk', onThinking)
@@ -156,8 +279,9 @@ export function useAgentPhase(emitter: AgentEmitter) {
       emitter.off('done', onDone)
       emitter.off('error', onError)
       emitter.off('intermediate_response', onIntermediateResponse)
+      emitter.off('snapshot', onSnapshot)
     }
-  }, [emitter])
+  }, [emitter, finalizeActiveThinking])
 
   const reset = () => {
     setPhase('idle')
@@ -165,6 +289,8 @@ export function useAgentPhase(emitter: AgentEmitter) {
     setThinkingDuration(null)
     thinkingStartRef.current = 0
     tokenBufferRef.current = []
+    thinkingTextRef.current = ''
+    thinkingIdCounter.current = 0
   }
 
   return { phase, timeline, thinkingDuration, reset, handleThoughtsDrained }

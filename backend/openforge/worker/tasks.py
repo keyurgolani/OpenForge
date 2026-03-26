@@ -212,7 +212,6 @@ async def _run_agent(execution_id: str, **kwargs):
                 provider_id=kwargs.get("provider_id"),
                 model_id=kwargs.get("model_id"),
                 mentions=kwargs.get("mentions"),
-                optimize=kwargs.get("optimize", False),
             )
     finally:
         await worker_engine.dispose()

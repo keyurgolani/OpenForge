@@ -1,7 +1,5 @@
 import { useMemo } from 'react'
 import MarkdownIt from 'markdown-it'
-import { partitionForRender } from '@/lib/markdown-zones'
-import { StreamingCursor } from './StreamingCursor'
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true })
 
@@ -10,34 +8,32 @@ interface StreamedResponseProps {
   isStreaming: boolean
 }
 
-export function StreamedResponse({ text, isStreaming }: StreamedResponseProps) {
-  const { stable, active } = useMemo(() => {
-    if (isStreaming) return partitionForRender(text)
-    return { stable: text, active: '' }
-  }, [text, isStreaming])
+/** Strip LLM citation artifacts like 【untrusted_content source="..."】or mixed bracket variants */
+function stripCitationTags(s: string): string {
+  return s
+    .replace(/【[^】\]]*[】\]]/g, '')           // 【...】 or 【...]
+    .replace(/\[untrusted_content[^\]]*\]/g, '') // [untrusted_content ...]
+    .replace(/\[citation[^\]]*\]/g, '')          // [citation ...]
+}
 
-  const stableHtml = useMemo(() => {
-    if (!stable) return ''
-    return md.render(stable)
-  }, [stable])
+const PROSE_CLASSES = "prose prose-sm prose-invert max-w-none [&_pre]:bg-muted/50 [&_pre]:rounded-md [&_pre]:p-3 [&_code]:font-mono [&_code]:text-xs [&_h1]:font-display [&_h2]:font-display [&_h3]:font-display [&_table]:text-xs [&_th]:px-3 [&_th]:py-1.5 [&_td]:px-3 [&_td]:py-1.5"
+
+export function StreamedResponse({ text, isStreaming }: StreamedResponseProps) {
+  const cleanText = useMemo(() => stripCitationTags(text), [text])
+
+  const renderedHtml = useMemo(() => {
+    if (!cleanText) return ''
+    return md.render(cleanText)
+  }, [cleanText])
 
   if (!text && !isStreaming) return null
 
   return (
-    <div className="text-foreground text-sm leading-relaxed pl-[30px]">
-      {stableHtml && (
-        <div
-          className="prose prose-sm prose-invert max-w-none [&_pre]:bg-muted/50 [&_pre]:rounded-md [&_pre]:p-3 [&_code]:font-mono [&_code]:text-xs [&_h1]:font-display [&_h2]:font-display [&_h3]:font-display"
-          dangerouslySetInnerHTML={{ __html: stableHtml }}
-        />
-      )}
-      {active && (
-        <span className="whitespace-pre-wrap">
-          {active}
-          {isStreaming && <StreamingCursor />}
-        </span>
-      )}
-      {isStreaming && !active && <StreamingCursor />}
+    <div className={`markdown-content text-foreground text-sm leading-relaxed px-4 py-3 ${isStreaming ? 'streaming-cursor' : ''}`}>
+      <div
+        className={PROSE_CLASSES}
+        dangerouslySetInnerHTML={{ __html: renderedHtml }}
+      />
     </div>
   )
 }

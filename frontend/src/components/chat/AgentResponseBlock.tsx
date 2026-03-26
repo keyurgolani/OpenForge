@@ -1,5 +1,4 @@
-import { Layers } from 'lucide-react'
-import { ThinkingTicker } from './ThinkingTicker'
+import { Bot } from 'lucide-react'
 import { Timeline } from './Timeline'
 import { StreamedResponse } from './StreamedResponse'
 import type { AgentPhase, TimelineItem } from '@/hooks/chat/useAgentPhase'
@@ -21,27 +20,34 @@ export function AgentResponseBlock({
   timeline, displayText, isStreaming,
   onApproveHITL, onDenyHITL,
 }: AgentResponseBlockProps) {
-  const isThinking = phase === 'thinking' || phase === 'draining_thoughts'
-  const showThinkingSummary = !isThinking && allThoughts.length > 0
+  const isActive = phase !== 'idle' && phase !== 'complete' && phase !== 'error'
 
   return (
-    <div className="flex gap-3 items-start animate-fade-in">
-      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-accent/20 to-purple-500/15 border border-accent/15 flex-shrink-0 flex items-center justify-center shadow-[inset_0_1px_1px_hsla(0,0%,100%,0.08)]">
-        <Layers className="w-3.5 h-3.5 text-accent" />
+    <div className="flex gap-2 items-start animate-fade-in">
+      <div className="chat-avatar w-7 h-7 rounded-full bg-muted/45 border border-border/70 flex-shrink-0 flex items-center justify-center">
+        <Bot className="w-3.5 h-3.5 text-muted-foreground" />
       </div>
-      <div className="flex-1 min-w-0 space-y-3">
-        {(isThinking || showThinkingSummary) && (
-          <ThinkingTicker
+      <div className="max-w-[90%] space-y-2 min-w-0">
+        {isActive && (
+          <div className="agent-generation-pill">
+            <span className="agent-generation-orb" />
+            <span>Responding…</span>
+          </div>
+        )}
+        {timeline.length > 0 && (
+          <Timeline
+            items={timeline}
+            onApproveHITL={onApproveHITL}
+            onDenyHITL={onDenyHITL}
             currentThought={currentThought}
-            isActive={isThinking}
-            thinkingDuration={thinkingDuration}
             allThoughts={allThoughts}
           />
         )}
-        {timeline.length > 0 && (
-          <Timeline items={timeline} onApproveHITL={onApproveHITL} onDenyHITL={onDenyHITL} />
+        {(displayText || (!isActive)) && (
+          <div className="chat-bubble-assistant">
+            <StreamedResponse text={displayText} isStreaming={isStreaming} />
+          </div>
         )}
-        <StreamedResponse text={displayText} isStreaming={isStreaming} />
       </div>
     </div>
   )

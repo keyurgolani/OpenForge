@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { extractSentences } from '@/lib/thought-extractor'
 import type { AgentEmitter } from '@/hooks/chat/useAgentStream'
 
-const THINKING_DRAIN_MS = 2500
-const FAST_DRAIN_MS = 800
-const MIN_DISPLAY_MS = 1200
+const THINKING_DRAIN_MS = 2000
+const FAST_DRAIN_MS = 1000
+const MIN_DISPLAY_MS = 1000
 const MAX_QUEUE = 5
 
 export function useThoughtQueue(emitter: AgentEmitter, onDrainComplete?: () => void) {
@@ -82,12 +82,36 @@ export function useThoughtQueue(emitter: AgentEmitter, onDrainComplete?: () => v
       }
     }
 
+    const onSnapshot = (data: { content: string; thinking: string; timeline: unknown[] }) => {
+      // Extract the last thinking content from snapshot timeline or thinking field
+      let lastThinking = ''
+      if (Array.isArray(data.timeline)) {
+        const thinkingEntries = data.timeline.filter((e: any) => e.type === 'thinking')
+        if (thinkingEntries.length > 0) {
+          lastThinking = (thinkingEntries[thinkingEntries.length - 1] as any).content ?? ''
+        }
+      }
+      if (!lastThinking && data.thinking) {
+        lastThinking = data.thinking
+      }
+      if (lastThinking) {
+        // Extract last sentence as current thought
+        const sentences = lastThinking.split(/(?<=[.!?])\s+/).filter(Boolean)
+        const last = sentences.length > 0 ? sentences[sentences.length - 1] : lastThinking
+        allThoughtsRef.current = sentences
+        setAllThoughts(sentences)
+        setCurrentThought(last)
+      }
+    }
+
     emitter.on('thinking_chunk', onThinkingChunk)
     emitter.on('done', onDone)
+    emitter.on('snapshot', onSnapshot)
 
     return () => {
       emitter.off('thinking_chunk', onThinkingChunk)
       emitter.off('done', onDone)
+      emitter.off('snapshot', onSnapshot)
       if (drainTimerRef.current) clearTimeout(drainTimerRef.current)
     }
   }, [emitter, onDrainComplete])

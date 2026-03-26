@@ -1,44 +1,82 @@
-import { useState } from 'react'
-import { GitBranch, ChevronDown } from 'lucide-react'
-import { AnimatePresence, motion } from 'framer-motion'
-import { Timeline } from './Timeline'
-import type { TimelineItem } from '@/hooks/chat/useAgentPhase'
+import { useState, useEffect, useRef, type ReactNode } from 'react'
+import { ChevronRight, Loader2, CheckCircle2, XCircle } from 'lucide-react'
+import type { ToolCallTimelineItem } from '@/hooks/chat/useAgentPhase'
 
 interface SubAgentNodeProps {
-  item: TimelineItem
+  item: ToolCallTimelineItem
   depth: number
   onApproveHITL: (hitlId: string) => void
   onDenyHITL: (hitlId: string) => void
+  /** Render function for nested timeline — breaks circular dependency with Timeline */
+  renderTimeline: (props: { items: ToolCallTimelineItem[]; depth: number; onApproveHITL: (id: string) => void; onDenyHITL: (id: string) => void }) => ReactNode
 }
 
-export function SubAgentNode({ item, depth, onApproveHITL, onDenyHITL }: SubAgentNodeProps) {
+export function SubAgentNode({ item, depth, onApproveHITL, onDenyHITL, renderTimeline }: SubAgentNodeProps) {
   const [expanded, setExpanded] = useState(false)
+  const userPinnedRef = useRef(false)
   const stepCount = item.nested_timeline?.length ?? 0
   const totalMs = item.duration_ms
+  const isRunning = item.status === 'running'
+  const isComplete = item.status === 'complete' || item.status === 'approved'
+  const isError = item.status === 'error'
+
+  // Auto-open when running (live preview)
+  useEffect(() => {
+    if (isRunning && !expanded && !userPinnedRef.current) {
+      setExpanded(true)
+    }
+  }, [isRunning]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-collapse 1s after completion (skip if user manually expanded)
+  useEffect(() => {
+    if ((isComplete || isError) && expanded && !userPinnedRef.current) {
+      const timer = setTimeout(() => setExpanded(false), 1500)
+      return () => clearTimeout(timer)
+    }
+  }, [isComplete, isError, expanded])
+
+  const handleToggle = () => {
+    const willOpen = !expanded
+    setExpanded(willOpen)
+    if (willOpen) {
+      userPinnedRef.current = true
+    } else {
+      userPinnedRef.current = false
+    }
+  }
+
+  // Extract the agent name from arguments (agent.invoke passes agent_id)
+  const agentHint = item.arguments?.agent_id
+    ? String(item.arguments.agent_id)
+    : item.arguments?.agent_slug
+      ? String(item.arguments.agent_slug)
+      : ''
 
   return (
-    <div className="bg-card border border-border rounded-md px-3.5 py-2.5 shadow-[inset_0_1px_1px_hsla(0,0%,100%,0.04)]">
-      <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-2 w-full text-left">
-        <GitBranch className="w-[13px] h-[13px] text-accent" />
-        <span className="text-[13px] font-mono text-accent/85">{item.tool_name}</span>
-        <span className="text-[11px] text-muted-foreground ml-auto">
+    <div>
+      <button
+        onClick={handleToggle}
+        className={`chat-subsection-toggle ${expanded ? 'chat-subsection-toggle-open' : ''}`}
+      >
+        <ChevronRight className={`h-3 w-3 transition-transform ${expanded ? 'rotate-90' : ''}`} />
+        <span className="font-mono text-[11px]">{item.tool_name}</span>
+        {agentHint && <span className="text-[11px] text-muted-foreground/60 truncate max-w-[200px]">{agentHint}</span>}
+        {isRunning && <Loader2 className="h-3 w-3 text-accent animate-spin" />}
+        {!isRunning && isComplete && <CheckCircle2 className="h-3 w-3 text-emerald-400" />}
+        {!isRunning && isError && <XCircle className="h-3 w-3 text-red-400" />}
+        <span className="text-[10px] text-muted-foreground/50 ml-auto">
           {stepCount} steps{totalMs ? `, ${(totalMs / 1000).toFixed(1)}s` : ''}
         </span>
-        <ChevronDown className={`w-3 h-3 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
       </button>
-      <AnimatePresence>
-        {expanded && item.nested_timeline && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className="overflow-hidden mt-2"
-          >
-            <Timeline items={item.nested_timeline} depth={depth + 1} onApproveHITL={onApproveHITL} onDenyHITL={onDenyHITL} />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <div className={`chat-collapse ${expanded ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>
+        <div className="chat-collapse-inner">
+          {item.nested_timeline && item.nested_timeline.length > 0 && (
+            <div className="chat-step-detail-card !p-0 !border-0 !bg-transparent">
+              {renderTimeline({ items: item.nested_timeline as ToolCallTimelineItem[], depth: depth + 1, onApproveHITL, onDenyHITL })}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

@@ -46,6 +46,8 @@ class ConversationResponse(BaseModel):
     archived_at: Optional[datetime] = None
     is_delegated: bool = False
     delegated_profile_id: Optional[str] = None
+    agent_id: Optional[UUID] = None
+    agent_name: Optional[str] = None
     message_count: int = 0
     last_message_at: Optional[datetime] = None
     last_message_preview: Optional[str] = None

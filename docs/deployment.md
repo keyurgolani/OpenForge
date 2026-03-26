@@ -90,7 +90,7 @@ curl http://localhost:3100/api/health
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `CELERY_WORKERS` | No | `1` | Number of background worker replicas |
+| `CELERY_WORKERS` | No | `1` | Number of background worker replicas. Each worker auto-scales concurrency via logarithmic autoscaler. |
 
 ## Docker Compose Services
 

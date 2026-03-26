@@ -298,6 +298,9 @@ export const setToolPermission = async (toolId: string, permission: string): Pro
 export const listApprovalRequests = (params?: { status?: string; limit?: number; offset?: number }): Promise<any> =>
     api.get('/policies/approvals', { params }).then(r => r.data)
 
+export const resolveApproval = (hitlId: string, approved: boolean, resolutionNote?: string): Promise<any> =>
+    api.post(`/approvals/${hitlId}/resolve`, { approved, resolution_note: resolutionNote }).then(r => r.data)
+
 function toLegacyHitl(approval: any) {
     return {
         id: approval.id,
@@ -471,7 +474,7 @@ export const runDeploymentNow = async (id: string) =>
 // --- Global Chat ---
 export const listGlobalConversations = async (params?: { agent_id?: string; skip?: number; limit?: number; category?: string }) =>
     (await api.get('/chat/conversations', { params })).data
-export const createGlobalConversation = async (data: { agent_id: string; title?: string }) =>
+export const createGlobalConversation = async (data: { agent_id?: string; title?: string }) =>
     (await api.post('/chat/conversations', data)).data
 export const getGlobalConversation = async (id: string, includeMessages = true) =>
     (await api.get(`/chat/conversations/${id}`, { params: { include_messages: includeMessages } })).data

@@ -13,7 +13,7 @@ OpenForge is a distributed application composed of seven services that communica
 - **Qdrant** — Vector database for semantic search, visual search, and agent memory
 - **Redis** — Message broker (Celery), real-time event pub/sub, HITL coordination, session cache
 - **SearXNG** — Self-hosted meta-search engine for web search capabilities
-- **Celery Worker** — Background task processor sharing the backend codebase
+- **Celery Worker** — Background task processor sharing the backend codebase, with logarithmic autoscaling
 
 ## Services
 
@@ -38,7 +38,7 @@ The main application server built with **FastAPI** (Python 3.11). Handles:
 - `api/` — HTTP route handlers (thin layer, delegates to services)
 - `core/` — Core business logic (embedding, search, context assembly, LLM gateway, prompt resolution)
 - `services/` — Application services (knowledge processing, LLM management, conversations, automation config)
-- `runtime/` — Execution engines (chat_handler, strategy_executor, tool_loop, handoff_engine, agent_registry, graph_executor, deployment_scheduler, input_extraction)
+- `runtime/` — Execution engines (chat_handler, strategy_executor, tool_loop, handoff_engine, agent_registry, graph_executor, deployment_scheduler, input_extraction, prompt_context)
 - `runtime/strategies/` — Strategy plugins (chat, researcher, reviewer, builder, watcher, coordinator)
 - `runtime/template_engine/` — Template engine (parser, renderer, variable extractor, built-in functions, types)
 - `domains/` — Domain-driven services (agents, automations, deployments, knowledge, retrieval, runs, outputs, common)
@@ -56,7 +56,7 @@ A separate Python process running **Celery** with a solo pool for asyncio compat
 - Automation runs
 - Background intelligence generation
 
-The worker shares the same codebase as the backend but runs tasks asynchronously. Redis serves as the message broker.
+The worker shares the same codebase as the backend but runs tasks asynchronously. Redis serves as the message broker. Workers auto-scale concurrency using a logarithmic autoscaler that grows capacity as `ceil(log2(current + 1))` when utilization exceeds 75%.
 
 ### Tool Server
 
@@ -129,7 +129,7 @@ Agent Definition (structured fields)
    - Memory config: history_limit, attachment_support, auto_bookmark_urls
    - Parameters: typed input parameters (text, enum, number, boolean)
    - Output definitions: structured output variables (text, json, number, boolean)
-   - System prompt: template-driven with preamble/postamble
+   - System prompt: template-driven with context-aware preamble/postamble
     |
     v
 2. On save → immutable AgentDefinitionVersionModel snapshot
@@ -146,7 +146,9 @@ Agent Definition (structured fields)
    - Inject system variables (workspaces, agents, tools, skills, timestamps)
    - Inject user input values for parameters
    - Inject output.* namespace for output variable references
-   - Render preamble (agent identity, input/output docs)
+   - Render context-aware preamble (varies by execution context):
+     - CHAT: conversational guidance with content-informed output
+     - AUTOMATION: structured JSON output format instructions
    - Render user's editable section
    - Render postamble (application context, available agents/skills)
     |
@@ -176,9 +178,10 @@ Agent Definition (structured fields)
 
    Deployment (GraphExecutor):
      a. Load automation DAG with node wiring
-     b. Topologically sort nodes
-     c. Execute each agent node, passing wired outputs as inputs
-     d. Route final outputs to sink nodes
+     b. Build AUTOMATION-context preamble/postamble for each agent node
+     c. Topologically sort nodes
+     d. Execute each agent node, passing wired outputs as inputs
+     e. Route final outputs to sink nodes
 ```
 
 ### Strategy Plugin System

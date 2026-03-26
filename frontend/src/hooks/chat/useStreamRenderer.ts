@@ -39,16 +39,28 @@ export function useStreamRenderer(emitter: AgentEmitter) {
       renderer.complete()
     }
 
+    const onSnapshot = (data: { content: string; thinking: string; timeline: unknown[] }) => {
+      const content = data.content ?? ''
+      if (content) {
+        renderer.reset()
+        renderer.ingest(content)
+        setDisplayText(content)
+        setIsStreaming(true)
+      }
+    }
+
     emitter.on('token', onToken)
     emitter.on('done', onDone)
     emitter.on('intermediate_response', onIntermediateResponse)
     emitter.on('error', onError)
+    emitter.on('snapshot', onSnapshot)
 
     return () => {
       emitter.off('token', onToken)
       emitter.off('done', onDone)
       emitter.off('intermediate_response', onIntermediateResponse)
       emitter.off('error', onError)
+      emitter.off('snapshot', onSnapshot)
       renderer.destroy()
     }
   }, [emitter])

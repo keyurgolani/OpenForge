@@ -24,6 +24,9 @@ celery_app.conf.update(
     worker_cancel_long_running_tasks_on_connection_loss=True,
 )
 
+# Use logarithmic autoscaler when --autoscale is passed
+celery_app.conf.worker_autoscaler = "openforge.worker.autoscale:LogarithmicAutoscaler"
+
 # Deployment scheduler beat schedule
 celery_app.conf.beat_schedule = {
     "poll-deployments": {

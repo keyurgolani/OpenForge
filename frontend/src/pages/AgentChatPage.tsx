@@ -13,11 +13,13 @@ import {
     listSettings,
     getWorkspace,
     listWorkspaces,
+    listAgents,
     resolveKnowledgeIds,
     exportConversation,
     bulkTrashConversations,
     bulkRestoreConversations,
     bulkPermanentlyDeleteConversations,
+    resolveApproval,
 } from '@/lib/api'
 import { useStreamingChat, type Mention } from '@/hooks/useStreamingChat'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
@@ -25,7 +27,7 @@ import { useChatApi } from '@/hooks/useChatApi'
 import { useToast } from '@/components/shared/ToastProvider'
 import {
     Plus, Loader2, MessageSquare, Trash2, Bot,
-    ChevronDown, ChevronRight, Check, Pencil,
+    ChevronRight, Pencil,
     X, Copy, Search,
     RotateCcw, Trash, Download,
 } from 'lucide-react'
@@ -38,15 +40,31 @@ import { chatRoute } from '@/lib/routes'
 import { renderAgentMessageContent, type MentionResolutionMaps } from '@/lib/agent-content'
 import Siderail from '@/components/shared/Siderail'
 import { AgentChatView } from '@/components/chat/AgentChatView'
+import { ConfirmModal } from '@/components/ui/confirm-modal'
+
+function stripMarkdown(text: string): string {
+    return text
+        .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')   // images
+        .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')     // links
+        .replace(/(`{1,3})([^`]*?)\1/g, '$2')        // inline code / code blocks
+        .replace(/(\*{1,3}|_{1,3})(.+?)\1/g, '$2')   // bold/italic
+        .replace(/~~(.+?)~~/g, '$1')                  // strikethrough
+        .replace(/^#{1,6}\s+/gm, '')                  // headings
+        .replace(/^[>\-*+]\s+/gm, '')                 // blockquotes/lists
+        .replace(/^\d+\.\s+/gm, '')                   // ordered lists
+}
 
 function buildActiveThreadPreview(messages: Message[]): string | null {
-    const latestMessage = [...messages].reverse().find((message) => message.content?.trim())
-    if (!latestMessage?.content) return null
-
-    const normalized = latestMessage.content.replace(/\s+/g, ' ').trim()
-    if (!normalized) return null
-
-    return normalized.length > 83 ? `${normalized.slice(0, 83)}…` : normalized
+    // Walk backwards through messages to find the latest one with meaningful content
+    // (skip trivially short messages like stray punctuation artifacts)
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const content = messages[i].content?.trim()
+        if (!content) continue
+        const normalized = stripMarkdown(content).replace(/\s+/g, ' ').trim()
+        if (normalized.length < 2) continue  // skip single-char artifacts like "."
+        return normalized.length > 83 ? `${normalized.slice(0, 83)}…` : normalized
+    }
+    return null
 }
 
 function formatThreadRelativeTime(value: string | null): string | null {
@@ -72,7 +90,7 @@ interface Message {
     tool_calls?: { call_id: string; tool_name: string; arguments: Record<string, unknown> }[] | null
     timeline?: unknown[] | null
     is_interrupted?: boolean
-    provider_metadata?: { optimize?: boolean; [key: string]: unknown } | null
+    provider_metadata?: Record<string, unknown> | null
     created_at: string
 }
 
@@ -93,6 +111,8 @@ interface Conversation {
     is_archived?: boolean
     is_delegated?: boolean
     archived_at?: string | null
+    agent_id?: string | null
+    agent_name?: string | null
     message_count: number
     last_message_at: string | null
 }
@@ -136,15 +156,16 @@ export default function AgentChatPage() {
 
     // Per-message model override
     const [selectedModelKey, setSelectedModelKey] = useState('')
-    const [modelPickerOpen, setModelPickerOpen] = useState(false)
-    const [modelPickerQuery, setModelPickerQuery] = useState('')
-    const modelPickerRef = useRef<HTMLDivElement>(null)
-    const modelPickerSearchRef = useRef<HTMLInputElement>(null)
     const lastToastedErrorRef = useRef<string | null>(null)
 
     // File attachments
     const [attachments, setAttachments] = useState<File[]>([])
     const [uploadingFiles, setUploadingFiles] = useState(false)
+    const [optimisticResponding, setOptimisticResponding] = useState(false)
+
+    // Agent picker search & selection
+    const [agentSearchQuery, setAgentSearchQuery] = useState('')
+    const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null)
 
     // WS message forwarder ref — populated by AgentChatView's onReady callback
     const agentViewHandleMessageRef = useRef<((msg: { type: string; data?: unknown; conversation_id?: string }) => void) | null>(null)
@@ -160,6 +181,22 @@ export default function AgentChatPage() {
         queryFn: listWorkspaces,
         staleTime: 60_000,
     })
+
+    const { data: agentsData } = useQuery({
+        queryKey: ['agents'],
+        queryFn: () => listAgents(),
+        staleTime: 60_000,
+    })
+    const availableAgents = useMemo(() => {
+        const agents = (agentsData?.agents ?? []).filter(a => a.active_version_id !== null)
+        if (!agentSearchQuery.trim()) return agents
+        const q = agentSearchQuery.toLowerCase()
+        return agents.filter(a =>
+            a.name.toLowerCase().includes(q) ||
+            (a.description?.toLowerCase().includes(q)) ||
+            a.tags.some(t => t.toLowerCase().includes(q))
+        )
+    }, [agentsData, agentSearchQuery])
 
     const { data: conversations = [] } = useQuery({
         queryKey: [...chatApi.queryKeyPrefix],
@@ -179,7 +216,7 @@ export default function AgentChatPage() {
     )
 
     const { data: conversationData } = useQuery({
-        queryKey: ['conversation', activeCid],
+        queryKey: [...chatApi.conversationQueryKey(activeCid ?? '')],
         queryFn: () => chatApi.getConversation(activeCid!),
         enabled: !!activeCid,
     })
@@ -201,13 +238,22 @@ export default function AgentChatPage() {
         isConnected,
         lastError,
         clearLastError,
+        onWsEvent,
     } = useStreamingChat(activeCid, workspaceId || null)
 
-    // Forward raw WS messages to AgentChatView's ingestion layer
-    const { on: onWs } = useWorkspaceWebSocket(workspaceId ?? '', 'agent')
+    // Clear optimistic responding state once real streaming starts or on error
     useEffect(() => {
-        if (!activeCid || !workspaceId) return
-        const unsub = onWs('*', (msg) => {
+        if (isStreaming || lastError) setOptimisticResponding(false)
+    }, [isStreaming, lastError])
+
+    // Forward raw WS messages to AgentChatView's ingestion layer
+    // For workspace chats: use workspace WebSocket
+    // For global chats: use the chat WebSocket from useStreamingChat
+    const { on: onWorkspaceWs } = useWorkspaceWebSocket(workspaceId ?? '', 'agent')
+    useEffect(() => {
+        if (!activeCid) return
+        const onMsg = workspaceId ? onWorkspaceWs : onWsEvent
+        const unsub = onMsg('*', (msg) => {
             const m = msg as { type?: string; data?: unknown; conversation_id?: string }
             if (!m.type) return
             // Only forward messages for the active conversation
@@ -215,7 +261,7 @@ export default function AgentChatPage() {
             agentViewHandleMessageRef.current?.(m as { type: string; data?: unknown; conversation_id?: string })
         })
         return unsub
-    }, [activeCid, onWs, workspaceId])
+    }, [activeCid, onWorkspaceWs, onWsEvent, workspaceId])
 
     const messages = useMemo<Message[]>(
         () => conversationData?.messages ?? [],
@@ -340,7 +386,11 @@ export default function AgentChatPage() {
 
         // Primary source: system_chat_models setting
         const chatModelsSetting = appSettings.find(s => s.key === 'system_chat_models')
-        const chatModels = Array.isArray(chatModelsSetting?.value) ? chatModelsSetting.value as { provider_id: string; model_id: string; model_name: string; is_default?: boolean }[] : []
+        let rawValue = chatModelsSetting?.value
+        if (typeof rawValue === 'string') {
+            try { rawValue = JSON.parse(rawValue) } catch { rawValue = [] }
+        }
+        const chatModels = Array.isArray(rawValue) ? rawValue as { provider_id: string; model_id: string; model_name: string; is_default?: boolean }[] : []
 
         for (const entry of chatModels) {
             const pid = entry.provider_id
@@ -400,18 +450,17 @@ export default function AgentChatPage() {
     }, [providers, appSettings])
 
     const selectedOption = modelOptions.find(o => o.key === selectedModelKey)
-    const filteredModelOptions = useMemo(() => {
-        const q = modelPickerQuery.trim().toLowerCase()
-        if (!q) return modelOptions
-        return modelOptions.filter(opt => opt.searchText.includes(q))
-    }, [modelOptions, modelPickerQuery])
 
     // Determine the default model label
     const defaultLabel = useMemo(() => {
         if (!workspace) return 'Default model'
 
         const chatModelsSetting = appSettings.find(s => s.key === 'system_chat_models')
-        const chatModels = Array.isArray(chatModelsSetting?.value) ? chatModelsSetting.value as { provider_id: string; model_id: string; model_name: string; is_default?: boolean }[] : []
+        let rawDefaultValue = chatModelsSetting?.value
+        if (typeof rawDefaultValue === 'string') {
+            try { rawDefaultValue = JSON.parse(rawDefaultValue) } catch { rawDefaultValue = [] }
+        }
+        const chatModels = Array.isArray(rawDefaultValue) ? rawDefaultValue as { provider_id: string; model_id: string; model_name: string; is_default?: boolean }[] : []
         const systemDefault = chatModels.find(m => m.is_default) ?? chatModels[0]
 
         if (workspace.llm_provider_id) {
@@ -456,22 +505,6 @@ export default function AgentChatPage() {
     }, [activeCid, conversationId, mostRecentConversationId, navigate, workspaceId])
 
     useEffect(() => {
-        if (!modelPickerOpen) {
-            setModelPickerQuery('')
-            return
-        }
-        modelPickerSearchRef.current?.focus()
-        const handleOutsideClick = (event: MouseEvent) => {
-            if (!modelPickerRef.current) return
-            if (!modelPickerRef.current.contains(event.target as Node)) {
-                setModelPickerOpen(false)
-            }
-        }
-        document.addEventListener('mousedown', handleOutsideClick)
-        return () => document.removeEventListener('mousedown', handleOutsideClick)
-    }, [modelPickerOpen])
-
-    useEffect(() => {
         if (!lastError) {
             lastToastedErrorRef.current = null
             return
@@ -485,7 +518,7 @@ export default function AgentChatPage() {
         const createdAt = new Date().toISOString()
         const optimisticId = `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
-        qc.setQueryData(['conversation', cid], (prev: ConversationWithMessages | undefined) => {
+        qc.setQueryData([...chatApi.conversationQueryKey(cid)], (prev: ConversationWithMessages | undefined) => {
             if (!prev) {
                 return {
                     id: cid,
@@ -526,14 +559,26 @@ export default function AgentChatPage() {
         })
     }
 
-    const handleNewChat = async () => {
-        const conv = await chatApi.createConversation()
-        suppressAutoSelectRef.current = false
-        setActiveChatRailSection('conversations')
-        qc.invalidateQueries({ queryKey: [...chatApi.queryKeyPrefix] })
-        qc.invalidateQueries({ queryKey: [...chatApi.queryKeyPrefix, 'delegated'] }); qc.invalidateQueries({ queryKey: [...chatApi.queryKeyPrefix, 'trash'] })
-        setActiveCid(conv.id)
-        navigate(chatApi.routeFor(conv.id))
+    const handleNewChat = async (agentId?: string) => {
+        if (!agentId && !workspaceId) {
+            // Global chat: go to agent picker (empty state)
+            suppressAutoSelectRef.current = true
+            setActiveCid(null)
+            setAgentSearchQuery('')
+            navigate(chatApi.routeBase)
+            return
+        }
+        try {
+            const conv = await chatApi.createConversation(agentId ? { agent_id: agentId } : undefined)
+            suppressAutoSelectRef.current = false
+            setActiveChatRailSection('conversations')
+            qc.invalidateQueries({ queryKey: [...chatApi.queryKeyPrefix] })
+            qc.invalidateQueries({ queryKey: [...chatApi.queryKeyPrefix, 'delegated'] }); qc.invalidateQueries({ queryKey: [...chatApi.queryKeyPrefix, 'trash'] })
+            setActiveCid(conv.id)
+            navigate(chatApi.routeFor(conv.id))
+        } catch (err: any) {
+            showError('Chat creation failed', err?.response?.data?.detail || err?.message || 'Unable to create conversation.')
+        }
     }
 
     const handleDeleteConv = async (cid: string) => {
@@ -552,7 +597,7 @@ export default function AgentChatPage() {
             await chatApi.updateConversation(cid, { is_archived: false })
             qc.invalidateQueries({ queryKey: [...chatApi.queryKeyPrefix] })
             qc.invalidateQueries({ queryKey: [...chatApi.queryKeyPrefix, 'delegated'] }); qc.invalidateQueries({ queryKey: [...chatApi.queryKeyPrefix, 'trash'] })
-            qc.invalidateQueries({ queryKey: ['conversation', cid] })
+            qc.invalidateQueries({ queryKey: [...chatApi.conversationQueryKey(cid)] })
             if (activeCid === cid) {
                 setActiveChatRailSection('conversations')
             }
@@ -567,7 +612,7 @@ export default function AgentChatPage() {
             await chatApi.permanentlyDeleteConversation(cid)
             qc.invalidateQueries({ queryKey: [...chatApi.queryKeyPrefix] })
             qc.invalidateQueries({ queryKey: [...chatApi.queryKeyPrefix, 'delegated'] }); qc.invalidateQueries({ queryKey: [...chatApi.queryKeyPrefix, 'trash'] })
-            qc.removeQueries({ queryKey: ['conversation', cid], exact: true })
+            qc.removeQueries({ queryKey: [...chatApi.conversationQueryKey(cid)], exact: true })
             if (activeCid === cid) {
                 suppressAutoSelectRef.current = true
                 setActiveCid(null)
@@ -586,21 +631,29 @@ export default function AgentChatPage() {
     }
 
     const handleBulkTrash = async (category: 'chats' | 'delegated') => {
-        await chatApi.bulkTrashConversations(category)
-        invalidateAllConvQueries()
-        if (activeCid) {
-            const affected = category === 'delegated' ? delegatedConversations : activeConversations
-            if (affected.some(c => c.id === activeCid)) {
-                suppressAutoSelectRef.current = true
-                setActiveCid(null)
-                navigate(chatApi.routeBase)
+        try {
+            await chatApi.bulkTrashConversations(category)
+            invalidateAllConvQueries()
+            if (activeCid) {
+                const affected = category === 'delegated' ? delegatedConversations : activeConversations
+                if (affected.some(c => c.id === activeCid)) {
+                    suppressAutoSelectRef.current = true
+                    setActiveCid(null)
+                    navigate(chatApi.routeBase)
+                }
             }
+        } catch (err: any) {
+            showError('Trash failed', err?.response?.data?.detail || err?.message || 'Unable to trash conversations.')
         }
     }
 
     const handleBulkRestore = async () => {
-        await chatApi.bulkRestoreConversations()
-        invalidateAllConvQueries()
+        try {
+            await chatApi.bulkRestoreConversations()
+            invalidateAllConvQueries()
+        } catch (err: any) {
+            showError('Restore failed', err?.response?.data?.detail || err?.message || 'Unable to restore conversations.')
+        }
     }
 
     const handleBulkPermanentDelete = async () => {
@@ -671,6 +724,7 @@ export default function AgentChatPage() {
         }
         const msg = content.trim()
         clearLastError()
+        setOptimisticResponding(true)
 
         // Upload attachments if any
         let attachmentIds: string[] = []
@@ -710,7 +764,7 @@ export default function AgentChatPage() {
             navigate(chatApi.routeFor(conv.id))
         }
 
-        const override: { provider_id?: string; model_id?: string; attachment_ids?: string[]; mentions?: Mention[]; optimize?: boolean } = {}
+        const override: { provider_id?: string; model_id?: string; attachment_ids?: string[] } = {}
         if (selectedOption) {
             override.provider_id = selectedOption.providerId
             override.model_id = selectedOption.modelId
@@ -719,6 +773,7 @@ export default function AgentChatPage() {
 
         const sent = sendMessage(msg, override, targetCid)
         if (!sent) {
+            setOptimisticResponding(false)
             showError('Message not sent', 'Chat socket is disconnected. Wait for reconnect and try again.')
             return
         }
@@ -765,6 +820,12 @@ export default function AgentChatPage() {
     const isTrashSectionExpanded = activeChatRailSection === 'trash'
     const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
     const confirmBulkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const [confirmBulkTrashChats, setConfirmBulkTrashChats] = useState(false)
+    const confirmBulkTrashChatsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const [confirmBulkTrashDelegated, setConfirmBulkTrashDelegated] = useState(false)
+    const confirmBulkTrashDelegatedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const [confirmBulkRestore, setConfirmBulkRestore] = useState(false)
+    const confirmBulkRestoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const toggleChatRailSection = (section: 'conversations' | 'delegated' | 'trash') => {
         setActiveChatRailSection(prev => (prev === section ? null : section))
     }
@@ -775,16 +836,16 @@ export default function AgentChatPage() {
         qc.invalidateQueries({ queryKey: [...chatApi.queryKeyPrefix, 'delegated'] })
         qc.invalidateQueries({ queryKey: [...chatApi.queryKeyPrefix, 'trash'] })
         if (conversation.id) {
-            qc.invalidateQueries({ queryKey: ['conversation', conversation.id] })
+            qc.invalidateQueries({ queryKey: [...chatApi.conversationQueryKey(conversation.id)] })
         }
-    }, [qc, workspaceId])
+    }, [qc, chatApi])
 
     const handleStreamComplete = useCallback((messageId: string) => {
         if (activeCid) {
-            qc.invalidateQueries({ queryKey: ['conversation', activeCid] })
+            qc.invalidateQueries({ queryKey: [...chatApi.conversationQueryKey(activeCid)] })
         }
         qc.invalidateQueries({ queryKey: [...chatApi.queryKeyPrefix] })
-    }, [activeCid, qc, workspaceId])
+    }, [activeCid, qc, chatApi])
 
     const handleRetry = useCallback(() => {
         const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')
@@ -813,20 +874,141 @@ export default function AgentChatPage() {
             {/* Conversation pane (flat main area) */}
             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                 {!activeCid ? (
-                    <div className="flex-1 flex items-center justify-center">
-                        <div className="text-center">
-                            <div className="w-16 h-16 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center mx-auto mb-4">
-                                <Bot className="w-8 h-8 text-accent/60" />
+                    <div className="flex-1 flex flex-col overflow-y-auto py-8 px-6">
+                        <div className="w-full">
+                            <div className="text-center mb-6">
+                                <div className="w-14 h-14 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center mx-auto mb-4">
+                                    <Bot className="w-7 h-7 text-accent/60" />
+                                </div>
+                                <h3 className="text-lg font-semibold mb-1">Choose an Agent</h3>
+                                <p className="text-muted-foreground text-sm">Select an agent to start a conversation with.</p>
                             </div>
-                            <h3 className="text-lg font-semibold mb-2">Start a Conversation</h3>
-                            <p className="text-muted-foreground text-sm mb-4">Ask questions about your knowledge or anything else.</p>
-                            <button className="btn-primary" onClick={handleNewChat}>
-                                <Plus className="w-4 h-4" /> New Chat
-                            </button>
+                            <div className="relative mb-5">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                                <input
+                                    type="text"
+                                    placeholder="Search agents…"
+                                    value={agentSearchQuery}
+                                    onChange={e => setAgentSearchQuery(e.target.value)}
+                                    className="w-full rounded-xl border border-border/70 bg-card/60 py-2.5 pl-10 pr-4 text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:border-accent/60 transition-colors"
+                                />
+                            </div>
+                            {availableAgents.length === 0 ? (
+                                <p className="text-center text-sm text-muted-foreground py-8">
+                                    {agentSearchQuery ? 'No agents match your search.' : 'No agents available. Create an agent first.'}
+                                </p>
+                            ) : (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                    {availableAgents.map(agent => {
+                                        const isExpanded = expandedAgentId === agent.id
+                                        const allParams = agent.parameters ?? []
+                                        const requiredParams = allParams.filter((p: any) => p.required !== false)
+                                        const optionalParams = allParams.filter((p: any) => p.required === false)
+                                        return (
+                                            <div
+                                                key={agent.id}
+                                                className={`group text-left rounded-xl border p-4 transition-all duration-200 cursor-pointer ${isExpanded
+                                                    ? 'border-accent/60 bg-card/90 ring-1 ring-accent/25 sm:col-span-2 lg:col-span-3'
+                                                    : 'border-border/60 bg-card/40 hover:bg-card/80 hover:border-accent/40'
+                                                }`}
+                                                onClick={() => setExpandedAgentId(isExpanded ? null : agent.id)}
+                                            >
+                                                <div className="flex items-start gap-3">
+                                                    <div className={`rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${isExpanded
+                                                        ? 'w-11 h-11 bg-accent/15 border border-accent/30'
+                                                        : 'w-9 h-9 bg-accent/10 border border-accent/20'
+                                                    }`}>
+                                                        <Bot className={`${isExpanded ? 'w-5 h-5' : 'w-4.5 h-4.5'} text-accent/70`} />
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className={`font-medium text-foreground group-hover:text-accent transition-colors ${isExpanded ? 'text-base' : 'text-sm truncate'}`}>{agent.name}</div>
+                                                        {agent.description && (
+                                                            <p className={`text-xs text-muted-foreground/80 mt-0.5 leading-relaxed ${isExpanded ? '' : 'line-clamp-2'}`}>{agent.description}</p>
+                                                        )}
+                                                        {/* Collapsed view: minimal info */}
+                                                        {!isExpanded && allParams.length > 0 && (
+                                                            <div className="flex items-center gap-1.5 mt-2 text-[10px] text-muted-foreground/50">
+                                                                <span>{allParams.length} input{allParams.length !== 1 ? 's' : ''}</span>
+                                                                {requiredParams.length > 0 && (
+                                                                    <span className="text-amber-400/60">({requiredParams.length} required)</span>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                        {!isExpanded && agent.tags.length > 0 && (
+                                                            <div className="flex flex-wrap gap-1 mt-1.5">
+                                                                {agent.tags.slice(0, 3).map(tag => (
+                                                                    <span key={tag} className="rounded-md bg-muted/60 border border-border/50 px-1.5 py-0.5 text-[10px] text-muted-foreground">{tag}</span>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Expanded view: full parameter details + Start Chat */}
+                                                {isExpanded && (
+                                                    <div className="mt-4 border-t border-border/40 pt-4" onClick={e => e.stopPropagation()}>
+                                                        {allParams.length > 0 ? (
+                                                            <div className="space-y-2.5 mb-5">
+                                                                <h4 className="text-xs font-semibold text-muted-foreground/90 uppercase tracking-wider">Agent Inputs</h4>
+                                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                                                    {allParams.map((p: any) => (
+                                                                        <div key={p.name} className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
+                                                                            <div className="flex items-center gap-1.5">
+                                                                                {p.required !== false && <span className="text-amber-400/90 text-xs font-medium">*</span>}
+                                                                                <span className="text-xs font-mono font-medium text-foreground/90">{p.label || p.name}</span>
+                                                                                <span className="text-[10px] text-muted-foreground/50 ml-auto">{p.type}</span>
+                                                                            </div>
+                                                                            {p.description && (
+                                                                                <p className="text-[11px] text-muted-foreground/70 mt-1 leading-relaxed">{p.description}</p>
+                                                                            )}
+                                                                            {p.type === 'enum' && p.options?.length > 0 && (
+                                                                                <div className="flex flex-wrap gap-1 mt-1.5">
+                                                                                    {p.options.map((opt: string) => (
+                                                                                        <span key={opt} className="rounded bg-muted/50 border border-border/40 px-1.5 py-0.5 text-[10px] text-muted-foreground/80">{opt}</span>
+                                                                                    ))}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <p className="text-xs text-muted-foreground/60 mb-5">This agent has no input parameters. Just start chatting.</p>
+                                                        )}
+                                                        {agent.tags.length > 0 && (
+                                                            <div className="flex flex-wrap gap-1 mb-4">
+                                                                {agent.tags.map(tag => (
+                                                                    <span key={tag} className="rounded-md bg-muted/60 border border-border/50 px-1.5 py-0.5 text-[10px] text-muted-foreground">{tag}</span>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleNewChat(agent.id)}
+                                                            className="w-full sm:w-auto rounded-xl bg-accent px-6 py-2.5 text-sm font-semibold text-accent-foreground hover:bg-accent/90 transition-colors shadow-sm"
+                                                        >
+                                                            Start Chat
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            )}
                         </div>
                     </div>
                 ) : (
-                    <div className="flex-1 min-h-0 flex flex-col">
+                    <div className="flex-1 min-h-0 flex flex-col relative overflow-hidden">
+                        {/* Agent name floating chip */}
+                        {activeConversationRecord?.agent_name && (
+                            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 pointer-events-none flex-shrink-0">
+                                <div className="pointer-events-auto inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-card/80 backdrop-blur-sm border border-border/40 shadow-sm">
+                                    <Bot className="w-3.5 h-3.5 text-accent/70" />
+                                    <span className="text-xs font-medium text-foreground/70">{activeConversationRecord.agent_name}</span>
+                                </div>
+                            </div>
+                        )}
                         {/* Connection / error status bar */}
                         {(!isConnected || lastError) && (
                             <div className="px-4 py-1 flex-shrink-0">
@@ -851,6 +1033,25 @@ export default function AgentChatPage() {
                             </div>
                         )}
 
+                        {/* Archived / trashed banner */}
+                        {activeConversationIsArchived && activeCid && (
+                            <div className="px-4 py-1 flex-shrink-0">
+                                <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                                    <span className="flex items-center gap-1.5 leading-relaxed">
+                                        <Trash2 className="h-3 w-3 flex-shrink-0" />
+                                        This conversation is in Trash. Restore it to continue messaging.
+                                    </span>
+                                    <button
+                                        type="button"
+                                        className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-amber-100 hover:bg-amber-500/20 hover:text-amber-50 transition-colors"
+                                        onClick={() => handleRestoreConv(activeCid)}
+                                    >
+                                        <RotateCcw className="h-3 w-3" /> Restore
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                         {/* AgentChatView replaces the inline message thread + composer */}
                         <AgentChatView
                             conversationId={activeCid}
@@ -859,13 +1060,30 @@ export default function AgentChatPage() {
                             isLoadingMessages={!conversationData}
                             onSendMessage={handleSendMessage}
                             onCancelStream={cancelStream}
-                            onApproveHITL={() => {}}
-                            onDenyHITL={() => {}}
+                            onApproveHITL={async (hitlId: string) => {
+                                try {
+                                    await resolveApproval(hitlId, true)
+                                } catch (err: any) {
+                                    showError('Approval failed', err?.response?.data?.detail || err?.message || 'Unable to approve action.')
+                                }
+                            }}
+                            onDenyHITL={async (hitlId: string, note?: string) => {
+                                try {
+                                    await resolveApproval(hitlId, false, note)
+                                } catch (err: any) {
+                                    showError('Denial failed', err?.response?.data?.detail || err?.message || 'Unable to deny action.')
+                                }
+                            }}
                             onRetry={handleRetry}
                             onConversationUpdated={handleConversationUpdated}
                             onStreamComplete={handleStreamComplete}
                             onAttach={(files) => {
-                                setAttachments(prev => [...prev, ...files].slice(0, 5))
+                                const MAX_ATTACHMENTS = 5
+                                const combined = [...attachments, ...files]
+                                if (combined.length > MAX_ATTACHMENTS) {
+                                    showError('Attachment limit', `Maximum ${MAX_ATTACHMENTS} files allowed. ${combined.length - MAX_ATTACHMENTS} file(s) were not added.`)
+                                }
+                                setAttachments(combined.slice(0, MAX_ATTACHMENTS))
                             }}
                             onRemoveAttachment={(id) => {
                                 const idx = parseInt(id.replace('file-', ''), 10)
@@ -874,7 +1092,12 @@ export default function AgentChatPage() {
                             attachments={chatViewAttachments}
                             composerDisabled={composerDisabled}
                             userInitial="U"
+                            parentIsStreaming={isStreaming || optimisticResponding}
                             onReady={handleAgentViewReady}
+                            modelOptions={modelOptions}
+                            selectedModelKey={selectedModelKey}
+                            onModelSelect={setSelectedModelKey}
+                            defaultModelLabel={defaultLabel}
                         />
                     </div>
                 )}
@@ -894,7 +1117,7 @@ export default function AgentChatPage() {
                 collapsedExtra={
                     <button
                         type="button"
-                        onClick={handleNewChat}
+                        onClick={() => handleNewChat()}
                         className="w-8 h-8 rounded-lg border border-border/70 bg-card/60 flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-accent/50 transition-colors"
                         aria-label="Create new chat"
                         title="New chat"
@@ -961,17 +1184,30 @@ export default function AgentChatPage() {
                                 {isConversationsSectionExpanded && (
                                     <div className="mt-2 min-h-0 flex-1 flex flex-col">
                                         <div className="flex items-center gap-2">
-                                            <button className="btn-primary flex-1 justify-center text-sm py-2" onClick={handleNewChat}>
+                                            <button className="btn-primary flex-1 justify-center text-sm py-2" onClick={() => handleNewChat()}>
                                                 <Plus className="w-4 h-4" /> New Chat
                                             </button>
                                             {activeConversations.length > 0 && (
                                                 <button
                                                     type="button"
-                                                    onClick={() => void handleBulkTrash('chats')}
-                                                    className="flex items-center gap-1 px-2 py-2 text-[11px] text-muted-foreground hover:text-red-400 rounded-lg border border-border/50 hover:border-red-500/30 transition-colors"
-                                                    title="Trash all conversations"
+                                                    onClick={() => {
+                                                        if (confirmBulkTrashChats) {
+                                                            if (confirmBulkTrashChatsTimerRef.current) clearTimeout(confirmBulkTrashChatsTimerRef.current)
+                                                            setConfirmBulkTrashChats(false)
+                                                            void handleBulkTrash('chats')
+                                                        } else {
+                                                            setConfirmBulkTrashChats(true)
+                                                            confirmBulkTrashChatsTimerRef.current = setTimeout(() => setConfirmBulkTrashChats(false), 3000)
+                                                        }
+                                                    }}
+                                                    className={`flex items-center gap-1 px-2 py-2 text-[11px] rounded-lg border transition-all ${confirmBulkTrashChats
+                                                        ? 'bg-red-500/20 border-red-500/40 text-red-400 font-medium'
+                                                        : 'text-muted-foreground hover:text-red-400 border-border/50 hover:border-red-500/30'
+                                                    }`}
+                                                    title={confirmBulkTrashChats ? 'Click again to confirm' : 'Trash all conversations'}
                                                 >
                                                     <Trash className="w-3.5 h-3.5" />
+                                                    {confirmBulkTrashChats && <span>Sure?</span>}
                                                 </button>
                                             )}
                                         </div>
@@ -1031,11 +1267,23 @@ export default function AgentChatPage() {
                                             <div className="flex items-center justify-end mb-2">
                                                 <button
                                                     type="button"
-                                                    onClick={() => void handleBulkTrash('delegated')}
-                                                    className="flex items-center gap-1 px-2 py-1 text-[11px] text-muted-foreground hover:text-red-400 rounded-md border border-border/50 hover:border-red-500/30 transition-colors"
-                                                    title="Trash all delegated threads"
+                                                    onClick={() => {
+                                                        if (confirmBulkTrashDelegated) {
+                                                            if (confirmBulkTrashDelegatedTimerRef.current) clearTimeout(confirmBulkTrashDelegatedTimerRef.current)
+                                                            setConfirmBulkTrashDelegated(false)
+                                                            void handleBulkTrash('delegated')
+                                                        } else {
+                                                            setConfirmBulkTrashDelegated(true)
+                                                            confirmBulkTrashDelegatedTimerRef.current = setTimeout(() => setConfirmBulkTrashDelegated(false), 3000)
+                                                        }
+                                                    }}
+                                                    className={`flex items-center gap-1 px-2 py-1 text-[11px] rounded-md border transition-all ${confirmBulkTrashDelegated
+                                                        ? 'bg-red-500/20 border-red-500/40 text-red-400 font-medium'
+                                                        : 'text-muted-foreground hover:text-red-400 border-border/50 hover:border-red-500/30'
+                                                    }`}
+                                                    title={confirmBulkTrashDelegated ? 'Click again to confirm' : 'Trash all delegated threads'}
                                                 >
-                                                    <Trash className="w-3 h-3" /> Trash All
+                                                    <Trash className="w-3 h-3" /> {confirmBulkTrashDelegated ? 'Sure?' : 'Trash All'}
                                                 </button>
                                             </div>
                                         )}
@@ -1095,11 +1343,23 @@ export default function AgentChatPage() {
                                             <div className="flex items-center gap-2 mb-2">
                                                 <button
                                                     type="button"
-                                                    onClick={() => void handleBulkRestore()}
-                                                    className="flex items-center gap-1 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground rounded-md border border-border/50 hover:border-accent/30 transition-colors"
-                                                    title="Restore all trashed conversations"
+                                                    onClick={() => {
+                                                        if (confirmBulkRestore) {
+                                                            if (confirmBulkRestoreTimerRef.current) clearTimeout(confirmBulkRestoreTimerRef.current)
+                                                            setConfirmBulkRestore(false)
+                                                            void handleBulkRestore()
+                                                        } else {
+                                                            setConfirmBulkRestore(true)
+                                                            confirmBulkRestoreTimerRef.current = setTimeout(() => setConfirmBulkRestore(false), 3000)
+                                                        }
+                                                    }}
+                                                    className={`flex items-center gap-1 px-2 py-1 text-[11px] rounded-md border transition-all ${confirmBulkRestore
+                                                        ? 'bg-accent/20 border-accent/40 text-accent font-medium'
+                                                        : 'text-muted-foreground hover:text-foreground border-border/50 hover:border-accent/30'
+                                                    }`}
+                                                    title={confirmBulkRestore ? 'Click again to confirm' : 'Restore all trashed conversations'}
                                                 >
-                                                    <RotateCcw className="w-3 h-3" /> Restore All
+                                                    <RotateCcw className="w-3 h-3" /> {confirmBulkRestore ? 'Sure?' : 'Restore All'}
                                                 </button>
                                                 <button
                                                     type="button"
@@ -1224,24 +1484,24 @@ function ConversationRow({ conv, active, onSelect, onDelete, onDownload, onCopy,
                                 <p className="mt-1 truncate text-[12px] leading-5 text-muted-foreground/88">
                                     {activePreview}
                                 </p>
-                                <div className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground/72">
-                                    <span>{conv.message_count} message{conv.message_count === 1 ? '' : 's'}</span>
+                                <div className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground/72 whitespace-nowrap overflow-hidden">
+                                    <span className="flex-shrink-0">{conv.message_count} message{conv.message_count === 1 ? '' : 's'}</span>
                                     {relativeTime && (
                                         <>
-                                            <span aria-hidden>•</span>
-                                            <span>{relativeTime}</span>
+                                            <span aria-hidden className="flex-shrink-0">•</span>
+                                            <span className="truncate">{relativeTime}</span>
                                         </>
                                     )}
                                 </div>
                             </>
                         ) : (
-                            <p className="text-[10px] text-muted-foreground/85 leading-tight">{conv.message_count} messages</p>
+                            <p className="text-[10px] text-muted-foreground/85 leading-tight">{conv.message_count} message{conv.message_count === 1 ? '' : 's'}</p>
                         )}
                     </div>
                     <div className={`relative flex items-center gap-0.5 ${showActiveCard ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                         <button
                             className={showActiveCard
-                                ? 'btn-ghost h-7 w-7 rounded-lg border-border/55 bg-card/55'
+                                ? 'inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border/55 bg-card/55 text-muted-foreground hover:text-foreground hover:border-accent/40 transition-all'
                                 : 'inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors'
                             }
                             onClick={startEdit}
@@ -1253,7 +1513,7 @@ function ConversationRow({ conv, active, onSelect, onDelete, onDownload, onCopy,
                         <button
                             type="button"
                             className={showActiveCard
-                                ? 'btn-ghost h-7 w-7 rounded-lg border-border/55 bg-card/55 text-muted-foreground hover:text-foreground'
+                                ? 'inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border/55 bg-card/55 text-muted-foreground hover:text-foreground hover:border-accent/40 transition-all'
                                 : 'inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors'
                             }
                             onClick={(e) => { e.stopPropagation(); setShowDownloadMenu(m => !m) }}
@@ -1278,7 +1538,7 @@ function ConversationRow({ conv, active, onSelect, onDelete, onDownload, onCopy,
                         )}
                         <button
                             className={showActiveCard
-                                ? 'btn-ghost h-7 w-7 rounded-lg border-border/55 bg-card/55'
+                                ? 'inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border/55 bg-card/55 text-muted-foreground hover:text-foreground hover:border-accent/40 transition-all'
                                 : 'inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors'
                             }
                             onClick={e => { e.stopPropagation(); onDelete() }}
@@ -1329,6 +1589,7 @@ function TrashedConversationRow({
 }) {
     const [showDownloadMenu, setShowDownloadMenu] = useState(false)
     const [confirmingDelete, setConfirmingDelete] = useState(false)
+    const [showDeleteModal, setShowDeleteModal] = useState(false)
     const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const handleDeleteClick = (e: React.MouseEvent) => {
@@ -1358,7 +1619,7 @@ function TrashedConversationRow({
                     <Trash2 className="w-3 h-3 flex-shrink-0 text-amber-300" />
                     <div className="flex-1 min-w-0">
                         <p className="text-[11px] font-medium truncate leading-tight">{conv.title ?? 'Untitled Chat'}</p>
-                        <p className="text-[10px] text-muted-foreground/85 leading-tight">{conv.message_count} messages</p>
+                        <p className="text-[10px] text-muted-foreground/85 leading-tight">{conv.message_count} message{conv.message_count === 1 ? '' : 's'}</p>
                     </div>
                     <div className="relative flex items-center gap-0.5">
                         <button
@@ -1427,10 +1688,20 @@ function TrashedConversationRow({
                     Download Chat
                 </ContextMenuItem>
                 <ContextMenuSeparator />
-                <ContextMenuItem onSelect={(e) => { e.preventDefault(); onPermanentDelete() }} className="gap-2 text-red-500 focus:text-red-400 focus:bg-red-500/10">
+                <ContextMenuItem onSelect={(e) => { e.preventDefault(); setShowDeleteModal(true) }} className="gap-2 text-red-500 focus:text-red-400 focus:bg-red-500/10">
                     <Trash2 className="w-4 h-4" /> Delete Permanently
                 </ContextMenuItem>
             </ContextMenuContent>
+            <ConfirmModal
+                open={showDeleteModal}
+                title="Delete Permanently"
+                message={`This will permanently delete "${conv.title ?? 'Untitled Chat'}". This action cannot be undone.`}
+                confirmLabel="Delete"
+                cancelLabel="Cancel"
+                variant="danger"
+                onConfirm={() => { setShowDeleteModal(false); onPermanentDelete() }}
+                onCancel={() => setShowDeleteModal(false)}
+            />
         </ContextMenu>
     )
 }

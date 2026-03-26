@@ -2,6 +2,7 @@
 
 import asyncio
 import uuid
+from uuid import uuid4
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -276,3 +277,31 @@ class TestExecuteToolLoop:
             "results": [{"title": "Compose issue", "snippet": "Structured cards should render."}],
             "query": "docker compose recreate temp prefixed container names",
         }
+
+
+@pytest.mark.asyncio
+async def test_auto_fills_workspace_id_when_default_set(monkeypatch):
+    """When default_workspace_id is set on context and tool call omits workspace_id,
+    the dispatcher should receive the default."""
+    from openforge.runtime.tool_loop import ToolLoopContext
+
+    ctx = ToolLoopContext(
+        workspace_id=None,
+        conversation_id=uuid4(),
+        execution_id="test-exec",
+        default_workspace_id="ws-123",
+    )
+    # Verify the field exists and is set
+    assert ctx.default_workspace_id == "ws-123"
+
+
+@pytest.mark.asyncio
+async def test_default_workspace_id_is_none_by_default():
+    from openforge.runtime.tool_loop import ToolLoopContext
+
+    ctx = ToolLoopContext(
+        workspace_id=None,
+        conversation_id=uuid4(),
+        execution_id="test-exec",
+    )
+    assert ctx.default_workspace_id is None

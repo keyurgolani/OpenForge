@@ -136,6 +136,67 @@ class GraphExecutor:
             render_result = render(template, resolved_inputs)
             rendered_prompt = render_result.output
 
+        # Build automation preamble/postamble so the LLM knows the expected output format
+        from openforge.runtime.prompt_context import ExecutionContext, build_preamble, build_postamble
+
+        snapshot_input_schema = snapshot.get("parameters", [])
+        snapshot_output_defs = snapshot.get("output_definitions", [])
+
+        automation_preamble = build_preamble(
+            agent_name=snapshot.get("name", "Agent"),
+            agent_description=snapshot.get("description", ""),
+            context=ExecutionContext.AUTOMATION,
+            input_schema=snapshot_input_schema,
+            output_definitions=snapshot_output_defs,
+        )
+
+        # Gather context data for postamble
+        workspaces_data: list[dict] = []
+        tools_data: list[dict] = []
+        try:
+            from openforge.db.models import Workspace as _Workspace, Knowledge as _Knowledge
+            from sqlalchemy import func as _func, select as _select
+
+            ws_stmt = (
+                _select(_Workspace, _func.count(_Knowledge.id).label("kc"))
+                .outerjoin(_Knowledge, _Knowledge.workspace_id == _Workspace.id)
+                .group_by(_Workspace.id)
+                .order_by(_Workspace.sort_order)
+            )
+            for ws, kc in (await self.db.execute(ws_stmt)).all():
+                workspaces_data.append({
+                    "id": str(ws.id), "name": ws.name,
+                    "description": ws.description or "", "knowledge_count": kc,
+                })
+        except Exception:
+            pass
+
+        try:
+            raw_tools = await self.tool_dispatcher.list_tools()
+            for t in (raw_tools or []):
+                tools_data.append({
+                    "id": t["id"],
+                    "name": t.get("name", t["id"]),
+                    "description": (t.get("description", "") or "")[:120],
+                })
+        except Exception:
+            pass
+
+        automation_postamble = build_postamble(
+            workspace_id=parent_run.workspace_id,
+            workspaces_data=workspaces_data,
+            agents_data=[],
+            tools_data=tools_data,
+            skills_data=[],
+            tools_enabled=snapshot.get("tools_enabled", True),
+        )
+
+        # Assemble: preamble + rendered user prompt + postamble
+        prompt_parts = [automation_preamble, rendered_prompt]
+        if automation_postamble:
+            prompt_parts.append(automation_postamble)
+        rendered_prompt = "\n\n---\n\n".join(prompt_parts)
+
         # 3. Create a child run for this node so StrategyExecutor can manage
         #    its own steps without step_index collisions.
         child_run = RunModel(

@@ -108,6 +108,71 @@ class TestConditionals:
         )
         assert result.output == "Hello World"
 
+    def test_nested_if_blocks(self):
+        """Nested {% if %} blocks should be handled correctly."""
+        template = (
+            "{% if outer %}"
+            "outer-start "
+            "{% if inner %}inner-yes{% endif %}"
+            " outer-end"
+            "{% endif %}"
+        )
+        result = TemplateRenderer.render(template, {"outer": True, "inner": True})
+        assert result.output == "outer-start inner-yes outer-end"
+
+    def test_nested_if_outer_true_inner_false(self):
+        template = (
+            "{% if outer %}"
+            "outer-start "
+            "{% if inner %}inner-yes{% else %}inner-no{% endif %}"
+            " outer-end"
+            "{% endif %}"
+        )
+        result = TemplateRenderer.render(template, {"outer": True, "inner": False})
+        assert result.output == "outer-start inner-no outer-end"
+
+    def test_nested_if_outer_false(self):
+        template = (
+            "{% if outer %}"
+            "{% if inner %}inner-yes{% endif %}"
+            "{% endif %}"
+        )
+        result = TemplateRenderer.render(template, {"outer": False, "inner": True})
+        assert result.output == ""
+
+    def test_deeply_nested_if(self):
+        template = (
+            "{% if a %}"
+            "{% if b %}"
+            "{% if c %}deep{% endif %}"
+            "{% endif %}"
+            "{% endif %}"
+        )
+        result = TemplateRenderer.render(template, {"a": True, "b": True, "c": True})
+        assert result.output == "deep"
+
+    def test_nested_if_else_with_nested_if(self):
+        """Outer if/else where the true branch contains a nested if."""
+        template = (
+            "{% if mode %}"
+            "{% if detail %}detailed{% else %}brief{% endif %}"
+            "{% else %}"
+            "disabled"
+            "{% endif %}"
+        )
+        result = TemplateRenderer.render(template, {"mode": True, "detail": False})
+        assert result.output == "brief"
+        result2 = TemplateRenderer.render(template, {"mode": False, "detail": True})
+        assert result2.output == "disabled"
+
+    def test_sibling_if_blocks(self):
+        """Two sequential if blocks at the same level."""
+        template = "{% if a %}A{% endif %}-{% if b %}B{% endif %}"
+        result = TemplateRenderer.render(template, {"a": True, "b": True})
+        assert result.output == "A-B"
+        result2 = TemplateRenderer.render(template, {"a": True, "b": False})
+        assert result2.output == "A-"
+
 
 class TestLoops:
     """Tests for loop blocks."""

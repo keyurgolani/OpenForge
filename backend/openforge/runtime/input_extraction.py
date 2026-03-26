@@ -71,13 +71,18 @@ Latest user message: "{user_message}"
 Respond with a JSON object containing:
 - "extracted": a dict of parameter_name -> extracted_value (only include values you are confident about)
 - "missing": a list of parameter names that are required but could not be extracted
-- "follow_up": if there are missing required parameters, write a natural follow-up question to ask the user. If all required parameters are filled, set this to null.
+- "follow_up": a natural follow-up message to the user (see rules below), or null if all required params are filled AND no optional params remain unset.
 
 Rules:
 - Use the conversation transcript to accumulate values already provided across earlier turns.
 - Only USER messages count as sources of truth for parameter values.
 - ASSISTANT messages provide context about what is being asked, but they do not supply parameter values.
 - If the user gives multiple values for the same parameter, prefer the most recent USER-provided value.
+- When writing the follow_up message:
+  - First ask about any REQUIRED parameters that are still missing.
+  - Then, if there are OPTIONAL parameters that the user has not provided, briefly mention them and ask if the user would like to configure any of them. Describe what each optional parameter does so the user can make an informed choice. Do NOT assume the user knows what parameters the agent supports.
+  - If all required parameters are filled but optional parameters remain unset, still generate a follow_up that mentions the available optional parameters and asks if the user wants to set any before proceeding. Phrase it so the user can simply say "no" or "go ahead" to skip them.
+  - If the conversation transcript shows the user has already been asked about optional parameters and declined (e.g., said "no", "go ahead", "skip", "just proceed", etc.), set follow_up to null — do NOT ask again.
 
 Return ONLY valid JSON, no markdown formatting."""
 
@@ -110,12 +115,17 @@ def parse_extraction_response(response_text: str, input_schema: list[dict]) -> d
         required_names = {p["name"] for p in input_schema if p.get("required", True)}
         filled = set(extracted.keys())
         still_missing = required_names - filled
+        all_required_filled = len(still_missing) == 0
 
+        # Preserve the LLM's follow_up about optional params even when
+        # all required params are filled.  The LLM is instructed to set
+        # follow_up to null once the user declines optional configuration,
+        # so a non-null follow_up here means the user hasn't been asked yet.
         return {
             "extracted": extracted,
             "missing": list(still_missing),
-            "follow_up": follow_up if still_missing else None,
-            "all_filled": len(still_missing) == 0,
+            "follow_up": follow_up,
+            "all_filled": all_required_filled,
         }
 
     except (json.JSONDecodeError, KeyError, TypeError) as e:
@@ -123,22 +133,20 @@ def parse_extraction_response(response_text: str, input_schema: list[dict]) -> d
         return {
             "extracted": {},
             "missing": [p["name"] for p in input_schema if p.get("required", True)],
-            "follow_up": "I wasn't able to understand your input. Could you please provide the required inputs?",
+            "follow_up": None,
             "all_filled": False,
+            "extraction_failed": True,
         }
 
 
 def _build_fallback_follow_up(input_schema: list[dict[str, Any]]) -> dict[str, Any]:
     missing = [p["name"] for p in input_schema if p.get("required", True)]
-    if missing:
-        follow_up = "Could you please provide the required inputs: " + ", ".join(missing)
-    else:
-        follow_up = "Could you please provide the required inputs?"
     return {
         "extracted": {},
         "missing": missing,
-        "follow_up": follow_up,
+        "follow_up": None,
         "all_filled": False,
+        "extraction_failed": True,
     }
 
 

@@ -13,13 +13,9 @@ export function ThinkingDetail({ thoughts }: ThinkingDetailProps) {
       transition={{ type: 'spring', stiffness: 300, damping: 30 }}
       className="overflow-hidden"
     >
-      <div className="pl-8 py-2 space-y-1 max-h-[200px] overflow-y-auto">
-        {thoughts.map((thought, i) => (
-          <p key={i} className="text-xs text-muted-foreground/70 leading-relaxed">
-            {thought}
-          </p>
-        ))}
-      </div>
+      <pre className="whitespace-pre-wrap break-words text-xs text-foreground/60 leading-relaxed mt-1 ml-4.5 max-h-[200px] overflow-y-auto">
+        {thoughts.join('\n')}
+      </pre>
     </motion.div>
   )
 }

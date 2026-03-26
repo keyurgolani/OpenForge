@@ -24,7 +24,7 @@ router = APIRouter()
 
 
 class GlobalConversationCreate(BaseModel):
-    agent_id: UUID
+    agent_id: UUID | None = None
     title: str | None = None
 
 
@@ -70,9 +70,16 @@ class GlobalMessageResponse(BaseModel):
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _serialize_conversation(c: Conversation) -> dict:
+    agent_name = None
+    if c.agent_id:
+        try:
+            agent_name = c.agent.name if c.agent else None
+        except Exception:
+            pass
     return {
         "id": c.id,
         "agent_id": c.agent_id,
+        "agent_name": agent_name,
         "title": c.title,
         "title_locked": c.title_locked,
         "is_pinned": c.is_pinned,
@@ -136,12 +143,15 @@ async def create_global_conversation(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a global conversation with a specific agent."""
-    agent = await _require_global_chat_agent(db, data.agent_id)
+    agent = None
+    if data.agent_id is not None:
+        agent = await _require_global_chat_agent(db, data.agent_id)
 
+    title = data.title or (f"Chat with {agent.name}" if agent else "New Chat")
     conversation = Conversation(
         workspace_id=None,
         agent_id=data.agent_id,
-        title=data.title or f"Chat with {agent.name}",
+        title=title,
     )
     db.add(conversation)
     await db.commit()

@@ -205,6 +205,7 @@ class Conversation(Base):
 
     workspace: Mapped["Workspace"] = relationship(back_populates="conversations")
     messages: Mapped[list["Message"]] = relationship(back_populates="conversation", cascade="all, delete-orphan")
+    agent: Mapped[Optional["AgentDefinitionModel"]] = relationship(foreign_keys=[agent_id], lazy="joined")
 
     __table_args__ = (
         Index("idx_conversations_workspace", "workspace_id", "updated_at"),

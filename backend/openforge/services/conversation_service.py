@@ -97,6 +97,12 @@ def _msg_to_response(m: Message) -> MessageResponse:
 
 
 def _conv_to_response(conv: Conversation, last_preview: str | None = None) -> ConversationResponse:
+    agent_name = None
+    if conv.agent_id:
+        try:
+            agent_name = conv.agent.name if conv.agent else None
+        except Exception:
+            pass
     return ConversationResponse(
         id=conv.id,
         workspace_id=conv.workspace_id,
@@ -107,6 +113,8 @@ def _conv_to_response(conv: Conversation, last_preview: str | None = None) -> Co
         archived_at=conv.archived_at,
         is_delegated=conv.is_subagent,
         delegated_profile_id=conv.subagent_agent_id,
+        agent_id=conv.agent_id,
+        agent_name=agent_name,
         message_count=conv.message_count,
         last_message_at=conv.last_message_at,
         last_message_preview=last_preview,
@@ -432,6 +440,26 @@ class ConversationService:
             logger.warning("Failed to delete Qdrant embeddings during bulk delete: %s", e)
         return len(conv_ids)
 
+    @staticmethod
+    def _sanitize_pg(value: str | None) -> str | None:
+        """Strip null bytes that PostgreSQL text columns reject."""
+        if value is None:
+            return None
+        return value.replace("\x00", "")
+
+    @classmethod
+    def _sanitize_pg_json(cls, value):
+        """Recursively strip null bytes from strings inside JSON-serializable structures."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value.replace("\x00", "")
+        if isinstance(value, list):
+            return [cls._sanitize_pg_json(item) for item in value]
+        if isinstance(value, dict):
+            return {k: cls._sanitize_pg_json(v) for k, v in value.items()}
+        return value
+
     async def add_message(
         self,
         db: AsyncSession,
@@ -453,15 +481,15 @@ class ConversationService:
         msg = Message(
             conversation_id=conversation_id,
             role=role,
-            content=content,
-            thinking=thinking,
+            content=self._sanitize_pg(content) or "",
+            thinking=self._sanitize_pg(thinking),
             model_used=model_used,
             provider_used=provider_used,
             token_count=token_count,
             generation_ms=generation_ms,
-            context_sources=context_sources,
-            tool_calls=tool_calls,
-            timeline=timeline,
+            context_sources=self._sanitize_pg_json(context_sources),
+            tool_calls=self._sanitize_pg_json(tool_calls),
+            timeline=self._sanitize_pg_json(timeline),
             is_interrupted=is_interrupted,
             provider_metadata=provider_metadata,
         )

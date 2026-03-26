@@ -27,6 +27,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger("openforge.runtime.tool_loop")
 
 _MAX_LLM_TOOL_RESULT_CHARS = 12_000
+_COMPACT_TOOL_RESULT_CHARS = 2_000
+_COMPACT_AFTER_N_TOOL_RESULTS = 8
 _TOOL_NAME_SEP = "__"
 _TIMELINE_TEXT_OUTPUT_CHARS = 2_000
 _TIMELINE_UNTRUSTED_TEXT_CHARS = 4_000
@@ -55,6 +57,24 @@ def _try_parse_json(value: str) -> Any | None:
         return json.loads(value)
     except (TypeError, ValueError):
         return None
+
+
+def _compact_old_tool_results(messages: list[dict[str, Any]]) -> None:
+    """Trim older tool results in-place to limit context growth in long-running loops.
+
+    Only activates once more than COMPACT_AFTER_N_TOOL_RESULTS tool messages exist.
+    Keeps the most recent 6 tool results at full size; trims older ones to
+    COMPACT_TOOL_RESULT_CHARS.
+    """
+    tool_indices = [i for i, m in enumerate(messages) if m.get("role") == "tool"]
+    if len(tool_indices) <= _COMPACT_AFTER_N_TOOL_RESULTS:
+        return
+    keep_recent = 6
+    for idx in tool_indices[:-keep_recent]:
+        content = messages[idx].get("content", "")
+        if len(content) > _COMPACT_TOOL_RESULT_CHARS:
+            messages[idx]["content"] = content[:_COMPACT_TOOL_RESULT_CHARS] + " [trimmed]"
+
 
 
 def _prepare_timeline_output(output: Any) -> Any:
@@ -93,6 +113,7 @@ class ToolLoopContext:
     hitl_service: HITLService | None = None
     cancel_event: asyncio.Event = field(default_factory=asyncio.Event)
     db: AsyncSession | None = None
+    default_workspace_id: str | None = None
 
 
 @dataclass
@@ -161,6 +182,10 @@ async def execute_tool_loop(
         if ctx.cancel_event.is_set():
             result.was_cancelled = True
             break
+
+        # Compact older tool results to limit context growth in long loops
+        if iteration_index > 0:
+            _compact_old_tool_results(messages)
 
         response_this_turn = ""
         thinking_this_turn = ""
@@ -363,10 +388,13 @@ async def execute_tool_loop(
             if ctx.rate_limiter:
                 ctx.rate_limiter.record()
 
+            # Resolve workspace_id: explicit context > default > empty
+            _ws_id = str(ctx.workspace_id) if ctx.workspace_id else (ctx.default_workspace_id or "")
+
             tool_result = await tool_dispatcher.execute(
                 tool_id=tool_id,
                 params=arguments,
-                workspace_id=str(ctx.workspace_id) if ctx.workspace_id else "",
+                workspace_id=_ws_id,
                 execution_id=ctx.execution_id,
                 conversation_id=str(ctx.conversation_id or ""),
                 agent_id=str(ctx.agent_spec.agent_id) if ctx.agent_spec else "",

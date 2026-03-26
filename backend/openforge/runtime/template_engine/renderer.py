@@ -15,12 +15,6 @@ from openforge.runtime.template_engine.types import TemplateRenderResult
 _COMMENT_RE = re.compile(r"\{#[\s\S]*?#\}")
 _VARIABLE_RE = re.compile(r"\{\{\s*([a-zA-Z_][\w.-]*)((?:::?[^\}]*)?)\s*\}\}")
 _FUNCTION_RE = re.compile(r"\{\{\s*([a-zA-Z_]\w*)\s*\(([\s\S]*?)\)\s*\}\}")
-_IF_ELSE_RE = re.compile(
-    r"\{%\s*if\s+([\s\S]*?)\s*%\}([\s\S]*?)\{%\s*else\s*%\}([\s\S]*?)\{%\s*endif\s*%\}"
-)
-_IF_RE = re.compile(
-    r"\{%\s*if\s+([\s\S]*?)\s*%\}([\s\S]*?)\{%\s*endif\s*%\}"
-)
 _FOR_RE = re.compile(
     r"\{%\s*for\s+(\w+)\s+in\s+([\w.]+)\s*%\}([\s\S]*?)\{%\s*endfor\s*%\}"
 )
@@ -206,6 +200,78 @@ def _resolve_condition_value(token: str, context: dict[str, Any]) -> Any:
     return val
 
 
+def _find_matching_endif(text: str, start: int) -> int | None:
+    """Return the start index of the ``{% endif %}`` matching the ``{% if %}``
+    whose **body** begins at *start*, or ``None`` if unmatched.
+
+    *start* should point just past the closing ``%}`` of the opening ``{% if … %}``.
+    """
+    depth = 1
+    pos = start
+    while depth > 0:
+        next_if = text.find("{% if ", pos)
+        next_endif = text.find("{% endif %}", pos)
+        if next_endif == -1:
+            return None  # unmatched
+        if next_if != -1 and next_if < next_endif:
+            depth += 1
+            pos = next_if + 6  # skip past '{% if '
+        else:
+            depth -= 1
+            if depth == 0:
+                return next_endif
+            pos = next_endif + 11  # len('{% endif %}')
+    return None
+
+
+def _find_else_at_depth(text: str, start: int, endif_pos: int) -> int | None:
+    """Return the start index of the ``{% else %}`` at depth-0 between *start*
+    and *endif_pos*, or ``None`` if there is no else at this depth."""
+    depth = 0
+    pos = start
+    while pos < endif_pos:
+        next_if = text.find("{% if ", pos)
+        next_else = text.find("{% else %}", pos)
+        next_endif = text.find("{% endif %}", pos)
+
+        # Restrict to before our endif
+        if next_if != -1 and next_if >= endif_pos:
+            next_if = -1
+        if next_else != -1 and next_else >= endif_pos:
+            next_else = -1
+        if next_endif != -1 and next_endif >= endif_pos:
+            next_endif = -1
+
+        # Find the earliest relevant tag
+        candidates = []
+        if next_if != -1:
+            candidates.append(("if", next_if))
+        if next_else != -1:
+            candidates.append(("else", next_else))
+        if next_endif != -1:
+            candidates.append(("endif", next_endif))
+
+        if not candidates:
+            break
+
+        tag, tag_pos = min(candidates, key=lambda x: x[1])
+
+        if tag == "if":
+            depth += 1
+            pos = tag_pos + 6
+        elif tag == "endif":
+            depth -= 1
+            pos = tag_pos + 11
+        elif tag == "else":
+            if depth == 0:
+                return tag_pos
+            pos = tag_pos + 10  # len('{% else %}')
+    return None
+
+
+_IF_OPEN_RE = re.compile(r"\{%\s*if\s+([\s\S]*?)\s*%\}")
+
+
 # ---------------------------------------------------------------------------
 # Renderer
 # ---------------------------------------------------------------------------
@@ -260,38 +326,39 @@ class TemplateRenderer:
 
             output = output[: m.start()] + "".join(rendered_parts) + output[m.end() :]
 
-        # 3. Process if/else conditionals (iteratively)
+        # 3. Process conditionals (nesting-aware iterative scan)
         for _ in range(_MAX_ITERATIONS):
-            m = _IF_ELSE_RE.search(output)
+            m = _IF_OPEN_RE.search(output)
             if not m:
                 break
             condition = m.group(1)
-            true_block = m.group(2)
-            false_block = m.group(3)
+            body_start = m.end()  # just past '%}'
+
+            endif_pos = _find_matching_endif(output, body_start)
+            if endif_pos is None:
+                # Malformed template — leave as-is to avoid infinite loop
+                break
+
+            endif_end = endif_pos + 11  # len('{% endif %}')
+
+            # Check for {% else %} at this depth
+            else_pos = _find_else_at_depth(output, body_start, endif_pos)
+
+            if else_pos is not None:
+                true_block = output[body_start:else_pos]
+                false_block = output[else_pos + 10:endif_pos]  # len('{% else %}') == 10
+            else:
+                true_block = output[body_start:endif_pos]
+                false_block = ""
 
             if _evaluate_condition(condition, context):
                 replacement = true_block
             else:
                 replacement = false_block
 
-            output = output[: m.start()] + replacement + output[m.end() :]
+            output = output[: m.start()] + replacement + output[endif_end:]
 
-        # 4. Process if-only conditionals (iteratively)
-        for _ in range(_MAX_ITERATIONS):
-            m = _IF_RE.search(output)
-            if not m:
-                break
-            condition = m.group(1)
-            body = m.group(2)
-
-            if _evaluate_condition(condition, context):
-                replacement = body
-            else:
-                replacement = ""
-
-            output = output[: m.start()] + replacement + output[m.end() :]
-
-        # 5. Process function calls (iteratively)
+        # 4. Process function calls (iteratively)
         for _ in range(_MAX_ITERATIONS):
             m = _FUNCTION_RE.search(output)
             if not m:
@@ -316,7 +383,7 @@ class TemplateRenderer:
 
             output = output[: m.start()] + replacement + output[m.end() :]
 
-        # 6. Process plain variables
+        # 5. Process plain variables
         def _replace_variable(m: re.Match[str]) -> str:
             name = m.group(1)
             variables_used.add(name)
