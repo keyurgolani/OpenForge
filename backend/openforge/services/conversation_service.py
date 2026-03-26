@@ -37,6 +37,8 @@ def _attachment_to_processed_summary(attachment: MessageAttachment) -> dict:
         return {
             "id": str(attachment.id),
             "filename": attachment.filename,
+            "content_type": attachment.content_type,
+            "file_size": attachment.file_size,
             "status": "processed" if extracted_text else "empty",
             "pipeline": "url_extract",
             "details": f"Extracted {len(extracted_text)} chars" if extracted_text else "No content extracted",
@@ -67,6 +69,8 @@ def _attachment_to_processed_summary(attachment: MessageAttachment) -> dict:
     return {
         "id": str(attachment.id),
         "filename": attachment.filename,
+        "content_type": attachment.content_type,
+        "file_size": attachment.file_size,
         "status": status,
         "pipeline": pipeline,
         "details": details,

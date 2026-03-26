@@ -8,7 +8,7 @@ interface ModalShellProps {
     isOpen: boolean
     onClose: () => void
     title: string
-    size?: 'sm' | 'md' | 'lg'
+    size?: 'sm' | 'md' | 'lg' | 'xl'
     children: ReactNode
     footer?: ReactNode
 }
@@ -17,6 +17,7 @@ const sizeClasses: Record<NonNullable<ModalShellProps['size']>, string> = {
     sm: 'max-w-sm',
     md: 'max-w-lg',
     lg: 'max-w-2xl',
+    xl: 'w-[70vw] max-w-[70vw] h-[90vh] max-h-[90vh]',
 }
 
 export default function ModalShell({
@@ -51,7 +52,7 @@ export default function ModalShell({
                         >
                             <motion.div
                                 className={cn(
-                                    'fixed left-1/2 top-1/2 z-[10000] w-[calc(100%-2rem)]',
+                                    'fixed left-1/2 top-1/2 z-[10000] w-[calc(100%-2rem)] max-h-[calc(100vh-4rem)]',
                                     'glass-card rounded-2xl border border-border/60 shadow-2xl',
                                     'flex flex-col overflow-hidden',
                                     sizeClasses[size],
@@ -81,7 +82,7 @@ export default function ModalShell({
                                 </div>
 
                                 {/* Body */}
-                                <div className="flex-1 overflow-y-auto px-6 py-4">
+                                <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
                                     {children}
                                 </div>
 

@@ -75,7 +75,14 @@ interface Message {
   thinking?: string | null
   timeline?: TimelineItem[] | null
   created_at: string
-  attachments_processed?: { filename: string; content_type: string }[]
+  attachments_processed?: {
+    filename: string
+    content_type: string
+    id?: string
+    extracted_text?: string | null
+    pipeline?: string
+    file_size?: number
+  }[]
   is_interrupted?: boolean
 }
 
@@ -93,7 +100,7 @@ interface AgentChatViewProps {
   onStreamComplete?: (messageId: string) => void
   onAttach?: (files: File[]) => void
   onRemoveAttachment?: (id: string) => void
-  attachments?: { id: string; filename: string; content_type: string; size: number }[]
+  attachments?: { id: string; filename: string; content_type: string; size: number; status?: string; onRetry?: () => void }[]
   composerDisabled?: boolean
   userInitial?: string
   /** When true, the parent has sent a message and is awaiting the first streaming event. Shows immediate "Responding..." indicator. */

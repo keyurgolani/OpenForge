@@ -12,11 +12,12 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from openforge.db.models import AgentModel, Conversation, Message
 from openforge.db.postgres import get_db
 from openforge.runtime.agent_registry import agent_registry
-from openforge.services.conversation_service import conversation_service
+from openforge.services.conversation_service import conversation_service, _attachment_to_processed_summary
 
 logger = logging.getLogger("openforge.api.global_chat")
 
@@ -105,6 +106,7 @@ def _serialize_message(m: Message) -> dict:
         "generation_ms": getattr(m, "generation_ms", None),
         "tool_calls": m.tool_calls,
         "context_sources": getattr(m, "context_sources", None),
+        "attachments_processed": [_attachment_to_processed_summary(att) for att in (m.attachments or [])],
         "timeline": getattr(m, "timeline", None),
         "is_interrupted": getattr(m, "is_interrupted", False),
         "provider_metadata": getattr(m, "provider_metadata", None),
@@ -339,7 +341,7 @@ async def get_global_conversation(
     result = _serialize_conversation(conversation)
 
     if include_messages:
-        query = select(Message).where(Message.conversation_id == conversation_id)
+        query = select(Message).options(selectinload(Message.attachments)).where(Message.conversation_id == conversation_id)
 
         if before_id is not None:
             cursor_msg = await db.get(Message, before_id)

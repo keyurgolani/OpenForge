@@ -8,9 +8,9 @@ describe('UserMessageCard', () => {
     expect(screen.getByText('Hello, agent!')).toBeInTheDocument()
   })
 
-  it('renders user initial in avatar', () => {
-    render(<UserMessageCard content="Test" userInitial="K" />)
-    expect(screen.getByText('K')).toBeInTheDocument()
+  it('renders avatar icon', () => {
+    const { container } = render(<UserMessageCard content="Test" userInitial="K" />)
+    expect(container.querySelector('.chat-avatar')).toBeInTheDocument()
   })
 
   it('renders attachments when provided', () => {

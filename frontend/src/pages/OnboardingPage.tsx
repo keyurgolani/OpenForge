@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
     getOnboarding, advanceOnboarding, createProvider,
-    testConnection, createWorkspace, listProviders,
+    testConnection, createWorkspace, listProviders, deleteProvider,
 } from '@/lib/api'
 import { Eye, EyeOff, FileText, Loader2, Search, CheckCircle2, XCircle, Sliders, Sparkles, ArrowLeft, ArrowRight, Plus, Trash2, MessageSquare, Lock, Brain, Folder, Briefcase, Microscope, BookOpen, Target, Globe, Lightbulb, Wrench, Palette, BarChart3, Rocket, Shield, FlaskConical, Leaf, Key, Settings2, PenLine, Database, Sprout } from 'lucide-react'
 import { ProviderIcon } from '@/components/shared/ProviderIcon'
@@ -197,8 +197,13 @@ function ProvidersSetupStep({ onNext, onBack, loading }: { onNext: () => void; o
             })
             const result = await testConnection(saved.id)
             setTestResult(result)
-            setConfigured(c => [...c, { id: saved.id, name: sanitizeProviderDisplayName(saved.display_name) }])
-            if (result.success) resetForm()
+            if (result.success) {
+                setConfigured(c => [...c, { id: saved.id, name: sanitizeProviderDisplayName(saved.display_name) }])
+                resetForm()
+            } else {
+                // Delete the provider if the connection test failed
+                try { await deleteProvider(saved.id) } catch { /* ignore cleanup errors */ }
+            }
         } catch (e: unknown) {
             const err = e as { response?: { data?: { detail?: string } }; message?: string }
             setAddError(err?.response?.data?.detail ?? err?.message ?? 'Failed to add provider')
@@ -222,7 +227,18 @@ function ProvidersSetupStep({ onNext, onBack, loading }: { onNext: () => void; o
                     {configured.map(c => (
                         <div key={c.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/5 border border-emerald-500/20 text-xs">
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-                            <span className="text-emerald-300 truncate">{c.name}</span>
+                            <span className="text-emerald-300 truncate flex-1">{c.name}</span>
+                            <button
+                                type="button"
+                                className="text-red-400 hover:text-red-300 p-0.5 rounded transition-colors"
+                                onClick={async () => {
+                                    try { await deleteProvider(c.id) } catch { /* ignore */ }
+                                    setConfigured(prev => prev.filter(p => p.id !== c.id))
+                                }}
+                                aria-label={`Remove ${c.name}`}
+                            >
+                                <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                         </div>
                     ))}
                 </div>

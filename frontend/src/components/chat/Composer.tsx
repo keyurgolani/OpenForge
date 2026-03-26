@@ -9,6 +9,8 @@ interface ComposerAttachment {
   filename: string
   content_type: string
   size: number
+  status?: 'uploading' | 'extracted' | 'error'
+  onRetry?: () => void
 }
 
 interface ComposerProps {
@@ -31,6 +33,7 @@ export function Composer({ onSend, onCancel, onAttach, onRemoveAttachment, phase
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const isActive = phase !== 'idle' && phase !== 'complete' && phase !== 'error'
+  const hasPending = attachments.some(a => a.status === 'uploading')
   const composerDisabled = disabled || (isActive && phase !== 'awaiting_approval')
 
   // Auto-focus textarea when it becomes enabled
@@ -42,13 +45,13 @@ export function Composer({ onSend, onCancel, onAttach, onRemoveAttachment, phase
 
   const handleSend = useCallback(() => {
     const trimmed = value.trim()
-    if (!trimmed || isActive) return
+    if (!trimmed || isActive || hasPending) return
     onSend(trimmed)
     setValue('')
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
     }
-  }, [value, isActive, onSend])
+  }, [value, isActive, hasPending, onSend])
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -77,7 +80,7 @@ export function Composer({ onSend, onCancel, onAttach, onRemoveAttachment, phase
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-2 px-2">
             {attachments.map((att) => (
-              <AttachmentChip key={att.id} filename={att.filename} size={att.size} onRemove={onRemoveAttachment ? () => onRemoveAttachment(att.id) : undefined} />
+              <AttachmentChip key={att.id} filename={att.filename} size={att.size} status={att.status} onRetry={att.onRetry} onRemove={onRemoveAttachment ? () => onRemoveAttachment(att.id) : undefined} />
             ))}
           </div>
         )}
@@ -123,7 +126,7 @@ export function Composer({ onSend, onCancel, onAttach, onRemoveAttachment, phase
               ) : (
                 <button
                   onClick={handleSend}
-                  disabled={!value.trim() || isActive}
+                  disabled={!value.trim() || isActive || hasPending}
                   className="chat-send-button disabled:opacity-40 disabled:cursor-not-allowed"
                   aria-label="Send message"
                 >

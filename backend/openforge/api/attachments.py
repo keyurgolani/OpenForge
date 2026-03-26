@@ -18,7 +18,7 @@ from openforge.db.models import MessageAttachment, Message
 from openforge.config import get_settings
 from openforge.schemas.knowledge import KnowledgeCreate
 from openforge.services.knowledge_service import knowledge_service
-from openforge.services.attachment_pipeline import get_extractor
+from openforge.services.attachment_pipeline import get_extractor, resolve_attachment_pipeline
 
 router = APIRouter()
 logger = logging.getLogger("openforge.attachments")
@@ -63,6 +63,7 @@ class AttachmentOut(BaseModel):
     content_type: str
     file_size: int
     extracted_text: Optional[str] = None
+    pipeline: Optional[str] = None
 
 
 async def extract_text_from_text_file(file_path: str) -> str:
@@ -152,6 +153,7 @@ async def upload_file(
         content_type=content_type,
         file_size=len(content),
         extracted_text=extracted_text[:2000] if extracted_text else None,  # Preview only
+        pipeline=extractor.pipeline if extractor else resolve_attachment_pipeline(content_type, file.filename),
     )
 
 
@@ -174,6 +176,7 @@ async def get_attachment(
         content_type=attachment.content_type,
         file_size=attachment.file_size,
         extracted_text=attachment.extracted_text[:2000] if attachment.extracted_text else None,
+        pipeline=resolve_attachment_pipeline(attachment.content_type, attachment.filename),
     )
 
 
@@ -205,6 +208,8 @@ async def delete_attachment(
 
 class SaveToKnowledgeRequest(BaseModel):
     workspace_id: UUID
+    knowledge_type: Optional[str] = None
+    content: Optional[str] = None
 
 
 class SaveToKnowledgeResponse(BaseModel):
@@ -226,24 +231,26 @@ async def save_attachment_to_knowledge(
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
 
-    if not attachment.extracted_text:
+    content = body.content if body.content else attachment.extracted_text
+
+    if not content:
         raise HTTPException(status_code=422, detail="Attachment has no extracted content to save")
 
     source_url = getattr(attachment, "source_url", None)
 
-    if source_url:
-        data = KnowledgeCreate(
-            type="bookmark",
-            url=source_url,
-            title=attachment.filename or None,
-            content=attachment.extracted_text,
-        )
+    if body.knowledge_type:
+        knowledge_type = body.knowledge_type
+    elif source_url:
+        knowledge_type = "bookmark"
     else:
-        data = KnowledgeCreate(
-            type="note",
-            title=attachment.filename or None,
-            content=attachment.extracted_text,
-        )
+        knowledge_type = "note"
+
+    data = KnowledgeCreate(
+        type=knowledge_type,
+        url=source_url if source_url else None,
+        title=attachment.filename or None,
+        content=content,
+    )
 
     knowledge = await knowledge_service.create_knowledge(
         db, body.workspace_id, data, background_tasks

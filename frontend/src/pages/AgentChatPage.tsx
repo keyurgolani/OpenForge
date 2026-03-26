@@ -40,6 +40,7 @@ import { chatRoute } from '@/lib/routes'
 import { renderAgentMessageContent, type MentionResolutionMaps } from '@/lib/agent-content'
 import Siderail from '@/components/shared/Siderail'
 import { AgentChatView } from '@/components/chat/AgentChatView'
+import { useAttachmentUpload } from '@/hooks/chat/useAttachmentUpload'
 import { ConfirmModal } from '@/components/ui/confirm-modal'
 
 function stripMarkdown(text: string): string {
@@ -97,6 +98,8 @@ interface Message {
 interface AttachmentProcessed {
     id: string
     filename: string
+    content_type: string
+    file_size?: number
     status: string
     pipeline: string
     details?: string
@@ -159,8 +162,7 @@ export default function AgentChatPage() {
     const lastToastedErrorRef = useRef<string | null>(null)
 
     // File attachments
-    const [attachments, setAttachments] = useState<File[]>([])
-    const [uploadingFiles, setUploadingFiles] = useState(false)
+    const { attachments: managedAttachments, addFiles, removeAttachment: removeManaged, retryAttachment, clearAll, readyAttachmentIds, hasPending } = useAttachmentUpload()
     const [optimisticResponding, setOptimisticResponding] = useState(false)
 
     // Agent picker search & selection
@@ -717,7 +719,7 @@ export default function AgentChatPage() {
 
     // ── Send message handler: wraps useStreamingChat.sendMessage with file uploads, mentions, model overrides ──
     const handleSendMessage = useCallback(async (content: string) => {
-        if (!content.trim() || (isStreaming && !isInterrupted) || uploadingFiles) return
+        if (!content.trim() || (isStreaming && !isInterrupted) || hasPending) return
         if (conversationData?.is_archived || activeConversationRecord?.is_archived) {
             showError('Chat is archived', 'Restore this chat from Trash to continue messaging.')
             return
@@ -726,31 +728,8 @@ export default function AgentChatPage() {
         clearLastError()
         setOptimisticResponding(true)
 
-        // Upload attachments if any
-        let attachmentIds: string[] = []
-        if (attachments.length > 0) {
-            setUploadingFiles(true)
-            try {
-                const uploadPromises = attachments.map(async (file) => {
-                    const formData = new FormData()
-                    formData.append('file', file)
-                    const res = await fetch(`/api/v1/attachments/upload`, {
-                        method: 'POST',
-                        body: formData,
-                    })
-                    if (!res.ok) throw new Error(`Failed to upload ${file.name}`)
-                    return res.json()
-                })
-                const results = await Promise.all(uploadPromises)
-                attachmentIds = results.map((r: any) => r.id)
-            } catch (e) {
-                console.error('Failed to upload attachments:', e)
-                showError('Attachment upload failed', 'Please retry or remove the problematic file.')
-                return
-            } finally {
-                setUploadingFiles(false)
-            }
-        }
+        // Use already-uploaded attachment IDs from the hook
+        const attachmentIds = readyAttachmentIds
 
         let targetCid = activeCid
         if (!targetCid) {
@@ -780,8 +759,8 @@ export default function AgentChatPage() {
 
         pushOptimisticUserMessage(targetCid, msg)
         setInputText('')
-        if (attachments.length > 0) setAttachments([])
-    }, [activeCid, isStreaming, isInterrupted, uploadingFiles, conversationData, activeConversationRecord, attachments, selectedOption, sendMessage, workspaceId, clearLastError, showError, qc, navigate]) // eslint-disable-line react-hooks/exhaustive-deps
+        if (managedAttachments.length > 0) clearAll()
+    }, [activeCid, isStreaming, isInterrupted, hasPending, conversationData, activeConversationRecord, managedAttachments, readyAttachmentIds, selectedOption, sendMessage, workspaceId, clearLastError, showError, qc, navigate, clearAll]) // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(e.target.files || [])
@@ -801,12 +780,14 @@ export default function AgentChatPage() {
                  'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt'].includes(ext)
             )
         })
-        setAttachments(prev => [...prev, ...allowed].slice(0, 5))
+        const MAX_ATTACHMENTS = 5
+        const remaining = MAX_ATTACHMENTS - managedAttachments.length
+        addFiles(allowed.slice(0, Math.max(0, remaining)))
         if (fileInputRef.current) fileInputRef.current.value = ''
     }
 
-    const removeAttachment = (index: number) => {
-        setAttachments(prev => prev.filter((_, i) => i !== index))
+    const removeAttachment = (localId: string) => {
+        removeManaged(localId)
     }
 
     const activeConversationIsArchived = Boolean(conversationData?.is_archived || activeConversationRecord?.is_archived)
@@ -814,7 +795,7 @@ export default function AgentChatPage() {
         () => buildActiveThreadPreview(messages),
         [messages],
     )
-    const composerDisabled = (isStreaming && !isInterrupted) || uploadingFiles || activeConversationIsArchived
+    const composerDisabled = (isStreaming && !isInterrupted) || hasPending || activeConversationIsArchived
     const isConversationsSectionExpanded = activeChatRailSection === 'conversations'
     const isDelegatedSectionExpanded = activeChatRailSection === 'delegated'
     const isTrashSectionExpanded = activeChatRailSection === 'trash'
@@ -858,15 +839,17 @@ export default function AgentChatPage() {
         agentViewHandleMessageRef.current = handleMessage
     }, [])
 
-    // Convert File[] attachments to the format AgentChatView expects
+    // Convert ManagedAttachment[] to the format AgentChatView expects
     const chatViewAttachments = useMemo(() =>
-        attachments.map((file, i) => ({
-            id: `file-${i}`,
-            filename: file.name,
-            content_type: file.type || 'application/octet-stream',
-            size: file.size,
+        managedAttachments.map((att) => ({
+            id: att.localId,
+            filename: att.filename,
+            content_type: att.content_type,
+            size: att.size,
+            status: att.status,
+            onRetry: att.status === 'error' ? () => retryAttachment(att.localId) : undefined,
         })),
-        [attachments]
+        [managedAttachments, retryAttachment]
     )
 
     return (
@@ -1079,15 +1062,14 @@ export default function AgentChatPage() {
                             onStreamComplete={handleStreamComplete}
                             onAttach={(files) => {
                                 const MAX_ATTACHMENTS = 5
-                                const combined = [...attachments, ...files]
-                                if (combined.length > MAX_ATTACHMENTS) {
-                                    showError('Attachment limit', `Maximum ${MAX_ATTACHMENTS} files allowed. ${combined.length - MAX_ATTACHMENTS} file(s) were not added.`)
+                                const remaining = MAX_ATTACHMENTS - managedAttachments.length
+                                if (files.length > remaining) {
+                                    showError('Attachment limit', `Maximum ${MAX_ATTACHMENTS} files allowed. ${files.length - remaining} file(s) were not added.`)
                                 }
-                                setAttachments(combined.slice(0, MAX_ATTACHMENTS))
+                                addFiles(files.slice(0, Math.max(0, remaining)))
                             }}
                             onRemoveAttachment={(id) => {
-                                const idx = parseInt(id.replace('file-', ''), 10)
-                                if (!isNaN(idx)) removeAttachment(idx)
+                                removeManaged(id)
                             }}
                             attachments={chatViewAttachments}
                             composerDisabled={composerDisabled}
