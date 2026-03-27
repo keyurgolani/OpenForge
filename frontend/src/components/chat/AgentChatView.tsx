@@ -12,7 +12,8 @@ import { Composer } from './Composer'
 import type { ModelPickerOption } from './ComposerModelPicker'
 import { ScrollToBottomFAB } from './ScrollToBottomFAB'
 import { HITLNotificationBanner } from './HITLNotificationBanner'
-import type { TimelineItem, ToolCallTimelineItem } from '@/hooks/chat/useAgentPhase'
+import { formatDateTime } from '@/lib/formatters'
+import type { TimelineItem, ToolCallTimelineItem, ModelInfo } from '@/hooks/chat/useAgentPhase'
 
 /**
  * Parse raw timeline from the API (which may contain model_selection, thinking,
@@ -23,15 +24,24 @@ function parseMessageTimeline(rawTimeline: unknown[]): {
   items: TimelineItem[]
   thoughts: string[]
   thinkingDuration: number | null
+  modelInfo: ModelInfo | null
 } {
   const items: TimelineItem[] = []
   const thoughts: string[] = []
   let thinkingDuration: number | null = null
+  let modelInfo: ModelInfo | null = null
   let thinkingIdx = 0
 
   for (const raw of rawTimeline) {
     const item = raw as Record<string, unknown>
-    if (item.type === 'tool_call') {
+    if (item.type === 'model_selection') {
+      modelInfo = {
+        providerName: (item.provider_name as string) ?? '',
+        providerDisplayName: (item.provider_display_name as string) ?? (item.provider_name as string) ?? '',
+        model: (item.model as string) ?? '',
+        isOverride: (item.is_override as boolean) ?? false,
+      }
+    } else if (item.type === 'tool_call') {
       items.push({
         type: 'tool_call',
         call_id: (item.call_id as string) ?? '',
@@ -62,10 +72,9 @@ function parseMessageTimeline(rawTimeline: unknown[]): {
         sentences: content ? content.split(/(?<=[.!?])\s+/).filter(Boolean) : [],
       })
     }
-    // model_selection items are informational — not rendered in the timeline
   }
 
-  return { items, thoughts, thinkingDuration }
+  return { items, thoughts, thinkingDuration, modelInfo }
 }
 
 interface Message {
@@ -100,7 +109,7 @@ interface AgentChatViewProps {
   onStreamComplete?: (messageId: string) => void
   onAttach?: (files: File[]) => void
   onRemoveAttachment?: (id: string) => void
-  attachments?: { id: string; filename: string; content_type: string; size: number; status?: string; onRetry?: () => void }[]
+  attachments?: { id: string; filename: string; content_type: string; size: number; status?: 'uploading' | 'extracted' | 'error'; extracted_text?: string | null; pipeline?: string | null; onRetry?: () => void }[]
   composerDisabled?: boolean
   userInitial?: string
   /** When true, the parent has sent a message and is awaiting the first streaming event. Shows immediate "Responding..." indicator. */
@@ -115,12 +124,14 @@ interface AgentChatViewProps {
 }
 
 /** Renders a completed assistant message with properly parsed timeline data. */
-function ParsedAgentResponse({ msg, onApproveHITL, onDenyHITL }: {
+function ParsedAgentResponse({ msg, onApproveHITL, onDenyHITL, agentName, timestamp }: {
   msg: Message
   onApproveHITL: (hitlId: string) => void
   onDenyHITL: (hitlId: string) => void
+  agentName?: string
+  timestamp?: string
 }) {
-  const { items, thoughts, thinkingDuration: msgThinkingDuration } = useMemo(
+  const { items, thoughts, thinkingDuration: msgThinkingDuration, modelInfo: msgModelInfo } = useMemo(
     () => parseMessageTimeline((msg.timeline ?? []) as unknown[]),
     [msg.timeline]
   )
@@ -158,6 +169,9 @@ function ParsedAgentResponse({ msg, onApproveHITL, onDenyHITL }: {
       isStreaming={false}
       onApproveHITL={onApproveHITL}
       onDenyHITL={onDenyHITL}
+      agentName={agentName}
+      modelInfo={msgModelInfo}
+      timestamp={timestamp}
     />
   )
 }
@@ -181,7 +195,7 @@ export function AgentChatView({
   }, [onReady, handleMessage])
 
   // Layer 2: Coordination
-  const { phase, timeline, thinkingDuration, reset: resetPhase, handleThoughtsDrained } = useAgentPhase(emitter)
+  const { phase, timeline, thinkingDuration, modelInfo, reset: resetPhase, handleThoughtsDrained } = useAgentPhase(emitter)
   const { displayText, isStreaming, reset: resetRenderer } = useStreamRenderer(emitter)
   const { currentThought, allThoughts } = useThoughtQueue(emitter, handleThoughtsDrained)
   const { intent, scrollToBottom, containerRef, contentRef } = useScrollIntent()
@@ -248,6 +262,7 @@ export function AgentChatView({
               content={msg.content}
               userInitial={userInitial}
               attachments={msg.attachments_processed}
+              timestamp={formatDateTime(msg.created_at)}
             />
           ) : (
             <ParsedAgentResponse
@@ -255,6 +270,8 @@ export function AgentChatView({
               msg={msg}
               onApproveHITL={onApproveHITL ?? (() => {})}
               onDenyHITL={onDenyHITL ?? (() => {})}
+              agentName={agent.name}
+              timestamp={formatDateTime(msg.created_at)}
             />
           )
         ))}
@@ -271,6 +288,8 @@ export function AgentChatView({
             isStreaming={isStreaming || (parentIsStreaming && phase === 'idle')}
             onApproveHITL={onApproveHITL ?? (() => {})}
             onDenyHITL={onDenyHITL ?? (() => {})}
+            agentName={agent.name}
+            modelInfo={modelInfo}
           />
         )}
 

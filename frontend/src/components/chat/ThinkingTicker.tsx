@@ -15,7 +15,7 @@ export function ThinkingTicker({ currentThought, isActive, thinkingDuration, all
 
   if (isActive) {
     return (
-      <div className="px-1">
+      <div>
         <button
           onClick={() => setExpanded(!expanded)}
           className="flex items-center gap-2 py-1 w-full text-left"
@@ -51,7 +51,7 @@ export function ThinkingTicker({ currentThought, isActive, thinkingDuration, all
   const hasExpandableContent = allThoughts.length > 0
 
   return (
-    <div className="px-1">
+    <div>
       <button
         onClick={hasExpandableContent ? () => setExpanded(!expanded) : undefined}
         className={`flex items-center gap-1.5 text-xs text-muted-foreground/70 ${hasExpandableContent ? 'hover:text-muted-foreground cursor-pointer' : 'cursor-default'} transition-colors py-0.5`}

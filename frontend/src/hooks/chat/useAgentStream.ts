@@ -8,7 +8,7 @@ type AgentEventMap = {
   tool_call_result: [data: { call_id: string; success: boolean; output?: unknown; error?: string | null; duration_ms?: number | null }]
   hitl_request: [data: { call_id: string; hitl_id: string; action_summary: string; risk_level: string }]
   hitl_resolved: [data: { call_id: string; hitl_id: string; approved: boolean; resolution_note?: string | null }]
-  model_selection: [data: { provider_name: string; model: string; is_override: boolean }]
+  model_selection: [data: { provider_name: string; provider_display_name?: string; model: string; is_override: boolean }]
   prompt_optimized: [data: { original: string; optimized: string }]
   attachments_processed: [data: unknown[]]
   intermediate_response: [data: { content: string }]

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { User, FileText } from 'lucide-react'
 import { PreviewCard } from './PreviewCard'
 import { ContentModal } from './ContentModal'
+import { CopyButton } from '@/components/shared/CopyButton'
 import { pipelineToKnowledgeType } from '@/lib/knowledgeTypeMapping'
 
 interface Attachment {
@@ -40,7 +41,7 @@ export function UserMessageCard({ content, userInitial, attachments, timestamp }
   }
 
   return (
-    <div className="flex gap-2 items-start justify-end">
+    <div className="group flex gap-2 items-start justify-end">
       <div className="max-w-[90%]">
         <div className="chat-bubble-user px-4 py-3 text-foreground text-sm leading-relaxed">
           {content}
@@ -62,7 +63,7 @@ export function UserMessageCard({ content, userInitial, attachments, timestamp }
           })()}
         </div>
         {attachmentsWithContent.length > 0 && (
-          <div className="flex flex-col gap-2 mt-2">
+          <div className="flex flex-col gap-2 mt-2 overflow-hidden" style={{ contain: 'inline-size' }}>
             {attachmentsWithContent.map((att) => (
               <PreviewCard
                 key={att.id ?? att.filename}
@@ -78,11 +79,16 @@ export function UserMessageCard({ content, userInitial, attachments, timestamp }
             ))}
           </div>
         )}
-        {timestamp && (
-          <div className="chat-message-meta text-[11px] text-muted-foreground/50 mt-1 mr-1 text-right opacity-0 hover:opacity-100 transition-opacity">
-            {timestamp}
-          </div>
-        )}
+        <div className="flex items-center justify-end gap-2 mt-1 mr-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <CopyButton
+            content={content}
+            iconOnly
+            className="text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+          />
+          {timestamp && (
+            <span className="text-[11px] text-muted-foreground/50">{timestamp}</span>
+          )}
+        </div>
       </div>
       <div className="chat-avatar w-7 h-7 rounded-full bg-accent/24 border border-accent/35 flex-shrink-0 flex items-center justify-center">
         <User className="w-3.5 h-3.5 text-accent" />

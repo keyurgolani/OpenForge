@@ -620,7 +620,7 @@
     pointer-events: auto;
     border: 1px solid hsla(var(--border) / 0.78);
     border-radius: 1.05rem;
-    padding: 0.75rem 0.85rem;
+    padding: 0.5rem 0.65rem;
     background: linear-gradient(160deg, var(--chat-composer-bg-1), var(--chat-composer-bg-2));
     box-shadow: var(--chat-composer-shadow);
   }
@@ -736,6 +736,7 @@
     --chat-workflow-rail-width: 2px;
     --chat-workflow-rail-half-width: 1px;
     --chat-workflow-dot-center-x: var(--chat-workflow-dot-radius);
+    --chat-agent-response-indent: var(--chat-workflow-pad-left);
     position: relative;
     width: 100%;
     display: flex;
@@ -816,6 +817,11 @@
     background: hsl(var(--background));
   }
 
+  .chat-timeline-dot--avatar {
+    border-color: hsla(var(--border) / 0.7);
+    background: hsla(var(--muted) / 0.45);
+  }
+
   .chat-llm-inline {
     @apply inline-flex items-center gap-1.5 text-xs;
     color: hsl(var(--accent) / 0.95);
@@ -858,7 +864,7 @@
     border-color: var(--toggle-border, hsla(var(--border) / 0.75));
     background: var(--toggle-bg, linear-gradient(140deg, hsla(var(--muted) / 0.42), hsla(var(--input) / 0.42)));
     min-height: 1.5rem;
-    padding: 0.2rem 0.6rem;
+    padding: 0.2rem 0.6rem 0.2rem 0.35rem;
   }
 
   .chat-subsection-toggle:hover {

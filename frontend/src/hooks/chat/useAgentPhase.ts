@@ -36,6 +36,13 @@ export interface ThinkingTimelineItem {
 
 export type TimelineItem = ToolCallTimelineItem | ThinkingTimelineItem
 
+export interface ModelInfo {
+  providerName: string
+  providerDisplayName: string
+  model: string
+  isOverride: boolean
+}
+
 /**
  * useAgentPhase coordinates with useThoughtQueue via handleThoughtsDrained.
  * When thinking ends and tokens arrive, phase goes to 'draining_thoughts'.
@@ -46,6 +53,7 @@ export function useAgentPhase(emitter: AgentEmitter) {
   const [phase, setPhase] = useState<AgentPhase>('idle')
   const [timeline, setTimeline] = useState<TimelineItem[]>([])
   const [thinkingDuration, setThinkingDuration] = useState<number | null>(null)
+  const [modelInfo, setModelInfo] = useState<ModelInfo | null>(null)
   const phaseRef = useRef<AgentPhase>('idle')
   const thinkingStartRef = useRef<number>(0)
   const tokenBufferRef = useRef<string[]>([])
@@ -179,6 +187,15 @@ export function useAgentPhase(emitter: AgentEmitter) {
       setPhase('error')
     }
 
+    const onModelSelection = (data: { provider_name: string; provider_display_name?: string; model: string; is_override: boolean }) => {
+      setModelInfo({
+        providerName: data.provider_name,
+        providerDisplayName: data.provider_display_name ?? data.provider_name,
+        model: data.model,
+        isOverride: data.is_override,
+      })
+    }
+
     const onIntermediateResponse = () => {
       // Reset thinking and token state for next iteration,
       // but KEEP the timeline — tool calls and thinking blocks persist across iterations
@@ -195,6 +212,15 @@ export function useAgentPhase(emitter: AgentEmitter) {
 
       for (const e of snapshotTimeline) {
         const entry = e as Record<string, unknown>
+        if (entry.type === 'model_selection') {
+          setModelInfo({
+            providerName: (entry.provider_name as string) ?? '',
+            providerDisplayName: (entry.provider_display_name as string) ?? (entry.provider_name as string) ?? '',
+            model: (entry.model as string) ?? '',
+            isOverride: (entry.is_override as boolean) ?? false,
+          })
+          continue
+        }
         if (entry.type === 'thinking') {
           reconstructed.push({
             type: 'thinking' as const,
@@ -264,6 +290,7 @@ export function useAgentPhase(emitter: AgentEmitter) {
     emitter.on('tool_call_result', onToolCallResult)
     emitter.on('hitl_request', onHitlRequest)
     emitter.on('hitl_resolved', onHitlResolved)
+    emitter.on('model_selection', onModelSelection)
     emitter.on('done', onDone)
     emitter.on('error', onError)
     emitter.on('intermediate_response', onIntermediateResponse)
@@ -276,6 +303,7 @@ export function useAgentPhase(emitter: AgentEmitter) {
       emitter.off('tool_call_result', onToolCallResult)
       emitter.off('hitl_request', onHitlRequest)
       emitter.off('hitl_resolved', onHitlResolved)
+      emitter.off('model_selection', onModelSelection)
       emitter.off('done', onDone)
       emitter.off('error', onError)
       emitter.off('intermediate_response', onIntermediateResponse)
@@ -287,11 +315,12 @@ export function useAgentPhase(emitter: AgentEmitter) {
     setPhase('idle')
     setTimeline([])
     setThinkingDuration(null)
+    setModelInfo(null)
     thinkingStartRef.current = 0
     tokenBufferRef.current = []
     thinkingTextRef.current = ''
     thinkingIdCounter.current = 0
   }
 
-  return { phase, timeline, thinkingDuration, reset, handleThoughtsDrained }
+  return { phase, timeline, thinkingDuration, modelInfo, reset, handleThoughtsDrained }
 }

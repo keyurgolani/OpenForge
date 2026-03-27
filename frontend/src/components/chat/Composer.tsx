@@ -1,6 +1,7 @@
 import { useRef, useState, useCallback, useEffect, KeyboardEvent } from 'react'
 import { Send, Square, Paperclip } from 'lucide-react'
 import { AttachmentChip } from './AttachmentChip'
+import { ContentModal } from './ContentModal'
 import { ComposerModelPicker, type ModelPickerOption } from './ComposerModelPicker'
 import type { AgentPhase } from '@/hooks/chat/useAgentPhase'
 
@@ -10,6 +11,8 @@ interface ComposerAttachment {
   content_type: string
   size: number
   status?: 'uploading' | 'extracted' | 'error'
+  extracted_text?: string | null
+  pipeline?: string | null
   onRetry?: () => void
 }
 
@@ -30,6 +33,7 @@ interface ComposerProps {
 
 export function Composer({ onSend, onCancel, onAttach, onRemoveAttachment, phase, isStreaming, attachments = [], disabled, modelOptions, selectedModelKey, onModelSelect, defaultModelLabel }: ComposerProps) {
   const [value, setValue] = useState('')
+  const [modalAttachment, setModalAttachment] = useState<ComposerAttachment | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const isActive = phase !== 'idle' && phase !== 'complete' && phase !== 'error'
@@ -75,12 +79,20 @@ export function Composer({ onSend, onCancel, onAttach, onRemoveAttachment, phase
   }
 
   return (
-    <div className="chat-composer-shell pointer-events-none z-20 px-4 py-1 md:px-6 md:py-1.5 pb-3">
+    <div className="chat-composer-shell pointer-events-none z-20 px-3 py-0.5 md:px-4 md:py-1 pb-2">
       <div className="pointer-events-auto">
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-2 px-2">
             {attachments.map((att) => (
-              <AttachmentChip key={att.id} filename={att.filename} size={att.size} status={att.status} onRetry={att.onRetry} onRemove={onRemoveAttachment ? () => onRemoveAttachment(att.id) : undefined} />
+              <AttachmentChip
+                key={att.id}
+                filename={att.filename}
+                size={att.size}
+                status={att.status}
+                onRetry={att.onRetry}
+                onRemove={onRemoveAttachment ? () => onRemoveAttachment(att.id) : undefined}
+                onClick={att.status === 'extracted' && att.extracted_text ? () => setModalAttachment(att) : undefined}
+              />
             ))}
           </div>
         )}
@@ -137,6 +149,18 @@ export function Composer({ onSend, onCancel, onAttach, onRemoveAttachment, phase
           </div>
         </div>
       </div>
+      {modalAttachment && modalAttachment.extracted_text && (
+        <ContentModal
+          open={true}
+          onClose={() => setModalAttachment(null)}
+          attachmentId={modalAttachment.id}
+          filename={modalAttachment.filename}
+          pipeline={modalAttachment.pipeline ?? ''}
+          fileSize={modalAttachment.size}
+          extractedText={modalAttachment.extracted_text}
+          contentType={modalAttachment.content_type}
+        />
+      )}
     </div>
   )
 }

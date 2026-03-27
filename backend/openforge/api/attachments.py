@@ -152,7 +152,7 @@ async def upload_file(
         filename=file.filename or "unknown",
         content_type=content_type,
         file_size=len(content),
-        extracted_text=extracted_text[:2000] if extracted_text else None,  # Preview only
+        extracted_text=extracted_text or None,
         pipeline=extractor.pipeline if extractor else resolve_attachment_pipeline(content_type, file.filename),
     )
 
@@ -175,7 +175,7 @@ async def get_attachment(
         filename=attachment.filename,
         content_type=attachment.content_type,
         file_size=attachment.file_size,
-        extracted_text=attachment.extracted_text[:2000] if attachment.extracted_text else None,
+        extracted_text=attachment.extracted_text or None,
         pipeline=resolve_attachment_pipeline(attachment.content_type, attachment.filename),
     )
 

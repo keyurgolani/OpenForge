@@ -1,5 +1,9 @@
+import { useMemo } from 'react'
 import { FileText, Save } from 'lucide-react'
+import MarkdownIt from 'markdown-it'
 import { WorkspaceDropdown } from './WorkspaceDropdown'
+
+const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
 
 interface PreviewCardProps {
   attachmentId: string
@@ -42,11 +46,15 @@ export function PreviewCard({
   onSaveToWorkspace,
 }: PreviewCardProps) {
   const hasContent = extractedText != null && extractedText.length > 0
-  const truncated = hasContent ? extractedText.slice(0, 150) : null
+  const truncated = hasContent ? extractedText.slice(0, 300) : null
+  const renderedHtml = useMemo(
+    () => (truncated ? md.render(truncated + (extractedText!.length > 300 ? '\n\n…' : '')) : ''),
+    [truncated, extractedText],
+  )
 
   return (
     <div
-      className="group relative flex items-start gap-2 p-2.5 bg-card border border-border rounded-sm text-xs cursor-pointer hover:border-accent/40 transition-colors"
+      className="group relative flex items-start gap-2 p-2.5 bg-card/50 border border-border/60 rounded-sm text-xs cursor-pointer hover:border-accent/40 transition-colors"
       onClick={onOpenModal}
       role="button"
       tabIndex={0}
@@ -60,9 +68,10 @@ export function PreviewCard({
           <PipelineBadge pipeline={pipeline} />
         </div>
         {hasContent ? (
-          <p className="text-muted-foreground leading-relaxed line-clamp-2">
-            {truncated}{extractedText.length > 150 ? '…' : ''}
-          </p>
+          <div
+            className="prose prose-invert max-w-none text-xs text-muted-foreground leading-relaxed line-clamp-3 [&_*]:text-xs [&_p]:m-0 [&_h1]:text-xs [&_h1]:font-semibold [&_h1]:m-0 [&_h2]:text-xs [&_h2]:font-semibold [&_h2]:m-0 [&_h3]:text-xs [&_h3]:m-0 [&_ul]:m-0 [&_ol]:m-0 [&_li]:m-0 [&_pre]:m-0 [&_pre]:bg-muted/50 [&_pre]:rounded [&_pre]:p-1 [&_code]:text-[10px]"
+            dangerouslySetInnerHTML={{ __html: renderedHtml }}
+          />
         ) : (
           <p className="text-muted-foreground/60 italic">No content extracted</p>
         )}

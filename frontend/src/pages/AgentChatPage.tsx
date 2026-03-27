@@ -516,9 +516,10 @@ export default function AgentChatPage() {
         showError('Chat request failed', lastError)
     }, [lastError, showError])
 
-    const pushOptimisticUserMessage = (cid: string, content: string) => {
+    const pushOptimisticUserMessage = (cid: string, content: string, attachmentsProcessed?: Message['attachments_processed']) => {
         const createdAt = new Date().toISOString()
         const optimisticId = `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+        const optimisticMsg = { id: optimisticId, role: 'user', content, created_at: createdAt, ...(attachmentsProcessed?.length ? { attachments_processed: attachmentsProcessed } : {}) } as Message
 
         qc.setQueryData([...chatApi.conversationQueryKey(cid)], (prev: ConversationWithMessages | undefined) => {
             if (!prev) {
@@ -527,12 +528,12 @@ export default function AgentChatPage() {
                     title: null,
                     message_count: 1,
                     last_message_at: createdAt,
-                    messages: [{ id: optimisticId, role: 'user', content, created_at: createdAt } as Message],
+                    messages: [optimisticMsg],
                 } as ConversationWithMessages
             }
             const nextMessages = [
                 ...(prev.messages ?? []),
-                { id: optimisticId, role: 'user', content, created_at: createdAt } as Message,
+                optimisticMsg,
             ]
             return {
                 ...prev,
@@ -757,7 +758,18 @@ export default function AgentChatPage() {
             return
         }
 
-        pushOptimisticUserMessage(targetCid, msg)
+        const optimisticAttachments = managedAttachments
+            .filter(a => a.status === 'extracted' && a.id)
+            .map(a => ({
+                id: a.id,
+                filename: a.filename,
+                content_type: a.content_type,
+                extracted_text: a.extracted_text,
+                pipeline: a.pipeline ?? 'text',
+                status: 'extracted',
+                file_size: a.size,
+            }))
+        pushOptimisticUserMessage(targetCid, msg, optimisticAttachments.length > 0 ? optimisticAttachments : undefined)
         setInputText('')
         if (managedAttachments.length > 0) clearAll()
     }, [activeCid, isStreaming, isInterrupted, hasPending, conversationData, activeConversationRecord, managedAttachments, readyAttachmentIds, selectedOption, sendMessage, workspaceId, clearLastError, showError, qc, navigate, clearAll]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -846,7 +858,9 @@ export default function AgentChatPage() {
             filename: att.filename,
             content_type: att.content_type,
             size: att.size,
-            status: att.status,
+            status: att.status as 'uploading' | 'extracted' | 'error',
+            extracted_text: att.extracted_text,
+            pipeline: att.pipeline,
             onRetry: att.status === 'error' ? () => retryAttachment(att.localId) : undefined,
         })),
         [managedAttachments, retryAttachment]
@@ -1038,7 +1052,7 @@ export default function AgentChatPage() {
                         {/* AgentChatView replaces the inline message thread + composer */}
                         <AgentChatView
                             conversationId={activeCid}
-                            agent={{ id: workspaceId, name: workspace?.name ?? 'Agent' }}
+                            agent={{ id: workspaceId, name: conversationData?.agent_name ?? activeConversationRecord?.agent_name ?? workspace?.name ?? 'Agent' }}
                             messages={messages as any}
                             isLoadingMessages={!conversationData}
                             onSendMessage={handleSendMessage}

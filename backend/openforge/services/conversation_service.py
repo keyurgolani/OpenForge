@@ -4,6 +4,7 @@ from sqlalchemy.orm import selectinload
 from uuid import UUID
 from datetime import datetime, timezone, timedelta
 import logging
+import os
 
 from openforge.db.models import Conversation, Message, MessageAttachment
 from openforge.schemas.conversation import (
@@ -179,6 +180,7 @@ class ConversationService:
         if not stale:
             return 0
 
+        await self._delete_attachment_files(db, stale)
         for conv in stale:
             await db.delete(conv)
         await db.commit()
@@ -303,6 +305,24 @@ class ConversationService:
         conv.updated_at = datetime.now(timezone.utc)
         await db.commit()
 
+    async def _delete_attachment_files(self, db: AsyncSession, conversations: list) -> None:
+        """Delete attachment files from disk for the given conversations."""
+        conv_ids = [c.id for c in conversations]
+        if not conv_ids:
+            return
+        result = await db.execute(
+            select(MessageAttachment.file_path)
+            .join(Message, MessageAttachment.message_id == Message.id)
+            .where(Message.conversation_id.in_(conv_ids))
+        )
+        file_paths = [row[0] for row in result.all() if row[0]]
+        for path in file_paths:
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except Exception as e:
+                logger.warning("Failed to delete attachment file %s: %s", path, e)
+
     async def permanently_delete_conversation(
         self,
         db: AsyncSession,
@@ -324,6 +344,7 @@ class ConversationService:
                 status_code=400,
                 detail="Only chats in Trash can be permanently deleted",
             )
+        await self._delete_attachment_files(db, [conv])
         await db.delete(conv)
         await db.commit()
         # Remove chat embeddings from Qdrant so deleted conversations no
@@ -416,6 +437,7 @@ class ConversationService:
         )
         convs = result.scalars().all()
         conv_ids = [str(c.id) for c in convs]
+        await self._delete_attachment_files(db, convs)
         for conv in convs:
             await db.delete(conv)
         await db.commit()
