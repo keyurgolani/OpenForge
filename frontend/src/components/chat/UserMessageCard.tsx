@@ -53,7 +53,7 @@ export function UserMessageCard({ content, userInitial, attachments, timestamp }
             return (
               <div className="flex flex-wrap gap-2 mt-2">
                 {chipsOnly.map((att) => (
-                  <div key={att.filename} className="inline-flex items-center gap-1.5 px-2 py-1 bg-card/50 border border-border/60 rounded-sm text-xs text-muted-foreground">
+                  <div key={att.filename} className="inline-flex items-center gap-1.5 px-2 py-1 bg-card/50 border border-border/25 rounded-sm text-xs text-muted-foreground">
                     <FileText className="w-3 h-3" />
                     <span className="truncate max-w-[120px]">{att.filename}</span>
                   </div>

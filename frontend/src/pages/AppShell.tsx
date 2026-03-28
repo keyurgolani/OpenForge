@@ -54,7 +54,7 @@ export default function AppShell() {
   const navigate = useNavigate()
   const location = useLocation()
   const queryClient = useQueryClient()
-  const { setCommandPaletteOpen } = useUIStore()
+  const { setCommandPaletteOpen, headerActions } = useUIStore()
   const { isConnected, on } = useWorkspaceWebSocket(workspaceId, 'system')
 
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -201,13 +201,25 @@ export default function AppShell() {
     queryClient.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
   }, [queryClient, workspaceId])
 
+  // Derive active chat conversation from URL for title display
+  const activeChatConversation = useMemo(() => {
+    const chatMatch = location.pathname.match(/\/chat\/([^/]+)/)
+    if (!chatMatch) return null
+    const cid = chatMatch[1]
+    return conversations.find(c => c.id === cid) ?? null
+  }, [location.pathname, conversations])
+
   const currentSectionMeta = useMemo<SectionMeta>(() => {
     if (location.pathname.includes('/chat')) {
+      if (activeChatConversation) {
+        return {
+          title: activeChatConversation.title || 'Untitled Chat',
+          description: '',
+        }
+      }
       return {
         title: 'Chat',
-        description: location.pathname.startsWith('/chat')
-          ? 'Chat with any agent across all workspaces.'
-          : 'Ask questions, review context, and manage conversations.',
+        description: 'Start a conversation with any agent.',
       }
     }
     if (location.pathname.includes('/search')) {
@@ -265,10 +277,10 @@ export default function AppShell() {
       }
     }
     return {
-      title: 'Workspace',
-      description: 'Overview of the canonical domain surfaces in this workspace.',
+      title: 'Dashboard',
+      description: 'Your workspace at a glance.',
     }
-  }, [location.pathname])
+  }, [location.pathname, activeChatConversation])
 
   const routes = useMemo(() => ({
     workspace: dashboardRoute(workspaceId),
@@ -349,9 +361,9 @@ export default function AppShell() {
       </aside>
 
       <div className="glass-card flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="relative z-40 flex flex-shrink-0 items-center gap-3 border-b border-border/60 bg-card/40 px-5 py-3 backdrop-blur-md">
+        <header className="relative z-40 flex flex-shrink-0 items-center gap-3 border-b border-border/25 bg-card/40 px-5 py-3 backdrop-blur-md">
           <button
-            className="btn-ghost -ml-1 border border-border/60 bg-card/35 p-2"
+            className="btn-ghost -ml-1 border border-border/25 bg-card/35 p-2"
             onClick={() => setSidebarOpen(prev => !prev)}
             title={`Toggle sidebar (${shortcutDisplay.toggleSidebar})`}
             aria-label="Toggle sidebar"
@@ -376,13 +388,15 @@ export default function AppShell() {
           )}
 
           <button
-            className="btn-ghost hidden items-center gap-1.5 border border-border/60 bg-card/35 p-2 text-xs sm:flex"
+            className="btn-ghost hidden items-center gap-1.5 border border-border/25 bg-card/35 p-2 text-xs sm:flex"
             onClick={() => setCommandPaletteOpen(true)}
             title={`Command palette (${shortcutDisplay.commandPalette})`}
             aria-label="Open command palette"
           >
             <span className="font-mono text-muted-foreground">{shortcutDisplay.commandPalette}</span>
           </button>
+
+          {headerActions}
 
           {!isAgnosticPage && (
             <div className="group relative inline-flex h-8 rounded-md shadow-sm">
@@ -420,7 +434,7 @@ export default function AppShell() {
         <div className="relative z-0 flex min-h-0 min-w-0 flex-1 gap-3 overflow-hidden p-3">
           <main
             data-openforge-main-content="1"
-            className={`relative z-20 flex min-h-0 min-w-0 flex-1 flex-col ${isSettingsPage ? 'overflow-hidden' : 'overflow-auto'} ${isPrimarySurface ? '' : 'rounded-2xl border border-border/60 bg-card/25'}`}
+            className={`relative z-20 flex min-h-0 min-w-0 flex-1 flex-col ${isSettingsPage ? 'overflow-hidden' : 'overflow-auto'} ${isPrimarySurface ? '' : 'rounded-2xl border border-border/25 bg-card/25'}`}
           >
             <Outlet />
           </main>

@@ -47,7 +47,7 @@ export default function GistPreview({ knowledge, workspaceId, onClose }: GistPre
         >
             <div className="space-y-4">
                 {/* Code block */}
-                <div className="relative rounded-lg border border-border/60 bg-muted/20 overflow-hidden">
+                <div className="relative rounded-lg border border-border/25 bg-muted/20 overflow-hidden">
                     <CopyButton
                         content={content}
                         iconOnly

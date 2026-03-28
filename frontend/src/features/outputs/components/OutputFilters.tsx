@@ -41,7 +41,7 @@ export function OutputFilters({
   onVisibilityChange,
 }: OutputFiltersProps) {
   return (
-    <div className="grid gap-3 rounded-2xl border border-border/60 bg-card/30 p-4 lg:grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,0.8fr))]">
+    <div className="grid gap-3 rounded-2xl border border-border/25 bg-card/30 p-4 lg:grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,0.8fr))]">
       <label className="space-y-2 text-sm">
         <span className="text-muted-foreground">Search</span>
         <input

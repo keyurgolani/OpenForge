@@ -92,7 +92,7 @@ export default function BookmarkPreview({ knowledge, workspaceId, onClose }: Boo
                         href={url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="group flex items-center gap-3 rounded-xl border border-border/60 bg-muted/25 px-4 py-3 hover:bg-muted/40 hover:border-accent/40 transition-colors"
+                        className="group flex items-center gap-3 rounded-xl border border-border/25 bg-muted/25 px-4 py-3 hover:bg-muted/40 hover:border-accent/40 transition-colors"
                     >
                         <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-purple-500/10 border border-purple-500/20 shrink-0">
                             <Globe className="w-4.5 h-4.5 text-purple-400" />
@@ -116,7 +116,7 @@ export default function BookmarkPreview({ knowledge, workspaceId, onClose }: Boo
 
                 {/* Archived/extracted content */}
                 {contentHtml && (
-                    <div className="relative pt-4 border-t border-border/50">
+                    <div className="relative pt-4 border-t border-border/20">
                         <CopyButton
                             content={knowledge.content}
                             iconOnly

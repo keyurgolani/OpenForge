@@ -139,7 +139,7 @@ export function ContainerLogsSubTab() {
                 </button>
             </div>
 
-            <div className="min-h-0 flex-1 glass-card border border-border/50 rounded-xl overflow-y-auto p-4 font-mono text-xs bg-black/40 text-gray-300 flex flex-col gap-1 relative">
+            <div className="min-h-0 flex-1 glass-card border border-border/20 rounded-xl overflow-y-auto p-4 font-mono text-xs bg-black/40 text-gray-300 flex flex-col gap-1 relative">
                 {filteredLogs.length === 0 ? (
                     <div className="m-auto text-muted-foreground opacity-50 flex items-center gap-2">
                         {isConnected ? (

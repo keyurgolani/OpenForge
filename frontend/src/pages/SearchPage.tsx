@@ -11,6 +11,8 @@ import {
 import MarkdownIt from 'markdown-it'
 import VisualSearchTab from '@/components/search/VisualSearchTab'
 import EvidencePacketPanel from '@/features/retrieval/EvidencePacketPanel'
+import Siderail from '@/components/shared/Siderail'
+import { SearchCheck } from 'lucide-react'
 import type {
     EvidencePacketResponse,
     RetrievalReadResult,
@@ -73,6 +75,7 @@ export default function SearchPage() {
     const [traceLoading, setTraceLoading] = useState(false)
     const [buildingEvidence, setBuildingEvidence] = useState(false)
     const searchLayoutRef = useRef<HTMLDivElement | null>(null)
+    const [traceOpen, setTraceOpen] = useState(false)
 
     const [debouncedQuery, setDebouncedQuery] = useState(query)
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -119,6 +122,7 @@ export default function SearchPage() {
 
     const readTrace = async (result: RetrievalSearchResult) => {
         if (!queryRecord) return
+        setTraceOpen(true)
         setTraceLoading(true)
         setActiveTraceResult(result)
         try {
@@ -201,15 +205,15 @@ export default function SearchPage() {
         <div className="h-full w-full p-6 lg:p-7">
             <div ref={searchLayoutRef} data-openforge-knowledge-sheet-anchor="1" className="flex h-full min-h-0 flex-col gap-4">
                 {/* Tab toggle */}
-                <div className="flex items-center gap-1 p-1 bg-muted/30 border border-border/50 rounded-xl self-start">
+                <div className="flex items-center gap-1 p-1 bg-muted/30 border border-border/20 rounded-xl self-start">
                     <button
-                        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-all ${searchTab === 'text' ? 'bg-card text-foreground shadow-sm border border-border/60' : 'text-muted-foreground hover:text-foreground'}`}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-all ${searchTab === 'text' ? 'bg-card text-foreground shadow-sm border border-border/25' : 'text-muted-foreground hover:text-foreground'}`}
                         onClick={() => setSearchTab('text')}
                     >
                         <Search className="w-3.5 h-3.5" /> Text Search
                     </button>
                     <button
-                        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-all ${searchTab === 'visual' ? 'bg-card text-foreground shadow-sm border border-border/60' : 'text-muted-foreground hover:text-foreground'}`}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-all ${searchTab === 'visual' ? 'bg-card text-foreground shadow-sm border border-border/25' : 'text-muted-foreground hover:text-foreground'}`}
                         onClick={() => setSearchTab('visual')}
                     >
                         <ImageIcon className="w-3.5 h-3.5" /> Visual Search
@@ -253,8 +257,8 @@ export default function SearchPage() {
                     ))}
                 </div>
 
-                <div className="min-h-0 flex-1 grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
-                    <div className="min-h-0 overflow-y-auto pr-1">
+                <div className="min-h-0 flex-1 flex gap-3">
+                    <div className="min-h-0 min-w-0 flex-1 overflow-y-auto pr-1">
                     {/* Empty state – no query */}
                     {!debouncedQuery.trim() && (
                         <div className="flex h-full min-h-[240px] items-center justify-center text-center">
@@ -287,7 +291,7 @@ export default function SearchPage() {
                             <div className="flex flex-wrap items-center gap-2">
                                 <p className="text-xs text-muted-foreground">{results.length} result{results.length !== 1 ? 's' : ''}</p>
                                 {queryRecord && (
-                                    <span className="rounded-full border border-border/60 bg-muted/30 px-2 py-1 text-[11px] text-muted-foreground">
+                                    <span className="rounded-full border border-border/25 bg-muted/30 px-2 py-1 text-[11px] text-muted-foreground">
                                         Query {queryRecord.id.slice(0, 8)} · {queryRecord.search_strategy}
                                     </span>
                                 )}
@@ -307,7 +311,7 @@ export default function SearchPage() {
                                             >
                                                 <div className="flex items-start justify-between gap-3">
                                                     <div className="min-w-0 space-y-2">
-                                                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border border-border/60 bg-muted/40 text-violet-400">
+                                                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border border-border/25 bg-muted/40 text-violet-400">
                                                             <MessageSquare className="w-3.5 h-3.5" />
                                                             Chat
                                                         </span>
@@ -329,7 +333,7 @@ export default function SearchPage() {
                                                     <div className="flex items-center gap-2">
                                                         <span className="text-[11px] text-muted-foreground">{Math.round(card.topScore * 100)}%</span>
                                                         <button
-                                                            className="rounded-lg border border-border/60 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+                                                            className="rounded-lg border border-border/25 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
                                                             onClick={(event) => {
                                                                 event.stopPropagation()
                                                                 void readTrace(card.chunks[0])
@@ -358,7 +362,7 @@ export default function SearchPage() {
                                                                 <>
                                                                     <div className="flex items-start justify-between gap-3">
                                                                         <div className="min-w-0 space-y-2">
-                                                                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border border-border/60 bg-muted/40 ${typeMeta.color}`}>
+                                                                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border border-border/25 bg-muted/40 ${typeMeta.color}`}>
                                                                                 {typeIcon}
                                                                                 {typeMeta.label}
                                                                             </span>
@@ -372,7 +376,7 @@ export default function SearchPage() {
                                                                     </div>
 
                                                                     {card.chunks.map((chunk, i) => (
-                                                                        <div key={i} className={`${i > 0 ? 'pt-3 border-t border-border/60' : ''} space-y-2`}>
+                                                                        <div key={i} className={`${i > 0 ? 'pt-3 border-t border-border/25' : ''} space-y-2`}>
                                                                             {chunk.header_path && (
                                                                                 <p className="text-[11px] text-muted-foreground font-medium">{chunk.header_path}</p>
                                                                             )}
@@ -393,12 +397,12 @@ export default function SearchPage() {
                                                                             </div>
                                                                         </div>
                                                                     ))}
-                                                                    <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-3">
+                                                                    <div className="flex items-center justify-between gap-3 border-t border-border/25 pt-3">
                                                                         <p className="text-[11px] text-muted-foreground">
                                                                             #{card.chunks[0]?.rank_position ?? 1} · {card.chunks[0]?.strategy ?? 'hybrid'}
                                                                         </p>
                                                                         <button
-                                                                            className="rounded-lg border border-border/60 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+                                                                            className="rounded-lg border border-border/25 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
                                                                             onClick={(event) => {
                                                                                 event.stopPropagation()
                                                                                 void readTrace(card.chunks[0])
@@ -429,17 +433,40 @@ export default function SearchPage() {
                     )}
                     </div>
 
-                    <div className="min-h-0 lg:overflow-y-auto">
-                        <EvidencePacketPanel
-                            query={queryRecord}
-                            activeResult={activeTraceResult}
-                            readResult={activeReadResult}
-                            evidence={activeEvidencePacket}
-                            loading={traceLoading}
-                            buildingEvidence={buildingEvidence}
-                            onBuildEvidence={() => { void handleBuildEvidence() }}
-                        />
-                    </div>
+                    <Siderail
+                        storageKey="search-trace-width"
+                        collapsedStorageKey="search-trace-collapsed"
+                        icon={SearchCheck}
+                        label="Retrieval Trace"
+                        open={traceOpen}
+                        onOpenChange={setTraceOpen}
+                        defaultPct={28}
+                        minPct={18}
+                        maxPct={40}
+                    >
+                        {(onCollapse) => (
+                            <div className="flex-1 min-h-0 overflow-y-auto px-4">
+                                <div className="flex items-center justify-between mb-3">
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent/80">Retrieval Trace</p>
+                                    <button
+                                        onClick={onCollapse}
+                                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                    >
+                                        Collapse
+                                    </button>
+                                </div>
+                                <EvidencePacketPanel
+                                    query={queryRecord}
+                                    activeResult={activeTraceResult}
+                                    readResult={activeReadResult}
+                                    evidence={activeEvidencePacket}
+                                    loading={traceLoading}
+                                    buildingEvidence={buildingEvidence}
+                                    onBuildEvidence={() => { void handleBuildEvidence() }}
+                                />
+                            </div>
+                        )}
+                    </Siderail>
                 </div>
             </>)}
             </div>

@@ -38,7 +38,7 @@ export default function KnowledgeTypeGrid({ onSelect, compact = false }: Knowled
                     key={type}
                     type="button"
                     onClick={() => onSelect(type)}
-                    className="flex flex-col items-center gap-2 p-2.5 rounded-xl border border-border/50 bg-muted/20 hover:bg-muted/40 hover:border-accent/40 transition-all focus:outline-none group"
+                    className="flex flex-col items-center gap-2 p-2.5 rounded-xl border border-border/20 bg-muted/20 hover:bg-muted/40 hover:border-accent/40 transition-all focus:outline-none group"
                 >
                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${iconBg} border border-white/5`}>
                         <Icon className={`w-4 h-4 ${iconColor}`} />

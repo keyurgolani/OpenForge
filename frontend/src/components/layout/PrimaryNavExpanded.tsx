@@ -192,7 +192,7 @@ export function PrimaryNavExpanded({
                 <NavItem
                   to={routes.workspace}
                   icon={<Home className="w-4 h-4" />}
-                  label="Workspace"
+                  label="Dashboard"
                   isActive={activePath === routes.workspace}
                 />
                 <NavItem
@@ -306,20 +306,20 @@ export function PrimaryNavExpanded({
           </div>
 
         {/* Settings */}
-        <div className="flex-shrink-0 border-t border-border/60">
+        <div className="flex-shrink-0 border-t border-border/20">
           <Link
             to={routes.settings}
             className={cn(
               'flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-card/60',
-              isActive('/settings') ? 'bg-card/55' : 'bg-card/45'
+              isActive('/settings') ? 'bg-card/35' : 'bg-transparent'
             )}
           >
             <div
               className={cn(
-                'w-8 h-8 rounded-lg border flex items-center justify-center flex-shrink-0',
+                'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
                 isActive('/settings')
-                  ? 'bg-accent/15 border-accent/30'
-                  : 'bg-muted/40 border-border/50'
+                  ? 'bg-accent/10'
+                  : 'bg-muted/25'
               )}
             >
               <Settings
@@ -355,9 +355,9 @@ function AgnosticWorkspaceList({
 }) {
   return (
     <>
-      <div className="flex-shrink-0 border-b border-border/60 bg-card/45 px-4 py-3">
+      <div className="flex-shrink-0 border-b border-border/20 bg-card/30 px-4 py-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-accent/12 border border-accent/25 flex items-center justify-center flex-shrink-0">
+          <div className="w-8 h-8 rounded-lg bg-accent/8 flex items-center justify-center flex-shrink-0">
             <Home className="w-4 h-4 text-accent" />
           </div>
           <div className="min-w-0 flex-1">
@@ -375,7 +375,7 @@ function AgnosticWorkspaceList({
             to={`/w/${workspace.id}`}
             className="sidebar-item text-xs"
           >
-            <div className="w-6 h-6 rounded-md bg-accent/15 border border-accent/20 flex items-center justify-center flex-shrink-0">
+            <div className="w-6 h-6 rounded-md bg-accent/8 flex items-center justify-center flex-shrink-0">
               {getWorkspaceIcon(workspace.icon)}
             </div>
             <span className="truncate">{workspace.name}</span>

@@ -197,7 +197,7 @@ export default function CommandPalette() {
 
                             {/* Workspace navigation — hidden when searching */}
                             {!debouncedQuery && (workspaces as { id: string; name: string; icon: string }[]).length > 1 && (
-                                <Command.Group heading="Workspaces" className={`mt-2 pt-2 border-t border-border/60 ${GROUP_CLASS}`}>
+                                <Command.Group heading="Workspaces" className={`mt-2 pt-2 border-t border-border/25 ${GROUP_CLASS}`}>
                                     {(workspaces as { id: string; name: string; icon: string }[]).map(ws => (
                                         <PaletteItem
                                             key={ws.id}
@@ -215,7 +215,7 @@ export default function CommandPalette() {
                                 <div className="px-5 py-3 text-xs text-muted-foreground">Searching knowledge...</div>
                             )}
                             {knowledgeItems.length > 0 && (
-                                <Command.Group heading={`Knowledge — ${knowledgeItems.length} results`} className={`mt-2 pt-2 border-t border-border/60 ${GROUP_CLASS}`}>
+                                <Command.Group heading={`Knowledge — ${knowledgeItems.length} results`} className={`mt-2 pt-2 border-t border-border/25 ${GROUP_CLASS}`}>
                                     {knowledgeItems.map((n: { id: string; title: string; ai_title: string; type: string; excerpt?: string }) => (
                                         <PaletteItem
                                             key={n.id}

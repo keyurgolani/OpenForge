@@ -77,7 +77,7 @@ export function LocalModelPicker({ models, selected, onSelect }: {
                         onClick={() => onSelect(m.id)}
                         className={`text-left p-3 rounded-xl border transition-all duration-200 ${isSelected
                             ? 'border-accent bg-accent/15 shadow-glass-sm'
-                            : 'border-border/50 hover:border-border hover:bg-muted/20'
+                            : 'border-border/20 hover:border-border hover:bg-muted/20'
                         }`}
                     >
                         <div className="flex items-start gap-2">
@@ -86,8 +86,8 @@ export function LocalModelPicker({ models, selected, onSelect }: {
                                 <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
                                     <span className={`text-xs font-medium ${isSelected ? 'text-foreground' : 'text-foreground/80'}`}>{m.name}</span>
                                     <span className={`text-[9px] px-1.5 py-0.5 rounded border font-medium ${QUALITY_COLORS[m.quality]}`}>{m.quality}</span>
-                                    <span className="text-[9px] text-muted-foreground border border-border/60 px-1.5 py-0.5 rounded">{m.diskSize} disk</span>
-                                    <span className="text-[9px] text-muted-foreground border border-border/60 px-1.5 py-0.5 rounded">{m.vramReq} VRAM</span>
+                                    <span className="text-[9px] text-muted-foreground border border-border/25 px-1.5 py-0.5 rounded">{m.diskSize} disk</span>
+                                    <span className="text-[9px] text-muted-foreground border border-border/25 px-1.5 py-0.5 rounded">{m.vramReq} VRAM</span>
                                     {m.dims && <span className="text-[9px] text-muted-foreground">{m.dims}d</span>}
                                 </div>
                                 {m.recommendedFor && m.recommendedFor.length > 0 && (

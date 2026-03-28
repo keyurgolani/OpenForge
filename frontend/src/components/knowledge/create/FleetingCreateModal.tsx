@@ -79,14 +79,14 @@ export default function FleetingCreateModal({ isOpen, onClose, workspaceId, onCr
                 onChange={e => setContent(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="What's on your mind?"
-                className="w-full bg-muted/20 border border-border/60 rounded-xl p-3 text-sm resize-none outline-none focus:border-accent/50 transition-colors min-h-[160px]"
+                className="w-full bg-muted/20 border border-border/25 rounded-xl p-3 text-sm resize-none outline-none focus:border-accent/50 transition-colors min-h-[160px]"
                 rows={6}
             />
 
             <p className="text-[11px] text-muted-foreground/60 text-center">
-                Press <kbd className="px-1.5 py-0.5 rounded bg-muted/40 border border-border/50 text-[10px] font-mono">Enter</kbd> to save
+                Press <kbd className="px-1.5 py-0.5 rounded bg-muted/40 border border-border/20 text-[10px] font-mono">Enter</kbd> to save
                 {' '}&middot;{' '}
-                <kbd className="px-1.5 py-0.5 rounded bg-muted/40 border border-border/50 text-[10px] font-mono">Shift+Enter</kbd> for new line
+                <kbd className="px-1.5 py-0.5 rounded bg-muted/40 border border-border/20 text-[10px] font-mono">Shift+Enter</kbd> for new line
             </p>
 
             {saving && (

@@ -15,7 +15,7 @@ export function DataPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex gap-1 border-b border-border/60">
+      <div className="flex gap-1 border-b border-border/25">
         {TABS.map((tab) => (
           <button
             key={tab.id}

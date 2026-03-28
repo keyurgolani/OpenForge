@@ -149,7 +149,7 @@ async def create_global_conversation(
     if data.agent_id is not None:
         agent = await _require_global_chat_agent(db, data.agent_id)
 
-    title = data.title or (f"Chat with {agent.name}" if agent else "New Chat")
+    title = data.title or ""
     conversation = Conversation(
         workspace_id=None,
         agent_id=data.agent_id,

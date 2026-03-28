@@ -147,7 +147,7 @@ export function OpenForgeImportSubTab() {
                             ? 'border-accent bg-accent/15 shadow-glass-sm'
                             : file
                                 ? 'border-emerald-500/40 bg-emerald-500/5'
-                                : 'border-border/50 hover:border-border hover:bg-muted/10'
+                                : 'border-border/20 hover:border-border hover:bg-muted/10'
                     }`}
                 >
                     <input
@@ -194,7 +194,7 @@ export function OpenForgeImportSubTab() {
 
                 {/* Upload button */}
                 {file && !result && (
-                    <div className="flex items-center justify-end mt-4 pt-3 border-t border-border/50">
+                    <div className="flex items-center justify-end mt-4 pt-3 border-t border-border/20">
                         {progress && (
                             <p className="text-xs text-muted-foreground mr-auto flex items-center gap-2">
                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -248,21 +248,21 @@ export function OpenForgeImportSubTab() {
 
                             {result.success && (
                                 <div className="flex flex-wrap gap-3 mt-3">
-                                    <div className="glass-card px-3 py-2 rounded-lg border-border/50">
+                                    <div className="glass-card px-3 py-2 rounded-lg border-border/20">
                                         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-0.5">
                                             <FolderOpen className="w-3 h-3" />
                                             Workspaces
                                         </div>
                                         <p className="text-lg font-semibold text-foreground">{result.workspaces_imported}</p>
                                     </div>
-                                    <div className="glass-card px-3 py-2 rounded-lg border-border/50">
+                                    <div className="glass-card px-3 py-2 rounded-lg border-border/20">
                                         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-0.5">
                                             <BookOpen className="w-3 h-3" />
                                             Knowledge Items
                                         </div>
                                         <p className="text-lg font-semibold text-foreground">{result.knowledge_count}</p>
                                     </div>
-                                    <div className="glass-card px-3 py-2 rounded-lg border-border/50">
+                                    <div className="glass-card px-3 py-2 rounded-lg border-border/20">
                                         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-0.5">
                                             <MessageSquare className="w-3 h-3" />
                                             Conversations

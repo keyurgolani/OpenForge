@@ -60,7 +60,7 @@ export function ConfirmModal({
             />
 
             {/* Modal */}
-            <div className="relative w-full max-w-md glass-card rounded-2xl border border-border/60 p-6 shadow-2xl animate-fade-in">
+            <div className="relative w-full max-w-md glass-card rounded-2xl border border-border/25 p-6 shadow-2xl animate-fade-in">
                 {/* Close button */}
                 <button
                     type="button"

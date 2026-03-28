@@ -7,11 +7,7 @@
 import ProvidersTab from '../../llm/ProvidersTab';
 
 export function ProvidersPage() {
-  return (
-    <div className="p-6">
-      <ProvidersTab />
-    </div>
-  );
+  return <ProvidersTab />;
 }
 
 export default ProvidersPage;

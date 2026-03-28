@@ -90,7 +90,7 @@ export default function OnboardingPage() {
                                     onClick={() => canClick && advance.mutate(s)}
                                     className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all duration-500 ${isDone ? 'bg-accent/25 text-accent outline outline-1 outline-accent/30 cursor-pointer hover:scale-110' :
                                         isActive ? 'bg-accent text-accent-foreground scale-110 outline outline-2 outline-accent/50 shadow-glass-sm' :
-                                            'glass-sm text-muted-foreground border border-border/50'
+                                            'glass-sm text-muted-foreground border border-border/20'
                                     } ${!canClick ? 'cursor-default' : ''}`}>
                                     {isDone ? <CheckCircle2 className="w-3 h-3 flex-shrink-0" /> : i + 1}
                                 </button>
@@ -145,7 +145,7 @@ function WelcomeStep({ onNext, loading }: { onNext: () => void; loading: boolean
             </div>
             <div className="grid grid-cols-2 gap-3 text-left text-sm">
                 {FEATURES.map(({ Icon, text }) => (
-                    <div key={text} className="flex items-start gap-2.5 p-3 rounded-lg bg-muted/30 border border-border/50">
+                    <div key={text} className="flex items-start gap-2.5 p-3 rounded-lg bg-muted/30 border border-border/20">
                         <Icon className="w-4 h-4 text-accent mt-0.5 flex-shrink-0" />
                         <span className="text-muted-foreground text-xs leading-relaxed">{text}</span>
                     </div>
@@ -244,7 +244,7 @@ function ProvidersSetupStep({ onNext, onBack, loading }: { onNext: () => void; o
                 </div>
             )}
 
-            <div className="space-y-4 rounded-xl border border-border/60 p-4 bg-muted/10">
+            <div className="space-y-4 rounded-xl border border-border/25 p-4 bg-muted/10">
                 <div className="relative">
                     <p className="text-xs font-medium text-muted-foreground mb-2">1. Select provider type</p>
                     <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
@@ -252,7 +252,7 @@ function ProvidersSetupStep({ onNext, onBack, loading }: { onNext: () => void; o
                             <button key={p.id} onClick={() => handleSelectProvider(p.id)}
                                 className={`p-2.5 rounded-xl border text-center transition-all duration-300 ${selected === p.id
                                     ? `border-accent outline outline-2 outline-accent/30 shadow-glass-md bg-gradient-to-br ${p.color} to-transparent scale-105`
-                                    : 'border-border/50 hover:bg-muted/40 hover:shadow-glass-sm'
+                                    : 'border-border/20 hover:bg-muted/40 hover:shadow-glass-sm'
                                     }`}
                             >
                                 <div className="flex justify-center mb-1.5">
@@ -478,7 +478,7 @@ function WorkspaceDraftCard({ ws, idx, iconNames, iconComponents, providers, onC
     const selectedProvider = providers.find(p => p.id === ws.providerId)
 
     return (
-        <div className="rounded-xl border border-border/60 bg-muted/20 p-4 space-y-3">
+        <div className="rounded-xl border border-border/25 bg-muted/20 p-4 space-y-3">
             <div className="flex items-center gap-2">
                 <span className="text-xs font-medium text-muted-foreground">Workspace {idx + 1}</span>
                 {onRemove && (

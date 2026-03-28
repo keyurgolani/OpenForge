@@ -25,7 +25,7 @@ export function ImageCard({ item, workspaceId, slim, isProcessing }: { item: Kno
             {isProcessing && !hasThumbnail ? (
                 <ThumbnailSkeleton className="h-36" />
             ) : hasThumbnail ? (
-                <div className="rounded-lg overflow-hidden border border-border/60 bg-muted/20">
+                <div className="rounded-lg overflow-hidden border border-border/25 bg-muted/20">
                     <img
                         src={getKnowledgeThumbnailUrl(workspaceId, item.id)}
                         alt={displayTitle ?? 'Image preview'}
@@ -34,7 +34,7 @@ export function ImageCard({ item, workspaceId, slim, isProcessing }: { item: Kno
                     />
                 </div>
             ) : (
-                <div className="flex items-center justify-center rounded-lg border border-border/50 bg-pink-500/5 py-5">
+                <div className="flex items-center justify-center rounded-lg border border-border/20 bg-pink-500/5 py-5">
                     <ImageIcon className="w-8 h-8 text-pink-400 opacity-40" />
                 </div>
             )}
@@ -57,7 +57,7 @@ export function ImageCard({ item, workspaceId, slim, isProcessing }: { item: Kno
                     <TagRow tags={item.tags} />
 
                     {/* Footer */}
-                    <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-border/60">
+                    <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-border/25">
                         <span className="text-[10px] text-muted-foreground/80">
                             {formatTimestamp(item.updated_at)}
                         </span>

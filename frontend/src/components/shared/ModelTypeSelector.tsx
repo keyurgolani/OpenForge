@@ -370,7 +370,7 @@ export function ModelTypeSelector({
                                                 </p>
                                             ) : (
                                                 <div className={cn(
-                                                    'overflow-y-auto rounded-lg border border-border/50 bg-background/30 divide-y divide-border/20',
+                                                    'overflow-y-auto rounded-lg border border-border/20 bg-background/30 divide-y divide-border/20',
                                                     compact ? 'max-h-40' : 'max-h-56',
                                                 )}>
                                                     {filteredModels.map(model => {
@@ -413,7 +413,7 @@ export function ModelTypeSelector({
                                                                                     </span>
                                                                                 )}
                                                                                 {model.size_mb != null && (
-                                                                                    <span className="text-[9px] text-muted-foreground border border-border/60 px-1.5 py-0.5 rounded">
+                                                                                    <span className="text-[9px] text-muted-foreground border border-border/25 px-1.5 py-0.5 rounded">
                                                                                         {model.size_mb >= 1000 ? `${(model.size_mb / 1000).toFixed(1)} GB` : `${model.size_mb} MB`}
                                                                                     </span>
                                                                                 )}
@@ -435,7 +435,7 @@ export function ModelTypeSelector({
                                                                         'flex items-center gap-1 rounded-lg border transition-all flex-shrink-0',
                                                                         compact ? 'text-[10px] px-2 py-0.5' : 'text-xs px-2.5 py-1',
                                                                         already
-                                                                            ? 'border-border/50 text-muted-foreground/60 cursor-not-allowed'
+                                                                            ? 'border-border/20 text-muted-foreground/60 cursor-not-allowed'
                                                                             : isLocal && !model.downloaded
                                                                                 ? 'border-accent/30 text-accent hover:bg-accent/15'
                                                                                 : 'border-accent/30 text-accent hover:bg-accent/15',

@@ -130,7 +130,7 @@ export default function RunDetailPage() {
           <div className="flex flex-wrap items-center gap-2">
             <Link
               to={runsRoute()}
-              className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/25 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
             >
               <ArrowLeft className="h-4 w-4" />
               Back to Runs
@@ -138,7 +138,7 @@ export default function RunDetailPage() {
             {typeof run.composite_metadata?.agent_id === 'string' ? (
               <Link
                 to={agentsRoute(run.composite_metadata.agent_id as string)}
-                className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
+                className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/25 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
               >
                 <GitBranch className="h-4 w-4" />
                 Agent
@@ -157,7 +157,7 @@ export default function RunDetailPage() {
           { label: 'Delegation mode', value: <span className="text-foreground">{run.delegation_mode ?? 'None'}</span>, icon: <GitBranch className="h-4 w-4" /> },
           { label: 'Join group', value: <span className="text-foreground">{run.join_group_id ?? 'None'}</span>, icon: <PauseCircle className="h-4 w-4" /> },
         ].map((item) => (
-          <div key={item.label} className="rounded-2xl border border-border/60 bg-card/30 p-4">
+          <div key={item.label} className="rounded-2xl border border-border/25 bg-card/30 p-4">
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/75">{item.label}</p>
               <div className="flex h-9 w-9 items-center justify-center rounded-2xl border border-accent/20 bg-accent/15 text-accent">
@@ -185,12 +185,12 @@ export default function RunDetailPage() {
             <CardContent>
               {typeof run.output_payload.output === 'string' ? (
                 <div className="prose dark:prose-invert max-w-none text-sm">
-                  <pre className="whitespace-pre-wrap rounded-xl border border-border/60 bg-background/50 p-4 text-xs text-foreground/90">
+                  <pre className="whitespace-pre-wrap rounded-xl border border-border/25 bg-background/50 p-4 text-xs text-foreground/90">
                     {run.output_payload.output}
                   </pre>
                 </div>
               ) : (
-                <pre className="overflow-x-auto rounded-xl border border-border/60 bg-background/50 p-4 text-xs text-foreground/90">
+                <pre className="overflow-x-auto rounded-xl border border-border/25 bg-background/50 p-4 text-xs text-foreground/90">
                   {formatJson(run.output_payload)}
                 </pre>
               )}
@@ -248,7 +248,7 @@ export default function RunDetailPage() {
           <Section title="Step timeline" description="Ordered run steps make the execution path inspectable without backend spelunking.">
             <div className="space-y-3">
               {steps.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-border/60 bg-card/20 p-6 text-sm text-muted-foreground/80">
+                <div className="rounded-2xl border border-dashed border-border/25 bg-card/20 p-6 text-sm text-muted-foreground/80">
                   This run does not have any persisted steps yet.
                 </div>
               ) : steps.map((step) => (
@@ -259,7 +259,7 @@ export default function RunDetailPage() {
                   className={`w-full rounded-2xl border px-4 py-4 text-left transition ${
                     selectedStepId === step.id
                       ? 'border-accent/40 bg-accent/15'
-                      : 'border-border/60 bg-card/30 hover:border-border/80'
+                      : 'border-border/25 bg-card/30 hover:border-border/80'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -274,7 +274,7 @@ export default function RunDetailPage() {
                         <span
                           role="button"
                           tabIndex={0}
-                          className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-background/40 px-2 py-1 text-[10px] text-muted-foreground transition hover:text-accent hover:border-accent/40"
+                          className="inline-flex items-center gap-1 rounded-md border border-border/25 bg-background/40 px-2 py-1 text-[10px] text-muted-foreground transition hover:text-accent hover:border-accent/40"
                           onClick={(e) => { e.stopPropagation(); handleReplay(step.step_index) }}
                           onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); handleReplay(step.step_index) } }}
                         >
@@ -320,23 +320,23 @@ export default function RunDetailPage() {
                     <div className="grid gap-4 md:grid-cols-2">
                       <div>
                         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/75">Input snapshot</p>
-                        <pre className="overflow-x-auto rounded-xl border border-border/60 bg-background/50 p-4 text-xs text-foreground/90">
+                        <pre className="overflow-x-auto rounded-xl border border-border/25 bg-background/50 p-4 text-xs text-foreground/90">
                           {formatJson(selectedStep.input_snapshot)}
                         </pre>
                       </div>
                       <div>
                         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/75">Output snapshot</p>
-                        <pre className="overflow-x-auto rounded-xl border border-border/60 bg-background/50 p-4 text-xs text-foreground/90">
+                        <pre className="overflow-x-auto rounded-xl border border-border/25 bg-background/50 p-4 text-xs text-foreground/90">
                           {formatJson(selectedStep.output_snapshot)}
                         </pre>
                       </div>
                     </div>
                     <div className="grid gap-3 md:grid-cols-2">
-                      <div className="rounded-xl border border-border/60 bg-background/35 p-3">
+                      <div className="rounded-xl border border-border/25 bg-background/35 p-3">
                         <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Delegation mode</p>
                         <p className="mt-1 text-sm font-medium text-foreground">{selectedStep.delegation_mode ?? 'None'}</p>
                       </div>
-                      <div className="rounded-xl border border-border/60 bg-background/35 p-3">
+                      <div className="rounded-xl border border-border/25 bg-background/35 p-3">
                         <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Join or merge</p>
                         <p className="mt-1 text-sm font-medium text-foreground">{selectedStep.join_group_id ?? selectedStep.merge_strategy ?? 'None'}</p>
                       </div>
@@ -349,7 +349,7 @@ export default function RunDetailPage() {
                     ) : null}
                   </>
                 ) : (
-                  <div className="rounded-xl border border-dashed border-border/60 bg-background/35 p-6 text-sm text-muted-foreground/80">
+                  <div className="rounded-xl border border-dashed border-border/25 bg-background/35 p-6 text-sm text-muted-foreground/80">
                     No step has been selected.
                   </div>
                 )}
@@ -362,7 +362,7 @@ export default function RunDetailPage() {
                 <CardDescription>Parent and child runs stay explicit so subworkflow execution can be followed.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
-                <div className="rounded-xl border border-border/60 bg-background/35 p-3">
+                <div className="rounded-xl border border-border/25 bg-background/35 p-3">
                   <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Parent run</p>
                   <p className="mt-1 text-foreground">
                     {lineage?.parent_run ? (
@@ -372,13 +372,13 @@ export default function RunDetailPage() {
                     ) : 'This run is a root run.'}
                   </p>
                 </div>
-                <div className="rounded-xl border border-border/60 bg-background/35 p-3">
+                <div className="rounded-xl border border-border/25 bg-background/35 p-3">
                   <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Child runs</p>
                   <div className="mt-2 space-y-2">
                     {childRuns.length === 0 ? (
                       <p className="text-muted-foreground/80">No child runs have been spawned.</p>
                     ) : childRuns.map((childRun) => (
-                      <div key={childRun.id} className="flex items-center justify-between gap-3 rounded-lg border border-border/50 bg-background/50 px-3 py-2">
+                      <div key={childRun.id} className="flex items-center justify-between gap-3 rounded-lg border border-border/20 bg-background/50 px-3 py-2">
                         <Link className="transition hover:text-accent" to={runsRoute(childRun.id)}>
                           {truncateText(childRun.id, 18)}
                         </Link>
@@ -387,13 +387,13 @@ export default function RunDetailPage() {
                     ))}
                   </div>
                 </div>
-                <div className="rounded-xl border border-border/60 bg-background/35 p-3">
+                <div className="rounded-xl border border-border/25 bg-background/35 p-3">
                   <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Branch groups</p>
                   <div className="mt-2 space-y-2">
                     {groupedChildRuns.length === 0 ? (
                       <p className="text-muted-foreground/80">No branch grouping recorded.</p>
                     ) : groupedChildRuns.map((group) => (
-                      <div key={group.joinGroupId} className="rounded-lg border border-border/50 bg-background/50 px-3 py-2">
+                      <div key={group.joinGroupId} className="rounded-lg border border-border/20 bg-background/50 px-3 py-2">
                         <p className="font-medium text-foreground">{group.joinGroupId}</p>
                         <p className="mt-1 text-xs text-muted-foreground/80">{group.runs.length} branch run{group.runs.length === 1 ? '' : 's'}</p>
                       </div>
@@ -411,11 +411,11 @@ export default function RunDetailPage() {
           <Card glass>
             <CardContent className="space-y-3 pt-6">
               {(compositeDebug?.delegation_history ?? []).length === 0 ? (
-                <div className="rounded-xl border border-dashed border-border/60 bg-background/35 p-4 text-sm text-muted-foreground/80">
+                <div className="rounded-xl border border-dashed border-border/25 bg-background/35 p-4 text-sm text-muted-foreground/80">
                   No delegation events recorded for this run.
                 </div>
               ) : (compositeDebug?.delegation_history ?? []).map((entry, index) => (
-                <div key={`${index}-${String(entry.delegation_mode)}`} className="rounded-xl border border-border/60 bg-background/35 p-3 text-sm">
+                <div key={`${index}-${String(entry.delegation_mode)}`} className="rounded-xl border border-border/25 bg-background/35 p-3 text-sm">
                   <p className="font-medium text-foreground">{String(entry.delegation_mode ?? 'unknown')}</p>
                   <p className="mt-1 text-xs text-muted-foreground/80">Join group: {String(entry.join_group_id ?? 'none')} • Merge: {String(entry.merge_strategy ?? 'none')}</p>
                 </div>
@@ -435,7 +435,7 @@ export default function RunDetailPage() {
                 {(compositeDebug?.branch_groups ?? []).length === 0 ? (
                   <p className="text-muted-foreground/80">No branch groups recorded.</p>
                 ) : (compositeDebug?.branch_groups ?? []).map((group, index) => (
-                  <div key={`${index}-${String(group.join_group_id)}`} className="rounded-xl border border-border/60 bg-background/35 p-3">
+                  <div key={`${index}-${String(group.join_group_id)}`} className="rounded-xl border border-border/25 bg-background/35 p-3">
                     <p className="font-medium text-foreground">{String(group.join_group_id)}</p>
                     <p className="mt-1 text-xs text-muted-foreground/80">Branches: {String(group.branch_count ?? (Array.isArray(group.runs) ? group.runs.length : 0))}</p>
                   </div>
@@ -452,7 +452,7 @@ export default function RunDetailPage() {
                 {(compositeDebug?.merge_outcomes ?? []).length === 0 ? (
                   <p className="text-muted-foreground/80">No merge outcomes recorded.</p>
                 ) : (compositeDebug?.merge_outcomes ?? []).map((outcome, index) => (
-                  <div key={`${index}-${String(outcome.strategy)}`} className="rounded-xl border border-border/60 bg-background/35 p-3">
+                  <div key={`${index}-${String(outcome.strategy)}`} className="rounded-xl border border-border/25 bg-background/35 p-3">
                     <p className="font-medium text-foreground">{String(outcome.strategy ?? 'unknown')}</p>
                     <p className="mt-1 text-xs text-muted-foreground/80">Join group: {String(outcome.join_group_id ?? 'none')}</p>
                   </div>
@@ -468,11 +468,11 @@ export default function RunDetailPage() {
           <Card glass>
             <CardContent className="space-y-3 pt-6">
               {approvalEvents.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-border/60 bg-background/35 p-4 text-sm text-muted-foreground/80">
+                <div className="rounded-xl border border-dashed border-border/25 bg-background/35 p-4 text-sm text-muted-foreground/80">
                   No approval or interrupt events recorded for this run.
                 </div>
               ) : approvalEvents.map((event) => (
-                <div key={event.id} className="rounded-xl border border-border/60 bg-background/35 p-3 text-sm">
+                <div key={event.id} className="rounded-xl border border-border/25 bg-background/35 p-3 text-sm">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-medium text-foreground">{event.event_type}</p>
@@ -480,7 +480,7 @@ export default function RunDetailPage() {
                     </div>
                     <StatusBadge status={event.event_type === 'approval_requested' ? 'waiting_approval' : 'interrupted'} />
                   </div>
-                  <pre className="mt-3 overflow-x-auto rounded-lg border border-border/50 bg-background/60 p-3 text-xs text-foreground/90">
+                  <pre className="mt-3 overflow-x-auto rounded-lg border border-border/20 bg-background/60 p-3 text-xs text-foreground/90">
                     {formatJson(event.payload)}
                   </pre>
                 </div>
@@ -493,11 +493,11 @@ export default function RunDetailPage() {
           <Card glass>
             <CardContent className="space-y-3 pt-6">
               {checkpoints.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-border/60 bg-background/35 p-4 text-sm text-muted-foreground/80">
+                <div className="rounded-xl border border-dashed border-border/25 bg-background/35 p-4 text-sm text-muted-foreground/80">
                   No checkpoints have been persisted for this run.
                 </div>
               ) : checkpoints.map((checkpoint) => (
-                <div key={checkpoint.id} className="rounded-xl border border-border/60 bg-background/35 p-3 text-sm">
+                <div key={checkpoint.id} className="rounded-xl border border-border/25 bg-background/35 p-3 text-sm">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="font-medium text-foreground">{checkpoint.checkpoint_type}</p>
@@ -524,7 +524,7 @@ export default function RunDetailPage() {
                 ) : artifactIds.map((artifactId) => (
                   <Link
                     key={artifactId}
-                    className="flex items-center gap-2 rounded-xl border border-border/60 bg-background/35 px-3 py-2 transition hover:border-accent/35 hover:text-accent"
+                    className="flex items-center gap-2 rounded-xl border border-border/25 bg-background/35 px-3 py-2 transition hover:border-accent/35 hover:text-accent"
                     to={outputsRoute(artifactId)}
                   >
                     <FileOutput className="h-4 w-4" />
@@ -543,7 +543,7 @@ export default function RunDetailPage() {
                 {latestEvents.length === 0 ? (
                   <p className="text-sm text-muted-foreground/80">No runtime events persisted yet.</p>
                 ) : latestEvents.map((event) => (
-                  <div key={event.id} className="rounded-xl border border-border/60 bg-background/35 p-3 text-sm">
+                  <div key={event.id} className="rounded-xl border border-border/25 bg-background/35 p-3 text-sm">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-medium text-foreground">{event.event_type}</p>

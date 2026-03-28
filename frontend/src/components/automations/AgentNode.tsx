@@ -19,11 +19,11 @@ function AgentNode({ data, selected }: NodeProps) {
   return (
     <div
       className={`rounded-xl border bg-card/90 shadow-lg backdrop-blur-sm min-w-[180px] ${
-        selected ? 'border-accent ring-1 ring-accent/30' : 'border-border/60'
+        selected ? 'border-accent ring-1 ring-accent/30' : 'border-border/25'
       }`}
     >
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-border/60">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border/25">
         <Bot className="w-4 h-4 text-accent" />
         <span className="text-sm font-medium text-foreground truncate">
           {nodeData.label}

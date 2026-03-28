@@ -34,7 +34,7 @@ export function AppearancePage() {
                   'flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-colors',
                   active
                     ? 'border-accent bg-accent/10 text-accent'
-                    : 'border-border/60 bg-card hover:border-border hover:bg-muted/30 text-muted-foreground'
+                    : 'border-border/25 bg-card hover:border-border hover:bg-muted/30 text-muted-foreground'
                 )}
               >
                 <Icon className="w-5 h-5" />
@@ -62,7 +62,7 @@ export function AppearancePage() {
                   'relative rounded-xl border-2 overflow-hidden text-left transition-all',
                   active
                     ? 'border-accent ring-1 ring-accent/30'
-                    : 'border-border/60 hover:border-border'
+                    : 'border-border/25 hover:border-border'
                 )}
               >
                 {/* Gradient header */}

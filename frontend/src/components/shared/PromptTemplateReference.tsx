@@ -21,8 +21,8 @@ export default function PromptTemplateReference({ data, onInsert }: PromptTempla
   }, {})
 
   return (
-    <div className="w-72 border-l border-border/60 bg-background/50 overflow-y-auto">
-      <div className="p-3 border-b border-border/60">
+    <div className="w-72 border-l border-border/25 bg-background/50 overflow-y-auto">
+      <div className="p-3 border-b border-border/25">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground">
           <BookOpen className="w-4 h-4" />
           Template Reference
@@ -30,7 +30,7 @@ export default function PromptTemplateReference({ data, onInsert }: PromptTempla
       </div>
 
       {/* Tab bar */}
-      <div className="flex border-b border-border/60">
+      <div className="flex border-b border-border/25">
         {(['functions', 'syntax', 'types'] as const).map((tab) => (
           <button
             key={tab}

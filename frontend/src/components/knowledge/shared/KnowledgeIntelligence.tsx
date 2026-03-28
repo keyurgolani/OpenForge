@@ -165,7 +165,7 @@ export default function KnowledgeIntelligence({ knowledge, workspaceId, headerEx
                                         </div>
                                     </div>
                                 </div>
-                                <span className="text-[11px] font-semibold text-foreground/70 rounded-full border border-border/60 bg-muted/60 px-2 py-0.5">
+                                <span className="text-[11px] font-semibold text-foreground/70 rounded-full border border-border/25 bg-muted/60 px-2 py-0.5">
                                     {section.count}
                                 </span>
                             </button>

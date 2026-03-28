@@ -62,7 +62,7 @@ export function ComposerModelPicker({ options, selectedKey, onSelect, defaultLab
 
       {open && (
         <div className="absolute bottom-full mb-1 left-0 z-50 w-72 rounded-xl border border-border/70 bg-card shadow-xl overflow-hidden">
-          <div className="p-2 border-b border-border/50">
+          <div className="p-2 border-b border-border/20">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
               <input
@@ -71,7 +71,7 @@ export function ComposerModelPicker({ options, selectedKey, onSelect, defaultLab
                 placeholder="Search models..."
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                className="w-full rounded-md border border-border/50 bg-muted/30 pl-7 pr-2.5 py-1.5 text-xs placeholder:text-muted-foreground/70 focus:outline-none focus:border-accent/50"
+                className="w-full rounded-md border border-border/20 bg-muted/30 pl-7 pr-2.5 py-1.5 text-xs placeholder:text-muted-foreground/70 focus:outline-none focus:border-accent/50"
               />
             </div>
           </div>

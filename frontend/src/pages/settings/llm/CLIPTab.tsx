@@ -126,9 +126,9 @@ function CLIPTab() {
                                     <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                                         <span className="font-medium text-sm">{m.name}</span>
                                         <span className={`text-[9px] px-1.5 py-0.5 rounded border font-medium ${QUALITY_COLORS[m.quality]}`}>{m.quality}</span>
-                                        <span className="text-[9px] text-muted-foreground border border-border/60 px-1.5 py-0.5 rounded">{m.diskSize}</span>
-                                        <span className="text-[9px] text-muted-foreground border border-border/60 px-1.5 py-0.5 rounded">{m.vramReq} VRAM</span>
-                                        <span className="text-[9px] text-muted-foreground border border-border/60 px-1.5 py-0.5 rounded">{m.dimension}D</span>
+                                        <span className="text-[9px] text-muted-foreground border border-border/25 px-1.5 py-0.5 rounded">{m.diskSize}</span>
+                                        <span className="text-[9px] text-muted-foreground border border-border/25 px-1.5 py-0.5 rounded">{m.vramReq} VRAM</span>
+                                        <span className="text-[9px] text-muted-foreground border border-border/25 px-1.5 py-0.5 rounded">{m.dimension}D</span>
                                         {isDownloaded && (
                                             <span className="text-[9px] px-1.5 py-0.5 rounded border font-medium bg-emerald-500/15 text-emerald-300 border-emerald-500/30">
                                                 Downloaded{statusInfo?.disk_size ? ` (${statusInfo.disk_size})` : ''}
@@ -291,8 +291,8 @@ export function PDFProcessingTab() {
                             <div className="flex items-center gap-2 mb-0.5">
                                 <span className="font-medium text-sm">Marker PDF</span>
                                 <span className="text-[9px] px-1.5 py-0.5 rounded border font-medium bg-purple-500/15 text-purple-300 border-purple-500/30">Best</span>
-                                <span className="text-[9px] text-muted-foreground border border-border/60 px-1.5 py-0.5 rounded">~1.5 GB disk</span>
-                                <span className="text-[9px] text-muted-foreground border border-border/60 px-1.5 py-0.5 rounded">~3 GB VRAM</span>
+                                <span className="text-[9px] text-muted-foreground border border-border/25 px-1.5 py-0.5 rounded">~1.5 GB disk</span>
+                                <span className="text-[9px] text-muted-foreground border border-border/25 px-1.5 py-0.5 rounded">~3 GB VRAM</span>
                                 {isDownloaded && (
                                     <span className="text-[9px] px-1.5 py-0.5 rounded border font-medium bg-emerald-500/15 text-emerald-300 border-emerald-500/30">
                                         Downloaded{diskSize ? ` (${diskSize})` : ''}

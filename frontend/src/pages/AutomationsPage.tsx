@@ -1,16 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Filter, GitBranch, Plus, Zap } from 'lucide-react'
 
 import EmptyState from '@/components/shared/EmptyState'
 import ErrorState from '@/components/shared/ErrorState'
 import LoadingState from '@/components/shared/LoadingState'
-import PageHeader from '@/components/shared/PageHeader'
 import StatusBadge from '@/components/shared/StatusBadge'
 import { useAutomationsQuery, useCreateAutomation, useDeleteAutomation, usePauseAutomation, useResumeAutomation, useActivateAutomation } from '@/features/automations'
 import { useAgentsQuery } from '@/features/agents'
 import { formatRelativeTime } from '@/lib/formatters'
 import { automationsRoute, agentsRoute } from '@/lib/routes'
+import { useUIStore } from '@/stores/uiStore'
 import type { AutomationStatus } from '@/types/automations'
 
 export default function AutomationsPage() {
@@ -18,6 +18,7 @@ export default function AutomationsPage() {
   const [agentFilter, setAgentFilter] = useState<string>('all')
   const [showCreate, setShowCreate] = useState(false)
   const [createForm, setCreateForm] = useState({ agent_id: '', name: '', slug: '', description: '' })
+  const setHeaderActions = useUIStore(s => s.setHeaderActions)
 
   const { data, isLoading, error } = useAutomationsQuery({
     status: statusFilter === 'all' ? undefined : statusFilter,
@@ -29,6 +30,18 @@ export default function AutomationsPage() {
   const pauseAutomation = usePauseAutomation()
   const resumeAutomation = useResumeAutomation()
   const activateAutomation = useActivateAutomation()
+
+  useEffect(() => {
+    setHeaderActions(
+      <button
+        className="bg-accent text-accent-foreground hover:bg-accent/90 px-3.5 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors"
+        onClick={() => setShowCreate(true)}
+      >
+        <Plus className="w-3.5 h-3.5" /> Create Automation
+      </button>
+    )
+    return () => setHeaderActions(null)
+  }, [setHeaderActions])
 
   if (isLoading) return <LoadingState label="Loading automations..." />
   if (error) return <ErrorState message="Automations could not be loaded." />
@@ -52,22 +65,10 @@ export default function AutomationsPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <PageHeader
-        title="Automations"
-        description="Automated workflows that run agents on triggers and schedules."
-        actions={
-          <button
-            className="bg-accent text-accent-foreground hover:bg-accent/90 px-3.5 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors"
-            onClick={() => setShowCreate(true)}
-          >
-            <Plus className="w-3.5 h-3.5" /> Create Automation
-          </button>
-        }
-      />
 
       {/* Create dialog */}
       {showCreate && (
-        <div className="rounded-2xl border border-border/60 bg-card/30 p-5 space-y-4">
+        <div className="rounded-2xl border border-border/25 bg-card/30 p-5 space-y-4">
           <h3 className="text-sm font-semibold">New Automation</h3>
           <div className="grid gap-3 md:grid-cols-2">
             <label className="space-y-1 text-sm">
@@ -100,7 +101,7 @@ export default function AutomationsPage() {
       )}
 
       {/* Filters */}
-      <section className="rounded-2xl border border-border/60 bg-card/30 p-5">
+      <section className="rounded-2xl border border-border/25 bg-card/30 p-5">
         <div className="mb-4 flex items-center gap-2 text-sm font-medium text-foreground">
           <Filter className="h-4 w-4 text-accent" /> Filters
         </div>
@@ -136,7 +137,7 @@ export default function AutomationsPage() {
           icon={<Zap className="h-5 w-5" />}
         />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/30">
+        <div className="overflow-hidden rounded-2xl border border-border/25 bg-card/30">
           <table className="min-w-full divide-y divide-border/60">
             <thead className="bg-background/35">
               <tr className="text-left text-[11px] uppercase tracking-[0.12em] text-muted-foreground/75">

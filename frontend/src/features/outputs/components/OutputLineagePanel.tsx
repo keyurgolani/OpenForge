@@ -29,7 +29,7 @@ function LineageGroup({
           {items.map((item) => {
             const href = getOutputLinkHref(item)
             const content = (
-              <div className="rounded-xl border border-border/50 bg-background/35 px-3 py-3">
+              <div className="rounded-xl border border-border/20 bg-background/35 px-3 py-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium text-foreground">{item.label || getOutputLinkTargetLabel(item.target_type)}</p>
@@ -37,7 +37,7 @@ function LineageGroup({
                       {getOutputLinkTargetLabel(item.target_type)} · {item.target_id}
                     </p>
                   </div>
-                    <span className="rounded-full border border-border/50 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                    <span className="rounded-full border border-border/20 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                     {item.link_type.replace(/_/g, ' ')}
                     </span>
                 </div>

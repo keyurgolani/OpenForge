@@ -121,7 +121,7 @@ export default function ImageCreateModal({ isOpen, onClose, workspaceId, onCreat
             {/* Drop zone */}
             <div
                 className={`relative flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed transition-all cursor-pointer
-                    ${dragOver ? 'border-accent bg-accent/5 scale-[1.01]' : file ? 'border-accent/40 bg-accent/5' : 'border-border/60 hover:border-accent/50 hover:bg-muted/10'}`}
+                    ${dragOver ? 'border-accent bg-accent/5 scale-[1.01]' : file ? 'border-accent/40 bg-accent/5' : 'border-border/25 hover:border-accent/50 hover:bg-muted/10'}`}
                 style={{ minHeight: file ? undefined : '9rem' }}
                 onDragOver={e => { e.preventDefault(); setDragOver(true) }}
                 onDragLeave={() => setDragOver(false)}
@@ -138,9 +138,9 @@ export default function ImageCreateModal({ isOpen, onClose, workspaceId, onCreat
                 {file ? (
                     <div className="flex items-center gap-3 w-full p-3">
                         {preview ? (
-                            <img src={preview} alt="Preview" className="w-16 h-16 rounded-lg object-cover flex-shrink-0 border border-border/50" />
+                            <img src={preview} alt="Preview" className="w-16 h-16 rounded-lg object-cover flex-shrink-0 border border-border/20" />
                         ) : (
-                            <div className="w-16 h-16 rounded-lg bg-muted/40 border border-border/60 flex items-center justify-center flex-shrink-0">
+                            <div className="w-16 h-16 rounded-lg bg-muted/40 border border-border/25 flex items-center justify-center flex-shrink-0">
                                 <Upload className="w-7 h-7 text-muted-foreground" />
                             </div>
                         )}
@@ -158,7 +158,7 @@ export default function ImageCreateModal({ isOpen, onClose, workspaceId, onCreat
                     </div>
                 ) : (
                     <div className="flex flex-col items-center gap-2 text-center p-6">
-                        <div className="w-11 h-11 rounded-xl bg-muted/40 border border-border/60 flex items-center justify-center">
+                        <div className="w-11 h-11 rounded-xl bg-muted/40 border border-border/25 flex items-center justify-center">
                             <Upload className="w-5 h-5 text-muted-foreground" />
                         </div>
                         <div>

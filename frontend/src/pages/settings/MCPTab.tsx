@@ -163,7 +163,7 @@ function MCPServerCard({ server, onUpdated, onDeleted }: {
     }
 
     return (
-        <div className="glass-card rounded-xl border border-border/50 overflow-hidden">
+        <div className="glass-card rounded-xl border border-border/20 overflow-hidden">
             {/* Header row */}
             <div className="flex items-start gap-3 p-4">
                 <div className="flex-1 min-w-0">
@@ -172,7 +172,7 @@ function MCPServerCard({ server, onUpdated, onDeleted }: {
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${RISK_BADGE[server.default_risk_level] ?? RISK_BADGE.high}`}>
                             {server.default_risk_level}
                         </span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-border/60 text-muted-foreground uppercase tracking-wide">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-border/25 text-muted-foreground uppercase tracking-wide">
                             {server.transport}
                         </span>
                         {server.tool_count > 0 && (
@@ -181,7 +181,7 @@ function MCPServerCard({ server, onUpdated, onDeleted }: {
                             </span>
                         )}
                         {!server.is_enabled && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/40 border border-border/60 text-muted-foreground">disabled</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/40 border border-border/25 text-muted-foreground">disabled</span>
                         )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5 font-mono truncate">{server.url}</p>
@@ -232,7 +232,7 @@ function MCPServerCard({ server, onUpdated, onDeleted }: {
 
             {/* Edit form */}
             {editing && (
-                <div className="px-4 pb-4 border-t border-border/50 pt-4">
+                <div className="px-4 pb-4 border-t border-border/20 pt-4">
                     <MCPServerForm
                         initial={{
                             name: server.name, url: server.url,
@@ -250,7 +250,7 @@ function MCPServerCard({ server, onUpdated, onDeleted }: {
 
             {/* Tool list */}
             {expanded && !editing && server.discovered_tools.length > 0 && (
-                <div className="border-t border-border/50">
+                <div className="border-t border-border/20">
                     <div className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/60">
                         Discovered Tools
                     </div>
@@ -265,7 +265,7 @@ function MCPServerCard({ server, onUpdated, onDeleted }: {
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
                                     <select
-                                        className="text-[10px] bg-muted/30 border border-border/60 rounded px-1.5 py-0.5 capitalize cursor-pointer"
+                                        className="text-[10px] bg-muted/30 border border-border/25 rounded px-1.5 py-0.5 capitalize cursor-pointer"
                                         defaultValue={server.default_risk_level}
                                         disabled={overrideSaving === tool.name}
                                         onChange={e => handleRiskChange(tool.name, e.target.value)}

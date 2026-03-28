@@ -103,7 +103,7 @@ function ExportTab() {
                 <h4 className="text-sm font-medium mb-3">Export Individual Workspaces</h4>
                 <div className="space-y-2">
                     {(workspaces as WorkspaceRow[]).map(ws => (
-                        <div key={ws.id} className="glass-card px-4 py-3 flex items-center justify-between gap-3 rounded-xl border-border/50">
+                        <div key={ws.id} className="glass-card px-4 py-3 flex items-center justify-between gap-3 rounded-xl border-border/20">
                             <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 rounded-lg bg-accent/15 border border-accent/20 flex items-center justify-center flex-shrink-0">
                                     {getWorkspaceIcon(ws.icon)}

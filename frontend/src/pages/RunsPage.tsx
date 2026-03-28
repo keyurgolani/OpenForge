@@ -46,7 +46,7 @@ export default function RunsPage() {
       />
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_320px]">
-        <div className="rounded-2xl border border-border/60 bg-card/30 p-5">
+        <div className="rounded-2xl border border-border/25 bg-card/30 p-5">
           <div className="mb-4 flex items-center gap-2 text-sm font-medium text-foreground">
             <Filter className="h-4 w-4 text-accent" />
             Runtime filters
@@ -72,7 +72,7 @@ export default function RunsPage() {
             { label: 'Interrupted', value: interruptedCount, icon: <PauseCircle className="h-4 w-4" /> },
             { label: 'Failed', value: failedCount, icon: <AlertTriangle className="h-4 w-4" /> },
           ].map((item) => (
-            <div key={item.label} className="rounded-2xl border border-border/60 bg-card/30 p-4">
+            <div key={item.label} className="rounded-2xl border border-border/25 bg-card/30 p-4">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/75">{item.label}</p>
                 <div className="flex h-9 w-9 items-center justify-center rounded-2xl border border-accent/20 bg-accent/15 text-accent">
@@ -94,7 +94,7 @@ export default function RunsPage() {
           icon={<Boxes className="h-5 w-5" />}
         />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/30">
+        <div className="overflow-hidden rounded-2xl border border-border/25 bg-card/30">
           <table className="min-w-full divide-y divide-border/60">
             <thead className="bg-background/35">
               <tr className="text-left text-[11px] uppercase tracking-[0.12em] text-muted-foreground/75">

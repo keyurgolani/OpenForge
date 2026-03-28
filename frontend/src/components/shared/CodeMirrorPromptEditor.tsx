@@ -80,7 +80,7 @@ export default function CodeMirrorPromptEditor({
     return (
         <div
             ref={editorRef}
-            className="input w-full overflow-hidden rounded-lg border border-border/60 bg-background/40 text-xs font-mono"
+            className="input w-full overflow-hidden rounded-lg border border-border/25 bg-background/40 text-xs font-mono"
         />
     )
 }

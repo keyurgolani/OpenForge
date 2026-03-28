@@ -193,7 +193,7 @@ export function BookmarkImportSubTab() {
                                 className={`text-left p-3 rounded-xl border transition-all duration-200 ${
                                     isActive
                                         ? 'border-accent bg-accent/15 shadow-glass-sm ring-1 ring-accent/30'
-                                        : 'border-border/50 hover:border-border hover:bg-muted/20'
+                                        : 'border-border/20 hover:border-border hover:bg-muted/20'
                                 }`}
                             >
                                 <div className="flex items-center gap-2 mb-1">
@@ -242,7 +242,7 @@ export function BookmarkImportSubTab() {
                             ? 'border-accent bg-accent/15 shadow-glass-sm'
                             : file
                                 ? 'border-emerald-500/40 bg-emerald-500/5'
-                                : 'border-border/50 hover:border-border hover:bg-muted/10'
+                                : 'border-border/20 hover:border-border hover:bg-muted/10'
                     }`}
                 >
                     <input
@@ -303,16 +303,16 @@ export function BookmarkImportSubTab() {
 
                     {/* Summary stats */}
                     <div className="flex flex-wrap gap-3 mb-4">
-                        <div className="glass-card px-3 py-2 rounded-lg border-border/50">
+                        <div className="glass-card px-3 py-2 rounded-lg border-border/20">
                             <p className="text-[11px] text-muted-foreground">Bookmarks found</p>
                             <p className="text-lg font-semibold text-foreground">{totalCount.toLocaleString()}</p>
                         </div>
-                        <div className="glass-card px-3 py-2 rounded-lg border-border/50">
+                        <div className="glass-card px-3 py-2 rounded-lg border-border/20">
                             <p className="text-[11px] text-muted-foreground">Unique tags</p>
                             <p className="text-lg font-semibold text-foreground">{uniqueTags.length.toLocaleString()}</p>
                         </div>
                         {uniqueTags.length > 0 && (
-                            <div className="glass-card px-3 py-2 rounded-lg border-border/50 flex-1 min-w-0">
+                            <div className="glass-card px-3 py-2 rounded-lg border-border/20 flex-1 min-w-0">
                                 <p className="text-[11px] text-muted-foreground mb-1">Tags</p>
                                 <div className="flex flex-wrap gap-1">
                                     {uniqueTags.slice(0, 12).map(tag => (
@@ -331,11 +331,11 @@ export function BookmarkImportSubTab() {
                     </div>
 
                     {/* Preview table */}
-                    <div className="border border-border/60 rounded-lg overflow-hidden">
+                    <div className="border border-border/25 rounded-lg overflow-hidden">
                         <div className="overflow-x-auto">
                             <table className="w-full text-xs">
                                 <thead>
-                                    <tr className="bg-muted/30 border-b border-border/60">
+                                    <tr className="bg-muted/30 border-b border-border/25">
                                         <th className="text-left px-3 py-2 text-muted-foreground font-medium w-8">#</th>
                                         <th className="text-left px-3 py-2 text-muted-foreground font-medium">Title</th>
                                         <th className="text-left px-3 py-2 text-muted-foreground font-medium hidden md:table-cell">URL</th>
@@ -344,7 +344,7 @@ export function BookmarkImportSubTab() {
                                 </thead>
                                 <tbody>
                                     {previewItems.map((bm, i) => (
-                                        <tr key={i} className="border-b border-border/60 last:border-0 hover:bg-muted/10 transition-colors">
+                                        <tr key={i} className="border-b border-border/25 last:border-0 hover:bg-muted/10 transition-colors">
                                             <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
                                             <td className="px-3 py-2 font-medium max-w-[200px] truncate">{bm.title}</td>
                                             <td className="px-3 py-2 text-muted-foreground max-w-[240px] truncate hidden md:table-cell">
@@ -371,14 +371,14 @@ export function BookmarkImportSubTab() {
                             </table>
                         </div>
                         {totalCount > previewItems.length && (
-                            <div className="bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground text-center border-t border-border/50">
+                            <div className="bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground text-center border-t border-border/20">
                                 Showing {previewItems.length} of {totalCount.toLocaleString()} bookmarks
                             </div>
                         )}
                     </div>
 
                     {/* Import target */}
-                    <div className="flex items-center justify-between mt-4 pt-3 border-t border-border/50">
+                    <div className="flex items-center justify-between mt-4 pt-3 border-t border-border/20">
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <ChevronRight className="w-3.5 h-3.5" />
                             <span>Importing into</span>

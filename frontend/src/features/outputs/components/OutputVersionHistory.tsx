@@ -37,7 +37,7 @@ export function OutputVersionHistory({
                 key={version.id}
                 role="button"
                 tabIndex={0}
-                className={`w-full rounded-xl border px-4 py-3 text-left transition-colors ${selected ? 'border-accent/35 bg-accent/8' : 'border-border/50 bg-background/35 hover:border-border/75'} cursor-pointer`}
+                className={`w-full rounded-xl border px-4 py-3 text-left transition-colors ${selected ? 'border-accent/35 bg-accent/8' : 'border-border/20 bg-background/35 hover:border-border/75'} cursor-pointer`}
                 onClick={() => onSelectVersion(version.id)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
@@ -83,7 +83,7 @@ export function OutputVersionHistory({
           })}
         </div>
 
-        <div className="rounded-xl border border-border/50 bg-background/35 p-4">
+        <div className="rounded-xl border border-border/20 bg-background/35 p-4">
           <div className="mb-3 flex items-center gap-2">
             <GitCompareArrows className="h-4 w-4 text-accent" />
             <p className="text-sm font-medium text-foreground">Version Diff</p>
@@ -91,14 +91,14 @@ export function OutputVersionHistory({
           {diff ? (
             <div className="space-y-3 text-sm text-muted-foreground/85">
               <div className="flex flex-wrap gap-2">
-                <span className="rounded-full border border-border/50 px-2 py-1 text-xs">
+                <span className="rounded-full border border-border/20 px-2 py-1 text-xs">
                   v{diff.from_version_number} → v{diff.to_version_number}
                 </span>
                 {diff.content_changed ? <span className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-300">Content changed</span> : null}
                 {diff.structured_payload_changed ? <span className="rounded-full border border-sky-500/25 bg-sky-500/10 px-2 py-1 text-xs text-sky-300">Payload changed</span> : null}
                 {diff.summary_changed ? <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-xs text-amber-300">Summary changed</span> : null}
               </div>
-              <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg border border-border/60 bg-card/50 p-3 text-xs text-foreground/85">
+              <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg border border-border/25 bg-card/50 p-3 text-xs text-foreground/85">
                 {diff.content_preview || 'No text diff preview available.'}
               </pre>
             </div>

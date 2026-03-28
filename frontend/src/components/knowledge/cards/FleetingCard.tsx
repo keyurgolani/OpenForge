@@ -29,7 +29,7 @@ export function FleetingCard({ item, slim, isProcessing }: { item: KnowledgeList
                     <TagRow tags={item.tags} />
 
                     {/* Footer */}
-                    <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-border/60">
+                    <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-border/25">
                         <span className="text-[10px] text-muted-foreground/80">
                             {formatTimestamp(item.updated_at)}
                         </span>

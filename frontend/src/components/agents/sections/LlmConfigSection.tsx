@@ -128,7 +128,7 @@ export default function LlmConfigSection({
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">
               Temperature{' '}
-              <span className="text-muted-foreground/60">
+              <span className="text-muted-foreground/80">
                 ({(value.temperature ?? 0.7).toFixed(1)})
               </span>
             </label>
@@ -143,7 +143,7 @@ export default function LlmConfigSection({
               }
               className="w-full accent-accent"
             />
-            <div className="flex justify-between text-[10px] text-muted-foreground/60">
+            <div className="flex justify-between text-[10px] text-muted-foreground/80">
               <span>0</span>
               <span>2</span>
             </div>

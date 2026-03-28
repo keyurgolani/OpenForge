@@ -51,7 +51,7 @@ export function MutationButton({
 }: MutationButtonProps) {
   const variantStyles = {
     primary: 'bg-accent text-accent-foreground hover:bg-accent/90',
-    secondary: 'bg-muted/60 text-foreground hover:bg-muted/80 border border-border/60',
+    secondary: 'bg-muted/60 text-foreground hover:bg-muted/80 border border-border/25',
     danger: 'bg-red-500/15 text-red-400 border border-red-500/30 hover:bg-red-500/25',
     ghost: 'text-muted-foreground hover:text-foreground hover:bg-muted/40',
   };

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight, Bot, Plus } from 'lucide-react'
 
@@ -6,16 +6,29 @@ import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import EmptyState from '@/components/shared/EmptyState'
 import ErrorState from '@/components/shared/ErrorState'
 import LoadingState from '@/components/shared/LoadingState'
-import PageHeader from '@/components/shared/PageHeader'
 import { useAgentsQuery, useDeleteAgent } from '@/features/agents'
 import { formatRelativeTime } from '@/lib/formatters'
 import { agentsRoute } from '@/lib/routes'
+import { useUIStore } from '@/stores/uiStore'
 
 export default function AgentsPage() {
   const navigate = useNavigate()
   const { data, isLoading, error } = useAgentsQuery()
   const deleteAgent = useDeleteAgent()
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
+  const setHeaderActions = useUIStore(s => s.setHeaderActions)
+
+  useEffect(() => {
+    setHeaderActions(
+      <button
+        className="bg-accent text-accent-foreground hover:bg-accent/90 px-3.5 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors"
+        onClick={() => navigate('/agents/new')}
+      >
+        <Plus className="w-3.5 h-3.5" /> Create Agent
+      </button>
+    )
+    return () => setHeaderActions(null)
+  }, [navigate, setHeaderActions])
 
   if (isLoading) return <LoadingState label="Loading agents..." />
   if (error) return <ErrorState message="Agents could not be loaded." />
@@ -24,18 +37,6 @@ export default function AgentsPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <PageHeader
-        title="Agents"
-        description="Agent definitions that power interactive and autonomous workflows."
-        actions={
-          <button
-            className="bg-accent text-accent-foreground hover:bg-accent/90 px-3.5 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors"
-            onClick={() => navigate('/agents/new')}
-          >
-            <Plus className="w-3.5 h-3.5" /> Create Agent
-          </button>
-        }
-      />
 
       {/* Agent list */}
       {agents.length === 0 ? (
@@ -47,7 +48,7 @@ export default function AgentsPage() {
           icon={<Bot className="h-5 w-5" />}
         />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/30">
+        <div className="overflow-hidden rounded-2xl border border-border/25 bg-card/30">
           <table className="min-w-full divide-y divide-border/60">
             <thead className="bg-background/35">
               <tr className="text-left text-[11px] uppercase tracking-[0.12em] text-muted-foreground/75">

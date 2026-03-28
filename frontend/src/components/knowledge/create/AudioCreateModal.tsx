@@ -259,7 +259,7 @@ export default function AudioCreateModal({ isOpen, onClose, workspaceId, onCreat
             }
         >
             {/* Tab switcher */}
-            <div className="flex gap-1 p-0.5 rounded-lg bg-muted/30 border border-border/60">
+            <div className="flex gap-1 p-0.5 rounded-lg bg-muted/30 border border-border/25">
                 <button
                     type="button"
                     onClick={() => setTab('upload')}
@@ -287,7 +287,7 @@ export default function AudioCreateModal({ isOpen, onClose, workspaceId, onCreat
                 <>
                     <div
                         className={`relative flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed transition-all cursor-pointer
-                            ${dragOver ? 'border-accent bg-accent/5 scale-[1.01]' : file ? 'border-accent/40 bg-accent/5' : 'border-border/60 hover:border-accent/50 hover:bg-muted/10'}`}
+                            ${dragOver ? 'border-accent bg-accent/5 scale-[1.01]' : file ? 'border-accent/40 bg-accent/5' : 'border-border/25 hover:border-accent/50 hover:bg-muted/10'}`}
                         style={{ minHeight: file ? undefined : '9rem' }}
                         onDragOver={e => { e.preventDefault(); setDragOver(true) }}
                         onDragLeave={() => setDragOver(false)}
@@ -303,7 +303,7 @@ export default function AudioCreateModal({ isOpen, onClose, workspaceId, onCreat
                         />
                         {file ? (
                             <div className="flex items-center gap-3 w-full p-3">
-                                <div className="w-16 h-16 rounded-lg bg-muted/40 border border-border/60 flex items-center justify-center flex-shrink-0">
+                                <div className="w-16 h-16 rounded-lg bg-muted/40 border border-border/25 flex items-center justify-center flex-shrink-0">
                                     <Music className="w-7 h-7 text-orange-400" />
                                 </div>
                                 <div className="flex-1 min-w-0">
@@ -320,7 +320,7 @@ export default function AudioCreateModal({ isOpen, onClose, workspaceId, onCreat
                             </div>
                         ) : (
                             <div className="flex flex-col items-center gap-2 text-center p-6">
-                                <div className="w-11 h-11 rounded-xl bg-muted/40 border border-border/60 flex items-center justify-center">
+                                <div className="w-11 h-11 rounded-xl bg-muted/40 border border-border/25 flex items-center justify-center">
                                     <Upload className="w-5 h-5 text-muted-foreground" />
                                 </div>
                                 <div>
@@ -374,7 +374,7 @@ export default function AudioCreateModal({ isOpen, onClose, workspaceId, onCreat
                                     <button
                                         type="button"
                                         onClick={pauseRecording}
-                                        className="p-2.5 rounded-full bg-muted/50 border border-border/60 text-foreground hover:bg-muted/70 transition-colors"
+                                        className="p-2.5 rounded-full bg-muted/50 border border-border/25 text-foreground hover:bg-muted/70 transition-colors"
                                         title="Pause"
                                     >
                                         <Pause className="w-5 h-5" />
@@ -383,7 +383,7 @@ export default function AudioCreateModal({ isOpen, onClose, workspaceId, onCreat
                                     <button
                                         type="button"
                                         onClick={resumeRecording}
-                                        className="p-2.5 rounded-full bg-muted/50 border border-border/60 text-foreground hover:bg-muted/70 transition-colors"
+                                        className="p-2.5 rounded-full bg-muted/50 border border-border/25 text-foreground hover:bg-muted/70 transition-colors"
                                         title="Resume"
                                     >
                                         <Play className="w-5 h-5" />
@@ -408,7 +408,7 @@ export default function AudioCreateModal({ isOpen, onClose, workspaceId, onCreat
                     {recordingState === 'done' && recordedUrl && (
                         <>
                             {/* Playback */}
-                            <div className="w-full rounded-lg border border-border/60 bg-muted/10 p-3 space-y-2">
+                            <div className="w-full rounded-lg border border-border/25 bg-muted/10 p-3 space-y-2">
                                 <div className="flex items-center gap-2">
                                     <Music className="w-4 h-4 text-orange-400 flex-shrink-0" />
                                     <span className="text-sm font-medium text-foreground">Recording</span>

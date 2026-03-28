@@ -30,7 +30,7 @@ export function HITLApprovalCard({ toolName, actionSummary, status, onApprove, o
         <span className="text-[13px] font-mono text-accent/85">{toolName}</span>
       </div>
       {actionSummary && (
-        <div className="p-2 bg-card/60 border border-border/50 rounded-sm text-xs text-muted-foreground leading-relaxed mb-2.5">
+        <div className="p-2 bg-card/60 border border-border/20 rounded-sm text-xs text-muted-foreground leading-relaxed mb-2.5">
           {actionSummary}
         </div>
       )}

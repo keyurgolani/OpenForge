@@ -81,27 +81,12 @@ export function Composer({ onSend, onCancel, onAttach, onRemoveAttachment, phase
   return (
     <div className="chat-composer-shell pointer-events-none z-20 px-3 py-0.5 md:px-4 md:py-1 pb-2">
       <div className="pointer-events-auto">
-        {attachments.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-2 px-2">
-            {attachments.map((att) => (
-              <AttachmentChip
-                key={att.id}
-                filename={att.filename}
-                size={att.size}
-                status={att.status}
-                onRetry={att.onRetry}
-                onRemove={onRemoveAttachment ? () => onRemoveAttachment(att.id) : undefined}
-                onClick={att.status === 'extracted' && att.extracted_text ? () => setModalAttachment(att) : undefined}
-              />
-            ))}
-          </div>
-        )}
         <div
           className="chat-composer-panel"
           onDragOver={(e) => e.preventDefault()}
           onDrop={handleFileDrop}
         >
-          <div className="flex items-end gap-2.5">
+          <div className="flex flex-col gap-2">
             <textarea
               ref={textareaRef}
               value={value}
@@ -111,40 +96,59 @@ export function Composer({ onSend, onCancel, onAttach, onRemoveAttachment, phase
               placeholder="Message..."
               disabled={composerDisabled}
               rows={1}
-              className="chat-composer-textarea"
+              className="chat-composer-textarea w-full"
               aria-label="Chat message input"
             />
-            <div className="flex gap-1.5 items-center flex-shrink-0 pb-0.5">
-              {modelOptions && modelOptions.length > 0 && onModelSelect && (
-                <ComposerModelPicker
-                  options={modelOptions}
-                  selectedKey={selectedModelKey ?? ''}
-                  onSelect={onModelSelect}
-                  defaultLabel={defaultModelLabel}
-                />
-              )}
-              {onAttach && (
-                <>
-                  <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) onAttach(Array.from(e.target.files)) }} />
-                  <button onClick={() => fileInputRef.current?.click()} className="chat-control-pill h-9 min-w-9 justify-center" aria-label="Attach file">
-                    <Paperclip className="w-4 h-4" />
+            <div className="flex items-center justify-between">
+              <div className="flex gap-1.5 items-center">
+                {modelOptions && modelOptions.length > 0 && onModelSelect && (
+                  <ComposerModelPicker
+                    options={modelOptions}
+                    selectedKey={selectedModelKey ?? ''}
+                    onSelect={onModelSelect}
+                    defaultLabel={defaultModelLabel}
+                  />
+                )}
+                {onAttach && (
+                  <>
+                    <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) onAttach(Array.from(e.target.files)) }} />
+                    <button onClick={() => fileInputRef.current?.click()} className="chat-control-pill h-9 min-w-9 justify-center" aria-label="Attach file">
+                      <Paperclip className="w-4 h-4" />
+                    </button>
+                  </>
+                )}
+                {attachments.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {attachments.map((att) => (
+                      <AttachmentChip
+                        key={att.id}
+                        filename={att.filename}
+                        size={att.size}
+                        status={att.status}
+                        onRetry={att.onRetry}
+                        onRemove={onRemoveAttachment ? () => onRemoveAttachment(att.id) : undefined}
+                        onClick={att.status === 'extracted' && att.extracted_text ? () => setModalAttachment(att) : undefined}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-1.5 items-center">
+                {isActive && onCancel ? (
+                  <button onClick={onCancel} className="chat-control-pill h-9 min-w-9 justify-center" aria-label="Stop generation">
+                    <Square className="w-4 h-4" />
                   </button>
-                </>
-              )}
-              {isActive && onCancel ? (
-                <button onClick={onCancel} className="chat-control-pill h-9 min-w-9 justify-center" aria-label="Stop generation">
-                  <Square className="w-4 h-4" />
-                </button>
-              ) : (
-                <button
-                  onClick={handleSend}
-                  disabled={!value.trim() || isActive || hasPending}
-                  className="chat-send-button disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label="Send message"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
-              )}
+                ) : (
+                  <button
+                    onClick={handleSend}
+                    disabled={!value.trim() || isActive || hasPending}
+                    className="chat-send-button disabled:opacity-40 disabled:cursor-not-allowed"
+                    aria-label="Send message"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

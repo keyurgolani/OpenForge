@@ -33,7 +33,7 @@ export default function AccordionSection({
       className={`rounded-xl border px-2.5 py-2 transition-colors flex flex-col ${
         isExpanded
           ? 'border-accent/35 bg-card/50 flex-1 min-h-0'
-          : 'border-border/55 bg-card/22 flex-shrink-0'
+          : 'border-border/40 bg-card/22 flex-shrink-0'
       }`}
     >
       <button
@@ -49,7 +49,7 @@ export default function AccordionSection({
             }`}
           />
           {Icon && (
-            <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted/40">
+            <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border border-border/25 bg-muted/40">
               <Icon className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
           )}

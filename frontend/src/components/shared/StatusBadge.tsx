@@ -5,7 +5,7 @@ interface StatusBadgeProps {
 }
 
 const STATUS_CLASSNAMES = {
-  default: 'border-border/60 bg-muted/45 text-muted-foreground',
+  default: 'border-border/25 bg-muted/45 text-muted-foreground',
   success: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300',
   warning: 'border-amber-500/25 bg-amber-500/10 text-amber-300',
   error: 'border-red-500/25 bg-red-500/10 text-red-300',

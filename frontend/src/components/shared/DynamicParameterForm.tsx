@@ -37,7 +37,7 @@ export default function DynamicParameterForm({
               value={String(values[param.name] ?? param.default ?? '')}
               onChange={(e) => handleChange(param.name, e.target.value)}
               disabled={readOnly}
-              className="w-full rounded-lg border border-border/60 bg-background/50 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-accent/40"
+              className="w-full rounded-lg border border-border/25 bg-background/50 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-accent/40"
             />
           )}
 
@@ -47,7 +47,7 @@ export default function DynamicParameterForm({
               onChange={(e) => handleChange(param.name, e.target.value)}
               disabled={readOnly}
               rows={3}
-              className="w-full rounded-lg border border-border/60 bg-background/50 px-3 py-2 text-sm text-foreground resize-y focus:outline-none focus:border-accent/40"
+              className="w-full rounded-lg border border-border/25 bg-background/50 px-3 py-2 text-sm text-foreground resize-y focus:outline-none focus:border-accent/40"
             />
           )}
 
@@ -57,7 +57,7 @@ export default function DynamicParameterForm({
               value={values[param.name] !== undefined ? Number(values[param.name]) : (param.default as number ?? '')}
               onChange={(e) => handleChange(param.name, e.target.value ? Number(e.target.value) : undefined)}
               disabled={readOnly}
-              className="w-full rounded-lg border border-border/60 bg-background/50 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-accent/40"
+              className="w-full rounded-lg border border-border/25 bg-background/50 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-accent/40"
             />
           )}
 
@@ -83,7 +83,7 @@ export default function DynamicParameterForm({
               value={String(values[param.name] ?? param.default ?? '')}
               onChange={(e) => handleChange(param.name, e.target.value)}
               disabled={readOnly}
-              className="w-full rounded-lg border border-border/60 bg-background/50 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-accent/40"
+              className="w-full rounded-lg border border-border/25 bg-background/50 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-accent/40"
             >
               <option value="">Select...</option>
               {param.options.map((opt) => (

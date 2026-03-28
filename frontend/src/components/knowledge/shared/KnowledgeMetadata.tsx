@@ -102,7 +102,7 @@ export default function KnowledgeMetadata({ knowledge }: KnowledgeMetadataProps)
             </div>
 
             {tags.length > 0 && (
-                <div className="pt-2 border-t border-border/50">
+                <div className="pt-2 border-t border-border/20">
                     <div className="text-[10px] text-muted-foreground/70 uppercase tracking-wide mb-1.5">Tags</div>
                     <div className="flex flex-wrap gap-1">
                         {tags.map((tag: string, i: number) => (

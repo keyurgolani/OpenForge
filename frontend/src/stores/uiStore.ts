@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { create } from 'zustand'
 
 interface UIState {
@@ -15,6 +16,10 @@ interface UIState {
     /** Last visited knowledge ID per workspace */
     lastKnowledgeId: Record<string, string>
     setLastKnowledgeId: (workspaceId: string, knowledgeId: string) => void
+
+    /** Page-specific action buttons shown in the AppShell header */
+    headerActions: ReactNode | null
+    setHeaderActions: (actions: ReactNode | null) => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -32,4 +37,7 @@ export const useUIStore = create<UIState>((set) => ({
     lastKnowledgeId: {},
     setLastKnowledgeId: (workspaceId, knowledgeId) =>
         set((s) => ({ lastKnowledgeId: { ...s.lastKnowledgeId, [workspaceId]: knowledgeId } })),
+
+    headerActions: null,
+    setHeaderActions: (actions) => set({ headerActions: actions }),
 }))

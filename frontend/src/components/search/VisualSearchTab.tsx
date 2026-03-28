@@ -78,7 +78,7 @@ export default function VisualSearchTab() {
             <div className="flex flex-col sm:flex-row gap-3 items-start">
                 <div
                     className={`relative flex-1 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed transition-all cursor-pointer
-                        ${dragOver ? 'border-accent bg-accent/5 scale-[1.01]' : queryFile ? 'border-accent/40 bg-accent/5' : 'border-border/60 hover:border-accent/50 hover:bg-muted/20'}`}
+                        ${dragOver ? 'border-accent bg-accent/5 scale-[1.01]' : queryFile ? 'border-accent/40 bg-accent/5' : 'border-border/25 hover:border-accent/50 hover:bg-muted/20'}`}
                     style={{ minHeight: '8rem' }}
                     onDragOver={e => { e.preventDefault(); setDragOver(true) }}
                     onDragLeave={() => setDragOver(false)}
@@ -102,7 +102,7 @@ export default function VisualSearchTab() {
                                 style={{ maxHeight: '160px' }}
                             />
                             <button
-                                className="absolute top-3 right-3 btn-ghost p-1 bg-card/80 backdrop-blur-sm border border-border/50"
+                                className="absolute top-3 right-3 btn-ghost p-1 bg-card/80 backdrop-blur-sm border border-border/20"
                                 onClick={e => { e.stopPropagation(); handleReset() }}
                             >
                                 <X className="w-3 h-3" />
@@ -110,7 +110,7 @@ export default function VisualSearchTab() {
                         </div>
                     ) : (
                         <div className="flex flex-col items-center gap-2 text-center p-5">
-                            <div className="w-10 h-10 rounded-xl bg-muted/40 border border-border/60 flex items-center justify-center">
+                            <div className="w-10 h-10 rounded-xl bg-muted/40 border border-border/25 flex items-center justify-center">
                                 <Upload className="w-4 h-4 text-muted-foreground" />
                             </div>
                             <div>

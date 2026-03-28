@@ -101,7 +101,7 @@ export default function AutomationDetailPage() {
           <div className="flex flex-wrap items-center gap-2">
             <Link
               to={automationsRoute()}
-              className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/25 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
             >
               <ArrowLeft className="h-4 w-4" /> Back
             </Link>
@@ -180,7 +180,7 @@ export default function AutomationDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-border/60">
+      <div className="flex items-center gap-1 border-b border-border/25">
         {tabs.map(tab => (
           <button
             key={tab.id}
@@ -217,7 +217,7 @@ export default function AutomationDetailPage() {
             { label: 'Created', value: formatDateTime(automation.created_at) },
             { label: 'Updated', value: formatDateTime(automation.updated_at) },
           ].map(item => (
-            <div key={item.label} className="rounded-xl border border-border/60 bg-background/35 p-3">
+            <div key={item.label} className="rounded-xl border border-border/25 bg-background/35 p-3">
               <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">{item.label}</p>
               {'link' in item && item.link ? (
                 <Link to={item.link} className="mt-1 text-sm font-medium text-accent hover:text-accent/80 transition">{item.value}</Link>
@@ -255,7 +255,7 @@ export default function AutomationDetailPage() {
             <div key={label}>
               <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/75">{label}</p>
               <textarea
-                className="w-full min-h-[150px] rounded-xl border border-border/60 bg-background/50 p-4 font-mono text-xs text-foreground/90 resize-y focus:outline-none focus:border-accent/40"
+                className="w-full min-h-[150px] rounded-xl border border-border/25 bg-background/50 p-4 font-mono text-xs text-foreground/90 resize-y focus:outline-none focus:border-accent/40"
                 value={draft ?? JSON.stringify(value, null, 2)}
                 onChange={e => setDraft(e.target.value)}
               />
@@ -267,7 +267,7 @@ export default function AutomationDetailPage() {
       {activeTab === 'deployments' && (
         <div className="space-y-3">
           {!deploymentsData?.deployments?.length ? (
-            <div className="rounded-2xl border border-dashed border-border/60 bg-card/20 p-6 text-sm text-muted-foreground/80">
+            <div className="rounded-2xl border border-dashed border-border/25 bg-card/20 p-6 text-sm text-muted-foreground/80">
               No deployments yet. Deploy this automation to get started.
             </div>
           ) : (
@@ -276,7 +276,7 @@ export default function AutomationDetailPage() {
                 <Link
                   key={d.id}
                   to={deploymentsRoute(d.id)}
-                  className="flex items-center justify-between rounded-xl border border-border/60 bg-card/40 p-3 hover:bg-card/60 transition"
+                  className="flex items-center justify-between rounded-xl border border-border/25 bg-card/40 p-3 hover:bg-card/60 transition"
                 >
                   <div className="flex items-center gap-3">
                     <StatusBadge status={d.status} />
@@ -311,7 +311,7 @@ export default function AutomationDetailPage() {
       {/* Deploy dialog */}
       {showDeployDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl border border-border/60 bg-background p-6 shadow-xl space-y-4">
+          <div className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl border border-border/25 bg-background p-6 shadow-xl space-y-4">
             <h3 className="text-lg font-semibold text-foreground">Deploy {automation.name}</h3>
             {inputSchema.length > 0 && (
               <>
@@ -325,7 +325,7 @@ export default function AutomationDetailPage() {
             )}
 
             {/* Schedule section */}
-            <div className="border-t border-border/60 pt-4">
+            <div className="border-t border-border/25 pt-4">
               <label className="block text-sm font-medium text-foreground mb-1">Schedule</label>
               <p className="text-xs text-muted-foreground mb-2">
                 Cron expression for recurring runs. Leave empty for manual-only.
@@ -335,7 +335,7 @@ export default function AutomationDetailPage() {
                 value={deploySchedule}
                 onChange={(e) => setDeploySchedule(e.target.value)}
                 placeholder={String(automation.trigger_config?.cron ?? 'e.g. 0 7 * * *')}
-                className="w-full rounded-lg border border-border/60 bg-background/50 px-3 py-2 text-sm text-foreground font-mono focus:outline-none focus:border-accent/40"
+                className="w-full rounded-lg border border-border/25 bg-background/50 px-3 py-2 text-sm text-foreground font-mono focus:outline-none focus:border-accent/40"
               />
               {automation.trigger_config?.cron && !deploySchedule && (
                 <p className="mt-1 text-xs text-muted-foreground/70">
@@ -346,7 +346,7 @@ export default function AutomationDetailPage() {
 
             <div className="flex justify-end gap-2">
               <button
-                className="px-4 py-2 rounded-lg border border-border/60 text-sm text-muted-foreground hover:text-foreground transition"
+                className="px-4 py-2 rounded-lg border border-border/25 text-sm text-muted-foreground hover:text-foreground transition"
                 onClick={() => { setShowDeployDialog(false); setDeployInputValues({}); setDeploySchedule('') }}
               >
                 Cancel
@@ -390,7 +390,7 @@ function AutomationActivityTab({ automationId }: { automationId: string }) {
 
   if (!latestRun) {
     return (
-      <div className="rounded-2xl border border-dashed border-border/60 bg-card/20 p-6 text-sm text-muted-foreground/80">
+      <div className="rounded-2xl border border-dashed border-border/25 bg-card/20 p-6 text-sm text-muted-foreground/80">
         No runs found for this automation. Run this automation to see activity here.
       </div>
     )
@@ -405,7 +405,7 @@ function AutomationActivityTab({ automationId }: { automationId: string }) {
   }
 
   return (
-    <div className="rounded-2xl border border-border/60 bg-card/20 p-6 text-sm text-muted-foreground/80 space-y-2">
+    <div className="rounded-2xl border border-border/25 bg-card/20 p-6 text-sm text-muted-foreground/80 space-y-2">
       <div className="flex items-center gap-3">
         <span className="text-foreground font-medium">Latest run:</span>
         <Link to={runsRoute(latestRun.id)} className="text-accent hover:text-accent/80 transition font-mono text-xs">

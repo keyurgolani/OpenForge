@@ -53,7 +53,7 @@ export default function ModalShell({
                             <motion.div
                                 className={cn(
                                     'fixed left-1/2 top-1/2 z-[10000] w-[calc(100%-2rem)] max-h-[calc(100vh-4rem)]',
-                                    'glass-card rounded-2xl border border-border/60 shadow-2xl',
+                                    'glass-card rounded-2xl border border-border/25 shadow-2xl',
                                     'flex flex-col overflow-hidden',
                                     sizeClasses[size],
                                 )}
@@ -66,7 +66,7 @@ export default function ModalShell({
                                 <Dialog.Description className="sr-only">
                                     {title}
                                 </Dialog.Description>
-                                <div className="flex items-center justify-between px-6 py-4 border-b border-border/60">
+                                <div className="flex items-center justify-between px-6 py-4 border-b border-border/25">
                                     <Dialog.Title className="text-lg font-semibold text-foreground">
                                         {title}
                                     </Dialog.Title>
@@ -88,7 +88,7 @@ export default function ModalShell({
 
                                 {/* Footer */}
                                 {footer && (
-                                    <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border/60">
+                                    <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border/25">
                                         {footer}
                                     </div>
                                 )}

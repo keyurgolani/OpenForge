@@ -40,11 +40,11 @@ export function Card({
   return (
     <Component
       className={cn(
-        'rounded-xl border border-border/60',
-        glass ? 'glass-card' : 'bg-card/50',
+        'rounded-xl border border-border/25',
+        glass ? 'glass-card' : 'bg-card/35',
         paddingStyles[padding],
-        hover && 'hover:border-border/80 hover:bg-card/70 transition-colors',
-        interactive && 'cursor-pointer hover:border-accent/30 hover:bg-accent/5 transition-all',
+        hover && 'hover:border-border/45 hover:bg-card/50 transition-colors',
+        interactive && 'cursor-pointer hover:border-accent/20 hover:bg-accent/5 transition-all',
         className
       )}
     >
@@ -105,7 +105,7 @@ interface CardFooterProps {
 
 export function CardFooter({ children, className }: CardFooterProps) {
   return (
-    <div className={cn('mt-4 pt-4 border-t border-border/60', className)}>
+    <div className={cn('mt-4 pt-4 border-t border-border/25', className)}>
       {children}
     </div>
   );

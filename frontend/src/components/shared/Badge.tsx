@@ -21,13 +21,13 @@ interface BadgeProps {
 }
 
 const variantStyles: Record<BadgeVariant, string> = {
-  default: 'bg-muted/60 text-foreground border-border/50',
+  default: 'bg-muted/60 text-foreground border-border/20',
   accent: 'bg-accent/15 text-accent border-accent/30',
   success: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25',
   warning: 'bg-amber-500/15 text-amber-400 border-amber-500/25',
   danger: 'bg-red-500/15 text-red-400 border-red-500/25',
   outline: 'bg-transparent text-foreground border-border',
-  muted: 'bg-muted/30 text-muted-foreground border-border/50',
+  muted: 'bg-muted/30 text-muted-foreground border-border/20',
 };
 
 const sizeStyles: Record<BadgeSize, string> = {

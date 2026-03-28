@@ -52,7 +52,7 @@ export default function TagInput({
         <div
             className={cn(
                 'flex flex-wrap items-center gap-1.5 px-3 py-2 rounded-xl',
-                'border border-border/60 bg-background/30',
+                'border border-border/25 bg-background/30',
                 'focus-within:border-accent/50 transition-colors cursor-text',
             )}
             onClick={() => inputRef.current?.focus()}

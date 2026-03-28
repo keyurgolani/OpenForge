@@ -6,7 +6,7 @@ interface LoadingStateProps {
 
 export default function LoadingState({ label = 'Loading…' }: LoadingStateProps) {
   return (
-    <div className="flex min-h-[240px] flex-col items-center justify-center gap-3 rounded-2xl border border-border/60 bg-card/20">
+    <div className="flex min-h-[240px] flex-col items-center justify-center gap-3 rounded-2xl border border-border/20 bg-card/15">
       <LoadingSpinner size="lg" />
       <p className="text-sm text-muted-foreground/90">{label}</p>
     </div>

@@ -163,7 +163,7 @@ export default function GistEditor({ knowledge, workspaceId }: GistEditorProps) 
                                             className="fixed inset-0 z-40"
                                             onClick={() => setShowLangPicker(false)}
                                         />
-                                        <div className="absolute right-0 top-full mt-1 z-50 w-44 max-h-64 overflow-y-auto rounded-lg border border-border/60 bg-card shadow-xl">
+                                        <div className="absolute right-0 top-full mt-1 z-50 w-44 max-h-64 overflow-y-auto rounded-lg border border-border/25 bg-card shadow-xl">
                                             {GIST_LANGUAGES.map((lang) => (
                                                 <button
                                                     key={lang}

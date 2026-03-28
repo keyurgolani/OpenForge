@@ -83,7 +83,7 @@ export default function DeploymentDetailPage() {
               </button>
               <button
                 onClick={() => pauseDeployment.mutate(deployment.id)}
-                className="px-3 py-1.5 rounded-lg border border-border/60 text-sm text-muted-foreground hover:text-foreground transition flex items-center gap-1.5"
+                className="px-3 py-1.5 rounded-lg border border-border/25 text-sm text-muted-foreground hover:text-foreground transition flex items-center gap-1.5"
               >
                 <Pause className="w-3.5 h-3.5" /> Pause
               </button>
@@ -116,19 +116,19 @@ export default function DeploymentDetailPage() {
 
       {/* Metadata */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="rounded-xl border border-border/60 bg-card/40 p-3">
+        <div className="rounded-xl border border-border/25 bg-card/40 p-3">
           <p className="text-xs text-muted-foreground mb-1">Created</p>
           <p className="text-sm text-foreground">{deployment.created_at ? formatDateTime(deployment.created_at) : '—'}</p>
         </div>
-        <div className="rounded-xl border border-border/60 bg-card/40 p-3">
+        <div className="rounded-xl border border-border/25 bg-card/40 p-3">
           <p className="text-xs text-muted-foreground mb-1">Last Run</p>
           <p className="text-sm text-foreground">{deployment.last_run_at ? formatRelativeTime(deployment.last_run_at) : 'Never'}</p>
         </div>
-        <div className="rounded-xl border border-border/60 bg-card/40 p-3">
+        <div className="rounded-xl border border-border/25 bg-card/40 p-3">
           <p className="text-xs text-muted-foreground mb-1">Last Success</p>
           <p className="text-sm text-foreground">{deployment.last_success_at ? formatRelativeTime(deployment.last_success_at) : '—'}</p>
         </div>
-        <div className="rounded-xl border border-border/60 bg-card/40 p-3">
+        <div className="rounded-xl border border-border/25 bg-card/40 p-3">
           <p className="text-xs text-muted-foreground mb-1">Deployed By</p>
           <p className="text-sm text-foreground">{deployment.deployed_by ?? '—'}</p>
         </div>
@@ -136,7 +136,7 @@ export default function DeploymentDetailPage() {
 
       {/* Schedule */}
       {deployment.schedule_expression && (
-        <div className="rounded-xl border border-border/60 bg-card/40 p-4 flex items-center gap-3">
+        <div className="rounded-xl border border-border/25 bg-card/40 p-4 flex items-center gap-3">
           <Clock className="w-4 h-4 text-muted-foreground" />
           <div>
             <p className="text-xs text-muted-foreground mb-0.5">Schedule</p>
@@ -147,7 +147,7 @@ export default function DeploymentDetailPage() {
 
       {/* Input Values (read-only form) */}
       {Object.keys(deployment.input_values).length > 0 && (
-        <div className="rounded-xl border border-border/60 bg-card/40 p-5">
+        <div className="rounded-xl border border-border/25 bg-card/40 p-5">
           <div className="flex items-center gap-2 mb-4">
             <Settings className="w-4 h-4 text-muted-foreground" />
             <h3 className="text-sm font-semibold text-foreground">Configuration</h3>
@@ -162,7 +162,7 @@ export default function DeploymentDetailPage() {
       )}
 
       {/* Run History */}
-      <div className="rounded-xl border border-border/60 bg-card/40 p-5">
+      <div className="rounded-xl border border-border/25 bg-card/40 p-5">
         <div className="flex items-center gap-2 mb-4">
           <Clock className="w-4 h-4 text-muted-foreground" />
           <h3 className="text-sm font-semibold text-foreground">Run History</h3>
@@ -175,7 +175,7 @@ export default function DeploymentDetailPage() {
               <Link
                 key={run.id}
                 to={deploymentRunRoute(deployment.id, run.id)}
-                className="flex items-center justify-between rounded-lg border border-border/60 p-3 hover:bg-card/60 transition"
+                className="flex items-center justify-between rounded-lg border border-border/25 p-3 hover:bg-card/60 transition"
               >
                 <div className="flex items-center gap-3">
                   <StatusBadge status={run.status} />

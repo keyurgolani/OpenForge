@@ -9,7 +9,6 @@ import {
 import { useQuery } from '@tanstack/react-query'
 
 import ErrorState from '@/components/shared/ErrorState'
-import PageHeader from '@/components/shared/PageHeader'
 import LoadingState from '@/components/shared/LoadingState'
 import StatusBadge from '@/components/shared/StatusBadge'
 import { useOutputsQuery } from '@/features/outputs'
@@ -32,16 +31,16 @@ const md = new MarkdownIt({ html: false, linkify: false, breaks: true })
 /* ---------- Knowledge type colour map ---------- */
 
 const TYPE_COLORS: Record<string, string> = {
-  note: 'bg-blue-500/10 text-blue-400 border-blue-500/25',
-  fleeting: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/25',
-  bookmark: 'bg-green-500/10 text-green-400 border-green-500/25',
-  gist: 'bg-purple-500/10 text-purple-400 border-purple-500/25',
-  image: 'bg-pink-500/10 text-pink-400 border-pink-500/25',
-  audio: 'bg-red-500/10 text-red-400 border-red-500/25',
-  pdf: 'bg-orange-500/10 text-orange-400 border-orange-500/25',
-  document: 'bg-sky-500/10 text-sky-400 border-sky-500/25',
-  sheet: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25',
-  slides: 'bg-amber-500/10 text-amber-400 border-amber-500/25',
+  note: 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30',
+  fleeting: 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30',
+  bookmark: 'bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30',
+  gist: 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30',
+  image: 'bg-pink-500/15 text-pink-600 dark:text-pink-400 border-pink-500/30',
+  audio: 'bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30',
+  pdf: 'bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30',
+  document: 'bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30',
+  sheet: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
+  slides: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30',
 }
 
 /* ---------- Sub-components ---------- */
@@ -60,7 +59,7 @@ function PlatformCard({
   return (
     <Link
       to={to}
-      className="flex items-center gap-3 rounded-xl border border-border/50 bg-background/30 px-4 py-3 transition-colors hover:border-accent/30 hover:bg-background/45"
+      className="flex items-center gap-3 rounded-xl border border-border/20 bg-background/30 px-4 py-3 transition-colors hover:border-accent/30 hover:bg-background/45"
     >
       <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-accent/20 bg-accent/15 text-accent">
         {icon}
@@ -77,7 +76,7 @@ function SuggestionLink({ to, children }: { to: string; children: ReactNode }) {
   return (
     <Link
       to={to}
-      className="flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-background/30 px-4 py-3 transition-colors hover:border-accent/30 hover:bg-background/45 group"
+      className="flex items-center justify-between gap-3 rounded-xl border border-border/20 bg-background/30 px-4 py-3 transition-colors hover:border-accent/30 hover:bg-background/45 group"
     >
       <span className="text-sm text-foreground">{children}</span>
       <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
@@ -147,19 +146,14 @@ export default function DashboardPage() {
   const conversationsTotal = conversationsQuery.data?.total ?? (conversationsQuery.data?.conversations?.length ?? 0)
 
   return (
-    <div className="space-y-6 p-6">
-      <PageHeader
-        title="Dashboard"
-        description="Your workspace at a glance"
-      />
-
+    <div className="space-y-8 p-6">
       <div className="grid gap-6 lg:grid-cols-2">
         {/* ---- LEFT HALF: Workspace (knowledge-focused) ---- */}
-        <div className="space-y-5">
+        <div className="space-y-8">
           {/* Knowledge total */}
-          <section className="rounded-2xl border border-border/60 bg-card/30 p-5">
+          <section>
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-accent/20 bg-accent/15 text-accent">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/10 text-accent">
                 <BookOpenText className="h-6 w-6" />
               </div>
               <div>
@@ -176,7 +170,7 @@ export default function DashboardPage() {
                   .map(([type, count]) => (
                     <span
                       key={type}
-                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize ${TYPE_COLORS[type] ?? 'bg-muted/30 text-muted-foreground border-border/50'}`}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize ${TYPE_COLORS[type] ?? 'bg-muted/30 text-muted-foreground border-border/20'}`}
                     >
                       {type}
                       <span className="font-bold">{count}</span>
@@ -187,7 +181,7 @@ export default function DashboardPage() {
           </section>
 
           {/* Recent knowledge list */}
-          <section className="rounded-2xl border border-border/60 bg-card/30 p-5">
+          <section>
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-foreground">Recent knowledge</h2>
@@ -206,7 +200,7 @@ export default function DashboardPage() {
                   <Link
                     key={item.id}
                     to={knowledgeRoute(workspaceId, item.id)}
-                    className="block rounded-xl border border-border/50 bg-background/30 px-4 py-3 transition-colors hover:border-accent/30 hover:bg-background/45"
+                    className="block rounded-xl border border-border/20 bg-background/30 px-4 py-3 transition-colors hover:border-accent/30 hover:bg-background/45"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
@@ -215,7 +209,7 @@ export default function DashboardPage() {
                             {item.title || item.ai_title || 'Untitled knowledge'}
                           </p>
                           <span
-                            className={`inline-flex flex-shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize ${TYPE_COLORS[item.type] ?? 'bg-muted/30 text-muted-foreground border-border/50'}`}
+                            className={`inline-flex flex-shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize ${TYPE_COLORS[item.type] ?? 'bg-muted/30 text-muted-foreground border-border/20'}`}
                           >
                             {item.type}
                           </span>
@@ -235,9 +229,9 @@ export default function DashboardPage() {
         </div>
 
         {/* ---- RIGHT HALF: Platform (workspace-agnostic) ---- */}
-        <div className="space-y-5">
+        <div className="space-y-8">
           {/* 2x3 summary card grid */}
-          <section className="rounded-2xl border border-border/60 bg-card/30 p-5">
+          <section>
             <h2 className="mb-4 text-lg font-semibold text-foreground">Platform</h2>
             <div className="grid grid-cols-2 gap-3">
               <PlatformCard label="Agents" value={agentsTotal} icon={<Bot className="h-4 w-4" />} to={agentsRoute()} />
@@ -249,7 +243,7 @@ export default function DashboardPage() {
           </section>
 
           {/* What to do next */}
-          <section className="rounded-2xl border border-border/60 bg-card/30 p-5">
+          <section>
             <div className="mb-4">
               <h2 className="text-lg font-semibold text-foreground">What to do next</h2>
               <p className="text-sm text-muted-foreground/90">Quick actions to get started.</p>

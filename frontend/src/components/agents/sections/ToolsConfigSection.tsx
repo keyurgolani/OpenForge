@@ -192,7 +192,7 @@ export default function ToolsConfigSection({
                       <span className="text-xs text-foreground/80" title={tool.id}>
                         {tool.display_name || tool.id}
                       </span>
-                      <div className="flex rounded-md border border-border/60 overflow-hidden">
+                      <div className="flex rounded-md border border-border/25 overflow-hidden">
                         {MODES.map((m) => (
                           <button
                             key={m}

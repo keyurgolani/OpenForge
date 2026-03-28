@@ -170,7 +170,7 @@ export default function AgentConfigSiderail({
                           className={`w-full rounded-lg border px-2.5 py-1.5 text-left transition ${
                             !viewingVersion
                               ? 'border-accent/40 bg-accent/15'
-                              : 'border-border/50 bg-muted/20 hover:border-border hover:bg-muted/40'
+                              : 'border-border/20 bg-muted/20 hover:border-border hover:bg-muted/40'
                           }`}
                         >
                           <div className="flex items-center justify-between">
@@ -195,7 +195,7 @@ export default function AgentConfigSiderail({
                                 className={`w-full rounded-lg border px-2.5 py-1.5 text-left transition ${
                                   isActive
                                     ? 'border-accent/40 bg-accent/15'
-                                    : 'border-border/50 bg-muted/20 hover:border-border hover:bg-muted/40'
+                                    : 'border-border/20 bg-muted/20 hover:border-border hover:bg-muted/40'
                                 }`}
                               >
                                 <div className="flex items-center justify-between">

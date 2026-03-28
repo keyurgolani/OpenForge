@@ -410,7 +410,7 @@ export default function WorkspaceHome() {
                                             {opt.label}
                                         </button>
                                     ))}
-                                    <div className="border-t border-border/50 mt-1 pt-1">
+                                    <div className="border-t border-border/20 mt-1 pt-1">
                                         <button
                                             className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-muted/50 text-foreground"
                                             onClick={() => { setSortOrder(o => o === 'asc' ? 'desc' : 'asc'); setShowSortMenu(false) }}

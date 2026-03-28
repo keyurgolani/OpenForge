@@ -23,8 +23,8 @@ export default function NodePalette({ agents, onAddNode }: NodePaletteProps) {
   }
 
   return (
-    <div className="w-56 border-r border-border/60 bg-background/50 overflow-y-auto">
-      <div className="p-3 border-b border-border/60">
+    <div className="w-56 border-r border-border/25 bg-background/50 overflow-y-auto">
+      <div className="p-3 border-b border-border/25">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Agents
         </p>

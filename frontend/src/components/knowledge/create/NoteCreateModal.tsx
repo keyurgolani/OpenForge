@@ -135,7 +135,7 @@ export default function NoteCreateModal({ isOpen, onClose, workspaceId, onCreate
                 value={content}
                 onChange={e => setContent(e.target.value)}
                 placeholder="Start writing..."
-                className="w-full bg-muted/20 border border-border/60 rounded-xl p-3 text-sm resize-none outline-none focus:border-accent/50 transition-colors min-h-[160px]"
+                className="w-full bg-muted/20 border border-border/25 rounded-xl p-3 text-sm resize-none outline-none focus:border-accent/50 transition-colors min-h-[160px]"
                 rows={8}
             />
 

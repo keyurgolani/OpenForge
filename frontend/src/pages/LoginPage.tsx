@@ -68,7 +68,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
                             onChange={e => setPassword(e.target.value)}
                             placeholder="Password"
                             autoComplete="current-password"
-                            className={`w-full h-11 bg-muted/30 border rounded-xl px-4 pr-11 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-all focus:ring-2 focus:ring-accent/50 focus:border-accent/50 ${error ? 'border-red-500/50 focus:ring-red-500/30' : 'border-border/50'}`}
+                            className={`w-full h-11 bg-muted/30 border rounded-xl px-4 pr-11 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-all focus:ring-2 focus:ring-accent/50 focus:border-accent/50 ${error ? 'border-red-500/50 focus:ring-red-500/30' : 'border-border/20'}`}
                         />
                         <button
                             type="button"

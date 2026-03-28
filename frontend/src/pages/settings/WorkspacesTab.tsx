@@ -180,7 +180,7 @@ function WorkspaceCard({ workspace: ws, providers, onDeleted, onSaved }: {
             </div>
 
             {expanded && (
-                <div className="border-t border-border/50 px-4 py-4 space-y-3 animate-fade-in">
+                <div className="border-t border-border/20 px-4 py-4 space-y-3 animate-fade-in">
                     <div>
                         <label className="text-xs text-muted-foreground mb-1 block">Name</label>
                         <div className="flex items-center gap-2">
@@ -223,7 +223,7 @@ function WorkspaceCard({ workspace: ws, providers, onDeleted, onSaved }: {
                         <textarea className="input text-sm resize-none" rows={2} value={description} onChange={e => setDescription(e.target.value)} />
                     </div>
 
-                    <div className="border-t border-border/60 pt-3 space-y-3">
+                    <div className="border-t border-border/25 pt-3 space-y-3">
                         <p className="text-xs font-medium text-muted-foreground">AI Models <span className="text-xs font-normal opacity-60">(override global defaults per category for this workspace)</span></p>
 
                         {chatModels.length === 0 && visionModels.length === 0 && (
@@ -403,7 +403,7 @@ function MergeWorkspacesSection({ workspaces, onMerged }: { workspaces: Workspac
     const targetName = workspaces.find(w => w.id === targetId)?.name
 
     return (
-        <div className="glass-card rounded-xl border border-border/60">
+        <div className="glass-card rounded-xl border border-border/25">
             <button
                 type="button"
                 onClick={() => setOpen(p => !p)}
@@ -415,7 +415,7 @@ function MergeWorkspacesSection({ workspaces, onMerged }: { workspaces: Workspac
             </button>
 
             {open && (
-                <div className="px-4 pb-4 space-y-3 border-t border-border/60 pt-3">
+                <div className="px-4 pb-4 space-y-3 border-t border-border/25 pt-3">
                     <p className="text-xs text-muted-foreground">
                         Move all knowledge, conversations, runs, outputs, and other entities from the source workspace into the target workspace.
                     </p>

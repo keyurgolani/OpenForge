@@ -337,7 +337,7 @@ export default function AgentDetailPage() {
         )}
 
         {/* ── Top Zone: Name + Description + Actions ── */}
-        <div className="rounded-2xl border border-border/60 bg-card/35 px-6 py-5">
+        <div className="rounded-2xl border border-border/25 bg-card/35 px-6 py-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="flex-1 min-w-0">
               {isEditing && !isViewingVersion ? (
@@ -356,7 +356,7 @@ export default function AgentDetailPage() {
                   </h2>
                 </div>
               )}
-              <p className="mt-1 text-xs text-muted-foreground/70 font-mono">
+              <p className="mt-1 text-xs text-muted-foreground font-mono">
                 {isEditing && !isViewingVersion ? (
                   <input
                     className="input text-xs font-mono w-full max-w-xs mt-1"
@@ -385,7 +385,7 @@ export default function AgentDetailPage() {
                     {isSaving ? 'Saving...' : isCreateMode ? 'Create' : 'Save'}
                   </button>
                   <button
-                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border/60 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border/25 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
                     onClick={handleCancel}
                   >
                     <X className="w-3.5 h-3.5" /> Cancel
@@ -406,7 +406,7 @@ export default function AgentDetailPage() {
                     <Trash2 className="w-3.5 h-3.5" /> Delete
                   </button>
                   <button
-                    className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
+                    className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/25 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
                     onClick={() => navigate(agentsRoute())}
                   >
                     <ArrowLeft className="h-4 w-4" /> Back
@@ -426,7 +426,7 @@ export default function AgentDetailPage() {
                 placeholder="Describe what this agent does..."
               />
             ) : (
-              <p className="text-sm text-foreground/80 whitespace-pre-wrap">
+              <p className="text-sm text-foreground/90 whitespace-pre-wrap">
                 {displayState.description || <span className="text-muted-foreground italic">No description</span>}
               </p>
             )}
@@ -436,9 +436,9 @@ export default function AgentDetailPage() {
         {/* ── Input Parameters + Output Definitions row ── */}
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           {/* Input Parameters */}
-          <div className="rounded-xl border border-border/60 bg-card/30 p-4">
+          <div className="rounded-xl border border-border/25 bg-card/30 p-4">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Input Parameters</p>
+              <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Input Parameters</p>
               {isEditing && !isViewingVersion && (
                 <button
                   className="inline-flex items-center gap-1 text-xs text-accent hover:text-accent/80 transition"
@@ -466,9 +466,9 @@ export default function AgentDetailPage() {
           </div>
 
           {/* Output Definitions */}
-          <div className="rounded-xl border border-border/60 bg-card/30 p-4">
+          <div className="rounded-xl border border-border/25 bg-card/30 p-4">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">Output Definitions</p>
+              <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Output Definitions</p>
               {isEditing && !isViewingVersion && (
                 <button
                   className="inline-flex items-center gap-1 text-xs text-accent hover:text-accent/80 transition"
@@ -507,7 +507,7 @@ export default function AgentDetailPage() {
 
         {/* ── System Prompt Section ── */}
         <div className="mt-4 flex-1 min-h-0 flex flex-col">
-          <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70 mb-2">System Prompt</p>
+          <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground mb-2">System Prompt</p>
 
           <div className="flex-1 flex gap-3 min-h-0">
             {/* Editor — 80% */}
@@ -671,13 +671,13 @@ function PromptVariablesSidebar({
   const [expandedFnCat, setExpandedFnCat] = useState<string | null>(null)
 
   return (
-    <div className="flex-1 overflow-y-auto rounded-xl border border-border/60 bg-card/20 p-3 space-y-3">
+    <div className="flex-1 overflow-y-auto rounded-xl border border-border/25 bg-card/20 p-3 space-y-3">
       {/* Title */}
-      <div className="border-b border-border/50 pb-2">
-        <p className="text-[11px] font-semibold text-foreground/80 tracking-tight">
+      <div className="border-b border-border/20 pb-2">
+        <p className="text-[11px] font-semibold text-foreground/90 tracking-tight">
           Template Reference
         </p>
-        <p className="text-[9px] text-muted-foreground/60 mt-0.5">
+        <p className="text-[9px] text-muted-foreground/80 mt-0.5">
           Variables, functions &amp; syntax for the template engine
         </p>
       </div>
@@ -694,7 +694,7 @@ function PromptVariablesSidebar({
                 <code className="rounded bg-accent/8 px-1 py-0.5 text-[10px] text-accent font-mono">
                   {`{{${v.name}}}`}
                 </code>
-                <span className="text-muted-foreground/70 text-[10px]">{v.type}</span>
+                <span className="text-muted-foreground text-[10px]">{v.type}</span>
               </div>
             ))}
           </div>
@@ -704,13 +704,13 @@ function PromptVariablesSidebar({
       {/* System Variables by category */}
       {categories.size > 0 && (
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
             System Variables
           </p>
           <div className="space-y-3">
             {Array.from(categories.entries()).map(([cat, vars]) => (
               <div key={cat}>
-                <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/35 mb-1 pl-0.5">
+                <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/65 mb-1 pl-0.5">
                   {cat}
                 </p>
                 <div className="space-y-1.5">
@@ -719,13 +719,13 @@ function PromptVariablesSidebar({
                       <code className="rounded bg-accent/8 px-1 py-0.5 text-[10px] text-accent font-mono w-fit">
                         {`{{${v.name}}}`}
                       </code>
-                      <span className="text-muted-foreground/70 text-[10px] pl-1">{v.description}</span>
+                      <span className="text-muted-foreground text-[10px] pl-1">{v.description}</span>
                       {v.children && v.children.length > 0 && (
-                        <div className="ml-3 mt-0.5 space-y-0.5 border-l border-border/50 pl-2">
+                        <div className="ml-3 mt-0.5 space-y-0.5 border-l border-border/20 pl-2">
                           {v.children.map((c) => (
                             <div key={c.name} className="flex items-baseline gap-1 text-[10px]">
                               <code className="text-accent/60 font-mono">.{c.name}</code>
-                              <span className="text-muted-foreground/60">{c.description}</span>
+                              <span className="text-muted-foreground/80">{c.description}</span>
                             </div>
                           ))}
                         </div>
@@ -751,7 +751,7 @@ function PromptVariablesSidebar({
                 <code className="rounded bg-emerald-500/8 px-1 py-0.5 text-[10px] text-emerald-400 font-mono w-fit">
                   {`{{output.${o.key}}}`}
                 </code>
-                <span className="text-muted-foreground/70 text-[10px] pl-1">
+                <span className="text-muted-foreground text-[10px] pl-1">
                   {o.label || o.key} ({o.type})
                 </span>
               </div>
@@ -763,7 +763,7 @@ function PromptVariablesSidebar({
       {/* Functions Reference */}
       {functionCategories.size > 0 && (
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
             Built-in Functions
           </p>
           <div className="space-y-0.5">
@@ -771,14 +771,14 @@ function PromptVariablesSidebar({
               <div key={cat}>
                 <button
                   onClick={() => setExpandedFnCat(expandedFnCat === cat ? null : cat)}
-                  className="w-full flex items-center gap-1 py-0.5 text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition"
+                  className="w-full flex items-center gap-1 py-0.5 text-[10px] text-muted-foreground/80 hover:text-muted-foreground transition"
                 >
                   <span className={`transition-transform text-[8px] ${expandedFnCat === cat ? 'rotate-90' : ''}`}>&#9656;</span>
                   <span className="font-medium">{cat}</span>
-                  <span className="ml-auto opacity-50">{fns.length}</span>
+                  <span className="ml-auto text-muted-foreground">{fns.length}</span>
                 </button>
                 {expandedFnCat === cat && (
-                  <div className="ml-3 space-y-0.5 border-l border-border/50 pl-2">
+                  <div className="ml-3 space-y-0.5 border-l border-border/20 pl-2">
                     {fns.map((fn) => (
                       <div key={fn.name} className="text-[10px]">
                         <code className="text-accent/70 font-mono">{fn.signature}</code>
@@ -795,21 +795,21 @@ function PromptVariablesSidebar({
       {/* Syntax Reference */}
       {referenceData?.syntax && referenceData.syntax.length > 0 && (
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
             Syntax
           </p>
           <div className="space-y-1">
             {referenceData.syntax.map((s) => (
               <div key={s.name} className="text-[10px]">
                 <code className="text-accent/60 font-mono">{s.pattern}</code>
-                <span className="text-muted-foreground/35 ml-1">{s.description}</span>
+                <span className="text-muted-foreground/65 ml-1">{s.description}</span>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      <p className="text-[9px] text-muted-foreground/25 italic pt-1 border-t border-border/60">
+      <p className="text-[9px] text-muted-foreground/80 italic pt-1 border-t border-border/25">
         System variables are auto-populated at runtime.
       </p>
     </div>
@@ -840,14 +840,14 @@ function OutputRow({
           {output.label && <span className="text-xs text-muted-foreground truncate">{output.label}</span>}
         </div>
         {output.description && (
-          <p className="text-xs text-muted-foreground/70 pl-1">{output.description}</p>
+          <p className="text-xs text-muted-foreground pl-1">{output.description}</p>
         )}
       </div>
     )
   }
 
   return (
-    <div className="space-y-1.5 rounded-lg border border-border/60 bg-background/20 p-2">
+    <div className="space-y-1.5 rounded-lg border border-border/25 bg-background/20 p-2">
       <div className="flex flex-wrap items-center gap-2">
         <input
           className="input text-xs flex-1 min-w-[80px]"
@@ -955,14 +955,14 @@ function ParameterRow({
           )}
         </div>
         {param.description && (
-          <p className="text-xs text-muted-foreground/70 pl-1">{param.description}</p>
+          <p className="text-xs text-muted-foreground pl-1">{param.description}</p>
         )}
       </div>
     )
   }
 
   return (
-    <div className="space-y-1.5 rounded-lg border border-border/60 bg-background/20 p-2">
+    <div className="space-y-1.5 rounded-lg border border-border/25 bg-background/20 p-2">
       <div className="flex flex-wrap items-center gap-2">
         <input
           className="input text-xs flex-1 min-w-[100px]"

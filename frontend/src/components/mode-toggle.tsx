@@ -12,7 +12,7 @@ export function ModeToggle() {
   }, [])
 
   if (!mounted) {
-    return <div className="w-16 h-8 rounded-full bg-muted/50 border border-border/50"></div>
+    return <div className="w-16 h-8 rounded-full bg-muted/50 border border-border/20"></div>
   }
 
   const isDark = resolvedTheme === "dark"

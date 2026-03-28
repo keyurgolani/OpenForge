@@ -56,7 +56,7 @@ export default function TagsSection({
     >
       {isEditing ? (
         <div
-          className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border/60 bg-background/30 px-2 py-1.5 focus-within:border-accent/50 transition-colors cursor-text"
+          className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border/25 bg-background/30 px-2 py-1.5 focus-within:border-accent/50 transition-colors cursor-text"
           onClick={(e) => {
             const inp = (e.currentTarget as HTMLElement).querySelector('input')
             inp?.focus()

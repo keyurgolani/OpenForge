@@ -78,7 +78,7 @@ export function ModelOverrideSelect({
 
             {open && (
                 <div className="absolute top-full left-0 mt-1 w-full z-[150] rounded-xl border border-border bg-popover shadow-2xl">
-                    <div className="p-2 border-b border-border/60">
+                    <div className="p-2 border-b border-border/25">
                         <div className="relative">
                             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
                             <input

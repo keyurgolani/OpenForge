@@ -139,7 +139,7 @@ export function ContentModal({
           trigger={
             <button
               type="button"
-              className="px-3 py-1.5 text-xs rounded-lg border border-border/60 text-foreground hover:bg-muted/50 transition-colors"
+              className="px-3 py-1.5 text-xs rounded-lg border border-border/25 text-foreground hover:bg-muted/50 transition-colors"
             >
               {selectedWorkspaceId
                 ? (workspaces as { id: string; name: string }[] | undefined)?.find(
@@ -166,7 +166,7 @@ export function ContentModal({
     <ModalShell isOpen={open} onClose={onClose} title={filename} size="xl" footer={footer}>
       <div className="flex flex-col h-full min-h-0">
         {header}
-        <div className="relative flex-1 min-h-0 mt-3 rounded-lg border border-border/60 overflow-hidden">
+        <div className="relative flex-1 min-h-0 mt-3 rounded-lg border border-border/25 overflow-hidden">
           {isEditing ? (
             <textarea
               ref={textareaRef}

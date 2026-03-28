@@ -51,14 +51,14 @@ export function TopBar({
     <header
       className={cn(
         'relative z-40 flex items-center gap-3 px-5 py-3',
-        'border-b border-border/60 bg-card/40 backdrop-blur-md',
+        'border-b border-border/30 bg-card/40 backdrop-blur-md',
         'flex-shrink-0',
         className
       )}
     >
       {/* Sidebar toggle */}
       <button
-        className="btn-ghost p-2 -ml-1 border border-border/60 bg-card/35"
+        className="btn-ghost p-2 -ml-1"
         onClick={onToggleSidebar}
         title={`Toggle sidebar (${toggleSidebar})`}
         aria-label="Toggle sidebar"
@@ -88,7 +88,7 @@ export function TopBar({
       {/* Command palette button */}
       {onOpenCommandPalette && (
         <button
-          className="btn-ghost p-2 text-xs gap-1.5 hidden sm:flex items-center border border-border/60 bg-card/35"
+          className="btn-ghost p-2 text-xs gap-1.5 hidden sm:flex items-center"
           onClick={onOpenCommandPalette}
           title={`Command palette (${commandPalette})`}
           aria-label="Open command palette"

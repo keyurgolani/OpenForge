@@ -168,7 +168,7 @@ function AudioTab() {
             </div>
 
             {/* STT / TTS sub-tabs */}
-            <div className="flex gap-1 p-1 rounded-lg bg-muted/30 border border-border/50">
+            <div className="flex gap-1 p-1 rounded-lg bg-muted/30 border border-border/20">
                 {([['stt', 'Speech-to-Text (STT)', sttModels.length], ['tts', 'Text-to-Speech (TTS)', ttsModels.length]] as const).map(([key, label, count]) => (
                     <button
                         key={key}
@@ -244,7 +244,7 @@ function AudioTab() {
                                                         : setSelectedAudioModels(new Set(filteredFetchedModels.map(m => m.id)))
                                                 }}>{selectedAudioModels.size === filteredFetchedModels.length ? 'Deselect all' : 'Select all'}</button>
                                             </div>
-                                            <div className="max-h-44 overflow-y-auto rounded-lg border border-border/50 bg-background/30 divide-y divide-border/20">
+                                            <div className="max-h-44 overflow-y-auto rounded-lg border border-border/20 bg-background/30 divide-y divide-border/20">
                                                 {filteredFetchedModels.map(m => {
                                                     const checked = selectedAudioModels.has(m.id)
                                                     return (
@@ -321,7 +321,7 @@ function AudioTab() {
                             </button>
                         </div>
                         {whisperExpanded && (
-                            <div className="border-t border-border/50 px-4 py-4 space-y-3 animate-fade-in">
+                            <div className="border-t border-border/20 px-4 py-4 space-y-3 animate-fade-in">
                                 <label className="text-xs text-muted-foreground mb-2 block font-medium">Download a Whisper model, then set it as default</label>
                                 <div className="grid grid-cols-1 gap-1.5 max-h-80 overflow-y-auto pr-1">
                                     {RECOMMENDED_WHISPER_MODELS.map(m => {
@@ -334,7 +334,7 @@ function AudioTab() {
                                                 key={m.id}
                                                 className={`text-left p-3 rounded-xl border transition-all duration-200 ${isSelected
                                                     ? 'border-accent bg-accent/15 shadow-glass-sm'
-                                                    : 'border-border/50 hover:border-border hover:bg-muted/20'
+                                                    : 'border-border/20 hover:border-border hover:bg-muted/20'
                                                 }`}
                                             >
                                                 <div className="flex items-start gap-2">
@@ -345,14 +345,14 @@ function AudioTab() {
                                                         className="mt-0.5 flex-shrink-0"
                                                         title={isDownloaded ? 'Select as default' : 'Download first'}
                                                     >
-                                                        <div className={`w-3.5 h-3.5 rounded-full border transition-colors ${isSelected ? 'bg-accent border-accent' : isDownloaded ? 'border-border hover:border-accent/50' : 'border-border/50 opacity-40'}`} />
+                                                        <div className={`w-3.5 h-3.5 rounded-full border transition-colors ${isSelected ? 'bg-accent border-accent' : isDownloaded ? 'border-border hover:border-accent/50' : 'border-border/20 opacity-40'}`} />
                                                     </button>
                                                     <div className="flex-1 min-w-0">
                                                         <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
                                                             <span className={`text-xs font-medium ${isSelected ? 'text-foreground' : 'text-foreground/80'}`}>{m.name}</span>
                                                             <span className={`text-[9px] px-1.5 py-0.5 rounded border font-medium ${QUALITY_COLORS[m.quality]}`}>{m.quality}</span>
-                                                            <span className="text-[9px] text-muted-foreground border border-border/60 px-1.5 py-0.5 rounded">{m.diskSize} disk</span>
-                                                            <span className="text-[9px] text-muted-foreground border border-border/60 px-1.5 py-0.5 rounded">{m.vramReq} VRAM</span>
+                                                            <span className="text-[9px] text-muted-foreground border border-border/25 px-1.5 py-0.5 rounded">{m.diskSize} disk</span>
+                                                            <span className="text-[9px] text-muted-foreground border border-border/25 px-1.5 py-0.5 rounded">{m.vramReq} VRAM</span>
                                                             {isDownloaded && (
                                                                 <span className="text-[9px] px-1.5 py-0.5 rounded border font-medium bg-emerald-500/15 text-emerald-300 border-emerald-500/30">Downloaded</span>
                                                             )}

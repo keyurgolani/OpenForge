@@ -228,7 +228,7 @@ export function TimelineRenderer({ timeline, isLive = false }: { timeline: Timel
                                     <span>Thought{durationMs != null ? ` ${((durationMs) / 1000).toFixed(1)} seconds` : ''}</span>
                                 </button>
                                 {isOpen && (
-                                    <div className="mt-1 ml-4.5 rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-xs text-muted-foreground/70">
+                                    <div className="mt-1 ml-4.5 rounded-lg border border-border/20 bg-muted/20 px-3 py-2 text-xs text-muted-foreground/70">
                                         Reasoning content is hidden for user-facing chats.
                                     </div>
                                 )}

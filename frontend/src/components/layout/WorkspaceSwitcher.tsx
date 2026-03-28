@@ -7,7 +7,11 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Search, Plus, ChevronDown, Home } from 'lucide-react';
+import {
+  Search, Plus, ChevronDown, Home, Brain, Folder, Briefcase, Microscope,
+  BookOpen, Target, Globe, Lightbulb, Wrench, Palette, BarChart3, Rocket,
+  Shield, FlaskConical, Leaf, Key, Settings2, PenLine, Database, Sprout,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface WorkspaceInfo {
@@ -104,13 +108,13 @@ export function WorkspaceSwitcher({
     <div ref={menuRef} className={cn('relative z-[180]', className)}>
       <button
         type="button"
-        className="w-full border-b border-border/60 bg-card/45 px-4 py-3 text-left transition-colors hover:bg-card/60"
+        className="w-full border-b border-border/20 bg-card/30 px-4 py-3 text-left transition-colors hover:bg-card/45"
         onClick={() => setMenuOpen((prev) => !prev)}
         aria-expanded={menuOpen}
         aria-label="Choose workspace"
       >
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-accent/12 border border-accent/25 flex items-center justify-center flex-shrink-0">
+          <div className="w-8 h-8 rounded-lg bg-accent/8 border border-accent/12 flex items-center justify-center flex-shrink-0">
             {currentWorkspace ? (
               getWorkspaceIcon(currentWorkspace.icon)
             ) : (
@@ -166,13 +170,13 @@ export function WorkspaceSwitcher({
                   className={cn(
                     'w-full rounded-lg px-2.5 py-2 text-left transition-colors',
                     workspace.id === currentWorkspaceId
-                      ? 'bg-accent/14 border border-accent/35'
-                      : 'hover:bg-muted/45 border border-transparent'
+                      ? 'bg-accent/10'
+                      : 'hover:bg-muted/35'
                   )}
                   onClick={() => handleWorkspaceSelect(workspace.id)}
                 >
                   <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-md bg-accent/15 border border-accent/20 flex items-center justify-center flex-shrink-0">
+                    <div className="w-7 h-7 rounded-md bg-accent/8 flex items-center justify-center flex-shrink-0">
                       {getWorkspaceIcon(workspace.icon)}
                     </div>
                     <div className="min-w-0 flex-1">
@@ -186,10 +190,10 @@ export function WorkspaceSwitcher({
               ))
             )}
           </div>
-          <div className="mt-2 border-t border-border/60 pt-2">
+          <div className="mt-2 border-t border-border/20 pt-2">
             <button
               type="button"
-              className="w-full rounded-lg border border-transparent px-2.5 py-2 text-left text-xs font-medium transition-colors hover:bg-muted/45 hover:border-border/60"
+              className="w-full rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-colors hover:bg-muted/35"
               onClick={handleCreateWorkspace}
             >
               <span className="inline-flex items-center gap-2">
@@ -204,26 +208,35 @@ export function WorkspaceSwitcher({
   );
 }
 
+const WORKSPACE_ICONS: Record<string, React.ReactNode> = {
+  'home': <Home className="w-4 h-4 text-accent" />,
+  'brain': <Brain className="w-4 h-4 text-accent" />,
+  'folder': <Folder className="w-4 h-4 text-accent" />,
+  'briefcase': <Briefcase className="w-4 h-4 text-accent" />,
+  'microscope': <Microscope className="w-4 h-4 text-accent" />,
+  'book-open': <BookOpen className="w-4 h-4 text-accent" />,
+  'target': <Target className="w-4 h-4 text-accent" />,
+  'globe': <Globe className="w-4 h-4 text-accent" />,
+  'lightbulb': <Lightbulb className="w-4 h-4 text-accent" />,
+  'wrench': <Wrench className="w-4 h-4 text-accent" />,
+  'palette': <Palette className="w-4 h-4 text-accent" />,
+  'bar-chart-3': <BarChart3 className="w-4 h-4 text-accent" />,
+  'rocket': <Rocket className="w-4 h-4 text-accent" />,
+  'shield': <Shield className="w-4 h-4 text-accent" />,
+  'flask-conical': <FlaskConical className="w-4 h-4 text-accent" />,
+  'leaf': <Leaf className="w-4 h-4 text-accent" />,
+  'key': <Key className="w-4 h-4 text-accent" />,
+  'settings-2': <Settings2 className="w-4 h-4 text-accent" />,
+  'pen-line': <PenLine className="w-4 h-4 text-accent" />,
+  'database': <Database className="w-4 h-4 text-accent" />,
+  'sprout': <Sprout className="w-4 h-4 text-accent" />,
+}
+
 /**
  * Get icon component for workspace icon type
  */
 export function getWorkspaceIcon(icon: string | null): React.ReactNode {
-  switch (icon) {
-    case 'home':
-      return <Home className="w-4 h-4 text-accent" />;
-    case 'briefcase':
-      return <span className="text-sm">💼</span>;
-    case 'rocket':
-      return <span className="text-sm">🚀</span>;
-    case 'lightbulb':
-      return <span className="text-sm">💡</span>;
-    case 'code':
-      return <span className="text-sm">💻</span>;
-    case 'folder':
-      return <span className="text-sm">📁</span>;
-    default:
-      return <Home className="w-4 h-4 text-accent" />;
-  }
+  return WORKSPACE_ICONS[icon ?? ''] ?? <Home className="w-4 h-4 text-accent" />;
 }
 
 export default WorkspaceSwitcher;

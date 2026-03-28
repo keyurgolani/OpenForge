@@ -19,7 +19,7 @@ function ToolCard({ tool, permission, onPermissionChange }: {
     const action = tool.id.split('.').slice(1).join('.')
 
     return (
-        <div className="glass-card rounded-xl border-border/50 overflow-hidden">
+        <div className="glass-card rounded-xl border-border/20 overflow-hidden">
             <div className="flex items-start">
                 <button
                     type="button"
@@ -69,7 +69,7 @@ function ToolCard({ tool, permission, onPermissionChange }: {
             </div>
 
             {expanded && (
-                <div className="border-t border-border/60 px-4 py-3 space-y-3 animate-fade-in">
+                <div className="border-t border-border/25 px-4 py-3 space-y-3 animate-fade-in">
                     {/* Full description */}
                     <p className="text-xs text-foreground/70 leading-relaxed">{tool.description}</p>
 
@@ -77,10 +77,10 @@ function ToolCard({ tool, permission, onPermissionChange }: {
                     {params.length > 0 && (
                         <div>
                             <div className="mb-2 text-[10px] uppercase tracking-wide text-muted-foreground/70">Parameters</div>
-                            <div className="overflow-x-auto rounded-lg border border-border/60">
+                            <div className="overflow-x-auto rounded-lg border border-border/25">
                                 <table className="w-full text-[11px]">
                                     <thead>
-                                        <tr className="border-b border-border/60 bg-muted/20">
+                                        <tr className="border-b border-border/25 bg-muted/20">
                                             <th className="px-3 py-1.5 text-left font-medium text-muted-foreground/80">Name</th>
                                             <th className="px-3 py-1.5 text-left font-medium text-muted-foreground/80">Type</th>
                                             <th className="px-3 py-1.5 text-left font-medium text-muted-foreground/80">Req</th>
@@ -89,7 +89,7 @@ function ToolCard({ tool, permission, onPermissionChange }: {
                                     </thead>
                                     <tbody>
                                         {params.map(p => (
-                                            <tr key={p.name} className="border-b border-border/50 last:border-0">
+                                            <tr key={p.name} className="border-b border-border/20 last:border-0">
                                                 <td className="px-3 py-1.5 font-mono text-accent/80">{p.name}</td>
                                                 <td className="px-3 py-1.5 font-mono text-blue-400/80">{p.type}</td>
                                                 <td className="px-3 py-1.5">
@@ -133,7 +133,7 @@ function ToolCard({ tool, permission, onPermissionChange }: {
                             Raw JSON schema
                         </button>
                         {showRaw && (
-                            <pre className="mt-1.5 overflow-x-auto whitespace-pre-wrap break-words text-[10px] text-foreground/60 bg-muted/30 rounded-lg p-3 border border-border/60 max-h-64">
+                            <pre className="mt-1.5 overflow-x-auto whitespace-pre-wrap break-words text-[10px] text-foreground/60 bg-muted/30 rounded-lg p-3 border border-border/25 max-h-64">
                                 {JSON.stringify(tool.input_schema, null, 2)}
                             </pre>
                         )}

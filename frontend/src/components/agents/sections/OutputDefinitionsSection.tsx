@@ -50,10 +50,10 @@ export default function OutputDefinitionsSection({
           {value.map((row, index) => (
             <div
               key={index}
-              className="space-y-2 rounded-lg border border-border/50 bg-muted/20 p-2"
+              className="space-y-2 rounded-lg border border-border/20 bg-muted/20 p-2"
             >
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/80">
                   Output {index + 1}
                 </span>
                 <button
@@ -138,7 +138,7 @@ export default function OutputDefinitionsSection({
           <button
             type="button"
             onClick={addRow}
-            className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-border/60 py-1.5 text-xs text-muted-foreground hover:border-accent/50 hover:text-foreground transition-colors"
+            className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-border/25 py-1.5 text-xs text-muted-foreground hover:border-accent/50 hover:text-foreground transition-colors"
           >
             <Plus className="h-3.5 w-3.5" />
             Add output
@@ -154,7 +154,7 @@ export default function OutputDefinitionsSection({
                 <span className="rounded bg-muted/50 px-1.5 py-0.5 text-[10px] font-mono text-foreground/70">
                   {row.key || '(empty)'}
                 </span>
-                <span className="text-muted-foreground/60">{row.type}</span>
+                <span className="text-muted-foreground/80">{row.type}</span>
                 {row.label && (
                   <span className="truncate text-foreground/60">
                     {row.label}

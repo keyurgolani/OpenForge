@@ -241,7 +241,7 @@ function EmbeddingTab() {
                                                         : setSelectedEmbModels(new Set(filteredFetchedModels.map(m => m.id)))
                                                 }}>{selectedEmbModels.size === filteredFetchedModels.length ? 'Deselect all' : 'Select all'}</button>
                                             </div>
-                                            <div className="max-h-52 overflow-y-auto rounded-lg border border-border/50 bg-background/30 divide-y divide-border/20">
+                                            <div className="max-h-52 overflow-y-auto rounded-lg border border-border/20 bg-background/30 divide-y divide-border/20">
                                                 {filteredFetchedModels.map(m => {
                                                     const checked = selectedEmbModels.has(m.id)
                                                     return (
@@ -326,7 +326,7 @@ function EmbeddingTab() {
                 </div>
 
                 {localExpanded && (
-                    <div className="border-t border-border/50 px-4 py-4 space-y-3 animate-fade-in">
+                    <div className="border-t border-border/20 px-4 py-4 space-y-3 animate-fade-in">
                         <label className="text-xs text-muted-foreground mb-2 block font-medium">Download a model, then set it as default</label>
                         <div className="grid grid-cols-1 gap-1.5 max-h-80 overflow-y-auto pr-1">
                             {RECOMMENDED_EMBEDDING_MODELS.map(m => {
@@ -339,7 +339,7 @@ function EmbeddingTab() {
                                         key={m.id}
                                         className={`text-left p-3 rounded-xl border transition-all duration-200 ${isSelected
                                             ? 'border-accent bg-accent/15 shadow-glass-sm'
-                                            : 'border-border/50 hover:border-border hover:bg-muted/20'
+                                            : 'border-border/20 hover:border-border hover:bg-muted/20'
                                         }`}
                                     >
                                         <div className="flex items-start gap-2">
@@ -350,14 +350,14 @@ function EmbeddingTab() {
                                                 className="mt-0.5 flex-shrink-0"
                                                 title={isDownloaded ? 'Select as default' : 'Download first'}
                                             >
-                                                <div className={`w-3.5 h-3.5 rounded-full border transition-colors ${isSelected ? 'bg-accent border-accent' : isDownloaded ? 'border-border hover:border-accent/50' : 'border-border/50 opacity-40'}`} />
+                                                <div className={`w-3.5 h-3.5 rounded-full border transition-colors ${isSelected ? 'bg-accent border-accent' : isDownloaded ? 'border-border hover:border-accent/50' : 'border-border/20 opacity-40'}`} />
                                             </button>
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
                                                     <span className={`text-xs font-medium ${isSelected ? 'text-foreground' : 'text-foreground/80'}`}>{m.name}</span>
                                                     <span className={`text-[9px] px-1.5 py-0.5 rounded border font-medium ${QUALITY_COLORS[m.quality]}`}>{m.quality}</span>
-                                                    <span className="text-[9px] text-muted-foreground border border-border/60 px-1.5 py-0.5 rounded">{m.diskSize} disk</span>
-                                                    {m.dims && <span className="text-[9px] text-muted-foreground border border-border/60 px-1.5 py-0.5 rounded">{m.dims}d</span>}
+                                                    <span className="text-[9px] text-muted-foreground border border-border/25 px-1.5 py-0.5 rounded">{m.diskSize} disk</span>
+                                                    {m.dims && <span className="text-[9px] text-muted-foreground border border-border/25 px-1.5 py-0.5 rounded">{m.dims}d</span>}
                                                     {isDownloaded && (
                                                         <span className="text-[9px] px-1.5 py-0.5 rounded border font-medium bg-emerald-500/15 text-emerald-300 border-emerald-500/30">Downloaded</span>
                                                     )}
@@ -499,7 +499,7 @@ function EmbeddingTab() {
 
                             <div className="px-6 py-5 space-y-4">
                                 {/* Model change summary */}
-                                <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/30 border border-border/60 text-xs font-mono">
+                                <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/30 border border-border/25 text-xs font-mono">
                                     <span className="text-muted-foreground truncate max-w-[180px]">{embeddingModel || '(none)'}</span>
                                     <span className="text-red-400 font-bold flex-shrink-0">&rarr;</span>
                                     <span className="text-foreground font-semibold truncate max-w-[180px]">{model}</span>

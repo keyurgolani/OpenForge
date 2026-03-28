@@ -139,7 +139,7 @@ export default function Siderail({
         return (
             <div
                 ref={selfRef}
-                className={`${visibilityClass} flex-col flex-shrink-0 relative overflow-hidden rounded-2xl border border-border/60 bg-card/28 py-4 transition-[width] duration-200 ease-out select-text`}
+                className={`${visibilityClass} flex-col flex-shrink-0 relative overflow-hidden rounded-2xl border border-border/25 bg-card/28 py-4 transition-[width] duration-200 ease-out select-text`}
                 style={{ width: `${railPct}%` }}
             >
                 {/* Resize handle */}
@@ -153,7 +153,7 @@ export default function Siderail({
     }
 
     return (
-        <div className={`${visibilityClass} flex-col flex-shrink-0 items-center gap-3 rounded-2xl border border-border/60 bg-card/28 px-2 py-4 w-14`}>
+        <div className={`${visibilityClass} flex-col flex-shrink-0 items-center gap-3 rounded-2xl border border-border/25 bg-card/28 px-2 py-4 w-14`}>
             <button
                 type="button"
                 onClick={() => setOpen(true)}

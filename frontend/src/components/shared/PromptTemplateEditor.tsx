@@ -232,7 +232,7 @@ export default function PromptTemplateEditor({
 
   return (
     <div className={`flex flex-col min-h-0 ${className}`}>
-      <div className="rounded-xl border border-border/60 overflow-y-auto min-h-0 flex flex-col flex-1">
+      <div className="rounded-xl border border-border/25 overflow-y-auto min-h-0 flex flex-col flex-1">
         {preamble && (
           <div
             className="shrink-0"

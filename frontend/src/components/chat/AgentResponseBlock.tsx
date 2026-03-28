@@ -46,7 +46,7 @@ export function AgentResponseBlock({
               <span className="text-xs font-medium text-foreground/80">{agentName}</span>
             )}
             {modelInfo && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted/50 border border-border/60 text-[10px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted/50 border border-border/25 text-[10px] text-muted-foreground">
                 <Cpu className="w-2.5 h-2.5" />
                 <span className="truncate max-w-[200px]">
                   {modelInfo.providerDisplayName}{modelInfo.model ? ` / ${modelInfo.model}` : ''}

@@ -103,8 +103,8 @@ export default function LiveTerminalLog({ runId }: LiveTerminalLogProps) {
   }
 
   return (
-    <div className="flex flex-col h-full rounded-2xl border border-border/60 bg-background/50 overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border/60 bg-card/30">
+    <div className="flex flex-col h-full rounded-2xl border border-border/25 bg-background/50 overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border/25 bg-card/30">
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Live Terminal
         </span>

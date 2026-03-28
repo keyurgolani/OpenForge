@@ -29,7 +29,7 @@ export function WorkspaceDropdown({ onSelect, trigger }: WorkspaceDropdownProps)
 
       {open && (
         <div className="absolute right-0 bottom-full mb-1 z-50 w-56 rounded-lg border border-border/70 bg-card shadow-xl overflow-hidden">
-          <div className="px-2.5 py-1.5 border-b border-border/50 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+          <div className="px-2.5 py-1.5 border-b border-border/20 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
             Save to workspace
           </div>
           <div className="max-h-48 overflow-y-auto p-1">

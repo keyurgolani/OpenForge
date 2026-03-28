@@ -162,7 +162,7 @@ function SkillsTab() {
                     </button>
                 </div>
                 {searchOutput && (
-                    <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[11px] text-foreground/70 bg-muted/30 rounded-lg p-3 max-h-48 border border-border/60">
+                    <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[11px] text-foreground/70 bg-muted/30 rounded-lg p-3 max-h-48 border border-border/25">
                         {searchOutput}
                     </pre>
                 )}
@@ -197,7 +197,7 @@ function SkillsTab() {
                 {!loadingList && installedSkills.length > 0 && (
                     <div className="space-y-2">
                         {installedSkills.map(skill => (
-                            <div key={skill.name} className="glass-card px-4 py-3 flex items-start gap-3 rounded-xl border-border/50">
+                            <div key={skill.name} className="glass-card px-4 py-3 flex items-start gap-3 rounded-xl border-border/20">
                                 <Wrench className="w-4 h-4 text-accent/60 flex-shrink-0 mt-0.5" />
                                 <div className="flex-1 min-w-0">
                                     <span className="font-medium text-sm">{skill.name}</span>

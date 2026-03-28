@@ -19,7 +19,7 @@ export default function EditorShell({ toolbar, siderail, railItemCount, children
             {/* Content area */}
             <div className="flex-1 min-h-0 overflow-hidden flex gap-2 p-2">
                 {/* Main content — scrollable */}
-                <div className="flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col rounded-2xl border border-border/60 bg-card/28">
+                <div className="flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col rounded-2xl border border-border/25 bg-card/28">
                     {children}
                 </div>
 

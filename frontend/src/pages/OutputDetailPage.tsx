@@ -224,7 +224,7 @@ export default function OutputDetailPage() {
           <div className="flex flex-wrap items-center gap-2">
             <Link
               to={outputsRoute()}
-              className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/25 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
             >
               <ArrowLeft className="h-4 w-4" />
               Back to Outputs
@@ -302,7 +302,7 @@ export default function OutputDetailPage() {
                     <option value="hidden">Hidden</option>
                   </select>
                 </label>
-                <div className="rounded-2xl border border-border/50 bg-background/35 p-4 text-sm text-muted-foreground/85">
+                <div className="rounded-2xl border border-border/20 bg-background/35 p-4 text-sm text-muted-foreground/85">
                   <p className="font-medium text-foreground">{getOutputOriginLabel(output.creation_mode)}</p>
                   <p className="mt-1">Visibility is separate from sink/export state so identity and destination don't get conflated.</p>
                 </div>
@@ -330,20 +330,20 @@ export default function OutputDetailPage() {
                     {getOutputTypeLabel(output.artifact_type)}
                   </span>
                   <StatusBadge status={output.status} />
-                  <span className="rounded-full border border-border/60 bg-background/35 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  <span className="rounded-full border border-border/25 bg-background/35 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                     {getOutputVisibilityLabel(output.visibility)}
                   </span>
                   {sourceChips.map((chip) => (
-                    <span key={chip} className="rounded-full border border-border/60 bg-background/35 px-2.5 py-1 text-[11px] text-muted-foreground">
+                    <span key={chip} className="rounded-full border border-border/25 bg-background/35 px-2.5 py-1 text-[11px] text-muted-foreground">
                       {chip}
                     </span>
                   ))}
                 </div>
                 <div
-                  className="rounded-2xl border border-border/50 bg-background/45 p-4 text-sm text-foreground/90 markdown-content"
+                  className="rounded-2xl border border-border/20 bg-background/45 p-4 text-sm text-foreground/90 markdown-content"
                   dangerouslySetInnerHTML={renderMarkdown(selectedVersion?.content ?? String(output.content?.body ?? ''))}
                 />
-                <div className="rounded-2xl border border-border/50 bg-card/45 p-4">
+                <div className="rounded-2xl border border-border/20 bg-card/45 p-4">
                   <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground/75">Structured Payload</p>
                   <pre className="overflow-x-auto whitespace-pre-wrap text-xs text-foreground/85">
                     {stringifyStructuredPayload(selectedVersion?.structured_payload)}
@@ -431,7 +431,7 @@ export default function OutputDetailPage() {
                   <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground/75">Tags</p>
                   <div className="flex flex-wrap gap-2">
                     {output.tags.map((tag) => (
-                      <span key={tag} className="rounded-full border border-border/50 px-2 py-1 text-xs text-muted-foreground">
+                      <span key={tag} className="rounded-full border border-border/20 px-2 py-1 text-xs text-muted-foreground">
                         {tag}
                       </span>
                     ))}
@@ -461,7 +461,7 @@ export default function OutputDetailPage() {
                   <p className="text-sm text-muted-foreground/80">No sinks are attached yet.</p>
                 ) : (
                   sinks.map((sink) => (
-                    <div key={sink.id} className="rounded-xl border border-border/50 bg-background/35 p-3">
+                    <div key={sink.id} className="rounded-xl border border-border/20 bg-background/35 p-3">
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="text-sm font-medium text-foreground">{sink.sink_type.replace(/_/g, ' ')}</p>
@@ -473,7 +473,7 @@ export default function OutputDetailPage() {
                   ))
                 )}
               </div>
-              <div className="grid gap-3 rounded-xl border border-border/50 bg-card/40 p-4">
+              <div className="grid gap-3 rounded-xl border border-border/20 bg-card/40 p-4">
                 <p className="text-sm font-medium text-foreground">Attach Sink</p>
                 <label className="space-y-2 text-sm">
                   <span className="text-muted-foreground">Sink Type</span>

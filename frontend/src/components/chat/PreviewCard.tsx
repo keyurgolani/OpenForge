@@ -54,7 +54,7 @@ export function PreviewCard({
 
   return (
     <div
-      className="group relative flex items-start gap-2 p-2.5 bg-card/50 border border-border/60 rounded-sm text-xs cursor-pointer hover:border-accent/40 transition-colors"
+      className="group relative flex items-start gap-2 p-2.5 bg-card/50 border border-border/25 rounded-sm text-xs cursor-pointer hover:border-accent/40 transition-colors"
       onClick={onOpenModal}
       role="button"
       tabIndex={0}

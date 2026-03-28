@@ -193,7 +193,7 @@ function AutomatedTriggersTab() {
 
             <button
                 type="button"
-                className="w-full rounded-xl border border-border/60 bg-muted/20 p-4 text-left hover:bg-muted/30 transition-colors disabled:opacity-70"
+                className="w-full rounded-xl border border-border/25 bg-muted/20 p-4 text-left hover:bg-muted/30 transition-colors disabled:opacity-70"
                 onClick={() => { void toggleSetting(AUTO_KNOWLEDGE_INTELLIGENCE_KEY, autoKnowledgeEnabled) }}
                 disabled={savingKey === AUTO_KNOWLEDGE_INTELLIGENCE_KEY}
             >
@@ -216,7 +216,7 @@ function AutomatedTriggersTab() {
 
             <button
                 type="button"
-                className="w-full rounded-xl border border-border/60 bg-muted/20 p-4 text-left hover:bg-muted/30 transition-colors disabled:opacity-70"
+                className="w-full rounded-xl border border-border/25 bg-muted/20 p-4 text-left hover:bg-muted/30 transition-colors disabled:opacity-70"
                 onClick={() => { void toggleSetting(AUTO_BOOKMARK_EXTRACTION_KEY, autoBookmarkEnabled) }}
                 disabled={savingKey === AUTO_BOOKMARK_EXTRACTION_KEY}
             >

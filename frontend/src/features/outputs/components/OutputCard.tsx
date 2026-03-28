@@ -16,7 +16,7 @@ export function OutputCard({ output }: OutputCardProps) {
   return (
     <Link
       to={outputsRoute(output.id)}
-      className="group block rounded-2xl border border-border/60 bg-card/30 p-5 transition-all hover:-translate-y-0.5 hover:border-accent/35 hover:bg-card/45"
+      className="group block rounded-2xl border border-border/25 bg-card/30 p-5 transition-all hover:-translate-y-0.5 hover:border-accent/35 hover:bg-card/45"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-2">
@@ -34,20 +34,20 @@ export function OutputCard({ output }: OutputCardProps) {
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted-foreground/85">
-        <span className="rounded-full border border-border/60 bg-background/35 px-2.5 py-1">
+        <span className="rounded-full border border-border/25 bg-background/35 px-2.5 py-1">
           v{output.version}
         </span>
-        <span className="rounded-full border border-border/60 bg-background/35 px-2.5 py-1">
+        <span className="rounded-full border border-border/25 bg-background/35 px-2.5 py-1">
           {getOutputVisibilityLabel(output.visibility)}
         </span>
         {sourceChips.map((chip) => (
-          <span key={chip} className="rounded-full border border-border/60 bg-background/35 px-2.5 py-1">
+          <span key={chip} className="rounded-full border border-border/25 bg-background/35 px-2.5 py-1">
             {chip}
           </span>
         ))}
       </div>
 
-      <div className="mt-5 flex items-center justify-between gap-3 border-t border-border/60 pt-4 text-xs text-muted-foreground/80">
+      <div className="mt-5 flex items-center justify-between gap-3 border-t border-border/25 pt-4 text-xs text-muted-foreground/80">
         <div className="flex items-center gap-4">
           <span className="inline-flex items-center gap-1.5">
             <GitBranch className="h-3.5 w-3.5" />

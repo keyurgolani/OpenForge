@@ -23,8 +23,8 @@ export default function NodeConfigPanel({
   onClose,
 }: NodeConfigPanelProps) {
   return (
-    <div className="w-72 border-l border-border/60 bg-background/50 overflow-y-auto">
-      <div className="flex items-center justify-between p-3 border-b border-border/60">
+    <div className="w-72 border-l border-border/25 bg-background/50 overflow-y-auto">
+      <div className="flex items-center justify-between p-3 border-b border-border/25">
         <div className="flex items-center gap-2">
           <Bot className="w-4 h-4 text-accent" />
           <span className="text-sm font-medium text-foreground">{agentName}</span>
@@ -71,7 +71,7 @@ export default function NodeConfigPanel({
                         value={String(staticInputs[param.name] ?? '')}
                         onChange={(e) => onStaticInputChange(param.name, e.target.value)}
                         placeholder={`Enter ${param.label || param.name}`}
-                        className="w-full rounded border border-border/60 bg-background/50 px-2 py-1.5 text-xs text-foreground focus:outline-none focus:border-accent/40"
+                        className="w-full rounded border border-border/25 bg-background/50 px-2 py-1.5 text-xs text-foreground focus:outline-none focus:border-accent/40"
                       />
                     )}
                   </div>

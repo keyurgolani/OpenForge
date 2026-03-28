@@ -211,7 +211,7 @@ function SearchResultsOutput({ results }: {
     return (
         <div className="space-y-1.5">
             {results.map((r, i) => (
-                <div key={i} className="rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2">
+                <div key={i} className="rounded-lg border border-border/25 bg-muted/20 px-2.5 py-2">
                     <div className="flex items-start justify-between gap-2 mb-0.5">
                         <span className="text-[11px] font-medium text-foreground/85 leading-tight">{r.title}</span>
                         <div className="flex items-center gap-1.5 shrink-0">
@@ -455,7 +455,7 @@ function ExpandablePre({ content, className }: { content: string; className: str
 }
 
 function TerminalOutput({ content }: { content: string }) {
-    return <ExpandablePre content={content} className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-[#0d0d0d] border border-border/60 px-3 py-2 text-[11px] text-green-300/80 font-mono max-h-64" />
+    return <ExpandablePre content={content} className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-[#0d0d0d] border border-border/25 px-3 py-2 text-[11px] text-green-300/80 font-mono max-h-64" />
 }
 
 function StringOutput({ content, toolName }: { content: string; toolName: string }) {
@@ -496,7 +496,7 @@ function KeyValueOutput({ obj, depth = 0 }: { obj: Record<string, unknown>; dept
     const entries = Object.entries(obj)
     if (entries.length === 0) return <span className="text-[11px] text-muted-foreground/60 italic">Empty</span>
     return (
-        <div className={`space-y-1 text-[11px] ${depth > 0 ? 'pl-3 border-l border-border/50' : ''}`}>
+        <div className={`space-y-1 text-[11px] ${depth > 0 ? 'pl-3 border-l border-border/20' : ''}`}>
             {entries.map(([k, v]) => {
                 const isNested = v !== null && typeof v === 'object' && !Array.isArray(v)
                 const isArr = Array.isArray(v)
@@ -540,7 +540,7 @@ function ArrayOutput({ items, depth = 0 }: { items: unknown[]; depth?: number })
     return (
         <div className={`space-y-1 ${depth > 0 ? 'pl-2' : ''}`}>
             {(items as Record<string, unknown>[]).slice(0, 15).map((item, i) => (
-                <div key={i} className="rounded border border-border/50 bg-muted/15 px-2 py-1.5">
+                <div key={i} className="rounded border border-border/20 bg-muted/15 px-2 py-1.5">
                     <KeyValueOutput obj={item} depth={depth + 1} />
                 </div>
             ))}

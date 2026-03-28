@@ -130,7 +130,7 @@ function AddProviderPanel({ onAdded }: { onAdded: () => void }) {
                         const m = PROVIDER_META[id]
                         return (
                             <button key={id} onClick={() => handleProviderChange(id)}
-                                className={`p-2 rounded-xl border text-center text-xs transition-all duration-300 ${providerName === id ? `${m.color} border-accent ring-2 ring-accent/30 scale-105 shadow-glass-md` : 'border-border/50 hover:bg-muted/30 hover:shadow-glass-sm'}`}
+                                className={`p-2 rounded-xl border text-center text-xs transition-all duration-300 ${providerName === id ? `${m.color} border-accent ring-2 ring-accent/30 scale-105 shadow-glass-md` : 'border-border/20 hover:bg-muted/30 hover:shadow-glass-sm'}`}
                             >
                                 <div className="flex justify-center mb-1.5">
                                     <ProviderIcon providerId={id} className="w-4 h-4" />
@@ -274,7 +274,7 @@ function ProviderCard({ provider, expanded, onToggle, onDelete }: {
             </div>
 
             {expanded && (
-                <div className="border-t border-border/50 px-4 py-4 space-y-4 animate-fade-in">
+                <div className="border-t border-border/20 px-4 py-4 space-y-4 animate-fade-in">
                     {provider.is_system ? (
                         <div className="flex items-start gap-2.5 rounded-lg bg-lime-500/10 border border-lime-500/20 p-3 text-xs text-lime-200">
                             <HardDrive className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -314,7 +314,7 @@ function ProviderCard({ provider, expanded, onToggle, onDelete }: {
                     </div>
 
                     {/* Test connection */}
-                    <div className="space-y-2 pt-2 border-t border-border/50">
+                    <div className="space-y-2 pt-2 border-t border-border/20">
                         <button className="btn-ghost text-xs border border-border w-full justify-center py-2" onClick={handleTest} disabled={testing}>
                             {testing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe2 className="w-3.5 h-3.5" />}
                             {testing ? 'Testing…' : 'Test Connection'}

@@ -86,7 +86,7 @@ export function PrimaryNavCollapsed({
             <nav className="flex flex-col gap-1 w-full items-center mt-1">
               <NavIcon
                 to={routes.workspace}
-                title="Workspace"
+                title="Dashboard"
                 isActive={activePath === routes.workspace}
                 icon={<Home className="w-4 h-4" />}
               />
@@ -102,12 +102,6 @@ export function PrimaryNavCollapsed({
                 isActive={activePath.includes('/search')}
                 icon={<Search className="w-4 h-4" />}
               />
-              <NavIcon
-                to={routes.chat}
-                title="Chat"
-                isActive={isActive('/chat')}
-                icon={<MessageSquare className="w-4 h-4" />}
-              />
             </nav>
           </>
         )}
@@ -115,6 +109,12 @@ export function PrimaryNavCollapsed({
 
       {/* Bottom section: global and workspace-scoped */}
       <div className="h-1/2 flex flex-col items-center py-3 gap-1 glass-card" style={{ boxShadow: 'none' }}>
+            <NavIcon
+              to={routes.chat}
+              title="Chat"
+              isActive={isActive('/chat')}
+              icon={<MessageSquare className="w-4 h-4" />}
+            />
             <NavIcon
               to={routes.agents}
               title="Agents"

@@ -906,7 +906,7 @@ export default function AgentChatPage() {
                                                 key={agent.id}
                                                 className={`group text-left rounded-xl border p-4 transition-all duration-200 cursor-pointer ${isExpanded
                                                     ? 'border-accent/60 bg-card/90 ring-1 ring-accent/25 sm:col-span-2 lg:col-span-3'
-                                                    : 'border-border/60 bg-card/40 hover:bg-card/80 hover:border-accent/40'
+                                                    : 'border-border/25 bg-card/40 hover:bg-card/80 hover:border-accent/40'
                                                 }`}
                                                 onClick={() => setExpandedAgentId(isExpanded ? null : agent.id)}
                                             >
@@ -934,7 +934,7 @@ export default function AgentChatPage() {
                                                         {!isExpanded && agent.tags.length > 0 && (
                                                             <div className="flex flex-wrap gap-1 mt-1.5">
                                                                 {agent.tags.slice(0, 3).map(tag => (
-                                                                    <span key={tag} className="rounded-md bg-muted/60 border border-border/50 px-1.5 py-0.5 text-[10px] text-muted-foreground">{tag}</span>
+                                                                    <span key={tag} className="rounded-md bg-muted/60 border border-border/20 px-1.5 py-0.5 text-[10px] text-muted-foreground">{tag}</span>
                                                                 ))}
                                                             </div>
                                                         )}
@@ -943,13 +943,13 @@ export default function AgentChatPage() {
 
                                                 {/* Expanded view: full parameter details + Start Chat */}
                                                 {isExpanded && (
-                                                    <div className="mt-4 border-t border-border/60 pt-4" onClick={e => e.stopPropagation()}>
+                                                    <div className="mt-4 border-t border-border/25 pt-4" onClick={e => e.stopPropagation()}>
                                                         {allParams.length > 0 ? (
                                                             <div className="space-y-2.5 mb-5">
                                                                 <h4 className="text-xs font-semibold text-muted-foreground/90 uppercase tracking-wider">Agent Inputs</h4>
                                                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                                                                     {allParams.map((p: any) => (
-                                                                        <div key={p.name} className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
+                                                                        <div key={p.name} className="rounded-lg border border-border/20 bg-muted/20 px-3 py-2">
                                                                             <div className="flex items-center gap-1.5">
                                                                                 {p.required !== false && <span className="text-amber-400/90 text-xs font-medium">*</span>}
                                                                                 <span className="text-xs font-mono font-medium text-foreground/90">{p.label || p.name}</span>
@@ -961,7 +961,7 @@ export default function AgentChatPage() {
                                                                             {p.type === 'enum' && p.options?.length > 0 && (
                                                                                 <div className="flex flex-wrap gap-1 mt-1.5">
                                                                                     {p.options.map((opt: string) => (
-                                                                                        <span key={opt} className="rounded bg-muted/50 border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground/80">{opt}</span>
+                                                                                        <span key={opt} className="rounded bg-muted/50 border border-border/25 px-1.5 py-0.5 text-[10px] text-muted-foreground/80">{opt}</span>
                                                                                     ))}
                                                                                 </div>
                                                                             )}
@@ -975,7 +975,7 @@ export default function AgentChatPage() {
                                                         {agent.tags.length > 0 && (
                                                             <div className="flex flex-wrap gap-1 mb-4">
                                                                 {agent.tags.map(tag => (
-                                                                    <span key={tag} className="rounded-md bg-muted/60 border border-border/50 px-1.5 py-0.5 text-[10px] text-muted-foreground">{tag}</span>
+                                                                    <span key={tag} className="rounded-md bg-muted/60 border border-border/20 px-1.5 py-0.5 text-[10px] text-muted-foreground">{tag}</span>
                                                                 ))}
                                                             </div>
                                                         )}
@@ -1000,7 +1000,7 @@ export default function AgentChatPage() {
                         {/* Agent name floating chip */}
                         {activeConversationRecord?.agent_name && (
                             <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 pointer-events-none flex-shrink-0">
-                                <div className="pointer-events-auto inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-card/80 backdrop-blur-sm border border-border/60 shadow-sm">
+                                <div className="pointer-events-auto inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-card/80 backdrop-blur-sm border border-border/25 shadow-sm">
                                     <Bot className="w-3.5 h-3.5 text-accent/70" />
                                     <span className="text-xs font-medium text-foreground/70">{activeConversationRecord.agent_name}</span>
                                 </div>
@@ -1172,7 +1172,7 @@ export default function AgentChatPage() {
                                             </div>
                                         </div>
                                     </div>
-                                    <span className="text-[11px] font-semibold text-foreground/70 rounded-full border border-border/60 bg-muted/60 px-2 py-0.5">
+                                    <span className="text-[11px] font-semibold text-foreground/70 rounded-full border border-border/25 bg-muted/60 px-2 py-0.5">
                                         {activeConversations.length}
                                     </span>
                                 </button>
@@ -1198,7 +1198,7 @@ export default function AgentChatPage() {
                                                     }}
                                                     className={`flex items-center gap-1 px-2 py-2 text-[11px] rounded-lg border transition-all ${confirmBulkTrashChats
                                                         ? 'bg-red-500/20 border-red-500/40 text-red-400 font-medium'
-                                                        : 'text-muted-foreground hover:text-red-400 border-border/50 hover:border-red-500/30'
+                                                        : 'text-muted-foreground hover:text-red-400 border-border/20 hover:border-red-500/30'
                                                     }`}
                                                     title={confirmBulkTrashChats ? 'Click again to confirm' : 'Trash all conversations'}
                                                 >
@@ -1252,7 +1252,7 @@ export default function AgentChatPage() {
                                             </div>
                                         </div>
                                     </div>
-                                    <span className="text-[11px] font-semibold text-foreground/70 rounded-full border border-border/60 bg-muted/60 px-2 py-0.5">
+                                    <span className="text-[11px] font-semibold text-foreground/70 rounded-full border border-border/25 bg-muted/60 px-2 py-0.5">
                                         {delegatedConversations.length}
                                     </span>
                                 </button>
@@ -1275,7 +1275,7 @@ export default function AgentChatPage() {
                                                     }}
                                                     className={`flex items-center gap-1 px-2 py-1 text-[11px] rounded-md border transition-all ${confirmBulkTrashDelegated
                                                         ? 'bg-red-500/20 border-red-500/40 text-red-400 font-medium'
-                                                        : 'text-muted-foreground hover:text-red-400 border-border/50 hover:border-red-500/30'
+                                                        : 'text-muted-foreground hover:text-red-400 border-border/20 hover:border-red-500/30'
                                                     }`}
                                                     title={confirmBulkTrashDelegated ? 'Click again to confirm' : 'Trash all delegated threads'}
                                                 >
@@ -1328,7 +1328,7 @@ export default function AgentChatPage() {
                                             </div>
                                         </div>
                                     </div>
-                                    <span className="text-[11px] font-semibold text-foreground/70 rounded-full border border-border/60 bg-muted/60 px-2 py-0.5">
+                                    <span className="text-[11px] font-semibold text-foreground/70 rounded-full border border-border/25 bg-muted/60 px-2 py-0.5">
                                         {trashedConversations.length}
                                     </span>
                                 </button>
@@ -1351,7 +1351,7 @@ export default function AgentChatPage() {
                                                     }}
                                                     className={`flex items-center gap-1 px-2 py-1 text-[11px] rounded-md border transition-all ${confirmBulkRestore
                                                         ? 'bg-accent/25 border-accent/40 text-accent font-medium'
-                                                        : 'text-muted-foreground hover:text-foreground border-border/50 hover:border-accent/30'
+                                                        : 'text-muted-foreground hover:text-foreground border-border/20 hover:border-accent/30'
                                                     }`}
                                                     title={confirmBulkRestore ? 'Click again to confirm' : 'Restore all trashed conversations'}
                                                 >
@@ -1371,7 +1371,7 @@ export default function AgentChatPage() {
                                                     }}
                                                     className={`flex items-center gap-1 px-2 py-1 text-[11px] rounded-md border transition-all ${confirmBulkDelete
                                                         ? 'bg-red-500/20 border-red-500/40 text-red-400 font-medium'
-                                                        : 'text-red-500/70 hover:text-red-400 border-border/50 hover:border-red-500/30'
+                                                        : 'text-red-500/70 hover:text-red-400 border-border/20 hover:border-red-500/30'
                                                     }`}
                                                     title={confirmBulkDelete ? 'Click again to confirm' : 'Permanently delete all trashed conversations'}
                                                 >
@@ -1449,7 +1449,7 @@ function ConversationRow({ conv, active, onSelect, onDelete, onDownload, onCopy,
                         ? 'rounded-2xl border border-accent/45 bg-[linear-gradient(180deg,hsla(var(--accent)/0.14),hsla(var(--card)/0.8))] px-3 py-3 shadow-[0_0_0_1px_hsla(var(--accent)/0.14)]'
                         : active
                         ? 'rounded-md border border-accent/35 bg-accent/12 px-2.5 py-1.5 ring-1 ring-accent/20'
-                        : 'rounded-md border border-transparent bg-transparent px-2.5 py-1.5 hover:border-border/60 hover:bg-muted/35'
+                        : 'rounded-md border border-transparent bg-transparent px-2.5 py-1.5 hover:border-border/25 hover:bg-muted/35'
                         }`}
                     onClick={onSelect}
                 >
@@ -1519,7 +1519,7 @@ function ConversationRow({ conv, active, onSelect, onDelete, onDownload, onCopy,
                             <Download className={actionIconClass} />
                         </button>
                         {showDownloadMenu && (
-                            <div className="absolute right-0 top-full mt-1 z-50 min-w-[100px] rounded-lg border border-border/60 bg-popover py-1 shadow-lg">
+                            <div className="absolute right-0 top-full mt-1 z-50 min-w-[100px] rounded-lg border border-border/25 bg-popover py-1 shadow-lg">
                                 <button type="button" onClick={(e) => { e.stopPropagation(); onCopy(); setShowDownloadMenu(false) }}
                                     className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 flex items-center gap-1.5">
                                     <Copy className="w-3 h-3" /> Copy Text
@@ -1608,7 +1608,7 @@ function TrashedConversationRow({
                 <div
                     className={`group flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 cursor-pointer transition-colors ${active
                         ? 'border-accent/35 bg-accent/12 ring-1 ring-accent/20'
-                        : 'border-transparent bg-transparent hover:border-border/60 hover:bg-muted/35'
+                        : 'border-transparent bg-transparent hover:border-border/25 hover:bg-muted/35'
                         }`}
                     onClick={onSelect}
                 >
@@ -1633,7 +1633,7 @@ function TrashedConversationRow({
                             </svg>
                         </button>
                         {showDownloadMenu && (
-                            <div className="absolute right-0 top-full mt-1 z-50 min-w-[100px] rounded-lg border border-border/60 bg-popover py-1 shadow-lg">
+                            <div className="absolute right-0 top-full mt-1 z-50 min-w-[100px] rounded-lg border border-border/25 bg-popover py-1 shadow-lg">
                                 <button type="button"
                                     onClick={(e) => { e.stopPropagation(); onCopy(); setShowDownloadMenu(false) }}
                                     className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/50 flex items-center gap-1.5">

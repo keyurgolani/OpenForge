@@ -90,7 +90,7 @@ export default function PreviewShell({
                     {/* Bottom sheet */}
                     <motion.div
                         ref={sheetRef}
-                        className="fixed bottom-0 left-0 right-0 z-[61] glass-card border-t border-border/60 shadow-2xl rounded-t-2xl flex flex-col max-h-[85vh]"
+                        className="fixed bottom-0 left-0 right-0 z-[61] glass-card border-t border-border/25 shadow-2xl rounded-t-2xl flex flex-col max-h-[85vh]"
                         style={{ y }}
                         initial={{ y: '100%' }}
                         animate={{ y: 0 }}
@@ -135,7 +135,7 @@ export default function PreviewShell({
                         <div className="flex min-h-0 overflow-hidden gap-2 p-2 pt-0">
                             {/* Left rail — metadata, desktop only */}
                             {leftRail && (
-                                <div className="hidden md:flex flex-shrink-0 w-72 overflow-y-auto rounded-2xl border border-border/60 bg-card/28 px-4 py-4 select-text">
+                                <div className="hidden md:flex flex-shrink-0 w-72 overflow-y-auto rounded-2xl border border-border/25 bg-card/28 px-4 py-4 select-text">
                                     {leftRail}
                                 </div>
                             )}
@@ -162,14 +162,14 @@ export default function PreviewShell({
 
                         {/* Left rail — mobile: inline above siderail */}
                         {leftRail && (
-                            <div className="md:hidden border-t border-border/50 px-5 py-4 overflow-y-auto max-h-[30vh] select-text">
+                            <div className="md:hidden border-t border-border/20 px-5 py-4 overflow-y-auto max-h-[30vh] select-text">
                                 {leftRail}
                             </div>
                         )}
 
                         {/* Siderail — mobile: inline below content */}
                         {siderail && (
-                            <div className="md:hidden border-t border-border/50 px-5 py-4 overflow-y-auto max-h-[40vh] select-text">
+                            <div className="md:hidden border-t border-border/20 px-5 py-4 overflow-y-auto max-h-[40vh] select-text">
                                 {typeof siderail === 'function' ? siderail(() => setRailOpen(false)) : siderail}
                             </div>
                         )}

@@ -68,7 +68,7 @@ export default function BlueprintEditor({ value, onChange, readOnly = false }: B
   return (
     <div
       ref={containerRef}
-      className="rounded-xl border border-border/60 bg-background/50 overflow-hidden [&_.cm-editor]:min-h-[400px] [&_.cm-editor]:text-sm [&_.cm-scroller]:font-mono"
+      className="rounded-xl border border-border/25 bg-background/50 overflow-hidden [&_.cm-editor]:min-h-[400px] [&_.cm-editor]:text-sm [&_.cm-scroller]:font-mono"
     />
   )
 }

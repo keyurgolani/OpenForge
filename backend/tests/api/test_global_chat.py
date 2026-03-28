@@ -113,6 +113,6 @@ def test_create_global_conversation_accepts_eligible_agent(monkeypatch):
     assert response.status_code == 201
     payload = response.json()
     assert payload["agent_id"] == str(agent_id)
-    assert payload["title"] == "Chat with Deep Researcher"
+    assert payload["title"] == ""
     assert added and getattr(added[0], "agent_id", None) == agent_id
     resolve_mock.assert_awaited_once()

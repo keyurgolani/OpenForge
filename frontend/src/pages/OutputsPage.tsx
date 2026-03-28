@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { FileOutput, Plus, Sparkles } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
@@ -8,8 +8,8 @@ import EmptyState from '@/components/shared/EmptyState'
 import ErrorState from '@/components/shared/ErrorState'
 import LoadingState from '@/components/shared/LoadingState'
 import MutationButton from '@/components/shared/MutationButton'
-import PageHeader from '@/components/shared/PageHeader'
 import Section from '@/components/shared/Section'
+import { useUIStore } from '@/stores/uiStore'
 import { OutputCard, OutputFilters, useOutputsQuery } from '@/features/outputs'
 import { createOutput } from '@/lib/api'
 import { outputsRoute } from '@/lib/routes'
@@ -44,6 +44,7 @@ export default function OutputsPage() {
   const [visibility, setVisibility] = useState<OutputVisibility | 'all'>('all')
   const [createOpen, setCreateOpen] = useState(false)
   const [draft, setDraft] = useState<CreateDraft>(CREATE_DEFAULTS)
+  const setHeaderActions = useUIStore(s => s.setHeaderActions)
 
   const { data, isLoading, error } = useOutputsQuery({
     q: search.trim() || undefined,
@@ -74,6 +75,22 @@ export default function OutputsPage() {
     },
   })
 
+  useEffect(() => {
+    setHeaderActions(
+      <MutationButton
+        type="button"
+        size="md"
+        variant={createOpen ? 'secondary' : 'primary'}
+        isPending={false}
+        icon={<Plus className="h-4 w-4" />}
+        onClick={() => setCreateOpen((current) => !current)}
+      >
+        {createOpen ? 'Close Composer' : 'New Output'}
+      </MutationButton>
+    )
+    return () => setHeaderActions(null)
+  }, [createOpen, setHeaderActions])
+
   if (isLoading) {
     return <LoadingState label="Loading outputs…" />
   }
@@ -87,23 +104,6 @@ export default function OutputsPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <PageHeader
-        title="Outputs"
-        description="Browse durable outputs as first-class product objects: versioned, linkable, and ready for future publishing flows."
-        actions={(
-          <MutationButton
-            type="button"
-            size="md"
-            variant={createOpen ? 'secondary' : 'primary'}
-            isPending={false}
-            icon={<Plus className="h-4 w-4" />}
-            onClick={() => setCreateOpen((current) => !current)}
-          >
-            {createOpen ? 'Close Composer' : 'New Output'}
-          </MutationButton>
-        )}
-      />
-
       <Section
         title="Output Browser"
         description="All durable outputs are unified through the output system with full versioning and lineage tracking."

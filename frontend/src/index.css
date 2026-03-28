@@ -14,7 +14,7 @@
     --card-foreground: 20 18% 6%;
 
     --muted: 30 6% 93%;
-    --muted-foreground: 20 10% 30%;
+    --muted-foreground: 20 12% 38%;
 
     --border: 24 10% 82%;
     --input: 24 10% 82%;
@@ -46,15 +46,15 @@
     --radius-xl: 1.5rem;
 
     --glass-bg: hsla(30, 6%, 100%, 0.78);
-    --glass-border: hsla(24, 10%, 70%, 0.45);
+    --glass-border: hsla(24, 10%, 70%, 0.22);
     --glass-blur: 18px;
     --glass-blur-sm: 12px;
     --glass-blur-lg: 28px;
 
-    --glass-shadow-sm: 0 8px 22px hsla(24, 10%, 60%, 0.12), inset 0 1px 0 hsla(0, 0%, 100%, 0.8);
-    --glass-shadow: 0 14px 40px hsla(24, 10%, 60%, 0.18), inset 0 1px 0 hsla(0, 0%, 100%, 0.8);
-    --glass-shadow-md: 0 20px 52px hsla(24, 10%, 60%, 0.24), inset 0 1px 0 hsla(0, 0%, 100%, 0.8);
-    --glass-shadow-lg: 0 28px 70px hsla(24, 10%, 60%, 0.30), inset 0 1px 0 hsla(0, 0%, 100%, 0.8);
+    --glass-shadow-sm: 0 4px 12px hsla(24, 10%, 60%, 0.06), inset 0 1px 0 hsla(0, 0%, 100%, 0.5);
+    --glass-shadow: 0 6px 18px hsla(24, 10%, 60%, 0.08), inset 0 1px 0 hsla(0, 0%, 100%, 0.5);
+    --glass-shadow-md: 0 10px 28px hsla(24, 10%, 60%, 0.12), inset 0 1px 0 hsla(0, 0%, 100%, 0.5);
+    --glass-shadow-lg: 0 16px 40px hsla(24, 10%, 60%, 0.16), inset 0 1px 0 hsla(0, 0%, 100%, 0.5);
 
     --chart-1: 38 92% 56%;
     --chart-2: 173 80% 40%;
@@ -83,7 +83,7 @@
     --code-bg: 30 8% 91%;
     --code-fg: 20 15% 8%;
     --glass-button-bg: hsla(30, 8%, 94%, 0.85);
-    --glass-button-border: hsla(24, 8%, 82%, 0.85);
+    --glass-button-border: hsla(24, 8%, 82%, 0.4);
     --glass-button-hover: hsla(30, 8%, 90%, 0.92);
 
     --chat-assistant-bg-1: hsla(40, 14%, 97%, 0.92);
@@ -101,11 +101,11 @@
 
     --chat-composer-bg-1: hsl(40 14% 97%);
     --chat-composer-bg-2: hsl(30 8% 92%);
-    --chat-composer-shadow: 0 8px 24px hsla(24, 10%, 60%, 0.22), inset 0 1px 0 hsla(0, 0%, 100%, 0.8);
+    --chat-composer-shadow: 0 4px 14px hsla(24, 10%, 60%, 0.1), inset 0 1px 0 hsla(0, 0%, 100%, 0.5);
     --chat-composer-input: hsla(0, 0%, 100%, 0.85);
     --chat-composer-input-focus: hsla(0, 0%, 100%, 1);
 
-    --log-bg: hsl(30 8% 94%);
+    --log-bg: hsl(30 8% 91%);
     --log-border: hsla(24, 10%, 72%, 0.65);
 
     --spatial-grid: hsla(38, 40%, 30%, 0.07);
@@ -149,15 +149,15 @@
     --ring: 43 96% 56%;
 
     --glass-bg: hsla(24, 10%, 12%, 0.64);
-    --glass-border: hsla(30, 20%, 60%, 0.2);
+    --glass-border: hsla(30, 20%, 60%, 0.1);
     --glass-blur: 18px;
     --glass-blur-sm: 12px;
     --glass-blur-lg: 28px;
 
-    --glass-shadow-sm: 0 8px 22px hsla(20, 30%, 4%, 0.42), inset 0 1px 0 hsla(30, 20%, 96%, 0.08);
-    --glass-shadow: 0 14px 40px hsla(20, 30%, 4%, 0.52), inset 0 1px 0 hsla(30, 20%, 96%, 0.1);
-    --glass-shadow-md: 0 20px 52px hsla(20, 30%, 4%, 0.56), inset 0 1px 0 hsla(30, 20%, 96%, 0.11);
-    --glass-shadow-lg: 0 28px 70px hsla(20, 30%, 3%, 0.62), inset 0 1px 0 hsla(30, 20%, 96%, 0.12);
+    --glass-shadow-sm: 0 4px 12px hsla(20, 30%, 4%, 0.2), inset 0 1px 0 hsla(30, 20%, 96%, 0.05);
+    --glass-shadow: 0 6px 18px hsla(20, 30%, 4%, 0.24), inset 0 1px 0 hsla(30, 20%, 96%, 0.06);
+    --glass-shadow-md: 0 10px 28px hsla(20, 30%, 4%, 0.3), inset 0 1px 0 hsla(30, 20%, 96%, 0.07);
+    --glass-shadow-lg: 0 16px 40px hsla(20, 30%, 3%, 0.36), inset 0 1px 0 hsla(30, 20%, 96%, 0.08);
 
     --chart-1: 43 96% 62%;
     --chart-2: 173 80% 50%;
@@ -186,7 +186,7 @@
     --code-bg: 38 60% 20%;
     --code-fg: 43 96% 70%;
     --glass-button-bg: hsla(25, 8%, 16%, 0.24);
-    --glass-button-border: hsla(30, 6%, 24%, 0.72);
+    --glass-button-border: hsla(30, 6%, 24%, 0.35);
     --glass-button-hover: hsla(25, 8%, 16%, 0.5);
 
     --chat-assistant-bg-1: hsla(25, 10%, 14%, 0.78);
@@ -204,7 +204,7 @@
 
     --chat-composer-bg-1: hsl(25 10% 14%);
     --chat-composer-bg-2: hsl(24 10% 9%);
-    --chat-composer-shadow: 0 16px 34px hsla(20, 30%, 4%, 0.56), inset 0 1px 0 hsla(30, 20%, 96%, 0.09);
+    --chat-composer-shadow: 0 6px 18px hsla(20, 30%, 4%, 0.28), inset 0 1px 0 hsla(30, 20%, 96%, 0.06);
     --chat-composer-input: hsla(24, 10%, 11%, 0.72);
     --chat-composer-input-focus: hsla(24, 10%, 12%, 0.84);
 
@@ -266,10 +266,10 @@
 @layer components {
   .glass-sm {
     background: hsla(var(--card) / 0.46);
-    border: 1px solid hsla(var(--border) / 0.86);
+    border: 1px solid hsla(var(--border) / 0.4);
     backdrop-filter: blur(10px) saturate(150%);
     -webkit-backdrop-filter: blur(10px) saturate(150%);
-    box-shadow: var(--glass-shadow-sm);
+    box-shadow: none;
     border-radius: var(--radius-sm);
   }
 
@@ -277,12 +277,10 @@
     position: relative;
     border-radius: var(--radius);
     border: 1px solid var(--glass-border);
-    background:
-      linear-gradient(160deg, hsla(210, 100%, 98%, 0.09) 0%, hsla(210, 100%, 98%, 0.02) 42%, hsla(210, 100%, 98%, 0.01) 100%),
-      var(--glass-bg);
-    backdrop-filter: blur(var(--glass-blur)) saturate(170%);
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(170%);
-    box-shadow: var(--glass-shadow);
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+    box-shadow: var(--glass-shadow-sm);
     transition:
       border-color 220ms cubic-bezier(0.2, 0.72, 0, 1),
       transform 220ms cubic-bezier(0.2, 0.72, 0, 1),
@@ -296,8 +294,8 @@
     inset: 0;
     border-radius: inherit;
     pointer-events: none;
-    background: linear-gradient(180deg, hsla(0, 0%, 100%, 0.12), transparent 32%);
-    opacity: 0.62;
+    background: linear-gradient(180deg, hsla(0, 0%, 100%, 0.06), transparent 32%);
+    opacity: 0.3;
   }
 
   .glass-card-hover {
@@ -305,27 +303,23 @@
   }
 
   .glass-card-hover:hover {
-    border-color: hsla(var(--accent) / 0.34);
-    box-shadow: var(--glass-shadow-md);
-    transform: translateY(-2px);
+    border-color: hsla(var(--accent) / 0.25);
+    box-shadow: var(--glass-shadow);
+    transform: translateY(-1px);
   }
 
   .sidebar-item {
     @apply flex items-center gap-3 px-3 py-2 text-sm rounded-xl text-muted-foreground transition-all duration-200 cursor-pointer;
-    border: 1px solid transparent;
   }
 
   .sidebar-item:hover {
     color: hsl(var(--foreground));
-    border-color: hsla(var(--accent) / 0.22);
-    background: linear-gradient(120deg, hsla(var(--accent) / 0.16), hsla(var(--accent) / 0.06));
+    background: hsla(var(--accent) / 0.08);
   }
 
   .sidebar-item.active {
     color: hsl(var(--accent));
-    border-color: hsla(var(--accent) / 0.4);
-    background: linear-gradient(120deg, hsla(var(--accent) / 0.24), hsla(var(--accent) / 0.08));
-    box-shadow: inset 0 1px 0 hsla(0, 0%, 100%, 0.08), 0 8px 22px hsla(223, 65%, 6%, 0.44);
+    background: hsla(var(--accent) / 0.12);
   }
 
   .btn-primary {
@@ -333,14 +327,14 @@
     background:
       linear-gradient(150deg, hsl(var(--accent)) 0%, hsl(var(--primary)) 52%, hsl(var(--ring)) 100%);
     color: hsl(var(--accent-foreground));
-    border: 1px solid hsla(var(--accent) / 0.4);
-    box-shadow: 0 10px 22px hsla(var(--accent) / 0.34), inset 0 1px 0 hsla(0, 0%, 100%, 0.34);
+    border: 1px solid hsla(var(--accent) / 0.2);
+    box-shadow: 0 4px 12px hsla(var(--accent) / 0.18);
     transition: transform 160ms ease, filter 160ms ease, box-shadow 180ms ease;
   }
 
   .btn-primary:hover {
     filter: saturate(1.08) brightness(1.04);
-    box-shadow: 0 12px 30px hsla(var(--accent) / 0.42), inset 0 1px 0 hsla(0, 0%, 100%, 0.36);
+    box-shadow: 0 6px 18px hsla(var(--accent) / 0.25);
   }
 
   .btn-primary:active {
@@ -350,20 +344,19 @@
   .btn-primary:focus-visible {
     outline: none;
     box-shadow:
-      0 0 0 3px hsla(var(--accent) / 0.3),
-      0 12px 30px hsla(var(--accent) / 0.42),
-      inset 0 1px 0 hsla(0, 0%, 100%, 0.36);
+      0 0 0 3px hsla(var(--accent) / 0.2),
+      0 6px 18px hsla(var(--accent) / 0.25);
   }
 
   .btn-ghost {
     @apply inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground transition-all duration-200 disabled:opacity-50;
-    border: 1px solid var(--glass-button-border);
+    border: 1px solid transparent;
     background: var(--glass-button-bg);
   }
 
   .btn-ghost:hover {
     color: hsl(var(--foreground));
-    border-color: hsla(var(--accent) / 0.4);
+    border-color: hsla(var(--border) / 0.3);
     background: var(--glass-button-hover);
   }
 
@@ -373,9 +366,9 @@
 
   .btn-destructive {
     @apply inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-destructive-foreground transition-all duration-200;
-    border: 1px solid hsla(var(--destructive) / 0.4);
+    border: 1px solid hsla(var(--destructive) / 0.2);
     background: linear-gradient(140deg, hsla(var(--destructive) / 0.95), hsla(0 78% 56% / 0.92));
-    box-shadow: 0 10px 24px hsla(var(--destructive) / 0.28);
+    box-shadow: 0 4px 12px hsla(var(--destructive) / 0.15);
   }
 
   .btn-destructive:hover {
@@ -388,20 +381,20 @@
 
   .input {
     @apply w-full px-3 py-2 rounded-xl text-sm text-foreground placeholder-muted-foreground focus:outline-none;
-    border: 1px solid hsla(var(--border) / 0.85);
-    background: linear-gradient(180deg, hsla(var(--muted) / 0.56), hsla(var(--input) / 0.92));
-    box-shadow: inset 0 1px 0 hsla(0, 0%, 100%, 0.05);
+    border: 1px solid hsla(var(--border) / 0.4);
+    background: hsla(var(--muted) / 0.45);
+    box-shadow: none;
     transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
   }
 
   .input:hover {
-    border-color: hsla(var(--accent) / 0.22);
+    border-color: hsla(var(--border) / 0.55);
   }
 
   .input:focus {
-    border-color: hsla(var(--accent) / 0.58);
-    background: linear-gradient(180deg, hsla(var(--muted) / 0.74), hsla(var(--input) / 0.98));
-    box-shadow: 0 0 0 3px hsla(var(--accent) / 0.22), inset 0 1px 0 hsla(0, 0%, 100%, 0.07);
+    border-color: hsla(var(--accent) / 0.45);
+    background: hsla(var(--muted) / 0.55);
+    box-shadow: 0 0 0 2px hsla(var(--accent) / 0.12);
   }
 
   select.input {
@@ -425,43 +418,43 @@
   .chip-accent {
     @apply chip border;
     color: hsl(var(--accent));
-    border-color: hsla(var(--accent) / 0.36);
-    background: linear-gradient(120deg, hsla(var(--accent) / 0.22), hsla(var(--accent) / 0.06));
+    border-color: hsla(var(--accent) / 0.2);
+    background: hsla(var(--accent) / 0.1);
   }
 
   .chip-muted {
     @apply chip border;
     color: hsl(var(--foreground) / 0.88);
-    border-color: hsla(var(--border) / 0.92);
-    background: hsla(var(--muted) / 0.42);
+    border-color: hsla(var(--border) / 0.4);
+    background: hsla(var(--muted) / 0.3);
   }
 
   .type-note {
     @apply chip border;
     color: hsl(var(--type-note));
-    border-color: hsla(var(--type-note) / 0.38);
-    background: hsla(var(--type-note-bg) / 0.18);
+    border-color: hsla(var(--type-note) / 0.2);
+    background: hsla(var(--type-note-bg) / 0.1);
   }
 
   .type-fleeting {
     @apply chip border;
     color: hsl(var(--type-fleeting));
-    border-color: hsla(var(--type-fleeting) / 0.4);
-    background: hsla(var(--type-fleeting-bg) / 0.18);
+    border-color: hsla(var(--type-fleeting) / 0.2);
+    background: hsla(var(--type-fleeting-bg) / 0.1);
   }
 
   .type-bookmark {
     @apply chip border;
     color: hsl(var(--type-bookmark));
-    border-color: hsla(var(--type-bookmark) / 0.4);
-    background: hsla(var(--type-bookmark-bg) / 0.18);
+    border-color: hsla(var(--type-bookmark) / 0.2);
+    background: hsla(var(--type-bookmark-bg) / 0.1);
   }
 
   .type-gist {
     @apply chip border;
     color: hsl(var(--type-gist));
-    border-color: hsla(var(--type-gist) / 0.4);
-    background: hsla(var(--type-gist-bg) / 0.18);
+    border-color: hsla(var(--type-gist) / 0.2);
+    background: hsla(var(--type-gist-bg) / 0.1);
   }
 
   .skeleton {
@@ -618,7 +611,7 @@
 
   .chat-composer-panel {
     pointer-events: auto;
-    border: 1px solid hsla(var(--border) / 0.78);
+    border: 1px solid hsla(var(--border) / 0.35);
     border-radius: 1.05rem;
     padding: 0.5rem 0.65rem;
     background: linear-gradient(160deg, var(--chat-composer-bg-1), var(--chat-composer-bg-2));
@@ -628,7 +621,7 @@
   .chat-composer-textarea {
     width: 100%;
     resize: none;
-    border: 1px solid hsla(var(--border) / 0.66);
+    border: 1px solid hsla(var(--border) / 0.3);
     border-radius: 0.95rem;
     background: var(--chat-composer-input);
     color: hsl(var(--foreground));
@@ -644,9 +637,9 @@
   }
 
   .chat-composer-textarea:focus {
-    border-color: hsla(var(--accent) / 0.5);
+    border-color: hsla(var(--accent) / 0.35);
     background: var(--chat-composer-input-focus);
-    box-shadow: 0 0 0 2px hsla(var(--accent) / 0.14);
+    box-shadow: 0 0 0 2px hsla(var(--accent) / 0.08);
   }
 
   /* Mention editor (contenteditable div replacing textarea) */
@@ -671,8 +664,8 @@
   .mention-chip {
     display: inline;
     border-radius: 9999px;
-    border: 1px solid hsla(var(--accent) / 0.5);
-    background: hsla(var(--accent) / 0.18);
+    border: 1px solid hsla(var(--accent) / 0.25);
+    background: hsla(var(--accent) / 0.12);
     color: hsl(var(--accent));
     padding: 0.05rem 0.45rem;
     font-size: 0.8125rem;
@@ -686,27 +679,27 @@
 
   .chat-control-pill {
     @apply inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs transition-colors;
-    border: 1px solid hsla(var(--border) / 0.72);
+    border: 1px solid hsla(var(--border) / 0.3);
     color: hsl(var(--muted-foreground));
     background: hsla(223, 28%, 20%, 0.36);
   }
 
   .chat-control-pill:hover {
-    border-color: hsla(var(--accent) / 0.38);
+    border-color: hsla(var(--accent) / 0.25);
     color: hsl(var(--foreground));
     background: hsla(223, 32%, 24%, 0.48);
   }
 
   .chat-send-button {
     @apply inline-flex h-9 min-w-9 items-center justify-center rounded-xl px-3 text-accent-foreground transition-all;
-    border: 1px solid hsla(var(--accent) / 0.46);
+    border: 1px solid hsla(var(--accent) / 0.2);
     background: linear-gradient(140deg, hsla(var(--accent) / 0.95), hsla(var(--primary) / 0.93));
-    box-shadow: 0 12px 24px hsla(var(--accent) / 0.34);
+    box-shadow: 0 4px 12px hsla(var(--accent) / 0.18);
   }
 
   .chat-send-button:hover {
     background: linear-gradient(140deg, hsla(var(--accent) / 0.8), hsla(var(--primary) / 0.8));
-    box-shadow: 0 14px 28px hsla(var(--accent) / 0.4);
+    box-shadow: 0 6px 16px hsla(var(--accent) / 0.25);
   }
 
   .chat-bubble-assistant {
@@ -717,15 +710,15 @@
 
   .chat-bubble-user {
     border-radius: 1rem;
-    border: 1px solid hsla(var(--accent) / 0.45);
+    border: 1px solid hsla(var(--accent) / 0.18);
     background: linear-gradient(150deg, var(--chat-user-bg-1), var(--chat-user-bg-2));
     color: hsl(var(--foreground));
-    box-shadow: var(--chat-user-shadow);
+    box-shadow: none;
   }
 
   .chat-avatar {
-    border: 1px solid hsla(var(--border) / 0.7);
-    box-shadow: inset 0 1px 0 hsla(210, 100%, 96%, 0.08);
+    border: 1px solid hsla(var(--border) / 0.3);
+    box-shadow: none;
   }
 
   .chat-workflow-stack {
@@ -752,7 +745,7 @@
     top: var(--chat-workflow-dot-radius);
     bottom: var(--chat-workflow-dot-radius);
     width: var(--chat-workflow-rail-width);
-    background: hsla(0, 0%, 100%, 0.06);
+    background: hsla(var(--border) / 0.3);
   }
 
   .chat-workflow-step {
@@ -852,8 +845,8 @@
   }
 
   .chat-workflow-step-live .chat-workflow-header {
-    border-color: hsla(var(--accent) / 0.52);
-    box-shadow: 0 0 0 1px hsla(var(--accent) / 0.2), 0 0 16px hsla(var(--accent) / 0.18);
+    border-color: hsla(var(--accent) / 0.35);
+    box-shadow: 0 0 8px hsla(var(--accent) / 0.1);
   }
 
   .chat-subsection-toggle {
@@ -880,16 +873,15 @@
   }
 
   .chat-step-detail-card {
-    border: 1px solid var(--card-border, hsla(var(--border) / 0.75));
-    border-top: 1px solid var(--card-border-top, hsla(var(--border) / 0.35));
+    border: 1px solid var(--card-border, hsla(var(--border) / 0.35));
+    border-top: 1px solid var(--card-border-top, hsla(var(--border) / 0.18));
     border-radius: 0 0.75rem 0.75rem 0.75rem;
     background: var(--card-bg, linear-gradient(160deg, hsla(var(--muted) / 0.28), hsla(var(--input) / 0.18)));
     padding: 0.625rem 0.75rem;
     font-size: 0.75rem;
     min-width: 0;
     overflow: hidden;
-    box-shadow:
-      inset 0 1px 0 hsla(210, 100%, 96%, 0.06);
+    box-shadow: none;
   }
 
   .chat-step-detail-card > * + * {
@@ -996,9 +988,9 @@
 
   .chat-source-card {
     border-radius: 0.9rem;
-    border: 1px solid hsla(var(--border) / 0.72);
+    border: 1px solid hsla(var(--border) / 0.3);
     background: linear-gradient(165deg, hsla(222, 35%, 16%, 0.74), hsla(223, 36%, 11%, 0.86));
-    box-shadow: inset 0 1px 0 hsla(210, 100%, 96%, 0.08);
+    box-shadow: none;
   }
 
   .chat-message-meta {

@@ -173,7 +173,7 @@ function ModelTypeTab({
                                     )}
 
                                     {!fetchError && fetchedModels !== null && fetchedModels.length === 0 && (
-                                        <div className="text-xs p-2.5 rounded-lg bg-muted/20 text-muted-foreground border border-border/50 space-y-1">
+                                        <div className="text-xs p-2.5 rounded-lg bg-muted/20 text-muted-foreground border border-border/20 space-y-1">
                                             <p>This provider doesn't support model listing. Enter the model ID manually.</p>
                                             <input className="input text-xs mt-1" placeholder="Enter model ID (e.g. meta-llama/Meta-Llama-3-8B-Instruct)" value={manualModel} onChange={e => setManualModel(e.target.value)} />
                                         </div>
@@ -192,7 +192,7 @@ function ModelTypeTab({
                                                         : setSelectedModels(new Set(filteredFetchedModels.map(m => m.id)))
                                                 }}>{selectedModels.size === filteredFetchedModels.length ? 'Deselect all' : 'Select all'}</button>
                                             </div>
-                                            <div className="max-h-52 overflow-y-auto rounded-lg border border-border/50 bg-background/30 divide-y divide-border/20">
+                                            <div className="max-h-52 overflow-y-auto rounded-lg border border-border/20 bg-background/30 divide-y divide-border/20">
                                                 {filteredFetchedModels.map(m => {
                                                     const checked = selectedModels.has(m.id)
                                                     return (

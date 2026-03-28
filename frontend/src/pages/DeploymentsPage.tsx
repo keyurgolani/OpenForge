@@ -7,7 +7,6 @@ import { deploymentsRoute } from '@/lib/routes'
 import LoadingState from '@/components/shared/LoadingState'
 import ErrorState from '@/components/shared/ErrorState'
 import StatusBadge from '@/components/shared/StatusBadge'
-import PageHeader from '@/components/shared/PageHeader'
 import { formatRelativeTime } from '@/lib/formatters'
 import type { Deployment, DeploymentStatus } from '@/types/deployments'
 
@@ -30,10 +29,9 @@ export default function DeploymentsPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8 space-y-6">
-      <PageHeader title="Deployments" description="Live automation instances" />
 
       {/* Status filter tabs */}
-      <div className="flex gap-1 rounded-lg bg-background/50 border border-border/60 p-1 w-fit">
+      <div className="flex gap-1 rounded-lg bg-background/50 border border-border/25 p-1 w-fit">
         {STATUS_FILTERS.map(({ label, value }) => (
           <button
             key={label}
@@ -63,7 +61,7 @@ export default function DeploymentsPage() {
             <Link
               key={d.id}
               to={deploymentsRoute(d.id)}
-              className="block rounded-xl border border-border/60 bg-card/40 p-4 hover:bg-card/60 transition group"
+              className="block rounded-xl border border-border/25 bg-card/40 p-4 hover:bg-card/60 transition group"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3 min-w-0">

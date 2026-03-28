@@ -245,7 +245,7 @@ export function QuickKnowledgePanel({ open, defaultType = 'note', onClose }: Pro
                 {/* Inner Glow Line */}
                 <div className="absolute inset-0 border border-white/5 rounded-[inherit] pointer-events-none mix-blend-overlay" />
                 {/* Header */}
-                <div className="flex items-center gap-2 px-4 py-3 border-b border-border/50">
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-border/20">
                     {/* Type selector */}
                     <div className="flex gap-1">
                         {(Object.entries(TYPE_CONFIG) as [KnowledgeType, typeof TYPE_CONFIG[KnowledgeType]][]).map(([t, c]) => (
@@ -340,7 +340,7 @@ export function QuickKnowledgePanel({ open, defaultType = 'note', onClose }: Pro
                 </div>
 
                 {/* Footer */}
-                <div className="flex items-center justify-between px-4 py-2.5 border-t border-border/60 bg-muted/10">
+                <div className="flex items-center justify-between px-4 py-2.5 border-t border-border/25 bg-muted/10">
                     <span className="text-[10px] text-muted-foreground opacity-60">
                         {getModSymbol()}+↵ save · Esc close · Click type to switch
                     </span>

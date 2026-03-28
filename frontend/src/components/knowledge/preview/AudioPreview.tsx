@@ -73,7 +73,7 @@ export default function AudioPreview({ knowledge, workspaceId, onClose }: AudioP
         >
             <div className="space-y-5">
                 {/* Audio player */}
-                <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
+                <div className="rounded-lg border border-border/25 bg-muted/10 p-4">
                     <div className="flex items-center gap-3 mb-3">
                         <Music className="w-5 h-5 text-muted-foreground" />
                         <span className="text-sm font-medium text-foreground truncate">

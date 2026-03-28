@@ -322,7 +322,7 @@ function AutomationGraphEditorInner({ automationId, graph }: AutomationGraphEdit
   }, [automationId, nodes, edges, saveGraph, staticInputsMap])
 
   return (
-    <div className="flex h-[600px] rounded-xl border border-border/60 overflow-hidden">
+    <div className="flex h-[600px] rounded-xl border border-border/25 overflow-hidden">
       <NodePalette agents={agents} onAddNode={handleAddNode} />
       <div className="flex-1 relative" ref={reactFlowWrapper}>
         {isDirty && (
@@ -359,9 +359,9 @@ function AutomationGraphEditorInner({ automationId, graph }: AutomationGraphEdit
           fitView
           className="bg-background"
         >
-          <Controls className="!bg-card !border-border/60 !shadow-lg" />
+          <Controls className="!bg-card !border-border/25 !shadow-lg" />
           <MiniMap
-            className="!bg-card !border-border/60"
+            className="!bg-card !border-border/25"
             nodeColor="#6366f1"
             maskColor="rgba(0,0,0,0.3)"
           />

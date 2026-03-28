@@ -207,7 +207,7 @@ export function PipelinesSubTab() {
                                             className={`group relative flex items-center gap-2 px-3 py-2 rounded-xl border transition-all duration-200 ${
                                                 enabled
                                                     ? 'bg-accent/15 border-accent/30 text-accent hover:bg-accent/25 hover:border-accent/50'
-                                                    : 'bg-muted/20 border-border/60 text-muted-foreground/70 hover:bg-muted/30 hover:border-border/60'
+                                                    : 'bg-muted/20 border-border/25 text-muted-foreground/70 hover:bg-muted/30 hover:border-border/25'
                                             } disabled:opacity-60`}
                                             title={`${enabled ? 'Disable' : 'Enable'} ${step.label}`}
                                         >

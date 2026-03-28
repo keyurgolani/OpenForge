@@ -73,7 +73,7 @@ export default function ImagePreview({ knowledge, workspaceId, onClose }: ImageP
         >
             <div className="space-y-5">
                 {/* Image display */}
-                <div className="rounded-lg overflow-hidden border border-border/60 bg-muted/10">
+                <div className="rounded-lg overflow-hidden border border-border/25 bg-muted/10">
                     <img
                         src={fileUrl}
                         alt={knowledge.title || 'Image preview'}
@@ -83,7 +83,7 @@ export default function ImagePreview({ knowledge, workspaceId, onClose }: ImageP
 
                 {/* Extracted content (OCR / AI description) */}
                 {knowledge.content && (
-                    <div className="relative pt-4 border-t border-border/50">
+                    <div className="relative pt-4 border-t border-border/20">
                         <CopyButton
                             content={knowledge.content}
                             iconOnly

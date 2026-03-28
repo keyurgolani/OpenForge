@@ -99,7 +99,7 @@ export function SettingsLayout() {
 
                 {/* Sub-navigation */}
                 {hasChildren && active && (
-                  <div className="ml-4 mt-1 space-y-0.5 border-l border-border/60 pl-3">
+                  <div className="ml-4 mt-1 space-y-0.5 border-l border-border/25 pl-3">
                     {item.children!.map((child) => (
                       <button
                         key={child.id}
