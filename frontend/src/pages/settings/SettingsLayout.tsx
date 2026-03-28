@@ -12,6 +12,7 @@ import {
   Bot,
   Wrench,
   ArrowUpDown,
+  Palette,
   Settings2,
 } from 'lucide-react';
 import { SETTINGS_LABELS, SETTINGS_DESCRIPTIONS, type SettingsSection } from '@/lib/productVocabulary';
@@ -43,6 +44,11 @@ const SETTINGS_NAV: SettingsNavItem[] = [
     id: 'data',
     route: '/settings/data',
     icon: ArrowUpDown,
+  },
+  {
+    id: 'appearance',
+    route: '/settings/appearance',
+    icon: Palette,
   },
   {
     id: 'advanced',

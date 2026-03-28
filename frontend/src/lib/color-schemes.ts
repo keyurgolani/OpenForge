@@ -1,0 +1,98 @@
+export const COLOR_SCHEMES = [
+  {
+    id: 'forge',
+    name: 'Forge',
+    description: 'Warm amber & teal',
+    primaryHsl: '38 92% 50%',
+    secondaryHsl: '173 80% 36%',
+    primaryDarkHsl: '43 96% 56%',
+    secondaryDarkHsl: '173 66% 50%',
+  },
+  {
+    id: 'ocean',
+    name: 'Ocean',
+    description: 'Deep blue & coral',
+    primaryHsl: '217 91% 52%',
+    secondaryHsl: '14 90% 62%',
+    primaryDarkHsl: '217 91% 62%',
+    secondaryDarkHsl: '14 90% 68%',
+  },
+  {
+    id: 'verdant',
+    name: 'Verdant',
+    description: 'Emerald & violet',
+    primaryHsl: '152 76% 36%',
+    secondaryHsl: '265 70% 58%',
+    primaryDarkHsl: '152 72% 46%',
+    secondaryDarkHsl: '265 70% 68%',
+  },
+  {
+    id: 'rose',
+    name: 'Rose',
+    description: 'Rose pink & slate blue',
+    primaryHsl: '340 75% 55%',
+    secondaryHsl: '220 60% 55%',
+    primaryDarkHsl: '340 72% 62%',
+    secondaryDarkHsl: '220 60% 64%',
+  },
+  {
+    id: 'obsidian',
+    name: 'Obsidian',
+    description: 'Cyan & magenta',
+    primaryHsl: '185 85% 40%',
+    secondaryHsl: '290 70% 55%',
+    primaryDarkHsl: '185 85% 55%',
+    secondaryDarkHsl: '290 70% 65%',
+  },
+  {
+    id: 'sandstone',
+    name: 'Sandstone',
+    description: 'Burnt sienna & dusty blue',
+    primaryHsl: '28 70% 48%',
+    secondaryHsl: '195 50% 42%',
+    primaryDarkHsl: '28 68% 56%',
+    secondaryDarkHsl: '195 50% 54%',
+  },
+  {
+    id: 'midnight',
+    name: 'Midnight',
+    description: 'Indigo & gold',
+    primaryHsl: '245 58% 50%',
+    secondaryHsl: '45 90% 52%',
+    primaryDarkHsl: '245 58% 62%',
+    secondaryDarkHsl: '45 90% 60%',
+  },
+  {
+    id: 'arctic',
+    name: 'Arctic',
+    description: 'Ice blue & warm orange',
+    primaryHsl: '200 80% 52%',
+    secondaryHsl: '24 85% 55%',
+    primaryDarkHsl: '200 80% 60%',
+    secondaryDarkHsl: '24 85% 62%',
+  },
+  {
+    id: 'dusk',
+    name: 'Dusk',
+    description: 'Plum & amber',
+    primaryHsl: '280 55% 50%',
+    secondaryHsl: '35 85% 55%',
+    primaryDarkHsl: '280 55% 62%',
+    secondaryDarkHsl: '35 85% 62%',
+  },
+  {
+    id: 'slate',
+    name: 'Slate',
+    description: 'Cool gray & electric green',
+    primaryHsl: '215 20% 46%',
+    secondaryHsl: '145 72% 44%',
+    primaryDarkHsl: '215 20% 58%',
+    secondaryDarkHsl: '145 72% 52%',
+  },
+] as const;
+
+export type ColorSchemeId = (typeof COLOR_SCHEMES)[number]['id'];
+
+export const VALID_SCHEME_IDS: readonly string[] = COLOR_SCHEMES.map((s) => s.id);
+
+export const DEFAULT_SCHEME: ColorSchemeId = 'forge';

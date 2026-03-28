@@ -12,6 +12,18 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Color scheme flash prevention — canonical list: src/lib/color-schemes.ts
+      (function() {
+        var valid = ['forge','ocean','verdant','rose','obsidian','sandstone','midnight','arctic','dusk','slate'];
+        var s = localStorage.getItem('color-scheme');
+        if (s && valid.indexOf(s) !== -1 && s !== 'forge') {
+          document.documentElement.dataset.scheme = s;
+        } else if (s && valid.indexOf(s) === -1) {
+          localStorage.removeItem('color-scheme');
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

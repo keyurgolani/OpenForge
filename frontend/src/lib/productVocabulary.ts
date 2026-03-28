@@ -268,6 +268,7 @@ export type SettingsSection =
   | 'models'
   | 'tools'
   | 'data'
+  | 'appearance'
   | 'advanced';
 
 export type SettingsModelSubsection =
@@ -284,6 +285,7 @@ export const SETTINGS_LABELS: Record<SettingsSection, string> = {
   models: 'AI Models',
   tools: 'Tools & Connections',
   data: 'Import / Export',
+  appearance: 'Appearance',
   advanced: 'Advanced',
 };
 
@@ -292,6 +294,7 @@ export const SETTINGS_DESCRIPTIONS: Record<SettingsSection, string> = {
   models: 'Configure AI model providers and model assignments.',
   tools: 'Manage tools, skills, and MCP server connections.',
   data: 'Import and export workspace data.',
+  appearance: 'Color scheme, light and dark mode preferences.',
   advanced: 'Pipelines, audit logs, and system configuration.',
 };
 

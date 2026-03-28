@@ -9,8 +9,10 @@ import SpatialBackdrop from '@/components/shared/SpatialBackdrop'
 import api, { checkAuth } from '@/lib/api'
 import ROUTES from '@/lib/routes'
 import { ThemeProvider } from '@/components/theme-provider'
+import { ColorSchemeProvider } from '@/components/color-scheme-provider'
 import LoginPage from '@/pages/LoginPage'
 import './index.css'
+import './styles/color-schemes.css'
 
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage'))
 const AppShell = lazy(() => import('./pages/AppShell'))
@@ -44,6 +46,7 @@ const PDFPage = lazy(() => import('./pages/settings/models/pdf/PDFPage'))
 const ToolsAndConnectionsPage = lazy(() => import('./pages/settings/ToolsAndConnectionsPage'))
 const DataPage = lazy(() => import('./pages/settings/DataPage'))
 const AdvancedPage = lazy(() => import('./pages/settings/AdvancedPage'))
+const AppearancePage = lazy(() => import('./pages/settings/AppearancePage'))
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -141,6 +144,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
         <QueryClientProvider client={queryClient}>
             <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+              <ColorSchemeProvider>
                 <ToastProvider>
                     <SpatialBackdrop />
                     <AxiosInterceptorSetup />
@@ -223,6 +227,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                     </Route>
                                     <Route path="tools" element={<ErrorBoundary><ToolsAndConnectionsPage /></ErrorBoundary>} />
                                     <Route path="data" element={<ErrorBoundary><DataPage /></ErrorBoundary>} />
+                                    <Route path="appearance" element={<ErrorBoundary><AppearancePage /></ErrorBoundary>} />
                                     <Route path="advanced" element={<ErrorBoundary><AdvancedPage /></ErrorBoundary>} />
                                     {/* Redirects from old routes */}
                                     <Route path="skills" element={<Navigate to="/settings/tools" replace />} />
@@ -239,6 +244,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                         </AuthGuard>
                 </BrowserRouter>
             </ToastProvider>
+            </ColorSchemeProvider>
             </ThemeProvider>
         </QueryClientProvider>
     </React.StrictMode>,
