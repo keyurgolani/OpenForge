@@ -33,14 +33,14 @@ export default function DeploymentsPage() {
       <PageHeader title="Deployments" description="Live automation instances" />
 
       {/* Status filter tabs */}
-      <div className="flex gap-1 rounded-lg bg-background/50 border border-border/40 p-1 w-fit">
+      <div className="flex gap-1 rounded-lg bg-background/50 border border-border/60 p-1 w-fit">
         {STATUS_FILTERS.map(({ label, value }) => (
           <button
             key={label}
             onClick={() => setStatusFilter(value)}
             className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${
               statusFilter === value
-                ? 'bg-accent/20 text-accent'
+                ? 'bg-accent/25 text-accent'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >

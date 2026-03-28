@@ -162,7 +162,7 @@ export default function AutomationsPage() {
                   <td className="px-4 py-3">
                     {automation.graph_version > 0 ? (
                       <span className="text-xs text-muted-foreground">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-accent/10 text-accent px-2 py-0.5">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 text-accent px-2 py-0.5">
                           <GitBranch className="w-3 h-3" /> Graph v{automation.graph_version}
                         </span>
                       </span>

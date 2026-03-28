@@ -93,7 +93,7 @@ export function SettingsLayout() {
 
                 {/* Sub-navigation */}
                 {hasChildren && active && (
-                  <div className="ml-4 mt-1 space-y-0.5 border-l border-border/40 pl-3">
+                  <div className="ml-4 mt-1 space-y-0.5 border-l border-border/60 pl-3">
                     {item.children!.map((child) => (
                       <button
                         key={child.id}
@@ -101,7 +101,7 @@ export function SettingsLayout() {
                         className={cn(
                           'w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-left transition-colors text-xs',
                           isActive(child.route)
-                            ? 'bg-accent/10 text-accent'
+                            ? 'bg-accent/15 text-accent'
                             : 'text-muted-foreground hover:bg-muted/30 hover:text-foreground'
                         )}
                       >

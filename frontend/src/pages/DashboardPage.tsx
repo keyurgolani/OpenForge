@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import MarkdownIt from 'markdown-it'
 import {
   BookOpenText, Bot, FileOutput, MessageSquare, Zap, Boxes,
   ArrowRight,
@@ -25,6 +26,8 @@ import {
   deploymentsRoute,
   knowledgeRoute,
 } from '@/lib/routes'
+
+const md = new MarkdownIt({ html: false, linkify: false, breaks: true })
 
 /* ---------- Knowledge type colour map ---------- */
 
@@ -59,7 +62,7 @@ function PlatformCard({
       to={to}
       className="flex items-center gap-3 rounded-xl border border-border/50 bg-background/30 px-4 py-3 transition-colors hover:border-accent/30 hover:bg-background/45"
     >
-      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-accent/20 bg-accent/10 text-accent">
+      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-accent/20 bg-accent/15 text-accent">
         {icon}
       </div>
       <div className="min-w-0">
@@ -156,7 +159,7 @@ export default function DashboardPage() {
           {/* Knowledge total */}
           <section className="rounded-2xl border border-border/60 bg-card/30 p-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-accent/20 bg-accent/10 text-accent">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-accent/20 bg-accent/15 text-accent">
                 <BookOpenText className="h-6 w-6" />
               </div>
               <div>
@@ -217,11 +220,12 @@ export default function DashboardPage() {
                             {item.type}
                           </span>
                         </div>
-                        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground/85">
-                          {item.content_preview || 'No preview available yet.'}
-                        </p>
+                        <div
+                          className="prose prose-sm mt-1 line-clamp-3 max-w-none text-xs text-muted-foreground/85 [&_p]:m-0 [&_ul]:m-0 [&_ol]:m-0 [&_li]:m-0 [&_h1]:text-xs [&_h2]:text-xs [&_h3]:text-xs [&_h1]:font-semibold [&_h2]:font-semibold [&_h3]:font-semibold [&_h1]:m-0 [&_h2]:m-0 [&_h3]:m-0 [&_code]:text-[10px] [&_code]:bg-muted/50 [&_code]:px-1 [&_code]:rounded [&_pre]:hidden [&_table]:hidden [&_img]:hidden [&_blockquote]:border-l-2 [&_blockquote]:border-accent/30 [&_blockquote]:pl-2 [&_blockquote]:m-0 [&_a]:text-accent [&_a]:no-underline"
+                          dangerouslySetInnerHTML={{ __html: md.render(item.content_preview || '*No preview available yet.*') }}
+                        />
                       </div>
-                      {item.is_archived ? <StatusBadge status="archived" /> : <StatusBadge status="ready" />}
+                      {item.is_archived && <StatusBadge status="archived" />}
                     </div>
                   </Link>
                 ))}

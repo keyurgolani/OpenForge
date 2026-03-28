@@ -62,7 +62,7 @@ export default function InlineEditTitle({
                 onKeyDown={handleKeyDown}
                 className={cn(
                     'w-full text-2xl font-bold bg-transparent outline-none',
-                    'text-foreground placeholder:text-muted-foreground/50',
+                    'text-foreground placeholder:text-muted-foreground/70',
                     'border-b-2 border-accent/40 focus:border-accent transition-colors',
                     'pb-1',
                 )}
@@ -76,8 +76,8 @@ export default function InlineEditTitle({
             onClick={() => setEditing(true)}
             className={cn(
                 'text-2xl font-bold cursor-text pb-1 border-b-2 border-transparent',
-                value ? 'text-foreground' : 'text-muted-foreground/50',
-                'hover:border-border/40 transition-colors',
+                value ? 'text-foreground' : 'text-muted-foreground/70',
+                'hover:border-border/60 transition-colors',
             )}
             role="button"
             tabIndex={0}

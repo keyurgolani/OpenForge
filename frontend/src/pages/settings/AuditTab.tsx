@@ -12,7 +12,7 @@ function AuditTab() {
                 <button
                     onClick={() => setSubTab('history')}
                     className={`flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-300 whitespace-nowrap ${subTab === 'history'
-                        ? 'bg-accent/20 text-accent ring-1 ring-accent/30'
+                        ? 'bg-accent/25 text-accent ring-1 ring-accent/30'
                         : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
                         }`}
                 >
@@ -21,7 +21,7 @@ function AuditTab() {
                 <button
                     onClick={() => setSubTab('tool-calls')}
                     className={`flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-300 whitespace-nowrap ${subTab === 'tool-calls'
-                        ? 'bg-accent/20 text-accent ring-1 ring-accent/30'
+                        ? 'bg-accent/25 text-accent ring-1 ring-accent/30'
                         : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
                         }`}
                 >
@@ -30,7 +30,7 @@ function AuditTab() {
                 <button
                     onClick={() => setSubTab('hitl')}
                     className={`flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-300 whitespace-nowrap ${subTab === 'hitl'
-                        ? 'bg-accent/20 text-accent ring-1 ring-accent/30'
+                        ? 'bg-accent/25 text-accent ring-1 ring-accent/30'
                         : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
                         }`}
                 >
@@ -39,7 +39,7 @@ function AuditTab() {
                 <button
                     onClick={() => setSubTab('logs')}
                     className={`flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-300 whitespace-nowrap ${subTab === 'logs'
-                        ? 'bg-accent/20 text-accent ring-1 ring-accent/30'
+                        ? 'bg-accent/25 text-accent ring-1 ring-accent/30'
                         : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
                         }`}
                 >

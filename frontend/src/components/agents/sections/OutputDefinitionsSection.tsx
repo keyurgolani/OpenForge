@@ -59,7 +59,7 @@ export default function OutputDefinitionsSection({
                 <button
                   type="button"
                   onClick={() => removeRow(index)}
-                  className="rounded p-0.5 text-muted-foreground/50 hover:text-red-400 transition-colors"
+                  className="rounded p-0.5 text-muted-foreground/70 hover:text-red-400 transition-colors"
                   title="Remove output"
                 >
                   <Trash2 className="h-3.5 w-3.5" />

@@ -338,7 +338,7 @@ function EmbeddingTab() {
                                     <div
                                         key={m.id}
                                         className={`text-left p-3 rounded-xl border transition-all duration-200 ${isSelected
-                                            ? 'border-accent bg-accent/10 shadow-glass-sm'
+                                            ? 'border-accent bg-accent/15 shadow-glass-sm'
                                             : 'border-border/50 hover:border-border hover:bg-muted/20'
                                         }`}
                                     >
@@ -350,14 +350,14 @@ function EmbeddingTab() {
                                                 className="mt-0.5 flex-shrink-0"
                                                 title={isDownloaded ? 'Select as default' : 'Download first'}
                                             >
-                                                <div className={`w-3.5 h-3.5 rounded-full border transition-colors ${isSelected ? 'bg-accent border-accent' : isDownloaded ? 'border-border hover:border-accent/50' : 'border-border/30 opacity-40'}`} />
+                                                <div className={`w-3.5 h-3.5 rounded-full border transition-colors ${isSelected ? 'bg-accent border-accent' : isDownloaded ? 'border-border hover:border-accent/50' : 'border-border/50 opacity-40'}`} />
                                             </button>
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
                                                     <span className={`text-xs font-medium ${isSelected ? 'text-foreground' : 'text-foreground/80'}`}>{m.name}</span>
                                                     <span className={`text-[9px] px-1.5 py-0.5 rounded border font-medium ${QUALITY_COLORS[m.quality]}`}>{m.quality}</span>
-                                                    <span className="text-[9px] text-muted-foreground border border-border/40 px-1.5 py-0.5 rounded">{m.diskSize} disk</span>
-                                                    {m.dims && <span className="text-[9px] text-muted-foreground border border-border/40 px-1.5 py-0.5 rounded">{m.dims}d</span>}
+                                                    <span className="text-[9px] text-muted-foreground border border-border/60 px-1.5 py-0.5 rounded">{m.diskSize} disk</span>
+                                                    {m.dims && <span className="text-[9px] text-muted-foreground border border-border/60 px-1.5 py-0.5 rounded">{m.dims}d</span>}
                                                     {isDownloaded && (
                                                         <span className="text-[9px] px-1.5 py-0.5 rounded border font-medium bg-emerald-500/15 text-emerald-300 border-emerald-500/30">Downloaded</span>
                                                     )}
@@ -380,7 +380,7 @@ function EmbeddingTab() {
                                                         type="button"
                                                         onClick={() => handleDownloadEmb(m.id)}
                                                         disabled={isDownloading || downloadingEmb !== null}
-                                                        className="p-1 rounded text-accent/70 hover:text-accent hover:bg-accent/10 transition-colors disabled:opacity-40"
+                                                        className="p-1 rounded text-accent/70 hover:text-accent hover:bg-accent/15 transition-colors disabled:opacity-40"
                                                         title="Download model"
                                                     >
                                                         {isDownloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}

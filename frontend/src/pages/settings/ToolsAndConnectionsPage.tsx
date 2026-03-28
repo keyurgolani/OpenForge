@@ -17,7 +17,7 @@ export function ToolsAndConnectionsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex gap-1 border-b border-border/40">
+      <div className="flex gap-1 border-b border-border/60">
         {TABS.map((tab) => (
           <button
             key={tab.id}

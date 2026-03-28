@@ -155,7 +155,7 @@ export default function KnowledgeIntelligence({ knowledge, workspaceId, headerEx
                             >
                                 <div className="flex items-center gap-2.5 min-w-0">
                                     <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-                                    <div className="w-6 h-6 rounded-md flex items-center justify-center text-accent bg-accent/10 border border-accent/20">
+                                    <div className="w-6 h-6 rounded-md flex items-center justify-center text-accent bg-accent/15 border border-accent/20">
                                         <SectionIcon className="w-3.5 h-3.5" />
                                     </div>
                                     <div className="min-w-0">

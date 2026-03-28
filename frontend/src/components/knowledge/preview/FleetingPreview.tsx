@@ -81,7 +81,7 @@ export default function FleetingPreview({ knowledge, workspaceId, onClose }: Fle
                 <textarea
                     value={content}
                     onChange={(e) => handleChange(e.target.value)}
-                    className="w-full min-h-[200px] bg-transparent border border-border/40 rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent/50 resize-y"
+                    className="w-full min-h-[200px] bg-transparent border border-border/60 rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent/50 resize-y"
                     placeholder="Write your thought..."
                     autoFocus
                 />

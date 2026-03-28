@@ -64,7 +64,7 @@ export function SubAgentNode({ item, depth, onApproveHITL, onDenyHITL, renderTim
         {isRunning && <Loader2 className="h-3 w-3 text-accent animate-spin" />}
         {!isRunning && isComplete && <CheckCircle2 className="h-3 w-3 text-emerald-400" />}
         {!isRunning && isError && <XCircle className="h-3 w-3 text-red-400" />}
-        <span className="text-[10px] text-muted-foreground/50 ml-auto">
+        <span className="text-[10px] text-muted-foreground/70 ml-auto">
           {stepCount} steps{totalMs ? `, ${(totalMs / 1000).toFixed(1)}s` : ''}
         </span>
       </button>

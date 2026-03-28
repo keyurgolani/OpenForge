@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { visualSearch, getKnowledgeThumbnailUrl } from '@/lib/api'
+import { knowledgeRoute } from '@/lib/routes'
 import { Image as ImageIcon, Upload, Loader2, X, SearchX } from 'lucide-react'
 
 interface VisualSearchResult {
@@ -49,7 +50,7 @@ export default function VisualSearchTab() {
         setError(null)
         try {
             const data = await visualSearch(workspaceId, queryFile, 20)
-            setResults(data.results ?? [])
+            setResults([...(data.results ?? [])].sort((a, b) => b.score - a.score))
             setSearched(true)
         } catch (err: any) {
             setError(err?.response?.data?.detail || 'Visual search failed. Please try again.')
@@ -157,7 +158,7 @@ export default function VisualSearchTab() {
                                 <div
                                     key={r.knowledge_id}
                                     className="glass-card-hover rounded-xl overflow-hidden cursor-pointer group animate-fade-in"
-                                    onClick={() => navigate(`/w/${workspaceId}/knowledge/${r.knowledge_id}`)}
+                                    onClick={() => navigate(`${knowledgeRoute(workspaceId)}?k=${r.knowledge_id}`)}
                                 >
                                     <div className="aspect-square bg-muted/30 overflow-hidden">
                                         {r.thumbnail_path ? (
@@ -169,7 +170,7 @@ export default function VisualSearchTab() {
                                             />
                                         ) : (
                                             <div className="w-full h-full flex items-center justify-center">
-                                                <ImageIcon className="w-8 h-8 text-muted-foreground/40" />
+                                                <ImageIcon className="w-8 h-8 text-muted-foreground/60" />
                                             </div>
                                         )}
                                     </div>

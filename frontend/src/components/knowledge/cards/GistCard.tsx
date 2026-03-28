@@ -33,7 +33,7 @@ export function GistCard({ item, slim, isProcessing }: { item: KnowledgeListItem
 
             {/* Code snippet */}
             {codeLines && (
-                <pre className="text-[11px] font-mono whitespace-pre-wrap text-foreground/80 bg-muted/25 rounded-lg px-3 py-2 overflow-hidden max-h-[7.5rem] border border-border/30">
+                <pre className="text-[11px] font-mono whitespace-pre-wrap text-foreground/80 bg-muted/25 rounded-lg px-3 py-2 overflow-hidden max-h-[7.5rem] border border-border/50">
                     {codeLines}
                 </pre>
             )}
@@ -44,7 +44,7 @@ export function GistCard({ item, slim, isProcessing }: { item: KnowledgeListItem
                     <TagRow tags={item.tags} />
 
                     {/* Footer */}
-                    <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-border/40">
+                    <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-border/60">
                         <span className="text-[10px] text-muted-foreground/80">
                             {formatTimestamp(item.updated_at)}
                         </span>

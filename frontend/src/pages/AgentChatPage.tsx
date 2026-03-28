@@ -874,7 +874,7 @@ export default function AgentChatPage() {
                     <div className="flex-1 flex flex-col overflow-y-auto py-8 px-6">
                         <div className="w-full">
                             <div className="text-center mb-6">
-                                <div className="w-14 h-14 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center mx-auto mb-4">
+                                <div className="w-14 h-14 rounded-2xl bg-accent/15 border border-accent/20 flex items-center justify-center mx-auto mb-4">
                                     <Bot className="w-7 h-7 text-accent/60" />
                                 </div>
                                 <h3 className="text-lg font-semibold mb-1">Choose an Agent</h3>
@@ -913,7 +913,7 @@ export default function AgentChatPage() {
                                                 <div className="flex items-start gap-3">
                                                     <div className={`rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${isExpanded
                                                         ? 'w-11 h-11 bg-accent/15 border border-accent/30'
-                                                        : 'w-9 h-9 bg-accent/10 border border-accent/20'
+                                                        : 'w-9 h-9 bg-accent/15 border border-accent/20'
                                                     }`}>
                                                         <Bot className={`${isExpanded ? 'w-5 h-5' : 'w-4.5 h-4.5'} text-accent/70`} />
                                                     </div>
@@ -924,7 +924,7 @@ export default function AgentChatPage() {
                                                         )}
                                                         {/* Collapsed view: minimal info */}
                                                         {!isExpanded && allParams.length > 0 && (
-                                                            <div className="flex items-center gap-1.5 mt-2 text-[10px] text-muted-foreground/50">
+                                                            <div className="flex items-center gap-1.5 mt-2 text-[10px] text-muted-foreground/70">
                                                                 <span>{allParams.length} input{allParams.length !== 1 ? 's' : ''}</span>
                                                                 {requiredParams.length > 0 && (
                                                                     <span className="text-amber-400/60">({requiredParams.length} required)</span>
@@ -943,7 +943,7 @@ export default function AgentChatPage() {
 
                                                 {/* Expanded view: full parameter details + Start Chat */}
                                                 {isExpanded && (
-                                                    <div className="mt-4 border-t border-border/40 pt-4" onClick={e => e.stopPropagation()}>
+                                                    <div className="mt-4 border-t border-border/60 pt-4" onClick={e => e.stopPropagation()}>
                                                         {allParams.length > 0 ? (
                                                             <div className="space-y-2.5 mb-5">
                                                                 <h4 className="text-xs font-semibold text-muted-foreground/90 uppercase tracking-wider">Agent Inputs</h4>
@@ -953,7 +953,7 @@ export default function AgentChatPage() {
                                                                             <div className="flex items-center gap-1.5">
                                                                                 {p.required !== false && <span className="text-amber-400/90 text-xs font-medium">*</span>}
                                                                                 <span className="text-xs font-mono font-medium text-foreground/90">{p.label || p.name}</span>
-                                                                                <span className="text-[10px] text-muted-foreground/50 ml-auto">{p.type}</span>
+                                                                                <span className="text-[10px] text-muted-foreground/70 ml-auto">{p.type}</span>
                                                                             </div>
                                                                             {p.description && (
                                                                                 <p className="text-[11px] text-muted-foreground/70 mt-1 leading-relaxed">{p.description}</p>
@@ -961,7 +961,7 @@ export default function AgentChatPage() {
                                                                             {p.type === 'enum' && p.options?.length > 0 && (
                                                                                 <div className="flex flex-wrap gap-1 mt-1.5">
                                                                                     {p.options.map((opt: string) => (
-                                                                                        <span key={opt} className="rounded bg-muted/50 border border-border/40 px-1.5 py-0.5 text-[10px] text-muted-foreground/80">{opt}</span>
+                                                                                        <span key={opt} className="rounded bg-muted/50 border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground/80">{opt}</span>
                                                                                     ))}
                                                                                 </div>
                                                                             )}
@@ -1000,7 +1000,7 @@ export default function AgentChatPage() {
                         {/* Agent name floating chip */}
                         {activeConversationRecord?.agent_name && (
                             <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 pointer-events-none flex-shrink-0">
-                                <div className="pointer-events-auto inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-card/80 backdrop-blur-sm border border-border/40 shadow-sm">
+                                <div className="pointer-events-auto inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-card/80 backdrop-blur-sm border border-border/60 shadow-sm">
                                     <Bot className="w-3.5 h-3.5 text-accent/70" />
                                     <span className="text-xs font-medium text-foreground/70">{activeConversationRecord.agent_name}</span>
                                 </div>
@@ -1162,7 +1162,7 @@ export default function AgentChatPage() {
                                 >
                                     <div className="flex items-center gap-2.5 min-w-0">
                                         <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isConversationsSectionExpanded ? 'rotate-90' : ''}`} />
-                                        <div className="w-6 h-6 rounded-md flex items-center justify-center text-accent bg-accent/10 border border-accent/20">
+                                        <div className="w-6 h-6 rounded-md flex items-center justify-center text-accent bg-accent/15 border border-accent/20">
                                             <MessageSquare className="w-3.5 h-3.5" />
                                         </div>
                                         <div className="min-w-0">
@@ -1350,7 +1350,7 @@ export default function AgentChatPage() {
                                                         }
                                                     }}
                                                     className={`flex items-center gap-1 px-2 py-1 text-[11px] rounded-md border transition-all ${confirmBulkRestore
-                                                        ? 'bg-accent/20 border-accent/40 text-accent font-medium'
+                                                        ? 'bg-accent/25 border-accent/40 text-accent font-medium'
                                                         : 'text-muted-foreground hover:text-foreground border-border/50 hover:border-accent/30'
                                                     }`}
                                                     title={confirmBulkRestore ? 'Click again to confirm' : 'Restore all trashed conversations'}

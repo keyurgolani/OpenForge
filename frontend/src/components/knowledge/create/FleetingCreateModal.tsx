@@ -79,7 +79,7 @@ export default function FleetingCreateModal({ isOpen, onClose, workspaceId, onCr
                 onChange={e => setContent(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="What's on your mind?"
-                className="w-full bg-muted/20 border border-border/40 rounded-xl p-3 text-sm resize-none outline-none focus:border-accent/50 transition-colors min-h-[160px]"
+                className="w-full bg-muted/20 border border-border/60 rounded-xl p-3 text-sm resize-none outline-none focus:border-accent/50 transition-colors min-h-[160px]"
                 rows={6}
             />
 

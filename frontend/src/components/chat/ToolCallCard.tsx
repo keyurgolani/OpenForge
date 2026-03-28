@@ -88,7 +88,7 @@ export function ToolCallCard({ toolName, arguments: args, status, success, outpu
           </span>
         )}
         {durationMs != null && !isRunning && (
-          <span className="text-[10px] text-muted-foreground/50 ml-auto">{(durationMs / 1000).toFixed(1)}s</span>
+          <span className="text-[10px] text-muted-foreground/70 ml-auto">{(durationMs / 1000).toFixed(1)}s</span>
         )}
       </button>
       <div className={`chat-collapse ${isOpen ? 'chat-collapse-open' : 'chat-collapse-closed'}`}>

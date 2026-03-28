@@ -83,10 +83,10 @@ export function UserMessageCard({ content, userInitial, attachments, timestamp }
           <CopyButton
             content={content}
             iconOnly
-            className="text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+            className="text-muted-foreground/70 hover:text-muted-foreground transition-colors"
           />
           {timestamp && (
-            <span className="text-[11px] text-muted-foreground/50">{timestamp}</span>
+            <span className="text-[11px] text-muted-foreground/70">{timestamp}</span>
           )}
         </div>
       </div>

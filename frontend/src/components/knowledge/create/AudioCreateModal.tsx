@@ -259,7 +259,7 @@ export default function AudioCreateModal({ isOpen, onClose, workspaceId, onCreat
             }
         >
             {/* Tab switcher */}
-            <div className="flex gap-1 p-0.5 rounded-lg bg-muted/30 border border-border/40">
+            <div className="flex gap-1 p-0.5 rounded-lg bg-muted/30 border border-border/60">
                 <button
                     type="button"
                     onClick={() => setTab('upload')}
@@ -408,7 +408,7 @@ export default function AudioCreateModal({ isOpen, onClose, workspaceId, onCreat
                     {recordingState === 'done' && recordedUrl && (
                         <>
                             {/* Playback */}
-                            <div className="w-full rounded-lg border border-border/40 bg-muted/10 p-3 space-y-2">
+                            <div className="w-full rounded-lg border border-border/60 bg-muted/10 p-3 space-y-2">
                                 <div className="flex items-center gap-2">
                                     <Music className="w-4 h-4 text-orange-400 flex-shrink-0" />
                                     <span className="text-sm font-medium text-foreground">Recording</span>

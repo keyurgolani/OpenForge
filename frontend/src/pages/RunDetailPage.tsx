@@ -160,7 +160,7 @@ export default function RunDetailPage() {
           <div key={item.label} className="rounded-2xl border border-border/60 bg-card/30 p-4">
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/75">{item.label}</p>
-              <div className="flex h-9 w-9 items-center justify-center rounded-2xl border border-accent/20 bg-accent/10 text-accent">
+              <div className="flex h-9 w-9 items-center justify-center rounded-2xl border border-accent/20 bg-accent/15 text-accent">
                 {item.icon}
               </div>
             </div>
@@ -184,7 +184,7 @@ export default function RunDetailPage() {
           <Card glass padding="lg">
             <CardContent>
               {typeof run.output_payload.output === 'string' ? (
-                <div className="prose prose-invert max-w-none text-sm">
+                <div className="prose dark:prose-invert max-w-none text-sm">
                   <pre className="whitespace-pre-wrap rounded-xl border border-border/60 bg-background/50 p-4 text-xs text-foreground/90">
                     {run.output_payload.output}
                   </pre>
@@ -258,7 +258,7 @@ export default function RunDetailPage() {
                   onClick={() => setSelectedStepId(step.id)}
                   className={`w-full rounded-2xl border px-4 py-4 text-left transition ${
                     selectedStepId === step.id
-                      ? 'border-accent/40 bg-accent/10'
+                      ? 'border-accent/40 bg-accent/15'
                       : 'border-border/60 bg-card/30 hover:border-border/80'
                   }`}
                 >

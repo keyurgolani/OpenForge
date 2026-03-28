@@ -9,7 +9,7 @@ import { openQuickKnowledge, type QuickKnowledgeType, FILE_BASED_TYPES } from '@
 import KnowledgeTypeGrid from '@/components/knowledge/KnowledgeTypeGrid'
 import PreviewDispatcher from '@/components/knowledge/preview/PreviewDispatcher'
 import { KnowledgeCard as KnowledgeCardContent, isKnowledgeProcessing } from '@/components/knowledge/cards/KnowledgeCard'
-import { getShortcutDisplay } from '@/lib/keyboard'
+import { getShortcutDisplay, isModKey } from '@/lib/keyboard'
 import {
     Search, FileText, Bookmark, Code2, Zap, Pin, Archive,
     Trash2, PinOff, ArchiveX, Loader2, Sparkles,
@@ -191,23 +191,23 @@ export default function WorkspaceHome() {
         openQuickKnowledge(type)
     }
 
-    const handleDelete = async (knowledgeId: string) => {
+    const handleDelete = useCallback(async (knowledgeId: string) => {
         if (!confirm('Delete this knowledge item permanently?')) return
         await deleteKnowledge(workspaceId, knowledgeId)
         qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
         setSelected(s => { const n = new Set(s); n.delete(knowledgeId); return n })
-    }
+    }, [workspaceId, qc])
 
     const handlePin = async (knowledgeId: string) => {
         await togglePin(workspaceId, knowledgeId)
         qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
     }
 
-    const handleArchive = async (knowledgeId: string) => {
+    const handleArchive = useCallback(async (knowledgeId: string) => {
         await toggleArchive(workspaceId, knowledgeId)
         qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
         setSelected(s => { const n = new Set(s); n.delete(knowledgeId); return n })
-    }
+    }, [workspaceId, qc])
 
     const handleExtractBookmarkContent = async (knowledgeId: string) => {
         setExtractingIds(prev => new Set(prev).add(knowledgeId))
@@ -222,18 +222,18 @@ export default function WorkspaceHome() {
         qc.invalidateQueries({ queryKey: ['knowledge-item', knowledgeId] })
     }
 
-    const handleBulkDelete = async () => {
+    const handleBulkDelete = useCallback(async () => {
         if (!confirm(`Delete ${selected.size} selected knowledge item${selected.size === 1 ? '' : 's'} permanently?`)) return
         await Promise.all([...selected].map(id => deleteKnowledge(workspaceId, id)))
         qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
         setSelected(new Set())
-    }
+    }, [selected, workspaceId, qc])
 
-    const handleBulkArchive = async () => {
+    const handleBulkArchive = useCallback(async () => {
         await Promise.all([...selected].map(id => toggleArchive(workspaceId, id)))
         qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
         setSelected(new Set())
-    }
+    }, [selected, workspaceId, qc])
 
     const handleBulkPin = async () => {
         await Promise.all([...selected].map(id => togglePin(workspaceId, id)))
@@ -260,6 +260,49 @@ export default function WorkspaceHome() {
 
     const selectAll = () => setSelected(new Set(knowledgeItems.map(n => n.id)))
     const clearSelection = () => setSelected(new Set())
+
+    // Archive (Cmd+Shift+A) and Delete (Cmd+Backspace) keyboard shortcuts
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            const target = e.target as HTMLElement
+            const tag = target.tagName.toLowerCase()
+            if (tag === 'input' || tag === 'textarea' || tag === 'select' || target.isContentEditable) return
+
+            // Cmd+Shift+A → Archive
+            if (isModKey(e) && e.shiftKey && e.key.toLowerCase() === 'a') {
+                e.preventDefault()
+                if (selected.size > 0) {
+                    void handleBulkArchive()
+                } else if (activeKnowledgeId) {
+                    void handleArchive(activeKnowledgeId)
+                }
+                return
+            }
+
+            // Cmd+A → Toggle Select All
+            if (isModKey(e) && !e.shiftKey && e.key.toLowerCase() === 'a') {
+                e.preventDefault()
+                if (selected.size === knowledgeItems.length) {
+                    clearSelection()
+                } else {
+                    selectAll()
+                }
+                return
+            }
+
+            // Cmd+Backspace → Delete
+            if (isModKey(e) && e.key === 'Backspace') {
+                e.preventDefault()
+                if (selected.size > 0) {
+                    void handleBulkDelete()
+                } else if (activeKnowledgeId) {
+                    void handleDelete(activeKnowledgeId)
+                }
+            }
+        }
+        window.addEventListener('keydown', handler)
+        return () => window.removeEventListener('keydown', handler)
+    }, [selected, activeKnowledgeId, knowledgeItems, handleArchive, handleDelete, handleBulkArchive, handleBulkDelete])
 
     const closeAllMenus = () => { setShowTypeMenu(false); setShowSortMenu(false) }
 
@@ -320,7 +363,7 @@ export default function WorkspaceHome() {
 
                         <div className="relative" onClick={e => e.stopPropagation()}>
                             <button
-                                className={`inline-flex h-10 items-center gap-1.5 px-3 rounded-lg border text-sm transition-colors ${typeFilter ? 'border-accent/50 text-accent bg-accent/10' : 'border-border/70 text-muted-foreground hover:text-foreground hover:border-border'}`}
+                                className={`inline-flex h-10 items-center gap-1.5 px-3 rounded-lg border text-sm transition-colors ${typeFilter ? 'border-accent/50 text-accent bg-accent/15' : 'border-border/70 text-muted-foreground hover:text-foreground hover:border-border'}`}
                                 onClick={() => { setShowTypeMenu(p => !p); setShowSortMenu(false) }}
                             >
                                 <Tag className="w-3.5 h-3.5" />
@@ -381,7 +424,7 @@ export default function WorkspaceHome() {
 
                         <button
                             className={`inline-flex h-10 items-center gap-1.5 px-3 rounded-lg border text-sm transition-colors ${showArchived
-                                ? 'border-accent/50 text-accent bg-accent/10'
+                                ? 'border-accent/50 text-accent bg-accent/15'
                                 : 'border-border/70 text-muted-foreground hover:text-foreground hover:border-border'
                                 }`}
                             onClick={() => setShowArchived(prev => !prev)}
@@ -432,13 +475,13 @@ export default function WorkspaceHome() {
                     {!isLoading && knowledgeItems.length === 0 && (
                         filterText ? (
                             <div className="text-center py-20">
-                                <Inbox className="w-14 h-14 mx-auto mb-4 text-muted-foreground/30" />
+                                <Inbox className="w-14 h-14 mx-auto mb-4 text-muted-foreground/70" />
                                 <h3 className="text-lg font-semibold mb-2">No knowledge match your search</h3>
                                 <p className="text-muted-foreground text-sm">Try a different search term.</p>
                             </div>
                         ) : typeFilter ? (
                             <div className="text-center py-20">
-                                <Inbox className="w-14 h-14 mx-auto mb-4 text-muted-foreground/30" />
+                                <Inbox className="w-14 h-14 mx-auto mb-4 text-muted-foreground/70" />
                                 <h3 className="text-lg font-semibold mb-2">No {typeMeta?.label?.toLowerCase() ?? 'items'} found</h3>
                                 <p className="text-muted-foreground text-sm">Create one to get started.</p>
                                 <div className="w-full max-w-2xl mt-6">
@@ -447,13 +490,13 @@ export default function WorkspaceHome() {
                             </div>
                         ) : showArchived ? (
                             <div className="text-center py-20">
-                                <Archive className="w-14 h-14 mx-auto mb-4 text-muted-foreground/30" />
+                                <Archive className="w-14 h-14 mx-auto mb-4 text-muted-foreground/70" />
                                 <h3 className="text-lg font-semibold mb-2">No archived knowledge</h3>
                                 <p className="text-muted-foreground text-sm">Items you archive will appear here.</p>
                             </div>
                         ) : (
                             <div className="flex flex-col items-center gap-6 py-16">
-                                <div className="w-12 h-12 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+                                <div className="w-12 h-12 rounded-2xl bg-accent/15 border border-accent/20 flex items-center justify-center">
                                     <Sparkles className="w-6 h-6 text-accent/60" />
                                 </div>
                                 <div className="text-center">

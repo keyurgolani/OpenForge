@@ -105,7 +105,7 @@ export default function BookmarkPreview({ knowledge, workspaceId, onClose }: Boo
                                 {url}
                             </p>
                         </div>
-                        <ExternalLink className="w-4 h-4 text-muted-foreground/50 group-hover:text-foreground/70 transition-colors shrink-0" />
+                        <ExternalLink className="w-4 h-4 text-muted-foreground/70 group-hover:text-foreground/70 transition-colors shrink-0" />
                     </a>
                 )}
 
@@ -116,17 +116,17 @@ export default function BookmarkPreview({ knowledge, workspaceId, onClose }: Boo
 
                 {/* Archived/extracted content */}
                 {contentHtml && (
-                    <div className="relative pt-4 border-t border-border/30">
+                    <div className="relative pt-4 border-t border-border/50">
                         <CopyButton
                             content={knowledge.content}
                             iconOnly
-                            className="absolute top-4 right-0 p-1.5 rounded-lg text-muted-foreground/50 hover:text-foreground hover:bg-muted/50 transition-colors"
+                            className="absolute top-4 right-0 p-1.5 rounded-lg text-muted-foreground/70 hover:text-foreground hover:bg-muted/50 transition-colors"
                         />
                         <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
                             Extracted Content
                         </h3>
                         <div
-                            className="prose prose-sm prose-invert max-w-none text-foreground/85 leading-relaxed pr-8"
+                            className="prose prose-sm dark:prose-invert max-w-none text-foreground/85 leading-relaxed pr-8"
                             dangerouslySetInnerHTML={{ __html: contentHtml }}
                         />
                     </div>

@@ -90,7 +90,7 @@ export default function PreviewShell({
                     {/* Bottom sheet */}
                     <motion.div
                         ref={sheetRef}
-                        className="fixed bottom-0 left-0 right-0 z-[61] glass-card border-t border-border/40 shadow-2xl rounded-t-2xl flex flex-col max-h-[85vh]"
+                        className="fixed bottom-0 left-0 right-0 z-[61] glass-card border-t border-border/60 shadow-2xl rounded-t-2xl flex flex-col max-h-[85vh]"
                         style={{ y }}
                         initial={{ y: '100%' }}
                         animate={{ y: 0 }}
@@ -162,14 +162,14 @@ export default function PreviewShell({
 
                         {/* Left rail — mobile: inline above siderail */}
                         {leftRail && (
-                            <div className="md:hidden border-t border-border/30 px-5 py-4 overflow-y-auto max-h-[30vh] select-text">
+                            <div className="md:hidden border-t border-border/50 px-5 py-4 overflow-y-auto max-h-[30vh] select-text">
                                 {leftRail}
                             </div>
                         )}
 
                         {/* Siderail — mobile: inline below content */}
                         {siderail && (
-                            <div className="md:hidden border-t border-border/30 px-5 py-4 overflow-y-auto max-h-[40vh] select-text">
+                            <div className="md:hidden border-t border-border/50 px-5 py-4 overflow-y-auto max-h-[40vh] select-text">
                                 {typeof siderail === 'function' ? siderail(() => setRailOpen(false)) : siderail}
                             </div>
                         )}

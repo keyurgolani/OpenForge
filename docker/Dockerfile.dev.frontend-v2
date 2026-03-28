@@ -1,0 +1,12 @@
+FROM node:20-alpine
+WORKDIR /app
+
+COPY refresh_frontend/package.json refresh_frontend/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
+
+COPY refresh_frontend/ ./
+
+EXPOSE 5174
+
+CMD ["npx", "vite", "--host", "--port", "5174"]

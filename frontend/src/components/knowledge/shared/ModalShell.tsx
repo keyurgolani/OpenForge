@@ -66,7 +66,7 @@ export default function ModalShell({
                                 <Dialog.Description className="sr-only">
                                     {title}
                                 </Dialog.Description>
-                                <div className="flex items-center justify-between px-6 py-4 border-b border-border/40">
+                                <div className="flex items-center justify-between px-6 py-4 border-b border-border/60">
                                     <Dialog.Title className="text-lg font-semibold text-foreground">
                                         {title}
                                     </Dialog.Title>
@@ -88,7 +88,7 @@ export default function ModalShell({
 
                                 {/* Footer */}
                                 {footer && (
-                                    <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border/40">
+                                    <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border/60">
                                         {footer}
                                     </div>
                                 )}

@@ -180,7 +180,7 @@ export default function AutomationDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-border/40">
+      <div className="flex items-center gap-1 border-b border-border/60">
         {tabs.map(tab => (
           <button
             key={tab.id}
@@ -325,7 +325,7 @@ export default function AutomationDetailPage() {
             )}
 
             {/* Schedule section */}
-            <div className="border-t border-border/40 pt-4">
+            <div className="border-t border-border/60 pt-4">
               <label className="block text-sm font-medium text-foreground mb-1">Schedule</label>
               <p className="text-xs text-muted-foreground mb-2">
                 Cron expression for recurring runs. Leave empty for manual-only.

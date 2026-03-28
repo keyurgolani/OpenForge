@@ -41,8 +41,8 @@ function ToolCard({ tool, permission, onPermissionChange }: {
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{tool.description}</p>
                         <p className="text-[10px] font-mono text-accent/60 mt-0.5">
-                            <span className="text-muted-foreground/50">{tool.category}</span>
-                            <span className="text-muted-foreground/30">.</span>
+                            <span className="text-muted-foreground/70">{tool.category}</span>
+                            <span className="text-muted-foreground/70">.</span>
                             {action}
                         </p>
                     </div>
@@ -69,7 +69,7 @@ function ToolCard({ tool, permission, onPermissionChange }: {
             </div>
 
             {expanded && (
-                <div className="border-t border-border/40 px-4 py-3 space-y-3 animate-fade-in">
+                <div className="border-t border-border/60 px-4 py-3 space-y-3 animate-fade-in">
                     {/* Full description */}
                     <p className="text-xs text-foreground/70 leading-relaxed">{tool.description}</p>
 
@@ -77,10 +77,10 @@ function ToolCard({ tool, permission, onPermissionChange }: {
                     {params.length > 0 && (
                         <div>
                             <div className="mb-2 text-[10px] uppercase tracking-wide text-muted-foreground/70">Parameters</div>
-                            <div className="overflow-x-auto rounded-lg border border-border/40">
+                            <div className="overflow-x-auto rounded-lg border border-border/60">
                                 <table className="w-full text-[11px]">
                                     <thead>
-                                        <tr className="border-b border-border/40 bg-muted/20">
+                                        <tr className="border-b border-border/60 bg-muted/20">
                                             <th className="px-3 py-1.5 text-left font-medium text-muted-foreground/80">Name</th>
                                             <th className="px-3 py-1.5 text-left font-medium text-muted-foreground/80">Type</th>
                                             <th className="px-3 py-1.5 text-left font-medium text-muted-foreground/80">Req</th>
@@ -89,13 +89,13 @@ function ToolCard({ tool, permission, onPermissionChange }: {
                                     </thead>
                                     <tbody>
                                         {params.map(p => (
-                                            <tr key={p.name} className="border-b border-border/30 last:border-0">
+                                            <tr key={p.name} className="border-b border-border/50 last:border-0">
                                                 <td className="px-3 py-1.5 font-mono text-accent/80">{p.name}</td>
                                                 <td className="px-3 py-1.5 font-mono text-blue-400/80">{p.type}</td>
                                                 <td className="px-3 py-1.5">
                                                     {p.required
                                                         ? <span className="text-amber-400">●</span>
-                                                        : <span className="text-muted-foreground/40">○</span>}
+                                                        : <span className="text-muted-foreground/60">○</span>}
                                                 </td>
                                                 <td className="px-3 py-1.5 text-muted-foreground">
                                                     {p.description ?? '—'}
@@ -105,7 +105,7 @@ function ToolCard({ tool, permission, onPermissionChange }: {
                                                         </span>
                                                     )}
                                                     {p.default !== undefined && (
-                                                        <span className="ml-1 text-muted-foreground/50">
+                                                        <span className="ml-1 text-muted-foreground/70">
                                                             (default: {String(p.default)})
                                                         </span>
                                                     )}
@@ -119,7 +119,7 @@ function ToolCard({ tool, permission, onPermissionChange }: {
                     )}
 
                     {params.length === 0 && (
-                        <p className="text-xs text-muted-foreground/50 italic">No parameters — call with empty object.</p>
+                        <p className="text-xs text-muted-foreground/70 italic">No parameters — call with empty object.</p>
                     )}
 
                     {/* Raw schema toggle */}
@@ -133,7 +133,7 @@ function ToolCard({ tool, permission, onPermissionChange }: {
                             Raw JSON schema
                         </button>
                         {showRaw && (
-                            <pre className="mt-1.5 overflow-x-auto whitespace-pre-wrap break-words text-[10px] text-foreground/60 bg-muted/30 rounded-lg p-3 border border-border/40 max-h-64">
+                            <pre className="mt-1.5 overflow-x-auto whitespace-pre-wrap break-words text-[10px] text-foreground/60 bg-muted/30 rounded-lg p-3 border border-border/60 max-h-64">
                                 {JSON.stringify(tool.input_schema, null, 2)}
                             </pre>
                         )}
@@ -243,7 +243,7 @@ function ToolsTab() {
                                     type="button"
                                     onClick={() => setActiveCategory(cat)}
                                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors capitalize ${activeCategory === cat
-                                        ? 'bg-accent/20 text-accent ring-1 ring-accent/30'
+                                        ? 'bg-accent/25 text-accent ring-1 ring-accent/30'
                                         : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
                                 >
                                     {cat !== 'all' && (CATEGORY_ICONS[cat] ?? <Wrench className="w-3.5 h-3.5" />)}
@@ -266,7 +266,7 @@ function ToolsTab() {
                             <div className="flex items-center gap-2 py-1">
                                 <span className="text-muted-foreground/60">{CATEGORY_ICONS[cat] ?? <Wrench className="w-4 h-4" />}</span>
                                 <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground capitalize">{cat}</h4>
-                                <span className="text-[10px] text-muted-foreground/50">{catTools.length} tool{catTools.length !== 1 ? 's' : ''}</span>
+                                <span className="text-[10px] text-muted-foreground/70">{catTools.length} tool{catTools.length !== 1 ? 's' : ''}</span>
                                 <div className="flex-1 h-px bg-border/40" />
                             </div>
                             {catTools.map(tool => (

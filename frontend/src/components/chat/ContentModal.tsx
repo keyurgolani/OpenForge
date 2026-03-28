@@ -166,7 +166,7 @@ export function ContentModal({
     <ModalShell isOpen={open} onClose={onClose} title={filename} size="xl" footer={footer}>
       <div className="flex flex-col h-full min-h-0">
         {header}
-        <div className="relative flex-1 min-h-0 mt-3 rounded-lg border border-border/40 overflow-hidden">
+        <div className="relative flex-1 min-h-0 mt-3 rounded-lg border border-border/60 overflow-hidden">
           {isEditing ? (
             <textarea
               ref={textareaRef}
@@ -192,7 +192,7 @@ export function ContentModal({
                 </span>
               </div>
               <div
-                className="prose prose-sm prose-invert max-w-none text-foreground/85 leading-relaxed [&_pre]:bg-muted/50 [&_pre]:rounded-md [&_pre]:p-3 [&_code]:font-mono [&_code]:text-xs [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-medium [&_h4]:text-xs [&_h4]:font-medium [&_h5]:text-xs [&_h6]:text-xs"
+                className="prose prose-sm dark:prose-invert max-w-none text-foreground/85 leading-relaxed [&_pre]:bg-muted/50 [&_pre]:rounded-md [&_pre]:p-3 [&_code]:font-mono [&_code]:text-xs [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-medium [&_h4]:text-xs [&_h4]:font-medium [&_h5]:text-xs [&_h6]:text-xs"
                 dangerouslySetInnerHTML={{ __html: renderedHtml }}
               />
             </div>

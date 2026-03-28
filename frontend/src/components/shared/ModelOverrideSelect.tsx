@@ -94,7 +94,7 @@ export function ModelOverrideSelect({
                     <div className="p-1.5 max-h-56 overflow-y-auto space-y-1">
                         <button
                             type="button"
-                            className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-2 hover:bg-muted/40 transition-colors ${!value ? 'text-accent bg-accent/10' : 'text-foreground'}`}
+                            className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-2 hover:bg-muted/40 transition-colors ${!value ? 'text-accent bg-accent/15' : 'text-foreground'}`}
                             onClick={() => {
                                 onChange('')
                                 setOpen(false)
@@ -121,7 +121,7 @@ export function ModelOverrideSelect({
                                     <button
                                         key={model.id}
                                         type="button"
-                                        className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-2 hover:bg-muted/40 transition-colors ${isSelected ? 'text-accent bg-accent/10' : 'text-foreground'}`}
+                                        className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-2 hover:bg-muted/40 transition-colors ${isSelected ? 'text-accent bg-accent/15' : 'text-foreground'}`}
                                         onClick={() => {
                                             onChange(model.id)
                                             setOpen(false)

@@ -15,12 +15,15 @@ import {
   FileText,
   Settings,
   Pin,
+  PinOff,
+  Archive,
   ChevronDown,
   ChevronRight,
   Pencil,
   Trash2,
   Zap,
   Rocket,
+  Search,
 } from 'lucide-react';
 import {
   ContextMenu,
@@ -71,6 +74,7 @@ interface PrimaryNavExpandedProps {
     workspace: string;
     knowledge: string;
     knowledgeItem: (id: string) => string;
+    search: string;
     chat: string;
     chatConversation: (id: string) => string;
     agents: string;
@@ -84,6 +88,9 @@ interface PrimaryNavExpandedProps {
   onRenameConversation?: (id: string, newTitle: string) => Promise<void>;
   onDeleteConversation?: (id: string) => Promise<void>;
   onPermanentDeleteConversation?: (id: string) => Promise<void>;
+  onUnpinKnowledge?: (id: string) => Promise<void>;
+  onArchiveKnowledge?: (id: string) => Promise<void>;
+  onDeleteKnowledge?: (id: string) => Promise<void>;
   className?: string;
 }
 
@@ -102,6 +109,9 @@ export function PrimaryNavExpanded({
   onRenameConversation,
   onDeleteConversation,
   onPermanentDeleteConversation,
+  onUnpinKnowledge,
+  onArchiveKnowledge,
+  onDeleteKnowledge,
   className,
 }: PrimaryNavExpandedProps) {
   const navigate = useNavigate();
@@ -191,6 +201,12 @@ export function PrimaryNavExpanded({
                   label="Knowledge"
                   isActive={activePath === routes.knowledge}
                 />
+                <NavItem
+                  to={routes.search}
+                  icon={<Search className="w-4 h-4" />}
+                  label="Search"
+                  isActive={activePath.includes('/search')}
+                />
 
                 {/* Spacer to push remaining workspace-scoped items up */}
                 <div className="flex-1" />
@@ -208,17 +224,40 @@ export function PrimaryNavExpanded({
                     </span>
                   </div>
                   {pinnedKnowledge.slice(0, 5).map((item) => (
-                    <Link
-                      key={item.id}
-                      to={routes.knowledgeItem(item.id)}
-                      className={cn(
-                        'sidebar-item text-xs',
-                        isActive(`/knowledge/${item.id}`) ? 'active' : ''
-                      )}
-                    >
-                      <KnowledgeTypeIcon type={item.type} />
-                      <span className="truncate">{item.title || item.ai_title || 'Untitled'}</span>
-                    </Link>
+                    <ContextMenu key={item.id}>
+                      <ContextMenuTrigger asChild>
+                        <Link
+                          to={`${routes.knowledge}?k=${item.id}`}
+                          className={cn(
+                            'sidebar-item text-xs',
+                            isActive(`/knowledge/${item.id}`) ? 'active' : ''
+                          )}
+                        >
+                          <KnowledgeTypeIcon type={item.type} />
+                          <span className="truncate">{item.title || item.ai_title || 'Untitled'}</span>
+                        </Link>
+                      </ContextMenuTrigger>
+                      <ContextMenuContent className="w-48">
+                        {onUnpinKnowledge && (
+                          <ContextMenuItem onClick={() => onUnpinKnowledge(item.id)} className="gap-2">
+                            <PinOff className="w-4 h-4" /> Unpin
+                          </ContextMenuItem>
+                        )}
+                        {onArchiveKnowledge && (
+                          <ContextMenuItem onClick={() => onArchiveKnowledge(item.id)} className="gap-2">
+                            <Archive className="w-4 h-4" /> Archive
+                          </ContextMenuItem>
+                        )}
+                        {onDeleteKnowledge && (
+                          <>
+                            <ContextMenuSeparator />
+                            <ContextMenuItem onClick={() => onDeleteKnowledge(item.id)} className="gap-2 text-red-500 focus:text-red-400 focus:bg-red-500/10">
+                              <Trash2 className="w-4 h-4" /> Delete
+                            </ContextMenuItem>
+                          </>
+                        )}
+                      </ContextMenuContent>
+                    </ContextMenu>
                   ))}
                 </div>
               </div>
@@ -336,7 +375,7 @@ function AgnosticWorkspaceList({
             to={`/w/${workspace.id}`}
             className="sidebar-item text-xs"
           >
-            <div className="w-6 h-6 rounded-md bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0">
+            <div className="w-6 h-6 rounded-md bg-accent/15 border border-accent/20 flex items-center justify-center flex-shrink-0">
               {getWorkspaceIcon(workspace.icon)}
             </div>
             <span className="truncate">{workspace.name}</span>
@@ -369,7 +408,7 @@ function SubList({ label, children }: { label: string; children: React.ReactNode
   return (
     <div className="ml-3 mt-1 flex items-stretch overflow-hidden flex-1 min-h-0">
       <span
-        className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/40 select-none flex-shrink-0 pt-0.5"
+        className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground/60 select-none flex-shrink-0 pt-0.5"
         style={{ writingMode: 'vertical-lr' }}
       >
         {label}

@@ -205,9 +205,9 @@ export default function ToolsConfigSection({
                                 ? m === 'hitl'
                                   ? 'bg-yellow-500/20 text-yellow-300'
                                   : m === 'allowed'
-                                    ? 'bg-accent/20 text-accent'
+                                    ? 'bg-accent/25 text-accent'
                                     : 'bg-muted/50 text-muted-foreground'
-                                : 'text-muted-foreground/50 hover:text-muted-foreground'
+                                : 'text-muted-foreground/70 hover:text-muted-foreground'
                             }`}
                           >
                             {MODE_LABELS[m]}
@@ -255,7 +255,7 @@ export default function ToolsConfigSection({
                       <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
                         (tool.mode ?? 'allowed') === 'hitl'
                           ? 'bg-yellow-500/15 text-yellow-400'
-                          : 'bg-accent/10 text-accent'
+                          : 'bg-accent/15 text-accent'
                       }`}>
                         {(tool.mode ?? 'allowed') === 'hitl' ? 'HITL' : 'On'}
                       </span>

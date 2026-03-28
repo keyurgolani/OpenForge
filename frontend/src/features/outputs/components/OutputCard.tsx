@@ -47,7 +47,7 @@ export function OutputCard({ output }: OutputCardProps) {
         ))}
       </div>
 
-      <div className="mt-5 flex items-center justify-between gap-3 border-t border-border/40 pt-4 text-xs text-muted-foreground/80">
+      <div className="mt-5 flex items-center justify-between gap-3 border-t border-border/60 pt-4 text-xs text-muted-foreground/80">
         <div className="flex items-center gap-4">
           <span className="inline-flex items-center gap-1.5">
             <GitBranch className="h-3.5 w-3.5" />

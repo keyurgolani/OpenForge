@@ -151,7 +151,7 @@ export default function GistCreateModal({ isOpen, onClose, workspaceId, onCreate
                 value={code}
                 onChange={e => setCode(e.target.value)}
                 placeholder="Paste code here..."
-                className="w-full bg-muted/20 border border-border/40 rounded-xl p-3 text-sm font-mono resize-none outline-none focus:border-accent/50 transition-colors"
+                className="w-full bg-muted/20 border border-border/60 rounded-xl p-3 text-sm font-mono resize-none outline-none focus:border-accent/50 transition-colors"
                 rows={12}
                 spellCheck={false}
                 autoFocus

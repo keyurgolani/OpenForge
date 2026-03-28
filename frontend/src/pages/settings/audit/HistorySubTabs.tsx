@@ -65,7 +65,7 @@ export function HITLHistorySubTab() {
                                             ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                                             : req.status === 'denied'
                                                 ? 'bg-red-500/10 text-red-400 border-red-500/20'
-                                                : 'bg-muted/30 text-muted-foreground border-border/40'
+                                                : 'bg-muted/30 text-muted-foreground border-border/60'
                                     }`}>
                                         {req.status}
                                     </span>
@@ -84,7 +84,7 @@ export function HITLHistorySubTab() {
                         </button>
 
                         {isExpanded && (
-                            <div className="px-4 pb-4 pt-1 space-y-3 border-t border-border/40">
+                            <div className="px-4 pb-4 pt-1 space-y-3 border-t border-border/60">
                                 {req.action_summary && (
                                     <div>
                                         <p className="text-[10px] text-muted-foreground/70 font-medium mb-1 uppercase tracking-wide">Action Summary</p>
@@ -95,7 +95,7 @@ export function HITLHistorySubTab() {
                                 {req.tool_input && Object.keys(req.tool_input).length > 0 && (
                                     <div>
                                         <p className="text-[10px] text-muted-foreground/70 font-medium mb-1 uppercase tracking-wide">Input Parameters</p>
-                                        <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[10px] text-foreground/60 bg-muted/30 rounded-lg p-3 border border-border/40 max-h-48 overflow-y-auto">
+                                        <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[10px] text-foreground/60 bg-muted/30 rounded-lg p-3 border border-border/60 max-h-48 overflow-y-auto">
                                             {JSON.stringify(req.tool_input, null, 2)}
                                         </pre>
                                     </div>
@@ -104,7 +104,7 @@ export function HITLHistorySubTab() {
                                 {req.resolution_note && (
                                     <div>
                                         <p className="text-[10px] text-muted-foreground/70 font-medium mb-1 uppercase tracking-wide">User Note</p>
-                                        <p className="text-xs text-foreground/70 bg-muted/20 rounded-lg px-3 py-2 border border-border/30">{req.resolution_note}</p>
+                                        <p className="text-xs text-foreground/70 bg-muted/20 rounded-lg px-3 py-2 border border-border/50">{req.resolution_note}</p>
                                     </div>
                                 )}
 
@@ -318,7 +318,7 @@ export function ToolCallLogsSubTab() {
                                     <div className="flex-1 min-w-0">
                                         <span className="text-sm font-medium">
                                             <span className="text-muted-foreground">{category}</span>
-                                            {action && <><span className="text-muted-foreground/50">.</span><span>{action}</span></>}
+                                            {action && <><span className="text-muted-foreground/70">.</span><span>{action}</span></>}
                                         </span>
                                         <div className="flex items-center gap-3 mt-0.5 text-[10px] text-muted-foreground flex-wrap">
                                             <span>{new Date(log.started_at).toLocaleString()}</span>
@@ -334,7 +334,7 @@ export function ToolCallLogsSubTab() {
                                 </button>
 
                                 {isOpen && (
-                                    <div className="border-t border-border/40 px-4 py-3 space-y-3 animate-fade-in">
+                                    <div className="border-t border-border/60 px-4 py-3 space-y-3 animate-fade-in">
                                         <div className="grid gap-2 text-[11px] text-muted-foreground sm:grid-cols-2">
                                             <div><span className="text-foreground/60">Call ID:</span> <span className="font-mono">{log.call_id}</span></div>
                                             <div><span className="text-foreground/60">Conversation:</span> <span className="font-mono">{log.conversation_id}</span></div>
@@ -346,7 +346,7 @@ export function ToolCallLogsSubTab() {
                                         {log.arguments && Object.keys(log.arguments).length > 0 && (
                                             <div>
                                                 <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground/70">Request (Arguments)</div>
-                                                <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[11px] text-foreground/70 bg-muted/30 rounded-lg p-3 max-h-48 border border-border/40">
+                                                <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[11px] text-foreground/70 bg-muted/30 rounded-lg p-3 max-h-48 border border-border/60">
                                                     {JSON.stringify(log.arguments, null, 2)}
                                                 </pre>
                                             </div>
@@ -355,7 +355,7 @@ export function ToolCallLogsSubTab() {
                                         {log.success && log.output !== null && (
                                             <div>
                                                 <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground/70">Response (Output)</div>
-                                                <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[11px] text-foreground/70 bg-muted/30 rounded-lg p-3 max-h-64 border border-border/40">
+                                                <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[11px] text-foreground/70 bg-muted/30 rounded-lg p-3 max-h-64 border border-border/60">
                                                     {log.output}
                                                 </pre>
                                             </div>

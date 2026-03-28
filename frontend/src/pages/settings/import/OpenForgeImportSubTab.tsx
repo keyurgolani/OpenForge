@@ -130,7 +130,7 @@ export function OpenForgeImportSubTab() {
             {/* ── Upload card ───────────────────────────────────────────────── */}
             <div className="glass-card p-4 rounded-xl">
                 <div className="flex items-center gap-2 mb-3">
-                    <div className="w-6 h-6 rounded-full bg-accent/20 flex items-center justify-center text-accent text-[11px] font-bold">
+                    <div className="w-6 h-6 rounded-full bg-accent/25 flex items-center justify-center text-accent text-[11px] font-bold">
                         <Archive className="w-3 h-3" />
                     </div>
                     <h4 className="text-sm font-medium">Upload OpenForge Export</h4>
@@ -144,7 +144,7 @@ export function OpenForgeImportSubTab() {
                     onClick={() => fileInputRef.current?.click()}
                     className={`relative cursor-pointer rounded-xl border-2 border-dashed p-8 text-center transition-all duration-200 ${
                         dragActive
-                            ? 'border-accent bg-accent/10 shadow-glass-sm'
+                            ? 'border-accent bg-accent/15 shadow-glass-sm'
                             : file
                                 ? 'border-emerald-500/40 bg-emerald-500/5'
                                 : 'border-border/50 hover:border-border hover:bg-muted/10'
@@ -179,7 +179,7 @@ export function OpenForgeImportSubTab() {
                         </div>
                     ) : (
                         <div className="flex flex-col items-center gap-2">
-                            <Upload className={`w-8 h-8 ${dragActive ? 'text-accent' : 'text-muted-foreground/50'}`} />
+                            <Upload className={`w-8 h-8 ${dragActive ? 'text-accent' : 'text-muted-foreground/70'}`} />
                             <div>
                                 <p className="text-sm text-muted-foreground">
                                     <span className="text-accent font-medium">Click to upload</span> or drag and drop
@@ -194,7 +194,7 @@ export function OpenForgeImportSubTab() {
 
                 {/* Upload button */}
                 {file && !result && (
-                    <div className="flex items-center justify-end mt-4 pt-3 border-t border-border/30">
+                    <div className="flex items-center justify-end mt-4 pt-3 border-t border-border/50">
                         {progress && (
                             <p className="text-xs text-muted-foreground mr-auto flex items-center gap-2">
                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />

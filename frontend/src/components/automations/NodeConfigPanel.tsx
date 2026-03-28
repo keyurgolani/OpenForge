@@ -23,13 +23,13 @@ export default function NodeConfigPanel({
   onClose,
 }: NodeConfigPanelProps) {
   return (
-    <div className="w-72 border-l border-border/40 bg-background/50 overflow-y-auto">
-      <div className="flex items-center justify-between p-3 border-b border-border/40">
+    <div className="w-72 border-l border-border/60 bg-background/50 overflow-y-auto">
+      <div className="flex items-center justify-between p-3 border-b border-border/60">
         <div className="flex items-center gap-2">
           <Bot className="w-4 h-4 text-accent" />
           <span className="text-sm font-medium text-foreground">{agentName}</span>
         </div>
-        <button onClick={onClose} className="p-1 rounded hover:bg-accent/10 transition">
+        <button onClick={onClose} className="p-1 rounded hover:bg-accent/15 transition">
           <X className="w-4 h-4 text-muted-foreground" />
         </button>
       </div>

@@ -73,7 +73,7 @@ export default function AgentsPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground/90 max-w-xs truncate">
-                    {agent.description || <span className="text-muted-foreground/50">--</span>}
+                    {agent.description || <span className="text-muted-foreground/70">--</span>}
                   </td>
                   <td className="px-4 py-3">
                     {agent.tags.length > 0 ? (

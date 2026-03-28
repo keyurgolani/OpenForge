@@ -171,7 +171,7 @@ export default function GistEditor({ knowledge, workspaceId }: GistEditorProps) 
                                                     onClick={() => handleLanguageChange(lang)}
                                                     className={`w-full text-left px-3 py-1.5 text-xs hover:bg-muted/50 transition-colors ${
                                                         lang === language
-                                                            ? 'text-accent-foreground bg-accent/10'
+                                                            ? 'text-accent-foreground bg-accent/15'
                                                             : 'text-foreground'
                                                     }`}
                                                 >

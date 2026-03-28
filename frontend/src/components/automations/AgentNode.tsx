@@ -23,7 +23,7 @@ function AgentNode({ data, selected }: NodeProps) {
       }`}
     >
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-border/40">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border/60">
         <Bot className="w-4 h-4 text-accent" />
         <span className="text-sm font-medium text-foreground truncate">
           {nodeData.label}

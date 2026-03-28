@@ -165,7 +165,7 @@ function AudioWaveformPlayer({ fileUrl, duration, format }: { fileUrl: string; d
     const displayTime = playing || currentTime > 0 ? currentTime : audioDuration
 
     return (
-        <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-border/30 bg-violet-500/5 py-5 px-4" onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
+        <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-border/50 bg-violet-500/5 py-5 px-4" onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
             {/* Hidden audio element */}
             <audio ref={audioRef} preload="metadata" src={fileUrl} />
 
@@ -272,7 +272,7 @@ export function FileCard({ item, workspaceId, slim, isProcessing }: { item: Know
             {isProcessing && !hasThumbnail && !isAudio ? (
                 <ThumbnailSkeleton className="h-24" />
             ) : hasThumbnail ? (
-                <div className="rounded-lg overflow-hidden border border-border/40 bg-muted/20">
+                <div className="rounded-lg overflow-hidden border border-border/60 bg-muted/20">
                     <img
                         src={getKnowledgeThumbnailUrl(workspaceId, item.id)}
                         alt={displayTitle ?? `${meta.label} preview`}
@@ -285,7 +285,7 @@ export function FileCard({ item, workspaceId, slim, isProcessing }: { item: Know
                 <AudioWaveformPlayer fileUrl={fileUrl} duration={duration} format={format} />
             ) : (
                 /* Document icon placeholder */
-                <div className={`flex items-center justify-center rounded-lg border border-border/30 ${meta.bgColor} py-5`}>
+                <div className={`flex items-center justify-center rounded-lg border border-border/50 ${meta.bgColor} py-5`}>
                     <Icon className={`w-8 h-8 ${meta.color} opacity-40`} />
                 </div>
             )}
@@ -314,7 +314,7 @@ export function FileCard({ item, workspaceId, slim, isProcessing }: { item: Know
                     <TagRow tags={item.tags} />
 
                     {/* Footer */}
-                    <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-border/40">
+                    <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-border/60">
                         <div className="flex items-center gap-2">
                             <span className="text-[10px] text-muted-foreground/80">
                                 {formatTimestamp(item.updated_at)}

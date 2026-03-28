@@ -161,7 +161,7 @@ export default function AgentConfigSiderail({
                   {/* Version selector */}
                   {versions && versions.length > 0 && !isEditing && (
                     <div className="space-y-1.5">
-                      <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
                         Versions
                       </div>
                       <div className="space-y-1">
@@ -169,7 +169,7 @@ export default function AgentConfigSiderail({
                           onClick={() => onViewVersion(null)}
                           className={`w-full rounded-lg border px-2.5 py-1.5 text-left transition ${
                             !viewingVersion
-                              ? 'border-accent/40 bg-accent/10'
+                              ? 'border-accent/40 bg-accent/15'
                               : 'border-border/50 bg-muted/20 hover:border-border hover:bg-muted/40'
                           }`}
                         >
@@ -178,7 +178,7 @@ export default function AgentConfigSiderail({
                               Current
                             </span>
                             {updatedAt && (
-                              <span className="text-[10px] text-muted-foreground/50">
+                              <span className="text-[10px] text-muted-foreground/70">
                                 {formatDate(updatedAt)}
                               </span>
                             )}
@@ -194,7 +194,7 @@ export default function AgentConfigSiderail({
                                 onClick={() => onViewVersion(v.id)}
                                 className={`w-full rounded-lg border px-2.5 py-1.5 text-left transition ${
                                   isActive
-                                    ? 'border-accent/40 bg-accent/10'
+                                    ? 'border-accent/40 bg-accent/15'
                                     : 'border-border/50 bg-muted/20 hover:border-border hover:bg-muted/40'
                                 }`}
                               >
@@ -202,7 +202,7 @@ export default function AgentConfigSiderail({
                                   <span className={`text-xs font-medium ${isActive ? 'text-accent' : 'text-foreground/80'}`}>
                                     v{v.version}
                                   </span>
-                                  <span className="text-[10px] text-muted-foreground/50">
+                                  <span className="text-[10px] text-muted-foreground/70">
                                     {formatDate(v.created_at)}
                                   </span>
                                 </div>

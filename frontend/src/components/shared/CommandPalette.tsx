@@ -1,8 +1,8 @@
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useState, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Command } from 'cmdk'
-import { listWorkspaces, listKnowledge } from '@/lib/api'
+import { listWorkspaces, retrievalSearch } from '@/lib/api'
 import { chatRoute, dashboardRoute, knowledgeRoute, searchRoute } from '@/lib/routes'
 import { useUIStore } from '@/stores/uiStore'
 import { isModKey, getShortcutDisplay } from '@/lib/keyboard'
@@ -11,8 +11,15 @@ import {
     Search, FileText, MessageSquare, Settings, Plus, Bookmark,
     Code2, Zap, Home, ArrowRight, FolderOpen
 } from 'lucide-react'
+import MarkdownIt from 'markdown-it'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getWorkspaceIcon } from '@/pages/settings/constants'
+
+const SIMILARITY_THRESHOLD = 0.35
+
+const mdPreview = new MarkdownIt({ html: false, linkify: false, typographer: true, breaks: true })
+mdPreview.renderer.rules.link_open = () => ''
+mdPreview.renderer.rules.link_close = () => ''
 
 const GROUP_CLASS =
     "[&_[cmdk-group-heading]]:px-4 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.1em] [&_[cmdk-group-heading]]:text-muted-foreground/80 [&_[cmdk-group-heading]]:font-semibold"
@@ -28,13 +35,51 @@ export default function CommandPalette() {
         enabled: commandPaletteOpen,
     })
 
-    const { data: knowledgeData } = useQuery({
-        queryKey: ['knowledge', workspaceId, 'palette'],
-        queryFn: () => listKnowledge(workspaceId, { page_size: 50 }),
-        enabled: commandPaletteOpen && !!workspaceId,
+    const [searchQuery, setSearchQuery] = useState('')
+    const [debouncedQuery, setDebouncedQuery] = useState('')
+    const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+    // Debounce the search query (300ms)
+    useEffect(() => {
+        clearTimeout(debounceRef.current)
+        if (searchQuery.trim().length >= 2) {
+            debounceRef.current = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 300)
+        } else {
+            setDebouncedQuery('')
+        }
+        return () => clearTimeout(debounceRef.current)
+    }, [searchQuery])
+
+    // Reset search when palette closes
+    useEffect(() => {
+        if (!commandPaletteOpen) {
+            setSearchQuery('')
+            setDebouncedQuery('')
+        }
+    }, [commandPaletteOpen])
+
+    const { data: searchResults, isFetching: isSearching } = useQuery({
+        queryKey: ['semantic-search', workspaceId, debouncedQuery],
+        queryFn: () => retrievalSearch({
+            workspace_id: workspaceId,
+            query_text: debouncedQuery,
+            limit: 10,
+            deduplicate_sources: true,
+        }),
+        enabled: commandPaletteOpen && debouncedQuery.length >= 2 && !!workspaceId,
     })
 
-    const knowledgeItems = knowledgeData?.knowledge ?? []
+    const knowledgeItems = (searchResults?.results ?? [])
+        .filter((r: any) => r.score >= SIMILARITY_THRESHOLD)
+        .sort((a: any, b: any) => b.score - a.score)
+        .map((r: any) => ({
+            id: r.metadata?.knowledge_id ?? r.id,
+            title: r.title ?? r.metadata?.title ?? '',
+            ai_title: r.metadata?.ai_title ?? '',
+            type: r.knowledge_type ?? r.metadata?.knowledge_type ?? 'note',
+            score: r.score,
+            excerpt: r.excerpt ?? r.content?.substring(0, 120) ?? '',
+        }))
 
     // Cmd+K / Ctrl+K to open
     useEffect(() => {
@@ -60,6 +105,19 @@ export default function CommandPalette() {
         openQuickKnowledge(type)
         close()
     }
+
+    // Close on Escape
+    useEffect(() => {
+        if (!commandPaletteOpen) return
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault()
+                close()
+            }
+        }
+        window.addEventListener('keydown', handler)
+        return () => window.removeEventListener('keydown', handler)
+    }, [commandPaletteOpen, close])
 
     if (!commandPaletteOpen) return null
 
@@ -94,13 +152,15 @@ export default function CommandPalette() {
                 >
                     {/* Inner Glow Line */}
                     <div className="absolute inset-0 border border-white/5 rounded-[inherit] pointer-events-none mix-blend-overlay" />
-                    <Command className="[&_[cmdk-root]]:bg-transparent" label="Command palette">
+                    <Command className="[&_[cmdk-root]]:bg-transparent" label="Command palette" shouldFilter={!debouncedQuery}>
                         <div className="flex items-center gap-3.5 px-5 py-4 border-b border-border/55">
                             <Search className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                             <Command.Input
                                 className="flex-1 bg-transparent text-sm outline-none placeholder-muted-foreground"
                                 placeholder="Type a command or search knowledge…"
                                 autoFocus
+                                value={searchQuery}
+                                onValueChange={setSearchQuery}
                             />
                             <kbd className="text-xs text-muted-foreground border border-border/80 rounded-md px-2 py-1 font-mono">ESC</kbd>
                         </div>
@@ -111,8 +171,8 @@ export default function CommandPalette() {
                                 No results found.
                             </Command.Empty>
 
-                            {/* Actions */}
-                            <Command.Group heading="Actions" className={GROUP_CLASS}>
+                            {/* Actions — hidden when searching knowledge */}
+                            {!debouncedQuery && <Command.Group heading="Actions" className={GROUP_CLASS}>
                                 {workspaceId && (
                                     <>
                                         <PaletteItem icon={<Plus className="w-4 h-4" />} onSelect={() => handleCreateKnowledge('note')}>New Knowledge</PaletteItem>
@@ -133,11 +193,11 @@ export default function CommandPalette() {
                                         >Go to Settings</PaletteItem>
                                     </>
                                 )}
-                            </Command.Group>
+                            </Command.Group>}
 
-                            {/* Workspace navigation */}
-                            {(workspaces as { id: string; name: string; icon: string }[]).length > 1 && (
-                                <Command.Group heading="Workspaces" className={`mt-2 pt-2 border-t border-border/40 ${GROUP_CLASS}`}>
+                            {/* Workspace navigation — hidden when searching */}
+                            {!debouncedQuery && (workspaces as { id: string; name: string; icon: string }[]).length > 1 && (
+                                <Command.Group heading="Workspaces" className={`mt-2 pt-2 border-t border-border/60 ${GROUP_CLASS}`}>
                                     {(workspaces as { id: string; name: string; icon: string }[]).map(ws => (
                                         <PaletteItem
                                             key={ws.id}
@@ -150,20 +210,34 @@ export default function CommandPalette() {
                                 </Command.Group>
                             )}
 
-                            {/* Knowledge search */}
+                            {/* Semantic knowledge search results */}
+                            {isSearching && debouncedQuery && (
+                                <div className="px-5 py-3 text-xs text-muted-foreground">Searching knowledge...</div>
+                            )}
                             {knowledgeItems.length > 0 && (
-                                <Command.Group heading="Knowledge" className={`mt-2 pt-2 border-t border-border/40 ${GROUP_CLASS}`}>
-                                    {(knowledgeItems as { id: string; title: string; ai_title: string; type: string }[]).map(n => (
+                                <Command.Group heading={`Knowledge — ${knowledgeItems.length} results`} className={`mt-2 pt-2 border-t border-border/60 ${GROUP_CLASS}`}>
+                                    {knowledgeItems.map((n: { id: string; title: string; ai_title: string; type: string; excerpt?: string }) => (
                                         <PaletteItem
                                             key={n.id}
                                             icon={<FileText className="w-4 h-4" />}
-                                            onSelect={() => run(() => navigate(knowledgeRoute(workspaceId, n.id)))}
+                                            onSelect={() => run(() => navigate(`${knowledgeRoute(workspaceId)}?k=${n.id}`))}
                                             hint={n.type}
                                         >
-                                            {n.title || n.ai_title || 'Untitled'}
+                                            <span className="flex flex-col gap-0.5">
+                                                <span>{n.title || n.ai_title || 'Untitled'}</span>
+                                                {n.excerpt && (
+                                                    <span
+                                                        className="markdown-content text-[11px] text-muted-foreground/70 line-clamp-2 [&_p]:mb-0 [&_h1]:text-[11px] [&_h2]:text-[11px] [&_h3]:text-[11px] [&_pre]:text-[10px] [&_code]:text-[10px]"
+                                                        dangerouslySetInnerHTML={{ __html: mdPreview.render(n.excerpt) }}
+                                                    />
+                                                )}
+                                            </span>
                                         </PaletteItem>
                                     ))}
                                 </Command.Group>
+                            )}
+                            {debouncedQuery && !isSearching && knowledgeItems.length === 0 && (
+                                <div className="px-5 py-3 text-xs text-muted-foreground">No knowledge matches for "{debouncedQuery}"</div>
                             )}
                         </Command.List>
 

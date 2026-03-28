@@ -6,29 +6,29 @@
 
 @layer base {
   :root {
-    /* Light Theme Variables */
-    --background: 210 50% 98%;
-    --foreground: 224 43% 10%;
+    /* Light Theme — Forge palette (warm amber primary, teal secondary) */
+    --background: 40 10% 97%;
+    --foreground: 20 18% 6%;
 
     --card: 0 0% 100%;
-    --card-foreground: 224 43% 10%;
+    --card-foreground: 20 18% 6%;
 
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
+    --muted: 30 6% 93%;
+    --muted-foreground: 20 10% 30%;
 
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
+    --border: 24 10% 82%;
+    --input: 24 10% 82%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 224 43% 10%;
+    --popover-foreground: 20 18% 6%;
 
-    --primary: 220 95% 45%;
+    --primary: 38 92% 50%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
+    --secondary: 173 80% 36%;
+    --secondary-foreground: 0 0% 100%;
 
-    --accent: 220 95% 45%;
+    --accent: 38 92% 50%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84% 60%;
@@ -37,7 +37,7 @@
     --success: 142 71% 45%;
     --warning: 38 92% 50%;
 
-    --ring: 220 95% 45%;
+    --ring: 38 92% 50%;
 
     --radius: 1rem;
     --radius-sm: 0.75rem;
@@ -45,29 +45,29 @@
     --radius-lg: 1.25rem;
     --radius-xl: 1.5rem;
 
-    --glass-bg: hsla(0, 0%, 100%, 0.7);
-    --glass-border: hsla(207, 20%, 80%, 0.4);
+    --glass-bg: hsla(30, 6%, 100%, 0.78);
+    --glass-border: hsla(24, 10%, 70%, 0.45);
     --glass-blur: 18px;
     --glass-blur-sm: 12px;
     --glass-blur-lg: 28px;
 
-    --glass-shadow-sm: 0 8px 22px hsla(225, 20%, 80%, 0.1), inset 0 1px 0 hsla(0, 0%, 100%, 0.8);
-    --glass-shadow: 0 14px 40px hsla(225, 20%, 80%, 0.15), inset 0 1px 0 hsla(0, 0%, 100%, 0.8);
-    --glass-shadow-md: 0 20px 52px hsla(225, 20%, 80%, 0.2), inset 0 1px 0 hsla(0, 0%, 100%, 0.8);
-    --glass-shadow-lg: 0 28px 70px hsla(225, 20%, 80%, 0.25), inset 0 1px 0 hsla(0, 0%, 100%, 0.8);
+    --glass-shadow-sm: 0 8px 22px hsla(24, 10%, 60%, 0.12), inset 0 1px 0 hsla(0, 0%, 100%, 0.8);
+    --glass-shadow: 0 14px 40px hsla(24, 10%, 60%, 0.18), inset 0 1px 0 hsla(0, 0%, 100%, 0.8);
+    --glass-shadow-md: 0 20px 52px hsla(24, 10%, 60%, 0.24), inset 0 1px 0 hsla(0, 0%, 100%, 0.8);
+    --glass-shadow-lg: 0 28px 70px hsla(24, 10%, 60%, 0.30), inset 0 1px 0 hsla(0, 0%, 100%, 0.8);
 
-    --chart-1: 192 100% 68%;
-    --chart-2: 153 75% 54%;
-    --chart-3: 41 95% 62%;
-    --chart-4: 278 74% 69%;
-    --chart-5: 9 93% 64%;
+    --chart-1: 38 92% 56%;
+    --chart-2: 173 80% 40%;
+    --chart-3: 142 71% 45%;
+    --chart-4: 0 84% 60%;
+    --chart-5: 280 74% 60%;
 
-    --bg-grad-1: hsla(192, 100%, 66%, 0.18);
-    --bg-grad-2: hsla(41, 96%, 45%, 0.15);
-    --bg-grad-3: hsla(268, 72%, 70%, 0.15);
-    --bg-base-1: hsl(210 50% 98%);
-    --bg-base-2: hsl(214 32% 96%);
-    --bg-base-3: hsl(214 32% 94%);
+    --bg-grad-1: hsla(38, 92%, 50%, 0.18);
+    --bg-grad-2: hsla(173, 80%, 40%, 0.15);
+    --bg-grad-3: hsla(24, 60%, 50%, 0.12);
+    --bg-base-1: hsl(40 14% 97%);
+    --bg-base-2: hsl(30 8% 94%);
+    --bg-base-3: hsl(30 8% 91%);
 
     --type-note: 205 90% 40%;
     --type-fleeting: 35 90% 45%;
@@ -79,66 +79,66 @@
     --type-bookmark-bg: 155 80% 35%;
     --type-gist-bg: 265 80% 45%;
 
-    --chat-accent-glow: 199 89% 48%;
-    --code-bg: 210 40% 90%;
-    --code-fg: 224 43% 10%;
-    --glass-button-bg: hsla(210, 40%, 96%, 0.8);
-    --glass-button-border: hsla(214, 32%, 91%, 0.8);
-    --glass-button-hover: hsla(210, 40%, 92%, 0.9);
+    --chat-accent-glow: 38 92% 50%;
+    --code-bg: 30 8% 91%;
+    --code-fg: 20 15% 8%;
+    --glass-button-bg: hsla(30, 8%, 94%, 0.85);
+    --glass-button-border: hsla(24, 8%, 82%, 0.85);
+    --glass-button-hover: hsla(30, 8%, 90%, 0.92);
 
-    --chat-assistant-bg-1: hsla(210, 50%, 98%, 0.9);
-    --chat-assistant-bg-2: hsla(210, 40%, 96%, 1);
-    --chat-assistant-shadow: 0 4px 12px hsla(220, 20%, 80%, 0.2);
-    --chat-user-bg-1: hsla(205, 90%, 92%, 0.6);
-    --chat-user-bg-2: hsla(205, 90%, 88%, 0.5);
-    --chat-user-shadow: 0 4px 12px hsla(205, 50%, 80%, 0.2);
-    
-    --workflow-dot-border: hsla(199, 89%, 48%, 0.5);
-    --workflow-dot-gradient-1: hsla(199, 89%, 48%, 0.8);
-    --workflow-dot-gradient-2: hsla(199, 89%, 48%, 0.3);
-    --workflow-line-gradient-1: hsla(199, 89%, 48%, 0.4);
-    --workflow-line-gradient-2: hsla(199, 89%, 48%, 0.1);
+    --chat-assistant-bg-1: hsla(40, 14%, 97%, 0.92);
+    --chat-assistant-bg-2: hsla(30, 8%, 94%, 1);
+    --chat-assistant-shadow: 0 4px 12px hsla(24, 10%, 60%, 0.18);
+    --chat-user-bg-1: hsla(38, 80%, 92%, 0.55);
+    --chat-user-bg-2: hsla(38, 70%, 87%, 0.45);
+    --chat-user-shadow: 0 4px 12px hsla(38, 40%, 70%, 0.22);
 
-    --chat-composer-bg-1: hsl(210 50% 98%);
-    --chat-composer-bg-2: hsl(214 32% 94%);
-    --chat-composer-shadow: 0 8px 24px hsla(220, 20%, 80%, 0.25), inset 0 1px 0 hsla(0, 0%, 100%, 0.8);
-    --chat-composer-input: hsla(0, 0%, 100%, 0.8);
+    --workflow-dot-border: hsla(173, 80%, 40%, 0.5);
+    --workflow-dot-gradient-1: hsla(173, 80%, 40%, 0.8);
+    --workflow-dot-gradient-2: hsla(173, 80%, 40%, 0.3);
+    --workflow-line-gradient-1: hsla(173, 80%, 40%, 0.4);
+    --workflow-line-gradient-2: hsla(173, 80%, 40%, 0.1);
+
+    --chat-composer-bg-1: hsl(40 14% 97%);
+    --chat-composer-bg-2: hsl(30 8% 92%);
+    --chat-composer-shadow: 0 8px 24px hsla(24, 10%, 60%, 0.22), inset 0 1px 0 hsla(0, 0%, 100%, 0.8);
+    --chat-composer-input: hsla(0, 0%, 100%, 0.85);
     --chat-composer-input-focus: hsla(0, 0%, 100%, 1);
 
-    --log-bg: hsl(214 32% 96%);
-    --log-border: hsla(214, 32%, 80%, 0.6);
+    --log-bg: hsl(30 8% 94%);
+    --log-border: hsla(24, 10%, 72%, 0.65);
 
-    --spatial-grid: hsla(203, 52%, 40%, 0.06);
-    --orb-a: hsla(194, 100%, 60%, 0.25);
-    --orb-b: hsla(41, 96%, 45%, 0.25);
-    --orb-c: hsla(271, 92%, 64%, 0.25);
+    --spatial-grid: hsla(38, 40%, 30%, 0.07);
+    --orb-a: hsla(38, 92%, 56%, 0.22);
+    --orb-b: hsla(173, 80%, 40%, 0.20);
+    --orb-c: hsla(24, 70%, 50%, 0.16);
   }
 
   .dark {
-    /* Core palette: midnight opulence + expressive cyan/amber accents */
-    --background: 224 43% 7%;
-    --foreground: 214 41% 96%;
+    /* Dark Theme — Forge palette (warm amber/teal on warm charcoal) */
+    --background: 20 14% 4%;
+    --foreground: 30 10% 96%;
 
-    --card: 223 36% 10%;
-    --card-foreground: 214 41% 96%;
+    --card: 24 10% 10%;
+    --card-foreground: 30 10% 96%;
 
-    --muted: 223 26% 16%;
-    --muted-foreground: 215 21% 72%;
+    --muted: 25 8% 16%;
+    --muted-foreground: 24 6% 64%;
 
-    --border: 221 25% 24%;
-    --input: 222 32% 14%;
+    --border: 30 6% 20%;
+    --input: 25 8% 14%;
 
-    --popover: 224 35% 9%;
-    --popover-foreground: 214 41% 96%;
+    --popover: 24 10% 8%;
+    --popover-foreground: 30 10% 96%;
 
-    --primary: 193 97% 64%;
-    --primary-foreground: 223 57% 8%;
+    --primary: 43 96% 56%;
+    --primary-foreground: 24 10% 8%;
 
-    --secondary: 224 23% 20%;
-    --secondary-foreground: 214 32% 90%;
+    --secondary: 173 66% 50%;
+    --secondary-foreground: 0 0% 100%;
 
-    --accent: 192 100% 66%;
-    --accent-foreground: 223 57% 8%;
+    --accent: 43 96% 56%;
+    --accent-foreground: 24 10% 8%;
 
     --destructive: 0 75% 60%;
     --destructive-foreground: 0 0% 100%;
@@ -146,31 +146,31 @@
     --success: 142 71% 45%;
     --warning: 38 92% 50%;
 
-    --ring: 192 100% 68%;
+    --ring: 43 96% 56%;
 
-    --glass-bg: hsla(223, 37%, 12%, 0.64);
-    --glass-border: hsla(207, 67%, 82%, 0.2);
+    --glass-bg: hsla(24, 10%, 12%, 0.64);
+    --glass-border: hsla(30, 20%, 60%, 0.2);
     --glass-blur: 18px;
     --glass-blur-sm: 12px;
     --glass-blur-lg: 28px;
 
-    --glass-shadow-sm: 0 8px 22px hsla(225, 55%, 4%, 0.42), inset 0 1px 0 hsla(210, 100%, 96%, 0.08);
-    --glass-shadow: 0 14px 40px hsla(225, 55%, 4%, 0.52), inset 0 1px 0 hsla(210, 100%, 96%, 0.1);
-    --glass-shadow-md: 0 20px 52px hsla(225, 55%, 4%, 0.56), inset 0 1px 0 hsla(210, 100%, 96%, 0.11);
-    --glass-shadow-lg: 0 28px 70px hsla(225, 55%, 3%, 0.62), inset 0 1px 0 hsla(210, 100%, 96%, 0.12);
+    --glass-shadow-sm: 0 8px 22px hsla(20, 30%, 4%, 0.42), inset 0 1px 0 hsla(30, 20%, 96%, 0.08);
+    --glass-shadow: 0 14px 40px hsla(20, 30%, 4%, 0.52), inset 0 1px 0 hsla(30, 20%, 96%, 0.1);
+    --glass-shadow-md: 0 20px 52px hsla(20, 30%, 4%, 0.56), inset 0 1px 0 hsla(30, 20%, 96%, 0.11);
+    --glass-shadow-lg: 0 28px 70px hsla(20, 30%, 3%, 0.62), inset 0 1px 0 hsla(30, 20%, 96%, 0.12);
 
-    --chart-1: 192 100% 68%;
-    --chart-2: 153 75% 54%;
-    --chart-3: 41 95% 62%;
-    --chart-4: 278 74% 69%;
-    --chart-5: 9 93% 64%;
+    --chart-1: 43 96% 62%;
+    --chart-2: 173 80% 50%;
+    --chart-3: 142 71% 50%;
+    --chart-4: 0 75% 60%;
+    --chart-5: 280 74% 66%;
 
-    --bg-grad-1: hsla(192, 100%, 66%, 0.24);
-    --bg-grad-2: hsla(41, 96%, 60%, 0.16);
-    --bg-grad-3: hsla(268, 72%, 70%, 0.16);
-    --bg-base-1: hsl(227 48% 6%);
-    --bg-base-2: hsl(223 40% 8%);
-    --bg-base-3: hsl(219 43% 10%);
+    --bg-grad-1: hsla(38, 92%, 56%, 0.24);
+    --bg-grad-2: hsla(173, 80%, 50%, 0.16);
+    --bg-grad-3: hsla(24, 60%, 50%, 0.14);
+    --bg-base-1: hsl(20 14% 5%);
+    --bg-base-2: hsl(24 10% 7%);
+    --bg-base-3: hsl(25 8% 10%);
 
     --type-note: 196 95% 72%;
     --type-fleeting: 43 98% 70%;
@@ -182,39 +182,39 @@
     --type-bookmark-bg: 163 82% 50%;
     --type-gist-bg: 274 88% 56%;
 
-    --chat-accent-glow: 192 100% 66%;
-    --code-bg: 192 92% 64%;
-    --code-fg: 192 95% 72%;
-    --glass-button-bg: hsla(223, 26%, 16%, 0.24);
-    --glass-button-border: hsla(221, 25%, 24%, 0.72);
-    --glass-button-hover: hsla(223, 26%, 16%, 0.5);
+    --chat-accent-glow: 43 96% 56%;
+    --code-bg: 38 60% 20%;
+    --code-fg: 43 96% 70%;
+    --glass-button-bg: hsla(25, 8%, 16%, 0.24);
+    --glass-button-border: hsla(30, 6%, 24%, 0.72);
+    --glass-button-hover: hsla(25, 8%, 16%, 0.5);
 
-    --chat-assistant-bg-1: hsla(221, 35%, 16%, 0.78);
-    --chat-assistant-bg-2: hsla(222, 38%, 11%, 0.9);
-    --chat-assistant-shadow: 0 8px 22px hsla(225, 55%, 5%, 0.34);
+    --chat-assistant-bg-1: hsla(25, 10%, 14%, 0.78);
+    --chat-assistant-bg-2: hsla(24, 10%, 10%, 0.9);
+    --chat-assistant-shadow: 0 8px 22px hsla(20, 30%, 5%, 0.34);
     --chat-user-bg-1: hsla(var(--accent) / 0.26);
-    --chat-user-bg-2: hsla(202, 95%, 58%, 0.2);
-    --chat-user-shadow: 0 10px 22px hsla(194, 100%, 35%, 0.22);
-    
+    --chat-user-bg-2: hsla(38, 92%, 50%, 0.2);
+    --chat-user-shadow: 0 10px 22px hsla(38, 80%, 35%, 0.22);
+
     --workflow-dot-border: hsla(var(--accent) / 0.7);
     --workflow-dot-gradient-1: hsla(var(--accent) / 0.92);
     --workflow-dot-gradient-2: hsla(var(--accent) / 0.42);
     --workflow-line-gradient-1: hsla(var(--accent) / 0.48);
     --workflow-line-gradient-2: hsla(var(--accent) / 0.14);
 
-    --chat-composer-bg-1: hsl(216 45% 16%);
-    --chat-composer-bg-2: hsl(223 40% 10%);
-    --chat-composer-shadow: 0 16px 34px hsla(225, 60%, 4%, 0.56), inset 0 1px 0 hsla(210, 100%, 96%, 0.09);
-    --chat-composer-input: hsla(224, 39%, 11%, 0.72);
-    --chat-composer-input-focus: hsla(224, 39%, 12%, 0.84);
+    --chat-composer-bg-1: hsl(25 10% 14%);
+    --chat-composer-bg-2: hsl(24 10% 9%);
+    --chat-composer-shadow: 0 16px 34px hsla(20, 30%, 4%, 0.56), inset 0 1px 0 hsla(30, 20%, 96%, 0.09);
+    --chat-composer-input: hsla(24, 10%, 11%, 0.72);
+    --chat-composer-input-focus: hsla(24, 10%, 12%, 0.84);
 
-    --log-bg: hsl(224 40% 11%);
+    --log-bg: hsl(24 10% 10%);
     --log-border: hsla(var(--border) / 0.8);
 
-    --spatial-grid: hsla(203, 52%, 86%, 0.06);
-    --orb-a: hsla(194, 100%, 70%, 0.5);
-    --orb-b: hsla(41, 96%, 66%, 0.34);
-    --orb-c: hsla(271, 92%, 74%, 0.3);
+    --spatial-grid: hsla(38, 52%, 86%, 0.06);
+    --orb-a: hsla(38, 92%, 60%, 0.4);
+    --orb-b: hsla(173, 80%, 50%, 0.3);
+    --orb-c: hsla(24, 70%, 50%, 0.25);
   }
 
 
@@ -1005,6 +1005,27 @@
     @apply text-xs;
     color: hsl(var(--muted-foreground));
     opacity: 0.88;
+  }
+
+  /* Override prose-invert colors so markdown always inherits theme foreground */
+  .prose {
+    --tw-prose-body: hsl(var(--foreground));
+    --tw-prose-headings: hsl(var(--foreground));
+    --tw-prose-lead: hsl(var(--muted-foreground));
+    --tw-prose-links: hsl(var(--accent));
+    --tw-prose-bold: hsl(var(--foreground));
+    --tw-prose-counters: hsl(var(--muted-foreground));
+    --tw-prose-bullets: hsl(var(--muted-foreground));
+    --tw-prose-hr: hsl(var(--border));
+    --tw-prose-quotes: hsl(var(--foreground));
+    --tw-prose-quote-borders: hsl(var(--border));
+    --tw-prose-captions: hsl(var(--muted-foreground));
+    --tw-prose-kbd: hsl(var(--foreground));
+    --tw-prose-code: hsl(var(--foreground));
+    --tw-prose-pre-code: hsl(var(--foreground));
+    --tw-prose-pre-bg: hsla(var(--muted) / 0.35);
+    --tw-prose-th-borders: hsl(var(--border));
+    --tw-prose-td-borders: hsl(var(--border));
   }
 
   .markdown-content {

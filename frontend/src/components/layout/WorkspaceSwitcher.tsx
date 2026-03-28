@@ -172,7 +172,7 @@ export function WorkspaceSwitcher({
                   onClick={() => handleWorkspaceSelect(workspace.id)}
                 >
                   <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-md bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0">
+                    <div className="w-7 h-7 rounded-md bg-accent/15 border border-accent/20 flex items-center justify-center flex-shrink-0">
                       {getWorkspaceIcon(workspace.icon)}
                     </div>
                     <div className="min-w-0 flex-1">

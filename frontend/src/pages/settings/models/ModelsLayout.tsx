@@ -66,7 +66,7 @@ export function ModelsLayout() {
             <div key={group.label ?? 'ungrouped'}>
               {group.label && (
                 <div className={cn('flex items-center gap-2 px-3 py-1.5', gi > 0 && 'mt-3')}>
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
                     {group.label}
                   </span>
                   <div className="flex-1 h-px bg-border/30" />

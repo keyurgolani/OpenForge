@@ -73,7 +73,7 @@ export default function TagInput({
                             e.stopPropagation()
                             removeTag(tag)
                         }}
-                        className="p-0.5 rounded hover:bg-accent/20 transition-colors text-muted-foreground hover:text-foreground"
+                        className="p-0.5 rounded hover:bg-accent/25 transition-colors text-muted-foreground hover:text-foreground"
                         aria-label={`Remove tag ${tag}`}
                     >
                         <X className="w-3 h-3" />

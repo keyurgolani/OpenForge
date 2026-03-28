@@ -73,7 +73,7 @@ export default function AudioPreview({ knowledge, workspaceId, onClose }: AudioP
         >
             <div className="space-y-5">
                 {/* Audio player */}
-                <div className="rounded-lg border border-border/40 bg-muted/10 p-4">
+                <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
                     <div className="flex items-center gap-3 mb-3">
                         <Music className="w-5 h-5 text-muted-foreground" />
                         <span className="text-sm font-medium text-foreground truncate">
@@ -96,7 +96,7 @@ export default function AudioPreview({ knowledge, workspaceId, onClose }: AudioP
                         <CopyButton
                             content={knowledge.content}
                             iconOnly
-                            className="absolute top-0 right-0 p-1.5 rounded-lg text-muted-foreground/50 hover:text-foreground hover:bg-muted/50 transition-colors"
+                            className="absolute top-0 right-0 p-1.5 rounded-lg text-muted-foreground/70 hover:text-foreground hover:bg-muted/50 transition-colors"
                         />
                         <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                             Transcript

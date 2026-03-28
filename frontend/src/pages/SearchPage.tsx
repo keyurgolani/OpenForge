@@ -1,11 +1,10 @@
-import { startTransition, useState, useMemo, useRef, useEffect } from 'react'
+import { startTransition, useMemo, useRef, useEffect, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import type { ReactElement } from 'react'
 import { buildEvidencePacket, retrievalRead, retrievalSearch } from '@/lib/api'
-import { chatRoute } from '@/lib/routes'
+import { chatRoute, knowledgeRoute } from '@/lib/routes'
 import { Search, Loader2, FileText, Bookmark, Code2, Zap, ExternalLink, Copy, SearchX, MessageSquare, Image as ImageIcon, Music, FileType2, Table, Presentation } from 'lucide-react'
-import PreviewDispatcher from '@/components/knowledge/preview/PreviewDispatcher'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem
 } from '@/components/ui/context-menu'
@@ -67,7 +66,6 @@ export default function SearchPage() {
     const [searchParams, setSearchParams] = useSearchParams()
     const [query, setQuery] = useState(searchParams.get('q') ?? '')
     const [typeFilter, setTypeFilter] = useState('')
-    const [modalKnowledgeId, setModalKnowledgeId] = useState<string | null>(null)
     const [searchTab, setSearchTab] = useState<'text' | 'visual'>('text')
     const [activeTraceResult, setActiveTraceResult] = useState<RetrievalSearchResult | null>(null)
     const [activeReadResult, setActiveReadResult] = useState<RetrievalReadResult | null>(null)
@@ -349,7 +347,7 @@ export default function SearchPage() {
                                                 <div className="break-inside-avoid mb-4">
                                                     <div
                                                         className="glass-card-hover rounded-2xl p-4 cursor-pointer animate-fade-in space-y-3"
-                                                        onClick={() => setModalKnowledgeId(card.key)}
+                                                        onClick={() => navigate(`${knowledgeRoute(workspaceId)}?k=${card.key}`)}
                                                     >
                                                         {(() => {
                                                             const first = card.chunks[0]
@@ -374,7 +372,7 @@ export default function SearchPage() {
                                                                     </div>
 
                                                                     {card.chunks.map((chunk, i) => (
-                                                                        <div key={i} className={`${i > 0 ? 'pt-3 border-t border-border/40' : ''} space-y-2`}>
+                                                                        <div key={i} className={`${i > 0 ? 'pt-3 border-t border-border/60' : ''} space-y-2`}>
                                                                             {chunk.header_path && (
                                                                                 <p className="text-[11px] text-muted-foreground font-medium">{chunk.header_path}</p>
                                                                             )}
@@ -395,7 +393,7 @@ export default function SearchPage() {
                                                                             </div>
                                                                         </div>
                                                                     ))}
-                                                                    <div className="flex items-center justify-between gap-3 border-t border-border/40 pt-3">
+                                                                    <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-3">
                                                                         <p className="text-[11px] text-muted-foreground">
                                                                             #{card.chunks[0]?.rank_position ?? 1} · {card.chunks[0]?.strategy ?? 'hybrid'}
                                                                         </p>
@@ -446,12 +444,6 @@ export default function SearchPage() {
             </>)}
             </div>
 
-            <PreviewDispatcher
-                knowledgeId={modalKnowledgeId}
-                workspaceId={workspaceId}
-                isOpen={!!modalKnowledgeId}
-                onClose={() => setModalKnowledgeId(null)}
-            />
         </div>
     )
 }

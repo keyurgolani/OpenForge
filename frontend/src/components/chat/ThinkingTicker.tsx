@@ -21,7 +21,7 @@ export function ThinkingTicker({ currentThought, isActive, thinkingDuration, all
           className="flex items-center gap-2 py-1 w-full text-left"
           role="status"
         >
-          <ChevronRight className={`h-3 w-3 text-muted-foreground/50 transition-transform flex-shrink-0 ${expanded ? 'rotate-90' : ''}`} />
+          <ChevronRight className={`h-3 w-3 text-muted-foreground/70 transition-transform flex-shrink-0 ${expanded ? 'rotate-90' : ''}`} />
           <div className="flex-1 min-w-0">
             <AnimatePresence mode="wait">
               <motion.span

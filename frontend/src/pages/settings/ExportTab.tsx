@@ -105,7 +105,7 @@ function ExportTab() {
                     {(workspaces as WorkspaceRow[]).map(ws => (
                         <div key={ws.id} className="glass-card px-4 py-3 flex items-center justify-between gap-3 rounded-xl border-border/50">
                             <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0">
+                                <div className="w-8 h-8 rounded-lg bg-accent/15 border border-accent/20 flex items-center justify-center flex-shrink-0">
                                     {getWorkspaceIcon(ws.icon)}
                                 </div>
                                 <div>

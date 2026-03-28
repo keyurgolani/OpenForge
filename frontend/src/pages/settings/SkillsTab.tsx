@@ -162,7 +162,7 @@ function SkillsTab() {
                     </button>
                 </div>
                 {searchOutput && (
-                    <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[11px] text-foreground/70 bg-muted/30 rounded-lg p-3 max-h-48 border border-border/40">
+                    <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[11px] text-foreground/70 bg-muted/30 rounded-lg p-3 max-h-48 border border-border/60">
                         {searchOutput}
                     </pre>
                 )}
@@ -204,7 +204,7 @@ function SkillsTab() {
                                     {skill.description && (
                                         <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{skill.description}</p>
                                     )}
-                                    <p className="text-[10px] font-mono text-muted-foreground/50 mt-1 truncate">{skill.path}</p>
+                                    <p className="text-[10px] font-mono text-muted-foreground/70 mt-1 truncate">{skill.path}</p>
                                 </div>
                                 <button
                                     className="btn-ghost p-1.5 text-red-400 hover:bg-destructive/10 flex-shrink-0"

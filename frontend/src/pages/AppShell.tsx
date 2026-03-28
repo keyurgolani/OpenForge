@@ -3,7 +3,7 @@ import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, PanelLeft, Plus, WifiOff } from 'lucide-react'
 
-import { listConversations, listKnowledge, listRuns, listWorkspaces, updateConversation, deleteConversation, permanentlyDeleteConversation } from '@/lib/api'
+import { listConversations, listKnowledge, listRuns, listWorkspaces, updateConversation, deleteConversation, permanentlyDeleteConversation, togglePin, deleteKnowledge, toggleArchive } from '@/lib/api'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import { useUIStore } from '@/stores/uiStore'
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
@@ -120,6 +120,8 @@ export default function AppShell() {
 
   useKeyboardShortcut('b', true, () => setSidebarOpen(prev => !prev), { ignoreInputs: false })
   useKeyboardShortcut('n', true, handleNewKnowledge)
+  useKeyboardShortcut('s', true, () => {/* prevent browser save dialog – app auto-saves */}, { ignoreInputs: false })
+  useKeyboardShortcut('/', false, () => { if (workspaceId) navigate(searchRoute(workspaceId)) })
 
   const shortcutDisplay = useMemo(() => ({
     commandPalette: getShortcutDisplay('commandPalette'),
@@ -182,6 +184,22 @@ export default function AppShell() {
       setConversationToDelete(null)
     }
   }, [conversationToDelete, location.pathname, navigate, queryClient, workspaceId])
+
+  const handleUnpinKnowledge = useCallback(async (knowledgeId: string) => {
+    await togglePin(workspaceId, knowledgeId)
+    queryClient.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
+  }, [queryClient, workspaceId])
+
+  const handleArchiveKnowledge = useCallback(async (knowledgeId: string) => {
+    await toggleArchive(workspaceId, knowledgeId)
+    queryClient.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
+  }, [queryClient, workspaceId])
+
+  const handleDeleteKnowledge = useCallback(async (knowledgeId: string) => {
+    if (!confirm('Delete this knowledge item permanently?')) return
+    await deleteKnowledge(workspaceId, knowledgeId)
+    queryClient.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
+  }, [queryClient, workspaceId])
 
   const currentSectionMeta = useMemo<SectionMeta>(() => {
     if (location.pathname.includes('/chat')) {
@@ -256,6 +274,7 @@ export default function AppShell() {
     workspace: dashboardRoute(workspaceId),
     knowledge: knowledgeRoute(workspaceId),
     knowledgeItem: (knowledgeId: string) => `/w/${workspaceId}/knowledge/${knowledgeId}`,
+    search: searchRoute(workspaceId),
     chat: chatRoute(workspaceId),
     chatConversation: (conversationId: string) => chatRoute(workspaceId, conversationId),
     agents: agentsRoute(),
@@ -312,6 +331,9 @@ export default function AppShell() {
             onRenameConversation={handleRenameConversation}
             onDeleteConversation={handleTrashConversation}
             onPermanentDeleteConversation={handlePermanentDeleteRequest}
+            onUnpinKnowledge={handleUnpinKnowledge}
+            onArchiveKnowledge={handleArchiveKnowledge}
+            onDeleteKnowledge={handleDeleteKnowledge}
           />
         ) : (
           <PrimaryNavCollapsed

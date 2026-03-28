@@ -206,8 +206,8 @@ export function PipelinesSubTab() {
                                             disabled={saving}
                                             className={`group relative flex items-center gap-2 px-3 py-2 rounded-xl border transition-all duration-200 ${
                                                 enabled
-                                                    ? 'bg-accent/10 border-accent/30 text-accent hover:bg-accent/20 hover:border-accent/50'
-                                                    : 'bg-muted/20 border-border/40 text-muted-foreground/50 hover:bg-muted/30 hover:border-border/60'
+                                                    ? 'bg-accent/15 border-accent/30 text-accent hover:bg-accent/25 hover:border-accent/50'
+                                                    : 'bg-muted/20 border-border/60 text-muted-foreground/70 hover:bg-muted/30 hover:border-border/60'
                                             } disabled:opacity-60`}
                                             title={`${enabled ? 'Disable' : 'Enable'} ${step.label}`}
                                         >
@@ -222,7 +222,7 @@ export function PipelinesSubTab() {
                                             <ChevronRight className={`w-4 h-4 mx-0.5 flex-shrink-0 ${
                                                 enabled && typeConfig[pipeline.steps[idx + 1].key] !== false
                                                     ? 'text-accent/40'
-                                                    : 'text-muted-foreground/20'
+                                                    : 'text-muted-foreground/70'
                                             }`} />
                                         )}
                                     </div>

@@ -141,7 +141,7 @@ export default function NoteEditor({ knowledge, workspaceId }: NoteEditorProps) 
                     actions={
                         <>
                             {/* Formatting buttons */}
-                            <div className="hidden sm:flex items-center gap-0.5 mr-2 border-r border-border/30 pr-2">
+                            <div className="hidden sm:flex items-center gap-0.5 mr-2 border-r border-border/50 pr-2">
                                 {toolbarButtons.map((btn) => (
                                     <button
                                         key={btn.label}
@@ -163,7 +163,7 @@ export default function NoteEditor({ knowledge, workspaceId }: NoteEditorProps) 
                                 className={cn(
                                     'p-1.5 rounded-lg transition-colors',
                                     showPreview
-                                        ? 'text-accent-foreground bg-accent/20'
+                                        ? 'text-accent-foreground bg-accent/25'
                                         : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
                                 )}
                                 title={showPreview ? 'Hide preview' : 'Show preview'}
@@ -202,7 +202,7 @@ export default function NoteEditor({ knowledge, workspaceId }: NoteEditorProps) 
                     ref={editorRef}
                     className={cn(
                         'min-h-0 flex-1 overflow-y-auto',
-                        showPreview ? 'w-1/2 border-r border-border/30' : 'w-full',
+                        showPreview ? 'w-1/2 border-r border-border/50' : 'w-full',
                     )}
                 />
 
@@ -210,7 +210,7 @@ export default function NoteEditor({ knowledge, workspaceId }: NoteEditorProps) 
                 {showPreview && (
                     <div className="w-1/2 min-h-0 flex-1 overflow-y-auto px-6 py-4">
                         <div
-                            className="prose prose-sm prose-invert max-w-none text-foreground/85 leading-relaxed"
+                            className="prose prose-sm dark:prose-invert max-w-none text-foreground/85 leading-relaxed"
                             dangerouslySetInnerHTML={{ __html: previewHtml }}
                         />
                     </div>

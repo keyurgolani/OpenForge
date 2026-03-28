@@ -65,7 +65,7 @@ export default function TagsSection({
           {value.map((tag) => (
             <span
               key={tag}
-              className="inline-flex items-center gap-1 rounded-md bg-accent/10 border border-accent/20 px-1.5 py-0.5 text-[11px] font-medium text-accent"
+              className="inline-flex items-center gap-1 rounded-md bg-accent/15 border border-accent/20 px-1.5 py-0.5 text-[11px] font-medium text-accent"
             >
               {tag}
               <button
@@ -78,7 +78,7 @@ export default function TagsSection({
             </span>
           ))}
           <input
-            className="flex-1 min-w-[60px] bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/50"
+            className="flex-1 min-w-[60px] bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/70"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}

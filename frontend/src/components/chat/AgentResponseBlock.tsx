@@ -46,7 +46,7 @@ export function AgentResponseBlock({
               <span className="text-xs font-medium text-foreground/80">{agentName}</span>
             )}
             {modelInfo && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted/50 border border-border/40 text-[10px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted/50 border border-border/60 text-[10px] text-muted-foreground">
                 <Cpu className="w-2.5 h-2.5" />
                 <span className="truncate max-w-[200px]">
                   {modelInfo.providerDisplayName}{modelInfo.model ? ` / ${modelInfo.model}` : ''}
@@ -88,10 +88,10 @@ export function AgentResponseBlock({
               <CopyButton
                 content={displayText}
                 iconOnly
-                className="text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                className="text-muted-foreground/70 hover:text-muted-foreground transition-colors"
               />
               {timestamp && (
-                <span className="text-[11px] text-muted-foreground/50">{timestamp}</span>
+                <span className="text-[11px] text-muted-foreground/70">{timestamp}</span>
               )}
             </div>
           )}

@@ -173,7 +173,7 @@ export function InputSection({ toolName: _toolName, args }: { toolName: string; 
     if (entries.length === 0) return null
     return (
         <div className="space-y-1.5">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground/50">Input</div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground/70">Input</div>
             <div className="space-y-1.5">
                 {entries.map(([k, v]) => <InputField key={k} argKey={k} value={v} />)}
             </div>
@@ -190,10 +190,10 @@ function FileListOutput({ items }: { items: Array<{ name: string; type: string; 
                 <div key={i} className="flex items-center gap-2 py-0.5 text-[11px]">
                     {item.type === 'directory'
                         ? <Folder className="h-3 w-3 text-accent/60 shrink-0" />
-                        : <File className="h-3 w-3 text-muted-foreground/50 shrink-0" />}
+                        : <File className="h-3 w-3 text-muted-foreground/70 shrink-0" />}
                     <span className="flex-1 truncate text-foreground/80">{item.name}</span>
                     {item.size !== undefined && item.type !== 'directory' && (
-                        <span className="text-muted-foreground/40 shrink-0">{formatBytes(item.size)}</span>
+                        <span className="text-muted-foreground/60 shrink-0">{formatBytes(item.size)}</span>
                     )}
                     {item.modified && (
                         <span className="text-muted-foreground/35 shrink-0 hidden sm:block">{formatDate(item.modified)}</span>
@@ -207,19 +207,19 @@ function FileListOutput({ items }: { items: Array<{ name: string; type: string; 
 function SearchResultsOutput({ results }: {
     results: Array<{ title: string; chunk_text?: string; snippet?: string; knowledge_type?: string; score?: number; knowledge_id?: string; conversation_id?: string }>
 }) {
-    if (results.length === 0) return <span className="text-[11px] text-muted-foreground/50 italic">No results found</span>
+    if (results.length === 0) return <span className="text-[11px] text-muted-foreground/70 italic">No results found</span>
     return (
         <div className="space-y-1.5">
             {results.map((r, i) => (
-                <div key={i} className="rounded-lg border border-border/40 bg-muted/20 px-2.5 py-2">
+                <div key={i} className="rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2">
                     <div className="flex items-start justify-between gap-2 mb-0.5">
                         <span className="text-[11px] font-medium text-foreground/85 leading-tight">{r.title}</span>
                         <div className="flex items-center gap-1.5 shrink-0">
                             {r.knowledge_type && (
-                                <span className="rounded px-1.5 py-0.5 text-[9px] uppercase tracking-wide bg-accent/10 text-accent/70">{r.knowledge_type}</span>
+                                <span className="rounded px-1.5 py-0.5 text-[9px] uppercase tracking-wide bg-accent/15 text-accent/70">{r.knowledge_type}</span>
                             )}
                             {r.score !== undefined && (
-                                <span className="text-[10px] text-muted-foreground/50">{Math.round(r.score * 100)}%</span>
+                                <span className="text-[10px] text-muted-foreground/70">{Math.round(r.score * 100)}%</span>
                             )}
                         </div>
                     </div>
@@ -235,7 +235,7 @@ function SearchResultsOutput({ results }: {
 function KnowledgeListOutput({ total, knowledge }: { total: number; knowledge: Array<{ id: string; title: string; type: string; tags?: string[] }> }) {
     return (
         <div className="space-y-1">
-            <div className="text-[10px] text-muted-foreground/50 mb-1">{total} item{total !== 1 ? 's' : ''}</div>
+            <div className="text-[10px] text-muted-foreground/70 mb-1">{total} item{total !== 1 ? 's' : ''}</div>
             {knowledge.slice(0, 20).map((k, i) => (
                 <div key={i} className="flex items-center gap-2 py-0.5 text-[11px]">
                     <BookOpen className="h-3 w-3 text-accent/50 shrink-0" />
@@ -243,20 +243,20 @@ function KnowledgeListOutput({ total, knowledge }: { total: number; knowledge: A
                     <span className="rounded px-1.5 py-0.5 text-[9px] uppercase tracking-wide bg-muted/40 text-muted-foreground/60 shrink-0">{k.type}</span>
                 </div>
             ))}
-            {total > 20 && <div className="text-[10px] text-muted-foreground/40 pt-0.5">+{total - 20} more…</div>}
+            {total > 20 && <div className="text-[10px] text-muted-foreground/60 pt-0.5">+{total - 20} more…</div>}
         </div>
     )
 }
 
 function ChatListOutput({ chats }: { chats: Array<{ id: string; title: string; message_count: number; updated_at: string }> }) {
-    if (chats.length === 0) return <span className="text-[11px] text-muted-foreground/50 italic">No chats found</span>
+    if (chats.length === 0) return <span className="text-[11px] text-muted-foreground/70 italic">No chats found</span>
     return (
         <div className="space-y-0.5">
             {chats.map((c, i) => (
                 <div key={i} className="flex items-center gap-2 py-0.5 text-[11px]">
-                    <MessageSquare className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+                    <MessageSquare className="h-3 w-3 text-muted-foreground/70 shrink-0" />
                     <span className="flex-1 truncate text-foreground/80">{c.title}</span>
-                    <span className="text-muted-foreground/40 shrink-0 tabular-nums">{c.message_count} msgs</span>
+                    <span className="text-muted-foreground/60 shrink-0 tabular-nums">{c.message_count} msgs</span>
                 </div>
             ))}
         </div>
@@ -266,13 +266,13 @@ function ChatListOutput({ chats }: { chats: Array<{ id: string; title: string; m
 function ConversationOutput({ data }: { data: { id: string; title: string; message_count: number; messages: Array<{ role: string; content: string }> } }) {
     return (
         <div className="space-y-1.5">
-            <div className="text-[10px] text-muted-foreground/50 mb-1">
+            <div className="text-[10px] text-muted-foreground/70 mb-1">
                 {data.title} · {data.message_count} message{data.message_count !== 1 ? 's' : ''}
             </div>
             {data.messages.map((m, i) => (
                 <div key={i} className={`flex gap-2 text-[11px] ${m.role === 'user' ? '' : ''}`}>
                     {m.role === 'user'
-                        ? <User className="h-3 w-3 text-muted-foreground/50 shrink-0 mt-0.5" />
+                        ? <User className="h-3 w-3 text-muted-foreground/70 shrink-0 mt-0.5" />
                         : <Bot className="h-3 w-3 text-accent/50 shrink-0 mt-0.5" />}
                     <span className="text-foreground/75 leading-relaxed line-clamp-3 break-words">{m.content}</span>
                 </div>
@@ -289,7 +289,7 @@ function HttpOutput({ data }: { data: { status: number; body: string; headers?: 
                 <span className={`rounded px-2 py-0.5 text-[11px] font-mono font-medium ${isOk ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'}`}>
                     {data.status}
                 </span>
-                <span className="text-[10px] text-muted-foreground/50">{isOk ? 'OK' : 'Error'}</span>
+                <span className="text-[10px] text-muted-foreground/70">{isOk ? 'OK' : 'Error'}</span>
             </div>
             {data.body && (
                 <ExpandablePre content={data.body} className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-muted/30 px-2 py-1.5 text-[11px] text-foreground/70 max-h-48 font-mono" />
@@ -303,7 +303,7 @@ function TaskPlanOutput({ plan }: { plan: { title: string; steps: Array<{ id: st
         if (status === 'done') return <CheckCircle2 className="h-3 w-3 text-emerald-400 shrink-0" />
         if (status === 'failed') return <XCircle className="h-3 w-3 text-red-400 shrink-0" />
         if (status === 'in_progress') return <Loader2 className="h-3 w-3 text-accent/70 animate-spin shrink-0" />
-        return <Circle className="h-3 w-3 text-muted-foreground/30 shrink-0" />
+        return <Circle className="h-3 w-3 text-muted-foreground/70 shrink-0" />
     }
     return (
         <div className="space-y-1.5">
@@ -312,10 +312,10 @@ function TaskPlanOutput({ plan }: { plan: { title: string; steps: Array<{ id: st
                 <div key={i} className="flex items-start gap-2 text-[11px]">
                     {statusIcon(s.status)}
                     <div className="flex-1 min-w-0">
-                        <span className={`leading-tight ${s.status === 'done' ? 'text-muted-foreground/50 line-through' : 'text-foreground/80'}`}>
+                        <span className={`leading-tight ${s.status === 'done' ? 'text-muted-foreground/70 line-through' : 'text-foreground/80'}`}>
                             {s.description}
                         </span>
-                        {s.note && <div className="text-[10px] text-muted-foreground/50 mt-0.5">{s.note}</div>}
+                        {s.note && <div className="text-[10px] text-muted-foreground/70 mt-0.5">{s.note}</div>}
                     </div>
                 </div>
             ))}
@@ -326,40 +326,40 @@ function TaskPlanOutput({ plan }: { plan: { title: string; steps: Array<{ id: st
 function AstOutput({ data }: { data: { classes: Array<{ name: string; line: number }>; functions: Array<{ name: string; line: number }>; imports: string[]; lines: number } }) {
     return (
         <div className="space-y-2 text-[11px]">
-            <div className="text-[10px] text-muted-foreground/50">{data.lines} lines</div>
+            <div className="text-[10px] text-muted-foreground/70">{data.lines} lines</div>
             {data.classes.length > 0 && (
                 <div>
-                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground/50 mb-0.5">Classes</div>
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground/70 mb-0.5">Classes</div>
                     {data.classes.map((c, i) => (
                         <div key={i} className="flex items-center gap-2 py-0.5">
                             <Code2 className="h-3 w-3 text-accent/50 shrink-0" />
                             <span className="text-foreground/80 font-mono">{c.name}</span>
-                            <span className="text-muted-foreground/40 ml-auto">L{c.line}</span>
+                            <span className="text-muted-foreground/60 ml-auto">L{c.line}</span>
                         </div>
                     ))}
                 </div>
             )}
             {data.functions.length > 0 && (
                 <div>
-                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground/50 mb-0.5">Functions</div>
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground/70 mb-0.5">Functions</div>
                     {data.functions.slice(0, 20).map((f, i) => (
                         <div key={i} className="flex items-center gap-2 py-0.5">
                             <span className="text-accent/40 font-mono text-[10px] shrink-0">ƒ</span>
                             <span className="text-foreground/75 font-mono">{f.name}</span>
-                            <span className="text-muted-foreground/40 ml-auto">L{f.line}</span>
+                            <span className="text-muted-foreground/60 ml-auto">L{f.line}</span>
                         </div>
                     ))}
-                    {data.functions.length > 20 && <div className="text-[10px] text-muted-foreground/40">+{data.functions.length - 20} more…</div>}
+                    {data.functions.length > 20 && <div className="text-[10px] text-muted-foreground/60">+{data.functions.length - 20} more…</div>}
                 </div>
             )}
             {data.imports.length > 0 && (
                 <div>
-                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground/50 mb-0.5">Imports</div>
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground/70 mb-0.5">Imports</div>
                     <div className="flex flex-wrap gap-1">
                         {data.imports.slice(0, 12).map((imp, i) => (
                             <span key={i} className="rounded bg-muted/30 px-1.5 py-0.5 text-[10px] font-mono text-foreground/60">{imp}</span>
                         ))}
-                        {data.imports.length > 12 && <span className="text-[10px] text-muted-foreground/40">+{data.imports.length - 12}</span>}
+                        {data.imports.length > 12 && <span className="text-[10px] text-muted-foreground/60">+{data.imports.length - 12}</span>}
                     </div>
                 </div>
             )}
@@ -371,9 +371,9 @@ function DefinitionOutput({ data }: { data: { name: string; type: string; line: 
     return (
         <div className="space-y-1.5 text-[11px]">
             <div className="flex items-center gap-2">
-                <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-accent/70">{data.type}</span>
+                <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-accent/70">{data.type}</span>
                 <span className="font-mono text-foreground/80">{data.name}</span>
-                <span className="text-muted-foreground/40 ml-auto">L{data.line}–{data.end_line}</span>
+                <span className="text-muted-foreground/60 ml-auto">L{data.line}–{data.end_line}</span>
             </div>
             {data.snippet && (
                 <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-muted/30 px-2 py-1.5 text-[11px] text-foreground/75 max-h-48 font-mono">
@@ -387,10 +387,10 @@ function DefinitionOutput({ data }: { data: { name: string; type: string; line: 
 function ReferencesOutput({ data }: { data: { references: Array<{ line: number; content: string }>; count: number } }) {
     return (
         <div className="space-y-1 text-[11px]">
-            <div className="text-[10px] text-muted-foreground/50 mb-1">{data.count} reference{data.count !== 1 ? 's' : ''}</div>
+            <div className="text-[10px] text-muted-foreground/70 mb-1">{data.count} reference{data.count !== 1 ? 's' : ''}</div>
             {data.references.map((ref, i) => (
                 <div key={i} className="flex items-start gap-2">
-                    <span className="text-muted-foreground/40 font-mono tabular-nums shrink-0 w-8 text-right">{ref.line}</span>
+                    <span className="text-muted-foreground/60 font-mono tabular-nums shrink-0 w-8 text-right">{ref.line}</span>
                     <pre className="text-foreground/70 whitespace-pre-wrap break-words font-mono">{ref.content}</pre>
                 </div>
             ))}
@@ -401,7 +401,7 @@ function ReferencesOutput({ data }: { data: { references: Array<{ line: number; 
 function SkillListOutput({ data }: { data: { skills: Array<{ name: string; description: string }>; count: number } }) {
     return (
         <div className="space-y-1">
-            <div className="text-[10px] text-muted-foreground/50 mb-1">{data.count} skill{data.count !== 1 ? 's' : ''}</div>
+            <div className="text-[10px] text-muted-foreground/70 mb-1">{data.count} skill{data.count !== 1 ? 's' : ''}</div>
             {data.skills.map((s, i) => (
                 <div key={i} className="flex items-start gap-2 py-0.5 text-[11px]">
                     <Package className="h-3 w-3 text-accent/50 shrink-0 mt-0.5" />
@@ -424,7 +424,7 @@ function DiffOutput({ content }: { content: string }) {
                 if (line.startsWith('+') && !line.startsWith('+++')) cls = 'text-emerald-400/90'
                 else if (line.startsWith('-') && !line.startsWith('---')) cls = 'text-red-400/90'
                 else if (line.startsWith('@@')) cls = 'text-sky-400/70'
-                else if (line.startsWith('diff ') || line.startsWith('index ') || line.startsWith('--- ') || line.startsWith('+++ ')) cls = 'text-muted-foreground/50'
+                else if (line.startsWith('diff ') || line.startsWith('index ') || line.startsWith('--- ') || line.startsWith('+++ ')) cls = 'text-muted-foreground/70'
                 return <span key={i} className={`block whitespace-pre ${cls}`}>{line}</span>
             })}
         </pre>
@@ -455,7 +455,7 @@ function ExpandablePre({ content, className }: { content: string; className: str
 }
 
 function TerminalOutput({ content }: { content: string }) {
-    return <ExpandablePre content={content} className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-[#0d0d0d] border border-border/20 px-3 py-2 text-[11px] text-green-300/80 font-mono max-h-64" />
+    return <ExpandablePre content={content} className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-[#0d0d0d] border border-border/60 px-3 py-2 text-[11px] text-green-300/80 font-mono max-h-64" />
 }
 
 function StringOutput({ content, toolName }: { content: string; toolName: string }) {
@@ -486,7 +486,7 @@ function StringOutput({ content, toolName }: { content: string; toolName: string
 // ── Generic key/value tree — no raw JSON ─────────────────────────────────────
 
 function PrimitiveValue({ val }: { val: unknown }) {
-    if (val === null || val === undefined) return <span className="italic text-muted-foreground/40">null</span>
+    if (val === null || val === undefined) return <span className="italic text-muted-foreground/60">null</span>
     if (typeof val === 'boolean') return <span className={val ? 'text-emerald-400' : 'text-red-400'}>{String(val)}</span>
     if (typeof val === 'number') return <span className="text-sky-400/80 tabular-nums">{val}</span>
     return <span className="text-foreground/75 break-words">{String(val)}</span>
@@ -494,9 +494,9 @@ function PrimitiveValue({ val }: { val: unknown }) {
 
 function KeyValueOutput({ obj, depth = 0 }: { obj: Record<string, unknown>; depth?: number }) {
     const entries = Object.entries(obj)
-    if (entries.length === 0) return <span className="text-[11px] text-muted-foreground/40 italic">Empty</span>
+    if (entries.length === 0) return <span className="text-[11px] text-muted-foreground/60 italic">Empty</span>
     return (
-        <div className={`space-y-1 text-[11px] ${depth > 0 ? 'pl-3 border-l border-border/30' : ''}`}>
+        <div className={`space-y-1 text-[11px] ${depth > 0 ? 'pl-3 border-l border-border/50' : ''}`}>
             {entries.map(([k, v]) => {
                 const isNested = v !== null && typeof v === 'object' && !Array.isArray(v)
                 const isArr = Array.isArray(v)
@@ -521,7 +521,7 @@ function KeyValueOutput({ obj, depth = 0 }: { obj: Record<string, unknown>; dept
 }
 
 function ArrayOutput({ items, depth = 0 }: { items: unknown[]; depth?: number }) {
-    if (items.length === 0) return <span className="text-[11px] text-muted-foreground/40 italic">Empty list</span>
+    if (items.length === 0) return <span className="text-[11px] text-muted-foreground/60 italic">Empty list</span>
     const first = items[0]
     // Array of primitives → comma/badge list
     if (typeof first !== 'object' || first === null) {
@@ -532,7 +532,7 @@ function ArrayOutput({ items, depth = 0 }: { items: unknown[]; depth?: number })
                         {String(item)}
                     </span>
                 ))}
-                {items.length > 20 && <span className="text-[10px] text-muted-foreground/40">+{items.length - 20}</span>}
+                {items.length > 20 && <span className="text-[10px] text-muted-foreground/60">+{items.length - 20}</span>}
             </div>
         )
     }
@@ -540,11 +540,11 @@ function ArrayOutput({ items, depth = 0 }: { items: unknown[]; depth?: number })
     return (
         <div className={`space-y-1 ${depth > 0 ? 'pl-2' : ''}`}>
             {(items as Record<string, unknown>[]).slice(0, 15).map((item, i) => (
-                <div key={i} className="rounded border border-border/30 bg-muted/15 px-2 py-1.5">
+                <div key={i} className="rounded border border-border/50 bg-muted/15 px-2 py-1.5">
                     <KeyValueOutput obj={item} depth={depth + 1} />
                 </div>
             ))}
-            {items.length > 15 && <div className="text-[10px] text-muted-foreground/40 pt-0.5">+{items.length - 15} more items</div>}
+            {items.length > 15 && <div className="text-[10px] text-muted-foreground/60 pt-0.5">+{items.length - 15} more items</div>}
         </div>
     )
 }
@@ -560,13 +560,13 @@ function SmartOutput({ toolName, output }: { toolName: string; output: unknown }
     }
 
     if (parsed === null || parsed === undefined) {
-        return <span className="text-[11px] text-muted-foreground/40 italic">No output</span>
+        return <span className="text-[11px] text-muted-foreground/60 italic">No output</span>
     }
 
     // ── Array outputs ───────────────────────────────────────────────────────
     if (Array.isArray(parsed)) {
         if (parsed.length === 0) {
-            return <span className="text-[11px] text-muted-foreground/40 italic">Empty</span>
+            return <span className="text-[11px] text-muted-foreground/60 italic">Empty</span>
         }
         const first = parsed[0]
         if (first && typeof first === 'object') {
@@ -739,7 +739,7 @@ export function ToolCallCard({ callId: _callId, toolName, arguments: args, resul
                     <span className="text-muted-foreground/80 shrink-0">{category}</span>
                     {action && (
                         <>
-                            <span className="text-muted-foreground/40">.</span>
+                            <span className="text-muted-foreground/60">.</span>
                             <span className="text-foreground/70 shrink-0">{action}</span>
                         </>
                     )}
@@ -753,22 +753,22 @@ export function ToolCallCard({ callId: _callId, toolName, arguments: args, resul
 
             {hitl && (
                 <div className="space-y-1">
-                    <div className="text-[10px] uppercase tracking-wide font-medium text-muted-foreground/50">Approval</div>
+                    <div className="text-[10px] uppercase tracking-wide font-medium text-muted-foreground/70">Approval</div>
                     <div className={`flex items-center gap-1.5 text-[11px] ${
                         hitl.status === 'approved' ? 'text-emerald-400' : hitl.status === 'denied' ? 'text-red-400' : 'text-amber-400'
                     }`}>
                         {hitl.status === 'approved' ? <CheckCircle2 className="h-3 w-3" /> : hitl.status === 'denied' ? <XCircle className="h-3 w-3" /> : <Loader2 className="h-3 w-3 animate-spin" />}
                         <span className="font-medium capitalize">{hitl.status}</span>
-                        {hitl.risk_level && <span className="text-muted-foreground/50 text-[10px]">({hitl.risk_level} risk)</span>}
+                        {hitl.risk_level && <span className="text-muted-foreground/70 text-[10px]">({hitl.risk_level} risk)</span>}
                     </div>
                     {hitl.action_summary && <p className="text-[10px] text-muted-foreground/60">{hitl.action_summary}</p>}
-                    {hitl.resolution_note && <p className="text-[10px] text-muted-foreground/50 italic">{hitl.resolution_note}</p>}
+                    {hitl.resolution_note && <p className="text-[10px] text-muted-foreground/70 italic">{hitl.resolution_note}</p>}
                 </div>
             )}
 
             {result !== undefined && (
                 <div className="space-y-1.5">
-                    <div className={`text-[10px] uppercase tracking-wide font-medium ${result.success ? 'text-muted-foreground/50' : 'text-red-400/70'}`}>
+                    <div className={`text-[10px] uppercase tracking-wide font-medium ${result.success ? 'text-muted-foreground/70' : 'text-red-400/70'}`}>
                         {result.success ? 'Output' : 'Error'}
                     </div>
                     {result.success

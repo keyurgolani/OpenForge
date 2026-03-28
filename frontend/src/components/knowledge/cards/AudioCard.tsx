@@ -89,7 +89,7 @@ export function AudioCard({ item, workspaceId, slim, isProcessing }: { item: Kno
             </div>
 
             {/* Inline audio player */}
-            <div className="rounded-lg border border-border/30 bg-violet-500/5 px-3 py-3 space-y-2">
+            <div className="rounded-lg border border-border/50 bg-violet-500/5 px-3 py-3 space-y-2">
                 <audio ref={audioRef} src={fileUrl} preload="metadata" />
 
                 <div className="flex items-center gap-2.5">
@@ -145,7 +145,7 @@ export function AudioCard({ item, workspaceId, slim, isProcessing }: { item: Kno
                     <TagRow tags={item.tags} />
 
                     {/* Footer */}
-                    <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-border/40">
+                    <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-border/60">
                         <span className="text-[10px] text-muted-foreground/80">
                             {formatTimestamp(item.updated_at)}
                         </span>

@@ -125,7 +125,7 @@ export function ContainerLogsSubTab() {
                     ))}
                 </select>
                 <button
-                    className={`btn-ghost text-xs py-1.5 px-2.5 gap-1.5 shrink-0 ${paused ? 'text-accent bg-accent/10' : ''}`}
+                    className={`btn-ghost text-xs py-1.5 px-2.5 gap-1.5 shrink-0 ${paused ? 'text-accent bg-accent/15' : ''}`}
                     onClick={() => setPaused(p => !p)}
                 >
                     {paused ? <Play className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}

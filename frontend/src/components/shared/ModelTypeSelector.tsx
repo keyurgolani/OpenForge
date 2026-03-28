@@ -413,7 +413,7 @@ export function ModelTypeSelector({
                                                                                     </span>
                                                                                 )}
                                                                                 {model.size_mb != null && (
-                                                                                    <span className="text-[9px] text-muted-foreground border border-border/40 px-1.5 py-0.5 rounded">
+                                                                                    <span className="text-[9px] text-muted-foreground border border-border/60 px-1.5 py-0.5 rounded">
                                                                                         {model.size_mb >= 1000 ? `${(model.size_mb / 1000).toFixed(1)} GB` : `${model.size_mb} MB`}
                                                                                     </span>
                                                                                 )}
@@ -435,10 +435,10 @@ export function ModelTypeSelector({
                                                                         'flex items-center gap-1 rounded-lg border transition-all flex-shrink-0',
                                                                         compact ? 'text-[10px] px-2 py-0.5' : 'text-xs px-2.5 py-1',
                                                                         already
-                                                                            ? 'border-border/30 text-muted-foreground/40 cursor-not-allowed'
+                                                                            ? 'border-border/50 text-muted-foreground/60 cursor-not-allowed'
                                                                             : isLocal && !model.downloaded
-                                                                                ? 'border-accent/30 text-accent hover:bg-accent/10'
-                                                                                : 'border-accent/30 text-accent hover:bg-accent/10',
+                                                                                ? 'border-accent/30 text-accent hover:bg-accent/15'
+                                                                                : 'border-accent/30 text-accent hover:bg-accent/15',
                                                                     )}
                                                                     title={
                                                                         already
@@ -537,7 +537,7 @@ export function ModelTypeSelector({
                                             'p-1 rounded transition-colors',
                                             m.is_default
                                                 ? 'text-amber-400'
-                                                : 'text-muted-foreground/40 hover:text-amber-400/60',
+                                                : 'text-muted-foreground/60 hover:text-amber-400/60',
                                         )}
                                         title={m.is_default ? 'Default model' : 'Set as default'}
                                     >

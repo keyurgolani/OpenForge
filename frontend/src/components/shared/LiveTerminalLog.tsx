@@ -104,7 +104,7 @@ export default function LiveTerminalLog({ runId }: LiveTerminalLogProps) {
 
   return (
     <div className="flex flex-col h-full rounded-2xl border border-border/60 bg-background/50 overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border/40 bg-card/30">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border/60 bg-card/30">
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Live Terminal
         </span>
@@ -131,7 +131,7 @@ export default function LiveTerminalLog({ runId }: LiveTerminalLogProps) {
         ) : (
           entries.map(entry => (
             <div key={entry.id} className="flex gap-2">
-              <span className="text-muted-foreground/50 flex-shrink-0">
+              <span className="text-muted-foreground/70 flex-shrink-0">
                 {new Date(entry.timestamp).toLocaleTimeString()}
               </span>
               <span className={`flex-shrink-0 ${typeColor(entry.type)}`}>

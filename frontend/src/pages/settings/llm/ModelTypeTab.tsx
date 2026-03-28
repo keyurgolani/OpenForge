@@ -173,7 +173,7 @@ function ModelTypeTab({
                                     )}
 
                                     {!fetchError && fetchedModels !== null && fetchedModels.length === 0 && (
-                                        <div className="text-xs p-2.5 rounded-lg bg-muted/20 text-muted-foreground border border-border/30 space-y-1">
+                                        <div className="text-xs p-2.5 rounded-lg bg-muted/20 text-muted-foreground border border-border/50 space-y-1">
                                             <p>This provider doesn't support model listing. Enter the model ID manually.</p>
                                             <input className="input text-xs mt-1" placeholder="Enter model ID (e.g. meta-llama/Meta-Llama-3-8B-Instruct)" value={manualModel} onChange={e => setManualModel(e.target.value)} />
                                         </div>

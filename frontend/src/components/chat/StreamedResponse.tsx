@@ -16,7 +16,7 @@ function stripCitationTags(s: string): string {
     .replace(/\[citation[^\]]*\]/g, '')          // [citation ...]
 }
 
-const PROSE_CLASSES = "prose prose-sm prose-invert max-w-none [&_pre]:bg-muted/50 [&_pre]:rounded-md [&_pre]:p-3 [&_code]:font-mono [&_code]:text-xs [&_h1]:font-display [&_h2]:font-display [&_h3]:font-display [&_table]:text-xs [&_th]:px-3 [&_th]:py-1.5 [&_td]:px-3 [&_td]:py-1.5"
+const PROSE_CLASSES = "prose prose-sm dark:prose-invert max-w-none [&_pre]:bg-muted/50 [&_pre]:rounded-md [&_pre]:p-3 [&_code]:font-mono [&_code]:text-xs [&_h1]:font-display [&_h2]:font-display [&_h3]:font-display [&_table]:text-xs [&_th]:px-3 [&_th]:py-1.5 [&_td]:px-3 [&_td]:py-1.5"
 
 export function StreamedResponse({ text, isStreaming }: StreamedResponseProps) {
   const cleanText = useMemo(() => stripCitationTags(text), [text])

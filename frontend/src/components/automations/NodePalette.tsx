@@ -23,8 +23,8 @@ export default function NodePalette({ agents, onAddNode }: NodePaletteProps) {
   }
 
   return (
-    <div className="w-56 border-r border-border/40 bg-background/50 overflow-y-auto">
-      <div className="p-3 border-b border-border/40">
+    <div className="w-56 border-r border-border/60 bg-background/50 overflow-y-auto">
+      <div className="p-3 border-b border-border/60">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Agents
         </p>
@@ -39,9 +39,9 @@ export default function NodePalette({ agents, onAddNode }: NodePaletteProps) {
               draggable
               onDragStart={(e) => handleDragStart(e, agent)}
               onClick={() => onAddNode(agent)}
-              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left hover:bg-accent/10 transition group cursor-grab active:cursor-grabbing"
+              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left hover:bg-accent/15 transition group cursor-grab active:cursor-grabbing"
             >
-              <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50 group-hover:text-muted-foreground" />
+              <GripVertical className="w-3.5 h-3.5 text-muted-foreground/70 group-hover:text-muted-foreground" />
               <Bot className="w-4 h-4 text-accent" />
               <div className="min-w-0 flex-1">
                 <p className="text-sm text-foreground truncate">{agent.name}</p>

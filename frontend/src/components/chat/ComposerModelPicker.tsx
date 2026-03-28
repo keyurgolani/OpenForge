@@ -51,7 +51,7 @@ export function ComposerModelPicker({ options, selectedKey, onSelect, defaultLab
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className={`chat-control-pill h-9 gap-1 px-2.5 justify-center transition-colors ${isOverride ? 'text-accent border-accent/40 bg-accent/10' : ''}`}
+        className={`chat-control-pill h-9 gap-1 px-2.5 justify-center transition-colors ${isOverride ? 'text-accent border-accent/40 bg-accent/15' : ''}`}
         aria-label="Select model"
         title={selected ? selected.label : defaultLabel}
       >
@@ -71,7 +71,7 @@ export function ComposerModelPicker({ options, selectedKey, onSelect, defaultLab
                 placeholder="Search models..."
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                className="w-full rounded-md border border-border/50 bg-muted/30 pl-7 pr-2.5 py-1.5 text-xs placeholder:text-muted-foreground/50 focus:outline-none focus:border-accent/50"
+                className="w-full rounded-md border border-border/50 bg-muted/30 pl-7 pr-2.5 py-1.5 text-xs placeholder:text-muted-foreground/70 focus:outline-none focus:border-accent/50"
               />
             </div>
           </div>
@@ -80,7 +80,7 @@ export function ComposerModelPicker({ options, selectedKey, onSelect, defaultLab
             <button
               type="button"
               onClick={() => { onSelect(''); setOpen(false) }}
-              className={`w-full text-left rounded-md px-2.5 py-1.5 text-xs flex items-center gap-2 ${!selectedKey ? 'bg-accent/10 text-accent' : 'hover:bg-muted/50'}`}
+              className={`w-full text-left rounded-md px-2.5 py-1.5 text-xs flex items-center gap-2 ${!selectedKey ? 'bg-accent/15 text-accent' : 'hover:bg-muted/50'}`}
             >
               {!selectedKey ? <Check className="w-3 h-3 flex-shrink-0" /> : <span className="w-3" />}
               <span className="truncate">{defaultLabel}</span>
@@ -96,7 +96,7 @@ export function ComposerModelPicker({ options, selectedKey, onSelect, defaultLab
                     key={opt.key}
                     type="button"
                     onClick={() => { onSelect(opt.key); setOpen(false) }}
-                    className={`w-full text-left rounded-md px-2.5 py-1.5 text-xs flex items-center gap-2 ${active ? 'bg-accent/10 text-accent' : 'hover:bg-muted/50'}`}
+                    className={`w-full text-left rounded-md px-2.5 py-1.5 text-xs flex items-center gap-2 ${active ? 'bg-accent/15 text-accent' : 'hover:bg-muted/50'}`}
                   >
                     {active ? <Check className="w-3 h-3 flex-shrink-0" /> : <span className="w-3" />}
                     <span className="truncate">{opt.label}</span>

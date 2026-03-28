@@ -55,10 +55,10 @@ export default function NotePreview({ knowledge, workspaceId, onClose }: NotePre
                         <CopyButton
                             content={content}
                             iconOnly
-                            className="absolute top-0 right-0 p-1.5 rounded-lg text-muted-foreground/50 hover:text-foreground hover:bg-muted/50 transition-colors"
+                            className="absolute top-0 right-0 p-1.5 rounded-lg text-muted-foreground/70 hover:text-foreground hover:bg-muted/50 transition-colors"
                         />
                         <div
-                            className="prose prose-sm prose-invert max-w-none text-foreground/85 leading-relaxed pr-8"
+                            className="prose prose-sm dark:prose-invert max-w-none text-foreground/85 leading-relaxed pr-8"
                             dangerouslySetInnerHTML={{ __html: html }}
                         />
                     </div>

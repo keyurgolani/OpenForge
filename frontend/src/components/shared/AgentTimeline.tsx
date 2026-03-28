@@ -276,13 +276,13 @@ export function TimelineRenderer({ timeline, isLive = false }: { timeline: Timel
                             >
                                 <div className="space-y-2 text-[11px]">
                                     <div>
-                                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground/50 mb-1">Original</div>
+                                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground/70 mb-1">Original</div>
                                         <pre className="whitespace-pre-wrap break-words rounded bg-muted/25 px-2 py-1.5 text-foreground/70 max-h-32 overflow-y-auto">
                                             {e.original}
                                         </pre>
                                     </div>
                                     <div>
-                                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground/50 mb-1">Optimized</div>
+                                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground/70 mb-1">Optimized</div>
                                         <pre className="whitespace-pre-wrap break-words rounded bg-muted/25 px-2 py-1.5 text-foreground/70 max-h-32 overflow-y-auto">
                                             {e.optimized}
                                         </pre>
@@ -312,13 +312,13 @@ export function TimelineRenderer({ timeline, isLive = false }: { timeline: Timel
                                 <div className="space-y-1 text-[11px]">
                                     {e.attachments.map((att, i) => (
                                         <div key={i} className="flex items-center gap-2">
-                                            <Paperclip className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+                                            <Paperclip className="h-3 w-3 text-muted-foreground/60 shrink-0" />
                                             <span className="text-foreground/75 truncate">{att.filename}</span>
                                             <span className={`text-[10px] px-1.5 py-0.5 rounded ${att.status === 'success' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'}`}>
                                                 {att.status}
                                             </span>
                                             {att.pipeline && (
-                                                <span className="text-muted-foreground/40 text-[10px]">{att.pipeline}</span>
+                                                <span className="text-muted-foreground/60 text-[10px]">{att.pipeline}</span>
                                             )}
                                         </div>
                                     ))}
@@ -334,7 +334,7 @@ export function TimelineRenderer({ timeline, isLive = false }: { timeline: Timel
                                 <button
                                     type="button"
                                     onClick={() => toggleCollapse(idx)}
-                                    className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors py-0.5 px-1"
+                                    className="flex items-center gap-1.5 text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors py-0.5 px-1"
                                 >
                                     <ChevronRight className={`h-3 w-3 transition-transform ${isCollapsed ? '' : 'rotate-90'}`} />
                                     <span>Intermediate response</span>

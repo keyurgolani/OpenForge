@@ -179,7 +179,7 @@ export function BookmarkImportSubTab() {
             {/* ── Step 1: Format selection ──────────────────────────────────── */}
             <div className="glass-card p-4 rounded-xl">
                 <div className="flex items-center gap-2 mb-3">
-                    <div className="w-6 h-6 rounded-full bg-accent/20 flex items-center justify-center text-accent text-[11px] font-bold">1</div>
+                    <div className="w-6 h-6 rounded-full bg-accent/25 flex items-center justify-center text-accent text-[11px] font-bold">1</div>
                     <h4 className="text-sm font-medium">Select Format</h4>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
@@ -192,7 +192,7 @@ export function BookmarkImportSubTab() {
                                 onClick={() => { setFormat(f.id); reset() }}
                                 className={`text-left p-3 rounded-xl border transition-all duration-200 ${
                                     isActive
-                                        ? 'border-accent bg-accent/10 shadow-glass-sm ring-1 ring-accent/30'
+                                        ? 'border-accent bg-accent/15 shadow-glass-sm ring-1 ring-accent/30'
                                         : 'border-border/50 hover:border-border hover:bg-muted/20'
                                 }`}
                             >
@@ -212,7 +212,7 @@ export function BookmarkImportSubTab() {
             {/* ── Step 2: Workspace + file upload ──────────────────────────── */}
             <div className="glass-card p-4 rounded-xl">
                 <div className="flex items-center gap-2 mb-3">
-                    <div className="w-6 h-6 rounded-full bg-accent/20 flex items-center justify-center text-accent text-[11px] font-bold">2</div>
+                    <div className="w-6 h-6 rounded-full bg-accent/25 flex items-center justify-center text-accent text-[11px] font-bold">2</div>
                     <h4 className="text-sm font-medium">Upload File</h4>
                 </div>
 
@@ -239,7 +239,7 @@ export function BookmarkImportSubTab() {
                     onClick={() => fileInputRef.current?.click()}
                     className={`relative cursor-pointer rounded-xl border-2 border-dashed p-8 text-center transition-all duration-200 ${
                         dragActive
-                            ? 'border-accent bg-accent/10 shadow-glass-sm'
+                            ? 'border-accent bg-accent/15 shadow-glass-sm'
                             : file
                                 ? 'border-emerald-500/40 bg-emerald-500/5'
                                 : 'border-border/50 hover:border-border hover:bg-muted/10'
@@ -271,7 +271,7 @@ export function BookmarkImportSubTab() {
                         </div>
                     ) : (
                         <div className="flex flex-col items-center gap-2">
-                            <Upload className={`w-8 h-8 ${dragActive ? 'text-accent' : 'text-muted-foreground/50'}`} />
+                            <Upload className={`w-8 h-8 ${dragActive ? 'text-accent' : 'text-muted-foreground/70'}`} />
                             <div>
                                 <p className="text-sm text-muted-foreground">
                                     <span className="text-accent font-medium">Click to upload</span> or drag and drop
@@ -297,7 +297,7 @@ export function BookmarkImportSubTab() {
             {parsed && parsed.length > 0 && (
                 <div className="glass-card p-4 rounded-xl">
                     <div className="flex items-center gap-2 mb-3">
-                        <div className="w-6 h-6 rounded-full bg-accent/20 flex items-center justify-center text-accent text-[11px] font-bold">3</div>
+                        <div className="w-6 h-6 rounded-full bg-accent/25 flex items-center justify-center text-accent text-[11px] font-bold">3</div>
                         <h4 className="text-sm font-medium">Preview & Confirm</h4>
                     </div>
 
@@ -316,7 +316,7 @@ export function BookmarkImportSubTab() {
                                 <p className="text-[11px] text-muted-foreground mb-1">Tags</p>
                                 <div className="flex flex-wrap gap-1">
                                     {uniqueTags.slice(0, 12).map(tag => (
-                                        <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 border border-accent/20 text-accent">
+                                        <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-accent/15 border border-accent/20 text-accent">
                                             {tag}
                                         </span>
                                     ))}
@@ -331,11 +331,11 @@ export function BookmarkImportSubTab() {
                     </div>
 
                     {/* Preview table */}
-                    <div className="border border-border/40 rounded-lg overflow-hidden">
+                    <div className="border border-border/60 rounded-lg overflow-hidden">
                         <div className="overflow-x-auto">
                             <table className="w-full text-xs">
                                 <thead>
-                                    <tr className="bg-muted/30 border-b border-border/40">
+                                    <tr className="bg-muted/30 border-b border-border/60">
                                         <th className="text-left px-3 py-2 text-muted-foreground font-medium w-8">#</th>
                                         <th className="text-left px-3 py-2 text-muted-foreground font-medium">Title</th>
                                         <th className="text-left px-3 py-2 text-muted-foreground font-medium hidden md:table-cell">URL</th>
@@ -344,7 +344,7 @@ export function BookmarkImportSubTab() {
                                 </thead>
                                 <tbody>
                                     {previewItems.map((bm, i) => (
-                                        <tr key={i} className="border-b border-border/20 last:border-0 hover:bg-muted/10 transition-colors">
+                                        <tr key={i} className="border-b border-border/60 last:border-0 hover:bg-muted/10 transition-colors">
                                             <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
                                             <td className="px-3 py-2 font-medium max-w-[200px] truncate">{bm.title}</td>
                                             <td className="px-3 py-2 text-muted-foreground max-w-[240px] truncate hidden md:table-cell">
@@ -356,7 +356,7 @@ export function BookmarkImportSubTab() {
                                             <td className="px-3 py-2 hidden lg:table-cell">
                                                 <div className="flex flex-wrap gap-1">
                                                     {bm.tags.slice(0, 3).map((tag, ti) => (
-                                                        <span key={ti} className="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 border border-accent/20 text-accent">
+                                                        <span key={ti} className="text-[10px] px-1.5 py-0.5 rounded bg-accent/15 border border-accent/20 text-accent">
                                                             {tag}
                                                         </span>
                                                     ))}
@@ -371,14 +371,14 @@ export function BookmarkImportSubTab() {
                             </table>
                         </div>
                         {totalCount > previewItems.length && (
-                            <div className="bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground text-center border-t border-border/30">
+                            <div className="bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground text-center border-t border-border/50">
                                 Showing {previewItems.length} of {totalCount.toLocaleString()} bookmarks
                             </div>
                         )}
                     </div>
 
                     {/* Import target */}
-                    <div className="flex items-center justify-between mt-4 pt-3 border-t border-border/30">
+                    <div className="flex items-center justify-between mt-4 pt-3 border-t border-border/50">
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <ChevronRight className="w-3.5 h-3.5" />
                             <span>Importing into</span>

@@ -33,7 +33,7 @@ function JobsTab() {
                             key={tab.id}
                             onClick={() => setActiveSubTab(tab.id)}
                             className={`flex min-h-8 items-center justify-center gap-2 px-4 py-1.5 text-sm font-medium rounded-xl transition-all duration-300 whitespace-nowrap ${activeSubTab === tab.id
-                                ? 'bg-accent/20 text-accent shadow-glass-inset ring-1 ring-accent/30'
+                                ? 'bg-accent/25 text-accent shadow-glass-inset ring-1 ring-accent/30'
                                 : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
                                 }`}
                         >
@@ -112,7 +112,7 @@ function IndexingJobsTab() {
                     <div key={job.title} className="glass-card p-4">
                         <div className="flex items-center justify-between gap-4">
                             <div className="flex items-start gap-3 min-w-0">
-                                <div className="w-8 h-8 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <div className="w-8 h-8 rounded-lg bg-accent/15 border border-accent/20 flex items-center justify-center flex-shrink-0 mt-0.5">
                                     <Icon className="w-4 h-4 text-accent" />
                                 </div>
                                 <div className="min-w-0">

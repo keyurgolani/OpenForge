@@ -47,11 +47,11 @@ export default function GistPreview({ knowledge, workspaceId, onClose }: GistPre
         >
             <div className="space-y-4">
                 {/* Code block */}
-                <div className="relative rounded-lg border border-border/40 bg-muted/20 overflow-hidden">
+                <div className="relative rounded-lg border border-border/60 bg-muted/20 overflow-hidden">
                     <CopyButton
                         content={content}
                         iconOnly
-                        className="absolute top-2 right-2 p-1.5 rounded-lg text-muted-foreground/50 hover:text-foreground hover:bg-muted/50 transition-colors z-10"
+                        className="absolute top-2 right-2 p-1.5 rounded-lg text-muted-foreground/70 hover:text-foreground hover:bg-muted/50 transition-colors z-10"
                     />
                     <pre className="overflow-x-auto p-4 pr-10 text-xs leading-relaxed">
                         <code className="font-mono text-foreground/90 whitespace-pre">

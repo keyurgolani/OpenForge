@@ -97,7 +97,7 @@ export default function EvidencePacketPanel({
                         {readResult.selection_reason_codes.length > 0 && (
                             <div className="flex flex-wrap gap-1.5">
                                 {readResult.selection_reason_codes.map(reason => (
-                                    <span key={reason} className="rounded-full bg-accent/10 text-accent px-2 py-0.5 text-[10px] font-medium">
+                                    <span key={reason} className="rounded-full bg-accent/15 text-accent px-2 py-0.5 text-[10px] font-medium">
                                         {formatReasonCode(reason)}
                                     </span>
                                 ))}
@@ -152,7 +152,7 @@ export default function EvidencePacketPanel({
                         </span>
                     </div>
                     {evidence.packet.items.map(item => (
-                        <div key={item.id} className="rounded-lg border border-border/40 bg-background/70 p-3 space-y-2">
+                        <div key={item.id} className="rounded-lg border border-border/60 bg-background/70 p-3 space-y-2">
                             <p className="text-xs font-medium text-foreground">{item.title}</p>
                             <div
                                 className="text-xs text-foreground/80 markdown-content"

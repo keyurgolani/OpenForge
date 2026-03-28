@@ -144,7 +144,7 @@ function WorkspaceCard({ workspace: ws, providers, onDeleted, onSaved }: {
                     }
                 }}
             >
-                <div className="w-9 h-9 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0">
+                <div className="w-9 h-9 rounded-lg bg-accent/15 border border-accent/20 flex items-center justify-center flex-shrink-0">
                     {getWorkspaceIcon(ws.icon)}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -202,7 +202,7 @@ function WorkspaceCard({ workspace: ws, providers, onDeleted, onSaved }: {
                                                     key={ic}
                                                     type="button"
                                                     onClick={() => { setIcon(ic); setShowIcons(false) }}
-                                                    className={`w-8 h-8 rounded-lg flex items-center justify-center hover:bg-muted transition-colors ${icon === ic ? 'bg-accent/20 ring-1 ring-accent' : ''}`}
+                                                    className={`w-8 h-8 rounded-lg flex items-center justify-center hover:bg-muted transition-colors ${icon === ic ? 'bg-accent/25 ring-1 ring-accent' : ''}`}
                                                 >
                                                     <IconComp className="w-4 h-4" />
                                                 </button>
@@ -223,7 +223,7 @@ function WorkspaceCard({ workspace: ws, providers, onDeleted, onSaved }: {
                         <textarea className="input text-sm resize-none" rows={2} value={description} onChange={e => setDescription(e.target.value)} />
                     </div>
 
-                    <div className="border-t border-border/40 pt-3 space-y-3">
+                    <div className="border-t border-border/60 pt-3 space-y-3">
                         <p className="text-xs font-medium text-muted-foreground">AI Models <span className="text-xs font-normal opacity-60">(override global defaults per category for this workspace)</span></p>
 
                         {chatModels.length === 0 && visionModels.length === 0 && (
@@ -415,7 +415,7 @@ function MergeWorkspacesSection({ workspaces, onMerged }: { workspaces: Workspac
             </button>
 
             {open && (
-                <div className="px-4 pb-4 space-y-3 border-t border-border/40 pt-3">
+                <div className="px-4 pb-4 space-y-3 border-t border-border/60 pt-3">
                     <p className="text-xs text-muted-foreground">
                         Move all knowledge, conversations, runs, outputs, and other entities from the source workspace into the target workspace.
                     </p>

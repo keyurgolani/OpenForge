@@ -21,7 +21,7 @@ const INSIGHT_SECTION_META: Record<InsightSectionKey, {
     title: 'Action Items',
     icon: CheckSquare,
     emptyLabel: 'No pending action items',
-    badgeClass: 'text-accent bg-accent/10 border border-accent/20',
+    badgeClass: 'text-accent bg-accent/15 border border-accent/20',
     dotClass: 'bg-accent/90',
   },
   timelines: {

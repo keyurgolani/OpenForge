@@ -57,8 +57,8 @@ export function ModeToggle() {
         
         {/* System mode gears */}
         <div className={`absolute inset-0 flex items-center justify-around px-2 transition-opacity duration-300 ${theme === 'system' ? 'opacity-100' : 'opacity-0'}`}>
-           <Settings className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 animate-[spin_4s_linear_infinite]" />
-           <Settings className="w-4 h-4 text-slate-300 dark:text-slate-600 animate-[spin_3s_linear_infinite_reverse]" />
+           <Settings className="w-3.5 h-3.5 text-muted-foreground dark:text-slate-500 animate-[spin_4s_linear_infinite]" />
+           <Settings className="w-4 h-4 text-muted-foreground/80 dark:text-foreground/70 animate-[spin_3s_linear_infinite_reverse]" />
         </div>
       </div>
 
@@ -73,7 +73,7 @@ export function ModeToggle() {
         }`}
       >
         {theme === 'system' ? (
-           <Settings className="h-3 w-3 text-slate-600 dark:text-slate-300" />
+           <Settings className="h-3 w-3 text-foreground/70 dark:text-muted-foreground/80" />
         ) : isDark ? (
            <Moon className="h-3 w-3 text-indigo-600" />
         ) : (

@@ -314,7 +314,7 @@ function ProviderCard({ provider, expanded, onToggle, onDelete }: {
                     </div>
 
                     {/* Test connection */}
-                    <div className="space-y-2 pt-2 border-t border-border/30">
+                    <div className="space-y-2 pt-2 border-t border-border/50">
                         <button className="btn-ghost text-xs border border-border w-full justify-center py-2" onClick={handleTest} disabled={testing}>
                             {testing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe2 className="w-3.5 h-3.5" />}
                             {testing ? 'Testing…' : 'Test Connection'}

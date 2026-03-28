@@ -17,7 +17,7 @@ function StepIcon({ stepType }: { stepType: string }) {
   const cls = 'w-3.5 h-3.5'
   switch (stepType) {
     case 'thinking':
-      return <Brain className={`${cls} text-zinc-400`} />
+      return <Brain className={`${cls} text-muted-foreground`} />
     case 'hitl':
       return <ShieldAlert className={`${cls} text-amber-400`} />
     case 'delegated':

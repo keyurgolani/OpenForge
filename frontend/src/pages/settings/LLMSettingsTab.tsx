@@ -40,7 +40,7 @@ function LLMSettings() {
                             <button
                                 onClick={() => setSubTab(id)}
                                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${subTab === id
-                                    ? 'bg-accent/20 text-accent ring-1 ring-accent/30'
+                                    ? 'bg-accent/25 text-accent ring-1 ring-accent/30'
                                     : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
                                 }`}
                             >

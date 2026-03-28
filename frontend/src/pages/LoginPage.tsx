@@ -42,7 +42,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
         <div className="fixed inset-0 flex items-center justify-center bg-background">
             {/* Background glow */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-accent/10 rounded-full blur-3xl" />
+                <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-accent/15 rounded-full blur-3xl" />
             </div>
 
             <div
@@ -86,7 +86,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
                     <button
                         type="submit"
                         disabled={loading || !password.trim()}
-                        className="h-11 rounded-xl bg-accent/20 hover:bg-accent/30 border border-accent/30 text-accent font-medium text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        className="h-11 rounded-xl bg-accent/25 hover:bg-accent/30 border border-accent/30 text-accent font-medium text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                         {loading ? (
                             <>

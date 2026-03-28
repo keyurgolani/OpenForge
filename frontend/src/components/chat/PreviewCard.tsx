@@ -69,7 +69,7 @@ export function PreviewCard({
         </div>
         {hasContent ? (
           <div
-            className="prose prose-invert max-w-none text-xs text-muted-foreground leading-relaxed line-clamp-3 [&_*]:text-xs [&_p]:m-0 [&_h1]:text-xs [&_h1]:font-semibold [&_h1]:m-0 [&_h2]:text-xs [&_h2]:font-semibold [&_h2]:m-0 [&_h3]:text-xs [&_h3]:m-0 [&_ul]:m-0 [&_ol]:m-0 [&_li]:m-0 [&_pre]:m-0 [&_pre]:bg-muted/50 [&_pre]:rounded [&_pre]:p-1 [&_code]:text-[10px]"
+            className="prose dark:prose-invert max-w-none text-xs text-muted-foreground leading-relaxed line-clamp-3 [&_*]:text-xs [&_p]:m-0 [&_h1]:text-xs [&_h1]:font-semibold [&_h1]:m-0 [&_h2]:text-xs [&_h2]:font-semibold [&_h2]:m-0 [&_h3]:text-xs [&_h3]:m-0 [&_ul]:m-0 [&_ol]:m-0 [&_li]:m-0 [&_pre]:m-0 [&_pre]:bg-muted/50 [&_pre]:rounded [&_pre]:p-1 [&_code]:text-[10px]"
             dangerouslySetInnerHTML={{ __html: renderedHtml }}
           />
         ) : (
@@ -87,7 +87,7 @@ export function PreviewCard({
           }}
           trigger={
             <button
-              className="p-1 rounded hover:bg-accent/10 text-muted-foreground hover:text-foreground transition-colors"
+              className="p-1 rounded hover:bg-accent/15 text-muted-foreground hover:text-foreground transition-colors"
               aria-label={`Save ${filename} to workspace`}
             >
               <Save className="w-3.5 h-3.5" />

@@ -175,7 +175,7 @@ export default function DeploymentDetailPage() {
               <Link
                 key={run.id}
                 to={deploymentRunRoute(deployment.id, run.id)}
-                className="flex items-center justify-between rounded-lg border border-border/40 p-3 hover:bg-card/60 transition"
+                className="flex items-center justify-between rounded-lg border border-border/60 p-3 hover:bg-card/60 transition"
               >
                 <div className="flex items-center gap-3">
                   <StatusBadge status={run.status} />

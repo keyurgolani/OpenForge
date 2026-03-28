@@ -340,7 +340,7 @@ export function QuickKnowledgePanel({ open, defaultType = 'note', onClose }: Pro
                 </div>
 
                 {/* Footer */}
-                <div className="flex items-center justify-between px-4 py-2.5 border-t border-border/40 bg-muted/10">
+                <div className="flex items-center justify-between px-4 py-2.5 border-t border-border/60 bg-muted/10">
                     <span className="text-[10px] text-muted-foreground opacity-60">
                         {getModSymbol()}+↵ save · Esc close · Click type to switch
                     </span>

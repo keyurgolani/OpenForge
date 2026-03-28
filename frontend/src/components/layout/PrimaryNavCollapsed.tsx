@@ -14,6 +14,7 @@ import {
   Settings,
   Zap,
   Rocket,
+  Search,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ConnectionStatus } from './ConnectionStatus';
@@ -26,6 +27,7 @@ interface PrimaryNavCollapsedProps {
   routes: {
     workspace: string;
     knowledge: string;
+    search: string;
     chat: string;
     agents: string;
     automations: string;
@@ -60,7 +62,7 @@ export function PrimaryNavCollapsed({
             type="button"
             onClick={onExpand}
             title="Workspaces"
-            className="w-9 h-9 rounded-lg bg-accent/12 border border-accent/25 flex items-center justify-center mb-1 hover:bg-accent/20 transition-colors"
+            className="w-9 h-9 rounded-lg bg-accent/12 border border-accent/25 flex items-center justify-center mb-1 hover:bg-accent/25 transition-colors"
           >
             <Home className="w-4 h-4 text-accent" />
           </button>
@@ -71,7 +73,7 @@ export function PrimaryNavCollapsed({
               type="button"
               onClick={onExpand}
               title="Open sidebar"
-              className="w-9 h-9 rounded-lg bg-accent/12 border border-accent/25 flex items-center justify-center mb-1 hover:bg-accent/20 transition-colors relative"
+              className="w-9 h-9 rounded-lg bg-accent/12 border border-accent/25 flex items-center justify-center mb-1 hover:bg-accent/25 transition-colors relative"
             >
               {workspaceIcon || <Home className="w-4 h-4 text-accent" />}
               <ConnectionStatus
@@ -93,6 +95,12 @@ export function PrimaryNavCollapsed({
                 title="Knowledge"
                 isActive={activePath === routes.knowledge}
                 icon={<Folder className="w-4 h-4" />}
+              />
+              <NavIcon
+                to={routes.search}
+                title="Search"
+                isActive={activePath.includes('/search')}
+                icon={<Search className="w-4 h-4" />}
               />
               <NavIcon
                 to={routes.chat}

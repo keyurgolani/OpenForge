@@ -172,22 +172,22 @@ function MCPServerCard({ server, onUpdated, onDeleted }: {
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${RISK_BADGE[server.default_risk_level] ?? RISK_BADGE.high}`}>
                             {server.default_risk_level}
                         </span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-border/40 text-muted-foreground uppercase tracking-wide">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-border/60 text-muted-foreground uppercase tracking-wide">
                             {server.transport}
                         </span>
                         {server.tool_count > 0 && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/10 border border-accent/20 text-accent">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/15 border border-accent/20 text-accent">
                                 {server.tool_count} tool{server.tool_count !== 1 ? 's' : ''}
                             </span>
                         )}
                         {!server.is_enabled && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/40 border border-border/40 text-muted-foreground">disabled</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/40 border border-border/60 text-muted-foreground">disabled</span>
                         )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5 font-mono truncate">{server.url}</p>
                     {server.description && <p className="text-xs text-muted-foreground/70 mt-0.5 truncate">{server.description}</p>}
                     {server.last_discovered_at && (
-                        <p className="text-[10px] text-muted-foreground/50 mt-1">
+                        <p className="text-[10px] text-muted-foreground/70 mt-1">
                             Last discovered {new Date(server.last_discovered_at).toLocaleString()}
                         </p>
                     )}
@@ -232,7 +232,7 @@ function MCPServerCard({ server, onUpdated, onDeleted }: {
 
             {/* Edit form */}
             {editing && (
-                <div className="px-4 pb-4 border-t border-border/30 pt-4">
+                <div className="px-4 pb-4 border-t border-border/50 pt-4">
                     <MCPServerForm
                         initial={{
                             name: server.name, url: server.url,
@@ -250,7 +250,7 @@ function MCPServerCard({ server, onUpdated, onDeleted }: {
 
             {/* Tool list */}
             {expanded && !editing && server.discovered_tools.length > 0 && (
-                <div className="border-t border-border/30">
+                <div className="border-t border-border/50">
                     <div className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/60">
                         Discovered Tools
                     </div>
@@ -265,7 +265,7 @@ function MCPServerCard({ server, onUpdated, onDeleted }: {
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
                                     <select
-                                        className="text-[10px] bg-muted/30 border border-border/40 rounded px-1.5 py-0.5 capitalize cursor-pointer"
+                                        className="text-[10px] bg-muted/30 border border-border/60 rounded px-1.5 py-0.5 capitalize cursor-pointer"
                                         defaultValue={server.default_risk_level}
                                         disabled={overrideSaving === tool.name}
                                         onChange={e => handleRiskChange(tool.name, e.target.value)}

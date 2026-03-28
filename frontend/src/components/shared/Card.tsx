@@ -105,7 +105,7 @@ interface CardFooterProps {
 
 export function CardFooter({ children, className }: CardFooterProps) {
   return (
-    <div className={cn('mt-4 pt-4 border-t border-border/40', className)}>
+    <div className={cn('mt-4 pt-4 border-t border-border/60', className)}>
       {children}
     </div>
   );

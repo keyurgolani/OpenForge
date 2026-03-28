@@ -54,7 +54,7 @@ export function Breadcrumbs({
             <Home className="w-4 h-4" />
           </Link>
           {items.length > 0 && (
-            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />
+            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/70" />
           )}
         </>
       )}
@@ -88,7 +88,7 @@ export function Breadcrumbs({
               </span>
             )}
             {!isLast && (
-              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />
+              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/70" />
             )}
           </span>
         );

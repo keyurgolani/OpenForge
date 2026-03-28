@@ -671,13 +671,13 @@ function PromptVariablesSidebar({
   const [expandedFnCat, setExpandedFnCat] = useState<string | null>(null)
 
   return (
-    <div className="flex-1 overflow-y-auto rounded-xl border border-border/40 bg-card/20 p-3 space-y-3">
+    <div className="flex-1 overflow-y-auto rounded-xl border border-border/60 bg-card/20 p-3 space-y-3">
       {/* Title */}
-      <div className="border-b border-border/30 pb-2">
+      <div className="border-b border-border/50 pb-2">
         <p className="text-[11px] font-semibold text-foreground/80 tracking-tight">
           Template Reference
         </p>
-        <p className="text-[9px] text-muted-foreground/40 mt-0.5">
+        <p className="text-[9px] text-muted-foreground/60 mt-0.5">
           Variables, functions &amp; syntax for the template engine
         </p>
       </div>
@@ -694,7 +694,7 @@ function PromptVariablesSidebar({
                 <code className="rounded bg-accent/8 px-1 py-0.5 text-[10px] text-accent font-mono">
                   {`{{${v.name}}}`}
                 </code>
-                <span className="text-muted-foreground/50 text-[10px]">{v.type}</span>
+                <span className="text-muted-foreground/70 text-[10px]">{v.type}</span>
               </div>
             ))}
           </div>
@@ -704,7 +704,7 @@ function PromptVariablesSidebar({
       {/* System Variables by category */}
       {categories.size > 0 && (
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50 mb-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-2">
             System Variables
           </p>
           <div className="space-y-3">
@@ -719,13 +719,13 @@ function PromptVariablesSidebar({
                       <code className="rounded bg-accent/8 px-1 py-0.5 text-[10px] text-accent font-mono w-fit">
                         {`{{${v.name}}}`}
                       </code>
-                      <span className="text-muted-foreground/50 text-[10px] pl-1">{v.description}</span>
+                      <span className="text-muted-foreground/70 text-[10px] pl-1">{v.description}</span>
                       {v.children && v.children.length > 0 && (
-                        <div className="ml-3 mt-0.5 space-y-0.5 border-l border-border/30 pl-2">
+                        <div className="ml-3 mt-0.5 space-y-0.5 border-l border-border/50 pl-2">
                           {v.children.map((c) => (
                             <div key={c.name} className="flex items-baseline gap-1 text-[10px]">
                               <code className="text-accent/60 font-mono">.{c.name}</code>
-                              <span className="text-muted-foreground/40">{c.description}</span>
+                              <span className="text-muted-foreground/60">{c.description}</span>
                             </div>
                           ))}
                         </div>
@@ -751,7 +751,7 @@ function PromptVariablesSidebar({
                 <code className="rounded bg-emerald-500/8 px-1 py-0.5 text-[10px] text-emerald-400 font-mono w-fit">
                   {`{{output.${o.key}}}`}
                 </code>
-                <span className="text-muted-foreground/50 text-[10px] pl-1">
+                <span className="text-muted-foreground/70 text-[10px] pl-1">
                   {o.label || o.key} ({o.type})
                 </span>
               </div>
@@ -763,7 +763,7 @@ function PromptVariablesSidebar({
       {/* Functions Reference */}
       {functionCategories.size > 0 && (
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50 mb-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-1">
             Built-in Functions
           </p>
           <div className="space-y-0.5">
@@ -778,7 +778,7 @@ function PromptVariablesSidebar({
                   <span className="ml-auto opacity-50">{fns.length}</span>
                 </button>
                 {expandedFnCat === cat && (
-                  <div className="ml-3 space-y-0.5 border-l border-border/30 pl-2">
+                  <div className="ml-3 space-y-0.5 border-l border-border/50 pl-2">
                     {fns.map((fn) => (
                       <div key={fn.name} className="text-[10px]">
                         <code className="text-accent/70 font-mono">{fn.signature}</code>
@@ -795,7 +795,7 @@ function PromptVariablesSidebar({
       {/* Syntax Reference */}
       {referenceData?.syntax && referenceData.syntax.length > 0 && (
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50 mb-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-1">
             Syntax
           </p>
           <div className="space-y-1">
@@ -809,7 +809,7 @@ function PromptVariablesSidebar({
         </div>
       )}
 
-      <p className="text-[9px] text-muted-foreground/25 italic pt-1 border-t border-border/20">
+      <p className="text-[9px] text-muted-foreground/25 italic pt-1 border-t border-border/60">
         System variables are auto-populated at runtime.
       </p>
     </div>
@@ -847,7 +847,7 @@ function OutputRow({
   }
 
   return (
-    <div className="space-y-1.5 rounded-lg border border-border/40 bg-background/20 p-2">
+    <div className="space-y-1.5 rounded-lg border border-border/60 bg-background/20 p-2">
       <div className="flex flex-wrap items-center gap-2">
         <input
           className="input text-xs flex-1 min-w-[80px]"
@@ -962,7 +962,7 @@ function ParameterRow({
   }
 
   return (
-    <div className="space-y-1.5 rounded-lg border border-border/40 bg-background/20 p-2">
+    <div className="space-y-1.5 rounded-lg border border-border/60 bg-background/20 p-2">
       <div className="flex flex-wrap items-center gap-2">
         <input
           className="input text-xs flex-1 min-w-[100px]"

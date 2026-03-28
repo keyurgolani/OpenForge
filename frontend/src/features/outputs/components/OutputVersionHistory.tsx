@@ -98,7 +98,7 @@ export function OutputVersionHistory({
                 {diff.structured_payload_changed ? <span className="rounded-full border border-sky-500/25 bg-sky-500/10 px-2 py-1 text-xs text-sky-300">Payload changed</span> : null}
                 {diff.summary_changed ? <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-xs text-amber-300">Summary changed</span> : null}
               </div>
-              <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg border border-border/40 bg-card/50 p-3 text-xs text-foreground/85">
+              <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg border border-border/60 bg-card/50 p-3 text-xs text-foreground/85">
                 {diff.content_preview || 'No text diff preview available.'}
               </pre>
             </div>

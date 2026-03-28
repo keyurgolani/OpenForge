@@ -66,7 +66,7 @@ export default function OnboardingPage() {
             <div className="w-full max-w-2xl">
                 {/* Logo */}
                 <div className="flex items-center gap-3 mb-10 justify-center">
-                    <div className="w-12 h-12 rounded-2xl bg-accent/20 border border-accent/30 flex items-center justify-center shadow-lg shadow-accent/10">
+                    <div className="w-12 h-12 rounded-2xl bg-accent/25 border border-accent/30 flex items-center justify-center shadow-lg shadow-accent/10">
                         <Sparkles className="w-6 h-6 text-accent" />
                     </div>
                     <div>
@@ -88,7 +88,7 @@ export default function OnboardingPage() {
                                     type="button"
                                     disabled={!canClick}
                                     onClick={() => canClick && advance.mutate(s)}
-                                    className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all duration-500 ${isDone ? 'bg-accent/20 text-accent outline outline-1 outline-accent/30 cursor-pointer hover:scale-110' :
+                                    className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all duration-500 ${isDone ? 'bg-accent/25 text-accent outline outline-1 outline-accent/30 cursor-pointer hover:scale-110' :
                                         isActive ? 'bg-accent text-accent-foreground scale-110 outline outline-2 outline-accent/50 shadow-glass-sm' :
                                             'glass-sm text-muted-foreground border border-border/50'
                                     } ${!canClick ? 'cursor-default' : ''}`}>
@@ -134,7 +134,7 @@ function WelcomeStep({ onNext, loading }: { onNext: () => void; loading: boolean
     ]
     return (
         <div className="glass-card shadow-glass-lg p-8 text-center space-y-6 animate-fade-in border border-accent/20">
-            <div className="w-16 h-16 rounded-2xl bg-accent/20 border border-accent/30 flex items-center justify-center mx-auto shadow-lg shadow-accent/10">
+            <div className="w-16 h-16 rounded-2xl bg-accent/25 border border-accent/30 flex items-center justify-center mx-auto shadow-lg shadow-accent/10">
                 <Sparkles className="w-8 h-8 text-accent" />
             </div>
             <div>
@@ -503,7 +503,7 @@ function WorkspaceDraftCard({ ws, idx, iconNames, iconComponents, providers, onC
                                 <button
                                     key={ic}
                                     onClick={() => { onChange({ icon: ic }); setShowIcons(false) }}
-                                    className={`w-8 h-8 rounded-lg flex items-center justify-center hover:bg-muted transition-colors ${ws.icon === ic ? 'bg-accent/20 ring-1 ring-accent' : ''}`}
+                                    className={`w-8 h-8 rounded-lg flex items-center justify-center hover:bg-muted transition-colors ${ws.icon === ic ? 'bg-accent/25 ring-1 ring-accent' : ''}`}
                                 >
                                     {iconComponents[ic]}
                                 </button>

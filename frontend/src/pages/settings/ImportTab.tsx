@@ -35,14 +35,14 @@ export default function ImportTab() {
                             key={tab.id}
                             onClick={() => setActiveSubTab(tab.id)}
                             className={`flex min-h-8 items-center justify-center gap-2 px-4 py-1.5 text-sm font-medium rounded-xl transition-all duration-300 whitespace-nowrap ${activeSubTab === tab.id
-                                ? 'bg-accent/20 text-accent shadow-glass-inset ring-1 ring-accent/30'
+                                ? 'bg-accent/25 text-accent shadow-glass-inset ring-1 ring-accent/30'
                                 : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
                             }`}
                         >
                             <Icon className="w-4 h-4" />
                             {tab.label}
                             {tab.comingSoon && (
-                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-muted/40 text-muted-foreground border border-border/40 uppercase tracking-wide font-medium">
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-muted/40 text-muted-foreground border border-border/60 uppercase tracking-wide font-medium">
                                     Soon
                                 </span>
                             )}
@@ -76,8 +76,8 @@ function ComingSoonCard({ title, description, icon: Icon }: {
                 <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
             </div>
 
-            <div className="glass-card px-6 py-10 rounded-xl border-border/30 text-center">
-                <div className="w-12 h-12 rounded-2xl bg-muted/30 border border-border/30 flex items-center justify-center text-muted-foreground mx-auto mb-4">
+            <div className="glass-card px-6 py-10 rounded-xl border-border/50 text-center">
+                <div className="w-12 h-12 rounded-2xl bg-muted/30 border border-border/50 flex items-center justify-center text-muted-foreground mx-auto mb-4">
                     <Icon className="w-6 h-6" />
                 </div>
                 <p className="text-sm font-medium text-muted-foreground mb-1">Coming Soon</p>
