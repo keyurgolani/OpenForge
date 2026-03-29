@@ -70,7 +70,7 @@ class GlobalMessageResponse(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _serialize_conversation(c: Conversation) -> dict:
+def _serialize_conversation(c: Conversation, last_message_preview: str | None = None, last_user_message: str | None = None) -> dict:
     agent_name = None
     if c.agent_id:
         try:
@@ -89,6 +89,8 @@ def _serialize_conversation(c: Conversation) -> dict:
         "subagent_agent_id": c.subagent_agent_id,
         "message_count": c.message_count,
         "last_message_at": str(c.last_message_at) if c.last_message_at else None,
+        "last_message_preview": last_message_preview,
+        "last_user_message": last_user_message,
         "created_at": str(c.created_at),
         "updated_at": str(c.updated_at),
     }
@@ -338,7 +340,40 @@ async def get_global_conversation(
 ):
     """Get a global conversation with optional paginated messages."""
     conversation = await _get_global_conversation(db, conversation_id)
-    result = _serialize_conversation(conversation)
+
+    # Fetch last assistant message preview and last user message
+    from sqlalchemy import func as _func
+    preview_result = await db.execute(
+        select(_func.left(Message.content, 200))
+        .where(
+            Message.conversation_id == conversation_id,
+            Message.role == "assistant",
+            Message.content.isnot(None),
+            Message.content != "",
+        )
+        .order_by(Message.created_at.desc())
+        .limit(1)
+    )
+    last_preview = preview_result.scalar_one_or_none()
+
+    user_msg_result = await db.execute(
+        select(_func.left(Message.content, 200))
+        .where(
+            Message.conversation_id == conversation_id,
+            Message.role == "user",
+            Message.content.isnot(None),
+            Message.content != "",
+        )
+        .order_by(Message.created_at.desc())
+        .limit(1)
+    )
+    last_user_msg = user_msg_result.scalar_one_or_none()
+
+    result = _serialize_conversation(
+        conversation,
+        last_message_preview=last_preview,
+        last_user_message=last_user_msg,
+    )
 
     if include_messages:
         query = select(Message).options(selectinload(Message.attachments)).where(Message.conversation_id == conversation_id)

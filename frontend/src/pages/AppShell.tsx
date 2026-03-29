@@ -3,7 +3,7 @@ import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, PanelLeft, Plus, WifiOff } from 'lucide-react'
 
-import { listConversations, listKnowledge, listRuns, listWorkspaces, updateConversation, deleteConversation, permanentlyDeleteConversation, togglePin, deleteKnowledge, toggleArchive } from '@/lib/api'
+import { listConversations, listKnowledge, listRuns, listWorkspaces, updateConversation, deleteConversation, permanentlyDeleteConversation, togglePin, deleteKnowledge, toggleArchive, getGlobalConversation } from '@/lib/api'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import { useUIStore } from '@/stores/uiStore'
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
@@ -24,9 +24,12 @@ import { getWorkspaceIcon, type WorkspaceInfo } from '@/components/layout/Worksp
 type SidebarConversation = {
   id: string
   title: string | null
+  agent_name?: string | null
   message_count?: number
   updated_at?: string
   last_message_at?: string | null
+  last_message_preview?: string | null
+  last_user_message?: string | null
 }
 
 type KnowledgeItem = WorkspaceInsightSource & {
@@ -54,7 +57,7 @@ export default function AppShell() {
   const navigate = useNavigate()
   const location = useLocation()
   const queryClient = useQueryClient()
-  const { setCommandPaletteOpen, headerActions } = useUIStore()
+  const { setCommandPaletteOpen, headerActions, chatHeaderOverride, setChatHeaderOverride } = useUIStore()
   const { isConnected, on } = useWorkspaceWebSocket(workspaceId, 'system')
 
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -201,20 +204,52 @@ export default function AppShell() {
     queryClient.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
   }, [queryClient, workspaceId])
 
-  // Derive active chat conversation from URL for title display
-  const activeChatConversation = useMemo(() => {
+  // Derive active chat conversation ID from URL
+  const activeChatId = useMemo(() => {
     const chatMatch = location.pathname.match(/\/chat\/([^/]+)/)
-    if (!chatMatch) return null
-    const cid = chatMatch[1]
-    return conversations.find(c => c.id === cid) ?? null
-  }, [location.pathname, conversations])
+    const id = chatMatch ? chatMatch[1] : null
+    // Clear optimistic override when navigating away from chat
+    if (!id) setChatHeaderOverride(null)
+    return id
+  }, [location.pathname, setChatHeaderOverride])
+
+  // Fetch conversation details for the active chat (works for both workspace and global chats)
+  // WebSocket events (agent_done, conversation_updated) invalidate this query for live updates
+  const { data: activeChatData } = useQuery({
+    queryKey: ['conversation-header', activeChatId],
+    queryFn: () => getGlobalConversation(activeChatId!, false),
+    enabled: !!activeChatId,
+    staleTime: 30_000,
+  })
+
+  // Try sidebar conversations first (workspace), fall back to dedicated query (global)
+  const activeChatConversation = useMemo(() => {
+    if (!activeChatId) return null
+    const fromSidebar = conversations.find(c => c.id === activeChatId)
+    if (fromSidebar) return fromSidebar
+    if (activeChatData) return {
+      id: activeChatData.id,
+      title: activeChatData.title,
+      agent_name: activeChatData.agent_name,
+      message_count: activeChatData.message_count,
+      last_message_preview: activeChatData.last_message_preview,
+      last_user_message: activeChatData.last_user_message,
+    } as SidebarConversation
+    return null
+  }, [activeChatId, conversations, activeChatData])
 
   const currentSectionMeta = useMemo<SectionMeta>(() => {
     if (location.pathname.includes('/chat')) {
       if (activeChatConversation) {
+        // Priority: generated title (always wins) > optimistic override > last user query > agent name > "New Chat"
+        const chatTitle = activeChatConversation.title
+          || chatHeaderOverride
+          || activeChatConversation.last_user_message
+          || activeChatConversation.agent_name
+          || 'New Chat'
         return {
-          title: activeChatConversation.title || 'Untitled Chat',
-          description: '',
+          title: `Chat: ${chatTitle}`,
+          description: activeChatConversation.last_message_preview || '',
         }
       }
       return {
@@ -373,9 +408,14 @@ export default function AppShell() {
 
           <div className="min-w-0 max-w-[min(56vw,720px)] flex flex-col leading-tight">
             <p className="truncate text-sm font-semibold">{currentSectionMeta.title}</p>
-            <p className="hidden truncate text-xs text-muted-foreground/90 sm:block">
-              {currentSectionMeta.description}
-            </p>
+            {currentSectionMeta.description && (
+              <p className="hidden truncate text-xs text-muted-foreground/90 sm:block">
+                {currentSectionMeta.description
+                  .replace(/[#*_~`|>\[\](){}!]/g, '')
+                  .replace(/\n+/g, ' ')
+                  .trim()}
+              </p>
+            )}
           </div>
 
           <div className="flex-1" />

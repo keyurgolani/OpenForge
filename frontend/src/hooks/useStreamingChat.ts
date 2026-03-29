@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useChatWebSocket } from './useChatWebSocket'
 import { useQueryClient } from '@tanstack/react-query'
 import { getConversationStreamState, getGlobalConversationStreamState } from '@/lib/api'
+import { useUIStore } from '@/stores/uiStore'
 
 interface AttachmentProcessed {
     id: string
@@ -549,6 +550,8 @@ export function useStreamingChat(conversationId: string | null, workspaceId?: st
                 resetStreamState(!!m.interrupted)
                 queryClient.invalidateQueries({ queryKey: [...conversationQueryKey, conversationId] })
                 queryClient.invalidateQueries({ queryKey: conversationsQueryKey })
+                // Refresh app shell header preview
+                queryClient.invalidateQueries({ queryKey: ['conversation-header', conversationId] })
             }),
             on('agent_error', (msg) => {
                 const m = msg as { conversation_id?: string; detail?: string }
@@ -563,6 +566,9 @@ export function useStreamingChat(conversationId: string | null, workspaceId?: st
                 const m = msg as { conversation_id?: string; fields?: string[] }
                 if (!m.conversation_id) return
                 queryClient.invalidateQueries({ queryKey: conversationsQueryKey })
+                // Refresh app shell header title/preview and clear optimistic override
+                queryClient.invalidateQueries({ queryKey: ['conversation-header', m.conversation_id] })
+                useUIStore.getState().setChatHeaderOverride(null)
                 if (conversationId && m.conversation_id === conversationId) {
                     queryClient.invalidateQueries({ queryKey: [...conversationQueryKey, conversationId] })
                 }
@@ -754,6 +760,10 @@ export function useStreamingChat(conversationId: string | null, workspaceId?: st
         if (!sent) {
             setIsStreaming(false)
             setLastError('Failed to send message. Reconnecting to chat server...')
+        } else {
+            // Set optimistic title immediately so the app shell header updates
+            const { setChatHeaderOverride } = useUIStore.getState()
+            setChatHeaderOverride(content.trim())
         }
         return sent
     }, [conversationId, send, isConnected])

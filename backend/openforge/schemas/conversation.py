@@ -51,6 +51,7 @@ class ConversationResponse(BaseModel):
     message_count: int = 0
     last_message_at: Optional[datetime] = None
     last_message_preview: Optional[str] = None
+    last_user_message: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

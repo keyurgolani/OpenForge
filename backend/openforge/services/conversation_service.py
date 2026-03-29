@@ -101,7 +101,7 @@ def _msg_to_response(m: Message) -> MessageResponse:
     )
 
 
-def _conv_to_response(conv: Conversation, last_preview: str | None = None) -> ConversationResponse:
+def _conv_to_response(conv: Conversation, last_preview: str | None = None, last_user_msg: str | None = None) -> ConversationResponse:
     agent_name = None
     if conv.agent_id:
         try:
@@ -123,6 +123,7 @@ def _conv_to_response(conv: Conversation, last_preview: str | None = None) -> Co
         message_count=conv.message_count,
         last_message_at=conv.last_message_at,
         last_message_preview=last_preview,
+        last_user_message=last_user_msg,
         created_at=conv.created_at,
         updated_at=conv.updated_at,
     )
@@ -224,7 +225,52 @@ class ConversationService:
         query = query.order_by(Conversation.last_message_at.desc().nullslast(), Conversation.created_at.desc())
         result = await db.execute(query)
         convs = result.scalars().all()
-        return [_conv_to_response(c) for c in convs]
+
+        # Fetch last assistant message preview and last user message for each conversation
+        previews: dict[UUID, str] = {}
+        user_msgs: dict[UUID, str] = {}
+        if convs:
+            from sqlalchemy import func as _func
+            conv_ids = [c.id for c in convs]
+            # Get the latest assistant message content per conversation (truncated)
+            latest_msg_subq = (
+                select(
+                    Message.conversation_id,
+                    _func.left(Message.content, 200).label("preview"),
+                )
+                .where(
+                    Message.conversation_id.in_(conv_ids),
+                    Message.role == "assistant",
+                    Message.content.isnot(None),
+                    Message.content != "",
+                )
+                .distinct(Message.conversation_id)
+                .order_by(Message.conversation_id, Message.created_at.desc())
+            )
+            preview_result = await db.execute(latest_msg_subq)
+            for row in preview_result:
+                previews[row.conversation_id] = row.preview or ""
+
+            # Get the latest user message per conversation (for title fallback)
+            user_msg_subq = (
+                select(
+                    Message.conversation_id,
+                    _func.left(Message.content, 200).label("user_msg"),
+                )
+                .where(
+                    Message.conversation_id.in_(conv_ids),
+                    Message.role == "user",
+                    Message.content.isnot(None),
+                    Message.content != "",
+                )
+                .distinct(Message.conversation_id)
+                .order_by(Message.conversation_id, Message.created_at.desc())
+            )
+            user_msg_result = await db.execute(user_msg_subq)
+            for row in user_msg_result:
+                user_msgs[row.conversation_id] = row.user_msg or ""
+
+        return [_conv_to_response(c, last_preview=previews.get(c.id), last_user_msg=user_msgs.get(c.id)) for c in convs]
 
     async def get_conversation_with_messages(
         self,
@@ -538,13 +584,16 @@ class ConversationService:
         await db.commit()
         await db.refresh(msg)
 
-        # Schedule title refresh only after commit so the latest assistant turn
-        # is visible to the background title-generation session.
+        # Run title generation in a separate thread with its own event loop and
+        # DB connection to avoid asyncpg "another operation is in progress" errors.
+        # We use threading instead of asyncio.create_task because the Celery event
+        # loop may stop before the background task completes.
         if should_auto_title:
-            import asyncio
-            asyncio.create_task(
-                self._auto_title(auto_title_workspace_id, conversation_id)
-            )
+            import threading
+            def _run_title():
+                import asyncio as _aio
+                _aio.run(self._auto_title(auto_title_workspace_id, conversation_id))
+            threading.Thread(target=_run_title, daemon=True).start()
         return msg
 
     async def get_recent_messages(
@@ -678,6 +727,17 @@ class ConversationService:
                     title_prompt = await resolve_prompt_text(
                         db,
                         "conversation_title",
+                        default_text=(
+                            "Generate a short, descriptive title (max 8 words) for this conversation. "
+                            "The title should capture the main topic or intent.\n\n"
+                            "Current title: {current_title}\n"
+                            "Topic shifted: {topic_shift_signal}\n"
+                            "User's intent: {first_user_intent}\n"
+                            "Summary: {running_summary}\n"
+                            "Latest user message: {latest_user_turn}\n"
+                            "Latest assistant response: {latest_assistant_turn}\n\n"
+                            "Respond with ONLY the title, no quotes, no explanation."
+                        ),
                         current_title=(conv.title or "").strip() or "(none)",
                         topic_shift_signal="yes" if topic_shift_detected else "no",
                         first_user_intent=(first_user_text or latest_user_context)[:600],
@@ -749,11 +809,20 @@ class ConversationService:
         return next_title
 
     async def _auto_title(self, workspace_id: UUID | None, conversation_id: UUID):
+        import asyncio
+        await asyncio.sleep(2)
         try:
-            from openforge.db.postgres import AsyncSessionLocal
+            # Create a completely fresh engine + session to avoid sharing
+            # asyncpg connections with the parent event loop/thread.
+            from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession as _AsyncSession
+            from openforge.common.config import get_settings
 
-            async with AsyncSessionLocal() as db:
-                await self.refresh_conversation_title(db, workspace_id, conversation_id)
+            engine = create_async_engine(get_settings().database_url, pool_size=1, max_overflow=0)
+            try:
+                async with _AsyncSession(engine, expire_on_commit=False) as db:
+                    await self.refresh_conversation_title(db, workspace_id, conversation_id)
+            finally:
+                await engine.dispose()
         except Exception as e:
             logger.warning(f"Auto-title generation failed: {e}")
 

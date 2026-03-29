@@ -20,6 +20,10 @@ interface UIState {
     /** Page-specific action buttons shown in the AppShell header */
     headerActions: ReactNode | null
     setHeaderActions: (actions: ReactNode | null) => void
+
+    /** Optimistic chat title override — set by chat page on send, cleared when server title arrives */
+    chatHeaderOverride: string | null
+    setChatHeaderOverride: (title: string | null) => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -40,4 +44,7 @@ export const useUIStore = create<UIState>((set) => ({
 
     headerActions: null,
     setHeaderActions: (actions) => set({ headerActions: actions }),
+
+    chatHeaderOverride: null,
+    setChatHeaderOverride: (title) => set({ chatHeaderOverride: title }),
 }))
