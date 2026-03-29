@@ -1,7 +1,7 @@
 """Celery application configuration for agent execution workers."""
 
 import logging
-from celery import Celery
+from celery import Celery, signals
 from openforge.common.config import get_settings
 
 logger = logging.getLogger("openforge.worker")
@@ -37,3 +37,38 @@ celery_app.conf.beat_schedule = {
 
 # Auto-discover tasks
 celery_app.autodiscover_tasks(["openforge.worker"])
+
+
+@signals.worker_ready.connect
+def _cleanup_stale_executions(**kwargs):
+    """Mark any executions stuck in 'running' as 'failed' on worker startup.
+
+    This handles the case where the worker was killed mid-inference,
+    leaving execution records in 'running' state that block new chats.
+    """
+    import asyncio
+
+    async def _cleanup():
+        try:
+            from openforge.db.postgres import AsyncSessionLocal
+            from sqlalchemy import text
+
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(text(
+                    "UPDATE agent_executions SET status='failed', "
+                    "error_message='Worker restarted during execution' "
+                    "WHERE status = 'running'"
+                ))
+                count = result.rowcount
+                if count:
+                    await db.commit()
+                    logger.info("Cleaned up %d stale 'running' execution(s) on worker startup", count)
+        except Exception as e:
+            logger.warning("Failed to clean up stale executions: %s", e)
+
+    try:
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(_cleanup())
+        loop.close()
+    except Exception as e:
+        logger.warning("Stale execution cleanup error: %s", e)
