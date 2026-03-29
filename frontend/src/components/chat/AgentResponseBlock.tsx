@@ -65,7 +65,7 @@ export function AgentResponseBlock({
         {/* Remaining timeline steps rendered inline in the same stack */}
         {timeline.map((item, i) => (
           <TimelineStep
-            key={item.type === 'thinking' ? item.id : item.call_id}
+            key={item.type === 'thinking' ? item.id : item.type === 'intermediate_response' ? item.id : item.call_id}
             item={item}
             isLast={i === timeline.length - 1}
             depth={0}

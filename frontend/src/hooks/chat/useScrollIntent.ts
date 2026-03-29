@@ -43,29 +43,43 @@ export function useScrollIntent() {
     return () => container.removeEventListener('scroll', onScroll)
   }, [])
 
-  // ResizeObserver — auto-scroll on content growth when stuck
+  // Auto-scroll on any content growth when stuck.
+  // Uses ResizeObserver on container (catches all child size changes via scrollHeight)
+  // plus MutationObserver for DOM additions (new messages, tool cards).
   useEffect(() => {
     const content = contentRef.current
     const container = containerRef.current
     if (!content || !container) return
 
-    const observer = new ResizeObserver(() => {
+    const forceBottom = () => {
       if (intentRef.current !== 'stuck') return
+      isRendering.current = true
+      container.scrollTop = container.scrollHeight - container.clientHeight
+      lastScrollTop.current = container.scrollTop
+      requestAnimationFrame(() => { isRendering.current = false })
+    }
 
-      requestAnimationFrame(() => {
-        isRendering.current = true
-        const { scrollHeight, clientHeight } = container
-        container.scrollTop = scrollHeight - clientHeight
-        lastScrollTop.current = container.scrollTop
-
-        requestAnimationFrame(() => {
-          isRendering.current = false
-        })
-      })
+    // ResizeObserver on the content div — fires when its total height changes
+    const resizeObs = new ResizeObserver(() => {
+      requestAnimationFrame(forceBottom)
     })
+    resizeObs.observe(content)
 
-    observer.observe(content)
-    return () => observer.disconnect()
+    // MutationObserver — fires on DOM changes (new nodes, expanded sections).
+    // Schedule multiple scroll nudges to catch CSS transitions (e.g. grid-template-rows
+    // animating from 0fr→1fr over 260ms on tool call card expand/collapse).
+    const mutObs = new MutationObserver(() => {
+      requestAnimationFrame(forceBottom)
+      // Follow-up nudges to catch mid-transition and post-transition heights
+      setTimeout(forceBottom, 150)
+      setTimeout(forceBottom, 350)
+    })
+    mutObs.observe(content, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] })
+
+    return () => {
+      resizeObs.disconnect()
+      mutObs.disconnect()
+    }
   }, [])
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
@@ -127,5 +141,17 @@ export function useScrollIntent() {
     }
   }, [])
 
-  return { intent, scrollToBottom, preserveReadingPosition, containerRef, contentRef }
+  // Nudge scroll — call during streaming to keep up with content growth.
+  // Only scrolls if intent is stuck, avoids full ResizeObserver dependency.
+  const nudgeScroll = useCallback(() => {
+    if (intentRef.current !== 'stuck') return
+    const container = containerRef.current
+    if (!container) return
+    isRendering.current = true
+    container.scrollTop = container.scrollHeight - container.clientHeight
+    lastScrollTop.current = container.scrollTop
+    requestAnimationFrame(() => { isRendering.current = false })
+  }, [])
+
+  return { intent, scrollToBottom, preserveReadingPosition, nudgeScroll, containerRef, contentRef }
 }

@@ -4,9 +4,11 @@ interface MessageThreadProps {
   children: ReactNode
   containerRef: React.RefObject<HTMLDivElement | null>
   contentRef: React.RefObject<HTMLDivElement | null>
+  /** Dynamic bottom padding in px to clear the absolutely-positioned composer */
+  bottomPadding?: number
 }
 
-export function MessageThread({ children, containerRef, contentRef }: MessageThreadProps) {
+export function MessageThread({ children, containerRef, contentRef, bottomPadding }: MessageThreadProps) {
   return (
     <div
       ref={containerRef}
@@ -15,7 +17,11 @@ export function MessageThread({ children, containerRef, contentRef }: MessageThr
       role="log"
       aria-live="polite"
     >
-      <div ref={contentRef} className="px-2 md:px-4 py-4 space-y-4 pb-24">
+      <div
+        ref={contentRef}
+        className="px-2 md:px-4 py-4 space-y-4"
+        style={{ paddingBottom: bottomPadding ? `${bottomPadding}px` : '6rem' }}
+      >
         {children}
       </div>
     </div>

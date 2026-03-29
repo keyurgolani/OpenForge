@@ -23,13 +23,23 @@ export function StreamedResponse({ text, isStreaming }: StreamedResponseProps) {
 
   const renderedHtml = useMemo(() => {
     if (!cleanText) return ''
-    return md.render(cleanText)
-  }, [cleanText])
+    const html = md.render(cleanText)
+    if (!isStreaming) return html
+    // Inject blinking cursor inline at the end of the last block element
+    // so the cursor appears right after the last character, not below the content.
+    const cursorSpan = '<span class="streaming-cursor-inline"></span>'
+    // Find the last closing block tag and insert cursor before it
+    const lastClose = html.lastIndexOf('</')
+    if (lastClose > 0) {
+      return html.slice(0, lastClose) + cursorSpan + html.slice(lastClose)
+    }
+    return html + cursorSpan
+  }, [cleanText, isStreaming])
 
   if (!text && !isStreaming) return null
 
   return (
-    <div className={`markdown-content text-foreground text-sm leading-relaxed px-4 py-3 ${isStreaming ? 'streaming-cursor' : ''}`}>
+    <div className="markdown-content text-foreground text-sm leading-relaxed px-4 py-3">
       <div
         className={PROSE_CLASSES}
         dangerouslySetInnerHTML={{ __html: renderedHtml }}

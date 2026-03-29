@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { extractSentences } from '@/lib/thought-extractor'
 import type { AgentEmitter } from '@/hooks/chat/useAgentStream'
 
-const THINKING_DRAIN_MS = 2000
-const FAST_DRAIN_MS = 1000
-const MIN_DISPLAY_MS = 1000
+const THINKING_DRAIN_MS = 1200
+const FAST_DRAIN_MS = 600
+const MIN_DISPLAY_MS = 800
 const MAX_QUEUE = 5
 
 export function useThoughtQueue(emitter: AgentEmitter, onDrainComplete?: () => void) {
@@ -59,6 +59,12 @@ export function useThoughtQueue(emitter: AgentEmitter, onDrainComplete?: () => v
         if (!drainTimerRef.current) {
           drainNext()
         }
+      } else if (remainder.length > 20 && !drainTimerRef.current) {
+        // No complete sentence yet, but enough text buffered — show it
+        // as a live "working thought" so the user sees streaming progress
+        const preview = remainder.length > 120 ? remainder.slice(0, 117) + '...' : remainder
+        setCurrentThought(preview)
+        setIsDraining(true)
       }
     }
 

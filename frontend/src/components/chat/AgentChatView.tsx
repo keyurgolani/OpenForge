@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from 'react'
+import { useCallback, useEffect, useRef, useMemo, useState } from 'react'
 import { AlertCircle } from 'lucide-react'
 import { useAgentStream } from '@/hooks/chat/useAgentStream'
 import { useAgentPhase } from '@/hooks/chat/useAgentPhase'
@@ -198,7 +198,40 @@ export function AgentChatView({
   const { phase, timeline, thinkingDuration, modelInfo, reset: resetPhase, handleThoughtsDrained } = useAgentPhase(emitter)
   const { displayText, isStreaming, reset: resetRenderer } = useStreamRenderer(emitter)
   const { currentThought, allThoughts } = useThoughtQueue(emitter, handleThoughtsDrained)
-  const { intent, scrollToBottom, containerRef, contentRef } = useScrollIntent()
+  const { intent, scrollToBottom, nudgeScroll, containerRef, contentRef } = useScrollIntent()
+  const composerObsRef = useRef<ResizeObserver | null>(null)
+  const composerElRef = useRef<HTMLDivElement | null>(null)
+  const [composerHeight, setComposerHeight] = useState(80) // sensible default
+
+  // Callback ref that attaches a ResizeObserver to the actual composer panel element
+  const composerRef = useCallback((node: HTMLDivElement | null) => {
+    // Clean up previous observer
+    if (composerObsRef.current) {
+      composerObsRef.current.disconnect()
+      composerObsRef.current = null
+    }
+    if (!node) return
+    // The Composer renders a .chat-composer-shell (position: absolute) as its root.
+    // We need to observe the actual panel inside it for the real height.
+    const panel = node.querySelector('.chat-composer-shell') ?? node
+    composerElRef.current = panel as HTMLDivElement
+    const obs = new ResizeObserver(() => {
+      const h = (panel as HTMLElement).offsetHeight
+      if (h > 0) setComposerHeight(h)
+    })
+    obs.observe(panel)
+    composerObsRef.current = obs
+  }, [])
+
+  // Keep scrolled to bottom as streaming tokens arrive and timeline grows
+  useEffect(() => {
+    if (isStreaming || phase === 'thinking' || phase === 'tool_calling') nudgeScroll()
+  }, [displayText, timeline.length, currentThought, isStreaming, phase, nudgeScroll])
+
+  // Force scroll to bottom when new messages appear (user sends follow-up)
+  useEffect(() => {
+    scrollToBottom('instant')
+  }, [messages.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Safety: if the messages array now contains the assistant response that was being streamed,
   // but the phase didn't transition to 'complete' (e.g. agent_done event was missed), force reset.
@@ -254,7 +287,7 @@ export function AgentChatView({
 
   return (
     <div className="flex flex-col flex-1 min-h-0 relative">
-      <MessageThread containerRef={containerRef} contentRef={contentRef}>
+      <MessageThread containerRef={containerRef} contentRef={contentRef} bottomPadding={Math.max(96, Math.ceil(composerHeight * 1.2))}>
         {visibleMessages.map((msg) => (
           msg.role === 'user' ? (
             <UserMessageCard
@@ -320,6 +353,7 @@ export function AgentChatView({
         />
       )}
 
+      <div ref={composerRef}>
       <Composer
         onSend={onSendMessage}
         onCancel={onCancelStream}
@@ -334,6 +368,7 @@ export function AgentChatView({
         onModelSelect={onModelSelect}
         defaultModelLabel={defaultModelLabel}
       />
+      </div>
     </div>
   )
 }

@@ -34,7 +34,13 @@ export interface ThinkingTimelineItem {
   sentences: string[]
 }
 
-export type TimelineItem = ToolCallTimelineItem | ThinkingTimelineItem
+export interface IntermediateResponseTimelineItem {
+  type: 'intermediate_response'
+  id: string
+  content: string
+}
+
+export type TimelineItem = ToolCallTimelineItem | ThinkingTimelineItem | IntermediateResponseTimelineItem
 
 export interface ModelInfo {
   providerName: string
@@ -196,7 +202,18 @@ export function useAgentPhase(emitter: AgentEmitter) {
       })
     }
 
-    const onIntermediateResponse = () => {
+    const onIntermediateResponse = (data: { content: string }) => {
+      // Add the intermediate response to timeline as a collapsible item
+      if (data.content) {
+        setTimeline(prev => [
+          ...prev,
+          {
+            type: 'intermediate_response' as const,
+            id: `ir-${Date.now()}`,
+            content: data.content,
+          },
+        ])
+      }
       // Reset thinking and token state for next iteration,
       // but KEEP the timeline — tool calls and thinking blocks persist across iterations
       thinkingStartRef.current = 0
