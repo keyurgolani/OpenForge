@@ -47,6 +47,7 @@ export interface ModelInfo {
   providerDisplayName: string
   model: string
   isOverride: boolean
+  systemPrompt?: string
 }
 
 /**
@@ -199,6 +200,7 @@ export function useAgentPhase(emitter: AgentEmitter) {
         providerDisplayName: data.provider_display_name ?? data.provider_name,
         model: data.model,
         isOverride: data.is_override,
+        systemPrompt: (data as any).system_prompt,
       })
     }
 
@@ -235,6 +237,7 @@ export function useAgentPhase(emitter: AgentEmitter) {
             providerDisplayName: (entry.provider_display_name as string) ?? (entry.provider_name as string) ?? '',
             model: (entry.model as string) ?? '',
             isOverride: (entry.is_override as boolean) ?? false,
+            systemPrompt: (entry.system_prompt as string) ?? undefined,
           })
           continue
         }

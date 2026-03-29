@@ -161,6 +161,10 @@ export default function AgentChatPage() {
     const [selectedModelKey, setSelectedModelKey] = useState('')
     const lastToastedErrorRef = useRef<string | null>(null)
 
+    // Agent system prompt — captured from the model_selection event (rendered/final version)
+    const [showSystemPrompt, setShowSystemPrompt] = useState(false)
+    const [renderedSystemPrompt, setRenderedSystemPrompt] = useState<string | null>(null)
+
     // File attachments
     const { attachments: managedAttachments, addFiles, removeAttachment: removeManaged, retryAttachment, clearAll, readyAttachmentIds, hasPending } = useAttachmentUpload()
     const [optimisticResponding, setOptimisticResponding] = useState(false)
@@ -260,6 +264,11 @@ export default function AgentChatPage() {
             if (!m.type) return
             // Only forward messages for the active conversation
             if (m.conversation_id && m.conversation_id !== activeCid) return
+            // Capture rendered system prompt from model_selection event
+            if (m.type === 'agent_model_selection' && m.data && typeof m.data === 'object') {
+                const sp = (m.data as Record<string, unknown>).system_prompt
+                if (typeof sp === 'string') setRenderedSystemPrompt(sp)
+            }
             agentViewHandleMessageRef.current?.(m as { type: string; data?: unknown; conversation_id?: string })
         })
         return unsub
@@ -269,6 +278,19 @@ export default function AgentChatPage() {
         () => conversationData?.messages ?? [],
         [conversationData],
     )
+
+    // Extract rendered system prompt from persisted timeline on conversation load
+    useEffect(() => {
+        if (renderedSystemPrompt) return // already have it from live event
+        const msgs = conversationData?.messages ?? []
+        for (let i = msgs.length - 1; i >= 0; i--) {
+            const msg = msgs[i]
+            if (msg.role === 'assistant' && msg.timeline) {
+                const ms = (msg.timeline as any[]).find((e: any) => e.type === 'model_selection' && e.system_prompt)
+                if (ms) { setRenderedSystemPrompt(ms.system_prompt); break }
+            }
+        }
+    }, [conversationData]) // eslint-disable-line react-hooks/exhaustive-deps
     const activeConversations = conversations as Conversation[]
     const delegatedConversations = delegatedConversationsData as Conversation[]
     const trashedConversations = trashedConversationsData as Conversation[]
@@ -355,6 +377,7 @@ export default function AgentChatPage() {
         () => (conversationsWithArchived as Conversation[]).find(conv => conv.id === activeCid) ?? null,
         [conversationsWithArchived, activeCid]
     )
+
     const mostRecentConversationId = useMemo(() => {
         const list = activeConversations
         if (list.length === 0) return null
@@ -997,14 +1020,42 @@ export default function AgentChatPage() {
                     </div>
                 ) : (
                     <div className="flex-1 min-h-0 flex flex-col relative overflow-hidden">
-                        {/* Agent name floating chip */}
+                        {/* Agent name floating chip — click to expand system prompt */}
                         {activeConversationRecord?.agent_name && (
-                            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 pointer-events-none flex-shrink-0">
-                                <div className="pointer-events-auto inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-card/80 backdrop-blur-sm border border-border/25 shadow-sm">
-                                    <Bot className="w-3.5 h-3.5 text-accent/70" />
-                                    <span className="text-xs font-medium text-foreground/70">{activeConversationRecord.agent_name}</span>
+                            <>
+                                {/* Click-outside overlay to close */}
+                                {showSystemPrompt && (
+                                    <div className="absolute inset-0 z-10" onClick={() => setShowSystemPrompt(false)} />
+                                )}
+                                <div className={`absolute top-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none flex-shrink-0 transition-all duration-300 ease-out ${showSystemPrompt ? 'w-[90%] max-w-2xl' : ''}`}>
+                                    <div
+                                        className={`pointer-events-auto cursor-pointer rounded-2xl backdrop-blur-md border shadow-sm transition-all duration-300 ease-out ${
+                                            showSystemPrompt
+                                                ? 'bg-card/95 border-border/40 shadow-lg rounded-2xl p-4'
+                                                : 'bg-card/80 border-border/25 rounded-full px-3 py-1 inline-flex items-center gap-1.5 hover:bg-card/95 hover:border-accent/30'
+                                        }`}
+                                        onClick={() => { if (!showSystemPrompt) setShowSystemPrompt(true) }}
+                                    >
+                                        {showSystemPrompt ? (
+                                            <div className="animate-fade-in">
+                                                <div className="flex items-center gap-1.5 mb-3">
+                                                    <Bot className="w-3.5 h-3.5 text-accent/70" />
+                                                    <span className="text-xs font-medium text-foreground/70">{activeConversationRecord.agent_name}</span>
+                                                    <span className="text-[10px] text-muted-foreground/50 ml-1">System Prompt</span>
+                                                </div>
+                                                <pre className="text-xs text-foreground/80 whitespace-pre-wrap font-mono leading-relaxed max-h-[50vh] overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+                                                    {renderedSystemPrompt || 'System prompt will appear after the agent responds.'}
+                                                </pre>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <Bot className="w-3.5 h-3.5 text-accent/70" />
+                                                <span className="text-xs font-medium text-foreground/70">{activeConversationRecord.agent_name}</span>
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
+                            </>
                         )}
                         {/* Connection / error status bar */}
                         {(!isConnected || lastError) && (

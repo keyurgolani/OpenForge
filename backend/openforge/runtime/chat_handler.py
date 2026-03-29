@@ -1198,6 +1198,7 @@ class ChatHandler:
                 "provider_display_name": provider_display_name,
                 "model": model,
                 "is_override": bool(provider_id or model_id or agent.provider_override_id or agent.model_override),
+                "system_prompt": system_prompt,
             }
 
             context_sources: list[dict[str, Any]] = []
