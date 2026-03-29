@@ -23,8 +23,6 @@ from openforge.utils.task_audit import (
     start_task_log,
 )
 from openforge.utils.title import normalize_knowledge_title
-from openforge.core.prompt_resolution import resolve_prompt_text
-
 router = APIRouter()
 
 # Separate router for non-workspace-scoped endpoints
@@ -248,15 +246,21 @@ async def summarize_knowledge(
     )
 
     try:
+        from openforge.db.models import Workspace
+        from openforge.utils.insights import get_workspace_categories
         provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
         tags_str = ", ".join([t.tag for t in knowledge_record.tags])
-        prompt = await resolve_prompt_text(
-            db,
-            "summarize_knowledge",
+        ws_vars = await _workspace_prompt_vars(db, workspace_id)
+        workspace = await db.get(Workspace, workspace_id)
+        categories = get_workspace_categories(workspace.intelligence_categories if workspace else None)
+        summary_cat = next((c for c in categories if c.get("type") == "summary"), None)
+        prompt = knowledge_service._build_summary_prompt(
+            workspace_name=ws_vars["workspace_name"],
+            workspace_description=ws_vars["workspace_description"],
             knowledge_title=normalize_knowledge_title(knowledge_record.title) or "Untitled",
             knowledge_type=knowledge_record.type,
             tags=tags_str,
-            **(await _workspace_prompt_vars(db, workspace_id)),
+            summary_category=summary_cat,
         )
         summary = await llm_gateway.chat(
             messages=_prepare_knowledge_messages(
@@ -318,14 +322,19 @@ async def extract_insights(
     )
 
     try:
+        from openforge.db.models import Workspace
+        from openforge.utils.insights import get_workspace_categories
         provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
         tags_str = ", ".join([t.tag for t in knowledge_record.tags])
-        prompt = await resolve_prompt_text(
-            db,
-            "extract_insights",
+        ws_vars = await _workspace_prompt_vars(db, workspace_id)
+        workspace = await db.get(Workspace, workspace_id)
+        categories = get_workspace_categories(workspace.intelligence_categories if workspace else None)
+        prompt = knowledge_service._build_extraction_prompt(
+            categories=categories,
+            workspace_name=ws_vars["workspace_name"],
+            workspace_description=ws_vars["workspace_description"],
             knowledge_title=normalize_knowledge_title(knowledge_record.title) or "Untitled",
             tags=tags_str,
-            **(await _workspace_prompt_vars(db, workspace_id)),
         )
 
         response = await llm_gateway.chat(
@@ -338,15 +347,14 @@ async def extract_insights(
         )
 
         try:
-            # Extract JSON from response
             json_match = re.search(r"\{[\s\S]*\}", response)
             if json_match:
                 parsed = json.loads(json_match.group())
             else:
                 parsed = {}
-            insights = normalize_insights_payload(parsed, knowledge_record.content or "")
+            insights = normalize_insights_payload(parsed, knowledge_record.content or "", categories)
         except Exception:
-            insights = normalize_insights_payload({}, knowledge_record.content or "")
+            insights = normalize_insights_payload({}, knowledge_record.content or "", categories)
 
         knowledge_record.insights = insights
         knowledge_record.embedding_status = "pending"
@@ -402,19 +410,23 @@ async def generate_title(
 
     try:
         provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
-        prompt = await resolve_prompt_text(
-            db,
-            "generate_title",
-            **(await _workspace_prompt_vars(db, workspace_id)),
+        ws_vars = await _workspace_prompt_vars(db, workspace_id)
+        system_prompt = (
+            "You are an expert title writer. Generate a concise, descriptive title "
+            "for the given content. Return ONLY the title text, nothing else."
         )
-        system_prompt = await resolve_prompt_text(db, "knowledge_title_system")
+        user_prompt = (
+            f"Generate a short, descriptive title for this content."
+            f"\nWorkspace: {ws_vars['workspace_name']}"
+            + (f" — {ws_vars['workspace_description']}" if ws_vars['workspace_description'] else "")
+        )
 
         title_response = await llm_gateway.chat(
             messages=_prepare_knowledge_messages(
                 system_instruction=system_prompt,
                 knowledge_record=knowledge_record,
                 content=(knowledge_record.content or "")[:2000],
-                conversation_messages=[{"role": "user", "content": prompt}],
+                conversation_messages=[{"role": "user", "content": user_prompt}],
             ),
             provider_name=provider_name, api_key=api_key, model=model, base_url=base_url, max_tokens=30,
         )
@@ -462,6 +474,21 @@ async def generate_intelligence(
         knowledge_id=knowledge_id,
         workspace_id=workspace_id,
         audit_task_type="generate_knowledge_intelligence",
+    )
+    return result
+
+
+@router.post("/{workspace_id}/knowledge/regenerate-intelligence")
+async def regenerate_all_intelligence(
+    workspace_id: UUID, db: AsyncSession = Depends(get_db)
+):
+    from openforge.db.models import Workspace
+    workspace = await db.get(Workspace, workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    from openforge.services.knowledge_processing_service import knowledge_processing_service
+    result = await knowledge_processing_service.regenerate_all_intelligence(
+        workspace_id=workspace_id,
     )
     return result
 

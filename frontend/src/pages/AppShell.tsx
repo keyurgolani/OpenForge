@@ -440,7 +440,7 @@ export default function AppShell() {
           </main>
 
           {isKnowledgeBoardPage && (
-            <WorkspaceInsightsRail workspaceId={workspaceId} knowledgeItems={knowledgeItems} />
+            <WorkspaceInsightsRail workspaceId={workspaceId} knowledgeItems={knowledgeItems} categories={(currentWorkspace as any)?.intelligence_categories} />
           )}
         </div>
       </div>

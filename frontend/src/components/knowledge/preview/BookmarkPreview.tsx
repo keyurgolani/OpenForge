@@ -8,6 +8,7 @@ import KnowledgeIntelligence, { GenerateIntelligenceButton, getIntelligenceCount
 import PreviewActions from './PreviewActions'
 import { CopyButton } from '@/components/shared/CopyButton'
 import KnowledgeMetadata from '@/components/knowledge/shared/KnowledgeMetadata'
+import { useWorkspace } from '@/hooks/useWorkspace'
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
 
@@ -26,6 +27,7 @@ function extractDomain(url: string): string {
 }
 
 export default function BookmarkPreview({ knowledge, workspaceId, onClose }: BookmarkPreviewProps) {
+    const workspace = useWorkspace(workspaceId)
     const qc = useQueryClient()
     const [refetching, setRefetching] = useState(false)
     const url = knowledge.url || ''
@@ -82,8 +84,8 @@ export default function BookmarkPreview({ knowledge, workspaceId, onClose }: Boo
                 </>
             }
             leftRail={<KnowledgeMetadata knowledge={knowledge} />}
-            siderail={(onCollapse) => <KnowledgeIntelligence knowledge={knowledge} workspaceId={workspaceId} onCollapse={onCollapse} />}
-            railItemCount={getIntelligenceCount(knowledge)}
+            siderail={(onCollapse) => <KnowledgeIntelligence knowledge={knowledge} workspaceId={workspaceId} onCollapse={onCollapse} categories={(workspace as any)?.intelligence_categories} />}
+            railItemCount={getIntelligenceCount(knowledge, (workspace as any)?.intelligence_categories)}
         >
             <div className="space-y-5">
                 {/* URL banner */}

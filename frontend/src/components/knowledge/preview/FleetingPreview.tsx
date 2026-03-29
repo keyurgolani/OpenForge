@@ -7,6 +7,7 @@ import PreviewShell from '@/components/knowledge/shared/PreviewShell'
 import KnowledgeIntelligence, { GenerateIntelligenceButton, getIntelligenceCount } from '@/components/knowledge/shared/KnowledgeIntelligence'
 import PreviewActions from './PreviewActions'
 import KnowledgeMetadata from '@/components/knowledge/shared/KnowledgeMetadata'
+import { useWorkspace } from '@/hooks/useWorkspace'
 
 interface FleetingPreviewProps {
     knowledge: any
@@ -15,6 +16,7 @@ interface FleetingPreviewProps {
 }
 
 export default function FleetingPreview({ knowledge, workspaceId, onClose }: FleetingPreviewProps) {
+    const workspace = useWorkspace(workspaceId)
     const navigate = useNavigate()
     const qc = useQueryClient()
     const [content, setContent] = useState(knowledge.content || '')
@@ -73,8 +75,8 @@ export default function FleetingPreview({ knowledge, workspaceId, onClose }: Fle
                 </>
             }
             leftRail={<KnowledgeMetadata knowledge={knowledge} />}
-            siderail={(onCollapse) => <KnowledgeIntelligence knowledge={knowledge} workspaceId={workspaceId} onCollapse={onCollapse} />}
-            railItemCount={getIntelligenceCount(knowledge)}
+            siderail={(onCollapse) => <KnowledgeIntelligence knowledge={knowledge} workspaceId={workspaceId} onCollapse={onCollapse} categories={(workspace as any)?.intelligence_categories} />}
+            railItemCount={getIntelligenceCount(knowledge, (workspace as any)?.intelligence_categories)}
         >
             <div className="space-y-4">
                 {/* Always-editable textarea */}

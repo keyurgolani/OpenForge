@@ -1,8 +1,10 @@
 from pydantic import BaseModel, ConfigDict, field_validator
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 from datetime import datetime
 import re
+
+VALID_CATEGORY_TYPES = {"text", "timeline", "tag", "url", "number", "boolean", "summary"}
 
 
 class WorkspaceCreate(BaseModel):
@@ -14,6 +16,7 @@ class WorkspaceCreate(BaseModel):
     llm_model: Optional[str] = None
     knowledge_intelligence_provider_id: Optional[UUID] = None
     knowledge_intelligence_model: Optional[str] = None
+    intelligence_categories: Optional[list[dict[str, Any]]] = None
     vision_provider_id: Optional[UUID] = None
     vision_model: Optional[str] = None
 
@@ -43,6 +46,7 @@ class WorkspaceUpdate(BaseModel):
     llm_model: Optional[str] = None
     knowledge_intelligence_provider_id: Optional[UUID] = None
     knowledge_intelligence_model: Optional[str] = None
+    intelligence_categories: Optional[list[dict[str, Any]]] = None
     vision_provider_id: Optional[UUID] = None
     vision_model: Optional[str] = None
     sort_order: Optional[int] = None
@@ -61,6 +65,7 @@ class WorkspaceResponse(BaseModel):
     llm_model: Optional[str] = None
     knowledge_intelligence_provider_id: Optional[UUID] = None
     knowledge_intelligence_model: Optional[str] = None
+    intelligence_categories: Optional[list[dict[str, Any]]] = None
     vision_provider_id: Optional[UUID] = None
     vision_model: Optional[str] = None
     default_agent_id: Optional[UUID] = None

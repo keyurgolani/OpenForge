@@ -6,6 +6,7 @@ import KnowledgeIntelligence, { GenerateIntelligenceButton, getIntelligenceCount
 import PreviewActions from './PreviewActions'
 import { CopyButton } from '@/components/shared/CopyButton'
 import KnowledgeMetadata from '@/components/knowledge/shared/KnowledgeMetadata'
+import { useWorkspace } from '@/hooks/useWorkspace'
 
 interface ImagePreviewProps {
     knowledge: any
@@ -14,6 +15,7 @@ interface ImagePreviewProps {
 }
 
 export default function ImagePreview({ knowledge, workspaceId, onClose }: ImagePreviewProps) {
+    const workspace = useWorkspace(workspaceId)
     const qc = useQueryClient()
     const fileUrl = getKnowledgeFileUrl(workspaceId, knowledge.id)
     const isReprocessing = knowledge.embedding_status === 'processing'
@@ -68,8 +70,8 @@ export default function ImagePreview({ knowledge, workspaceId, onClose }: ImageP
                 </>
             }
             leftRail={<KnowledgeMetadata knowledge={knowledge} />}
-            siderail={(onCollapse) => <KnowledgeIntelligence knowledge={knowledge} workspaceId={workspaceId} onCollapse={onCollapse} />}
-            railItemCount={getIntelligenceCount(knowledge)}
+            siderail={(onCollapse) => <KnowledgeIntelligence knowledge={knowledge} workspaceId={workspaceId} onCollapse={onCollapse} categories={(workspace as any)?.intelligence_categories} />}
+            railItemCount={getIntelligenceCount(knowledge, (workspace as any)?.intelligence_categories)}
         >
             <div className="space-y-5">
                 {/* Image display */}

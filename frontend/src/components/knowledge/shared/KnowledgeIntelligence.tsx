@@ -2,32 +2,82 @@ import { useState, useCallback, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
     Brain, Sparkles, CheckSquare, FileText, Star, Calendar,
-    ChevronRight, Loader2,
+    ChevronRight, Loader2, Tag, Link, Hash, ToggleLeft,
 } from 'lucide-react'
 import MarkdownIt from 'markdown-it'
 import { generateKnowledgeIntelligence } from '@/lib/api'
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
 
-type SectionKey = 'summary' | 'tasks' | 'facts' | 'crucial_things' | 'timelines'
+/** Shape of a workspace intelligence category from the API */
+export interface IntelligenceCategory {
+    key: string
+    name: string
+    description: string
+    type: 'text' | 'timeline' | 'tag' | 'url' | 'number' | 'boolean' | 'summary'
+    sort_order: number
+}
+
+/* ── Icon mapping ─────────────────────────────────────────────── */
+const TYPE_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+    text: FileText,
+    timeline: Calendar,
+    tag: Tag,
+    url: Link,
+    number: Hash,
+    boolean: ToggleLeft,
+    summary: Sparkles,
+}
+
+const KEY_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+    tasks: CheckSquare,
+    facts: FileText,
+    crucial_things: Star,
+    timelines: Calendar,
+    summary: Sparkles,
+}
+
+function getIconForCategory(cat: IntelligenceCategory): React.ComponentType<{ className?: string }> {
+    return KEY_ICON_MAP[cat.key] ?? TYPE_ICON_MAP[cat.type] ?? FileText
+}
+
+/* ── Default categories for backward compatibility ────────────── */
+const DEFAULT_CATEGORIES: IntelligenceCategory[] = [
+    { key: 'summary', name: 'Summary', description: 'AI-generated summary', type: 'summary', sort_order: 0 },
+    { key: 'tasks', name: 'Tasks', description: 'Action items and todos', type: 'text', sort_order: 1 },
+    { key: 'facts', name: 'Facts', description: 'Key facts', type: 'text', sort_order: 2 },
+    { key: 'crucial_things', name: 'Crucial Things', description: 'Crucial information', type: 'text', sort_order: 3 },
+    { key: 'timelines', name: 'Timelines', description: 'Date and event pairs', type: 'timeline', sort_order: 4 },
+]
+
+/* ── Helpers ──────────────────────────────────────────────────── */
+
+function getItemsForCategory(knowledge: any, cat: IntelligenceCategory): unknown[] {
+    if (cat.type === 'summary') return []
+    const raw = knowledge?.insights?.[cat.key]
+    return Array.isArray(raw) ? raw : []
+}
+
+function getCountForCategory(knowledge: any, cat: IntelligenceCategory): number {
+    if (cat.type === 'summary') {
+        const text = (knowledge?.ai_summary ?? knowledge?.insights?.[cat.key] ?? '').toString().trim()
+        return text ? 1 : 0
+    }
+    return getItemsForCategory(knowledge, cat).length
+}
 
 /** Count total intelligence items extracted from a knowledge object */
-export function getIntelligenceCount(knowledge: any): number {
-    const summaryText = (knowledge?.ai_summary ?? '').trim()
-    const t = Array.isArray(knowledge?.insights?.tasks) ? knowledge.insights.tasks.length : 0
-    const f = Array.isArray(knowledge?.insights?.facts) ? knowledge.insights.facts.length : 0
-    const c = Array.isArray(knowledge?.insights?.crucial_things) ? knowledge.insights.crucial_things.length : 0
-    const tl = Array.isArray(knowledge?.insights?.timelines) ? knowledge.insights.timelines.length : 0
-    return (summaryText ? 1 : 0) + t + f + c + tl
+export function getIntelligenceCount(knowledge: any, categories?: IntelligenceCategory[] | null): number {
+    const cats = categories && categories.length > 0 ? categories : DEFAULT_CATEGORIES
+    return cats.reduce((sum, cat) => sum + getCountForCategory(knowledge, cat), 0)
 }
 
-interface KnowledgeIntelligenceProps {
-    knowledge: any
-    workspaceId: string
+function getSummaryText(knowledge: any, key: string): string {
+    return (knowledge?.ai_summary ?? knowledge?.insights?.[key] ?? '').toString().trim()
 }
 
-const formatItem = (section: SectionKey, item: unknown): string => {
-    if (section === 'timelines' && typeof item === 'object' && item !== null && !Array.isArray(item)) {
+const formatTimelineItem = (item: unknown): string => {
+    if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
         const t = item as { date?: unknown; event?: unknown }
         const date = typeof t.date === 'string' ? t.date.trim() : ''
         const event = typeof t.event === 'string' ? t.event.trim() : ''
@@ -38,19 +88,154 @@ const formatItem = (section: SectionKey, item: unknown): string => {
     try { return JSON.stringify(item) } catch { return String(item ?? '') }
 }
 
+const formatGenericItem = (item: unknown): string => {
+    if (typeof item === 'string') return item
+    try { return JSON.stringify(item) } catch { return String(item ?? '') }
+}
+
+/* ── Render helpers per type ──────────────────────────────────── */
+
+function renderSummaryContent(knowledge: any, key: string, emptyLabel: string) {
+    const text = getSummaryText(knowledge, key)
+    return text ? (
+        <div
+            className="markdown-content knowledge-intelligence-markdown pl-[1.2rem] text-sm text-muted-foreground"
+            dangerouslySetInnerHTML={{ __html: md.render(text) }}
+        />
+    ) : (
+        <p className="px-2 text-xs text-muted-foreground">{emptyLabel}</p>
+    )
+}
+
+function renderTimelineItems(items: unknown[], emptyLabel: string) {
+    if (items.length === 0) return <p className="px-2 text-xs text-muted-foreground">{emptyLabel}</p>
+    return (
+        <ul className="space-y-1.5 pl-[1.2rem]">
+            {items.map((item, i) => (
+                <li key={i} className="flex items-start gap-2 rounded-md px-2 py-1.5">
+                    <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-border flex-shrink-0" />
+                    <span className="text-[13px] leading-5 text-foreground/90">{formatTimelineItem(item)}</span>
+                </li>
+            ))}
+        </ul>
+    )
+}
+
+function renderTextItems(items: unknown[], emptyLabel: string) {
+    if (items.length === 0) return <p className="px-2 text-xs text-muted-foreground">{emptyLabel}</p>
+    return (
+        <ul className="space-y-1.5 pl-[1.2rem]">
+            {items.map((item, i) => (
+                <li key={i} className="flex items-start gap-2 rounded-md px-2 py-1.5">
+                    <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-border flex-shrink-0" />
+                    <span className="text-[13px] leading-5 text-foreground/90">{formatGenericItem(item)}</span>
+                </li>
+            ))}
+        </ul>
+    )
+}
+
+function renderTagItems(items: unknown[], emptyLabel: string) {
+    if (items.length === 0) return <p className="px-2 text-xs text-muted-foreground">{emptyLabel}</p>
+    return (
+        <div className="flex flex-wrap gap-1.5 pl-[1.2rem] px-2 py-1">
+            {items.map((item, i) => (
+                <span
+                    key={i}
+                    className="inline-flex items-center rounded-full border border-border/60 bg-muted/50 px-2.5 py-0.5 text-xs font-medium text-foreground/80"
+                >
+                    {formatGenericItem(item)}
+                </span>
+            ))}
+        </div>
+    )
+}
+
+function renderUrlItems(items: unknown[], emptyLabel: string) {
+    if (items.length === 0) return <p className="px-2 text-xs text-muted-foreground">{emptyLabel}</p>
+    return (
+        <ul className="space-y-1.5 pl-[1.2rem]">
+            {items.map((item, i) => {
+                const url = formatGenericItem(item)
+                return (
+                    <li key={i} className="flex items-start gap-2 rounded-md px-2 py-1.5">
+                        <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-border flex-shrink-0" />
+                        <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[13px] leading-5 text-accent hover:underline break-all"
+                        >
+                            {url}
+                        </a>
+                    </li>
+                )
+            })}
+        </ul>
+    )
+}
+
+function renderNumberItems(items: unknown[], emptyLabel: string) {
+    if (items.length === 0) return <p className="px-2 text-xs text-muted-foreground">{emptyLabel}</p>
+    return (
+        <ul className="space-y-1.5 pl-[1.2rem]">
+            {items.map((item, i) => (
+                <li key={i} className="flex items-start gap-2 rounded-md px-2 py-1.5">
+                    <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-border flex-shrink-0" />
+                    <span className="text-[13px] leading-5 text-foreground/90 tabular-nums">{formatGenericItem(item)}</span>
+                </li>
+            ))}
+        </ul>
+    )
+}
+
+function renderBooleanItems(items: unknown[], emptyLabel: string) {
+    if (items.length === 0) return <p className="px-2 text-xs text-muted-foreground">{emptyLabel}</p>
+    return (
+        <ul className="space-y-1.5 pl-[1.2rem]">
+            {items.map((item, i) => {
+                const val = typeof item === 'boolean' ? item : typeof item === 'string' ? item.toLowerCase() === 'true' : Boolean(item)
+                return (
+                    <li key={i} className="flex items-start gap-2 rounded-md px-2 py-1.5">
+                        <span className={`mt-0.5 text-sm ${val ? 'text-green-400' : 'text-red-400'}`}>
+                            {val ? '\u2713' : '\u2717'}
+                        </span>
+                        <span className="text-[13px] leading-5 text-foreground/90">{formatGenericItem(item)}</span>
+                    </li>
+                )
+            })}
+        </ul>
+    )
+}
+
+function renderSectionContent(knowledge: any, cat: IntelligenceCategory, items: unknown[]) {
+    const emptyLabel = `No ${cat.name.toLowerCase()} extracted yet.`
+    switch (cat.type) {
+        case 'summary': return renderSummaryContent(knowledge, cat.key, emptyLabel)
+        case 'timeline': return renderTimelineItems(items, emptyLabel)
+        case 'tag': return renderTagItems(items, emptyLabel)
+        case 'url': return renderUrlItems(items, emptyLabel)
+        case 'number': return renderNumberItems(items, emptyLabel)
+        case 'boolean': return renderBooleanItems(items, emptyLabel)
+        case 'text':
+        default: return renderTextItems(items, emptyLabel)
+    }
+}
+
+/* ── Components ───────────────────────────────────────────────── */
+
+interface KnowledgeIntelligenceProps {
+    knowledge: any
+    workspaceId: string
+    categories?: IntelligenceCategory[] | null
+}
+
 /** Standalone generate/regenerate intelligence button for use in header action bars */
-export function GenerateIntelligenceButton({ knowledge, workspaceId }: KnowledgeIntelligenceProps) {
+export function GenerateIntelligenceButton({ knowledge, workspaceId, categories }: KnowledgeIntelligenceProps) {
     const qc = useQueryClient()
     const [generating, setGenerating] = useState(false)
 
-    const totalCount = (() => {
-        const summaryText = (knowledge?.ai_summary ?? '').trim()
-        const t = Array.isArray(knowledge?.insights?.tasks) ? knowledge.insights.tasks.length : 0
-        const f = Array.isArray(knowledge?.insights?.facts) ? knowledge.insights.facts.length : 0
-        const c = Array.isArray(knowledge?.insights?.crucial_things) ? knowledge.insights.crucial_things.length : 0
-        const tl = Array.isArray(knowledge?.insights?.timelines) ? knowledge.insights.timelines.length : 0
-        return (summaryText ? 1 : 0) + t + f + c + tl
-    })()
+    const totalCount = getIntelligenceCount(knowledge, categories)
 
     const handleGenerate = useCallback(async () => {
         setGenerating(true)
@@ -82,26 +267,30 @@ export function GenerateIntelligenceButton({ knowledge, workspaceId }: Knowledge
     )
 }
 
-export default function KnowledgeIntelligence({ knowledge, workspaceId, headerExtra, onCollapse }: KnowledgeIntelligenceProps & { headerExtra?: React.ReactNode; onCollapse?: () => void }) {
-    const [expanded, setExpanded] = useState<SectionKey | null>('summary')
+export default function KnowledgeIntelligence({ knowledge, workspaceId, categories, headerExtra, onCollapse }: KnowledgeIntelligenceProps & { headerExtra?: React.ReactNode; onCollapse?: () => void }) {
+    const cats = useMemo(
+        () => (categories && categories.length > 0 ? [...categories].sort((a, b) => a.sort_order - b.sort_order) : DEFAULT_CATEGORIES),
+        [categories],
+    )
 
-    const summaryText = (knowledge?.ai_summary ?? '').trim()
-    const tasksItems = Array.isArray(knowledge?.insights?.tasks) ? knowledge.insights.tasks : []
-    const factsItems = Array.isArray(knowledge?.insights?.facts) ? knowledge.insights.facts : []
-    const crucialItems = Array.isArray(knowledge?.insights?.crucial_things) ? knowledge.insights.crucial_things : []
-    const timelineItems = Array.isArray(knowledge?.insights?.timelines) ? knowledge.insights.timelines : []
+    const [expanded, setExpanded] = useState<string | null>(() => {
+        const first = cats[0]
+        return first ? first.key : null
+    })
 
-    const sections = useMemo(() => [
-        { key: 'summary' as const, label: 'Summary', icon: Sparkles, items: [] as unknown[], count: summaryText ? 1 : 0, emptyLabel: 'No summary yet.' },
-        { key: 'tasks' as const, label: 'Tasks', icon: CheckSquare, items: tasksItems, count: tasksItems.length, emptyLabel: 'No tasks extracted yet.' },
-        { key: 'facts' as const, label: 'Facts', icon: FileText, items: factsItems, count: factsItems.length, emptyLabel: 'No facts extracted yet.' },
-        { key: 'crucial_things' as const, label: 'Crucial Things', icon: Star, items: crucialItems, count: crucialItems.length, emptyLabel: 'No crucial things extracted yet.' },
-        { key: 'timelines' as const, label: 'Timelines', icon: Calendar, items: timelineItems, count: timelineItems.length, emptyLabel: 'No timelines extracted yet.' },
-    ], [summaryText, tasksItems, factsItems, crucialItems, timelineItems])
+    const sections = useMemo(() =>
+        cats.map(cat => ({
+            cat,
+            icon: getIconForCategory(cat),
+            items: getItemsForCategory(knowledge, cat),
+            count: getCountForCategory(knowledge, cat),
+        })),
+        [cats, knowledge],
+    )
 
     const totalCount = sections.reduce((sum, s) => sum + s.count, 0)
 
-    const toggle = (key: SectionKey) => setExpanded(prev => prev === key ? null : key)
+    const toggle = (key: string) => setExpanded(prev => prev === key ? null : key)
 
     return (
         <div className="flex flex-col h-full">
@@ -135,12 +324,11 @@ export default function KnowledgeIntelligence({ knowledge, workspaceId, headerEx
 
             {/* Sections */}
             <div className="flex min-h-0 flex-1 flex-col gap-2 px-4 pb-2">
-                {sections.map(section => {
-                    const SectionIcon = section.icon
-                    const isExpanded = expanded === section.key
+                {sections.map(({ cat, icon: SectionIcon, items, count }) => {
+                    const isExpanded = expanded === cat.key
                     return (
                         <section
-                            key={section.key}
+                            key={cat.key}
                             className={`rounded-xl border px-2.5 py-2 transition-colors ${
                                 isExpanded
                                     ? 'flex min-h-0 flex-1 flex-col border-accent/35 bg-card/50'
@@ -149,9 +337,9 @@ export default function KnowledgeIntelligence({ knowledge, workspaceId, headerEx
                         >
                             <button
                                 type="button"
-                                onClick={() => toggle(section.key)}
+                                onClick={() => toggle(cat.key)}
                                 className="w-full flex items-center justify-between gap-3 py-0.5 text-left"
-                                aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${section.label}`}
+                                aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${cat.name}`}
                             >
                                 <div className="flex items-center gap-2.5 min-w-0">
                                     <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
@@ -159,42 +347,20 @@ export default function KnowledgeIntelligence({ knowledge, workspaceId, headerEx
                                         <SectionIcon className="w-3.5 h-3.5" />
                                     </div>
                                     <div className="min-w-0">
-                                        <div className="text-sm font-semibold text-foreground truncate">{section.label}</div>
+                                        <div className="text-sm font-semibold text-foreground truncate">{cat.name}</div>
                                         <div className="text-xs text-muted-foreground/90 leading-5">
-                                            {section.count} item{section.count === 1 ? '' : 's'}
+                                            {count} item{count === 1 ? '' : 's'}
                                         </div>
                                     </div>
                                 </div>
                                 <span className="text-[11px] font-semibold text-foreground/70 rounded-full border border-border/25 bg-muted/60 px-2 py-0.5">
-                                    {section.count}
+                                    {count}
                                 </span>
                             </button>
 
                             {isExpanded && (
                                 <div className="mt-2 min-h-0 flex-1 overflow-y-auto pr-1">
-                                    {section.key === 'summary' ? (
-                                        summaryText ? (
-                                            <div
-                                                className="markdown-content knowledge-intelligence-markdown pl-[1.2rem] text-sm text-muted-foreground"
-                                                dangerouslySetInnerHTML={{ __html: md.render(summaryText) }}
-                                            />
-                                        ) : (
-                                            <p className="px-2 text-xs text-muted-foreground">{section.emptyLabel}</p>
-                                        )
-                                    ) : section.items.length > 0 ? (
-                                        <ul className="space-y-1.5 pl-[1.2rem]">
-                                            {section.items.map((item, i) => (
-                                                <li key={i} className="flex items-start gap-2 rounded-md px-2 py-1.5">
-                                                    <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-border flex-shrink-0" />
-                                                    <span className="text-[13px] leading-5 text-foreground/90">
-                                                        {formatItem(section.key, item)}
-                                                    </span>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    ) : (
-                                        <p className="px-2 text-xs text-muted-foreground">{section.emptyLabel}</p>
-                                    )}
+                                    {renderSectionContent(knowledge, cat, items)}
                                 </div>
                             )}
                         </section>

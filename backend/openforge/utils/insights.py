@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from datetime import datetime, timezone
 import re
 from typing import Any
@@ -13,14 +14,61 @@ _DATE_PATTERNS = [
 ]
 
 
-def _empty_insights_payload() -> dict[str, list[Any]]:
-    return {
-        "timelines": [],
-        "facts": [],
-        "crucial_things": [],
-        "tasks": [],
-        "tags": [],
-    }
+# ── Default intelligence categories seeded into new workspaces ──
+# Also used as fallback when workspace.intelligence_categories is NULL.
+DEFAULT_INTELLIGENCE_CATEGORIES: list[dict[str, Any]] = [
+    {
+        "key": "summary",
+        "name": "Summary",
+        "description": "A concise markdown summary of the content",
+        "type": "summary",
+        "sort_order": 0,
+    },
+    {
+        "key": "tasks",
+        "name": "Tasks",
+        "description": "Action items and todos extracted from the content",
+        "type": "text",
+        "sort_order": 1,
+    },
+    {
+        "key": "facts",
+        "name": "Facts",
+        "description": "Key facts and highlights worth remembering",
+        "type": "text",
+        "sort_order": 2,
+    },
+    {
+        "key": "crucial_things",
+        "name": "Crucial Things",
+        "description": "Critical or important information that must not be missed",
+        "type": "text",
+        "sort_order": 3,
+    },
+    {
+        "key": "timelines",
+        "name": "Timelines",
+        "description": "Dates and events mentioned in the content",
+        "type": "timeline",
+        "sort_order": 4,
+    },
+]
+
+
+def get_workspace_categories(
+    workspace_categories: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    """Return the effective categories for a workspace (defaults if NULL)."""
+    if workspace_categories:
+        return workspace_categories
+    return copy.deepcopy(DEFAULT_INTELLIGENCE_CATEGORIES)
+
+
+def _empty_insights_payload(
+    categories: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    cats = get_workspace_categories(categories)
+    return {cat["key"]: [] for cat in cats if cat["type"] != "summary"}
 
 
 def _dedupe_strings(values: list[str]) -> list[str]:
@@ -170,39 +218,107 @@ def _dedupe_timelines(items: list[dict[str, str]]) -> list[dict[str, str]]:
     return out
 
 
-def normalize_insights_payload(raw: Any, knowledge_content: str) -> dict[str, list[Any]]:
-    payload = _empty_insights_payload()
+def _normalize_value_for_type(
+    raw_value: Any,
+    cat_type: str,
+    knowledge_content: str,
+) -> Any:
+    """Normalize a raw LLM value according to its category type."""
+    if cat_type == "summary":
+        return str(raw_value).strip() if raw_value else ""
+    if cat_type == "timeline":
+        items: list[dict[str, str]] = []
+        for raw_item in (raw_value if isinstance(raw_value, list) else []):
+            item = _normalize_timeline_item(raw_item)
+            if item:
+                items.append(item)
+        if not items:
+            items.extend(_extract_timelines_from_content(knowledge_content))
+        return _dedupe_timelines(items)
+    if cat_type == "tag":
+        tags = _to_string_list(raw_value)
+        return _dedupe_strings([t.lower().replace(" ", "-") for t in tags if t.strip()])
+    if cat_type == "url":
+        return _dedupe_strings(_to_string_list(raw_value))
+    if cat_type == "number":
+        out: list[Any] = []
+        for v in (raw_value if isinstance(raw_value, list) else [raw_value] if raw_value is not None else []):
+            try:
+                out.append(float(v) if "." in str(v) else int(v))
+            except (ValueError, TypeError):
+                continue
+        return out
+    if cat_type == "boolean":
+        out_b: list[bool] = []
+        for v in (raw_value if isinstance(raw_value, list) else [raw_value] if raw_value is not None else []):
+            if isinstance(v, bool):
+                out_b.append(v)
+            elif isinstance(v, str):
+                out_b.append(v.lower() in ("true", "yes", "1"))
+        return out_b
+    # Default: text
+    return _dedupe_strings(_to_string_list(raw_value))
+
+
+def normalize_insights_payload(
+    raw: Any,
+    knowledge_content: str,
+    categories: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    cats = get_workspace_categories(categories)
+    payload = _empty_insights_payload(cats)
     raw_data = raw if isinstance(raw, dict) else {}
 
-    tasks = _to_string_list(raw_data.get("tasks")) + _to_string_list(raw_data.get("todos"))
-    facts = _to_string_list(raw_data.get("facts")) + _to_string_list(raw_data.get("highlights"))
-    crucial = _to_string_list(raw_data.get("crucial_things")) + _to_string_list(raw_data.get("critical"))
-    tags = _to_string_list(raw_data.get("tags"))
-    tags = _dedupe_strings([tag.lower().replace(" ", "-") for tag in tags if tag.strip()])
+    # Legacy key aliases for backward compatibility
+    _LEGACY_ALIASES: dict[str, list[str]] = {
+        "tasks": ["todos"],
+        "facts": ["highlights"],
+        "crucial_things": ["critical"],
+        "timelines": ["deadlines", "reminders"],
+    }
 
-    timeline_items: list[dict[str, str]] = []
-    for raw_item in raw_data.get("timelines") or []:
-        item = _normalize_timeline_item(raw_item)
-        if item:
-            timeline_items.append(item)
-    for raw_item in raw_data.get("deadlines") or []:
-        item = _normalize_timeline_item(raw_item, fallback_event="Deadline")
-        if item:
-            timeline_items.append(item)
-    for raw_item in raw_data.get("reminders") or []:
-        item = _normalize_timeline_item(raw_item, fallback_event="Reminder")
-        if item:
-            timeline_items.append(item)
-    for task in tasks:
-        item = _normalize_timeline_item(task)
-        if item:
-            timeline_items.append(item)
-    if not timeline_items:
-        timeline_items.extend(_extract_timelines_from_content(knowledge_content))
+    # First pass: extract all non-timeline categories
+    text_items_for_timeline_scan: list[str] = []
+    timeline_keys: list[str] = []
 
-    payload["tasks"] = _dedupe_strings(tasks)
-    payload["facts"] = _dedupe_strings(facts)
-    payload["crucial_things"] = _dedupe_strings(crucial)
-    payload["tags"] = tags
-    payload["timelines"] = _dedupe_timelines(timeline_items)
+    for cat in cats:
+        key = cat["key"]
+        cat_type = cat.get("type", "text")
+        if cat_type == "summary":
+            continue  # summary handled separately
+        # Collect raw values from primary key + legacy aliases
+        raw_value = raw_data.get(key)
+        if raw_value is None:
+            raw_value = []
+        elif not isinstance(raw_value, list):
+            raw_value = [raw_value]
+        else:
+            raw_value = list(raw_value)
+        for alias in _LEGACY_ALIASES.get(key, []):
+            alias_val = raw_data.get(alias)
+            if isinstance(alias_val, list):
+                raw_value.extend(alias_val)
+            elif alias_val is not None:
+                raw_value.append(alias_val)
+
+        if cat_type == "timeline":
+            timeline_keys.append(key)
+            payload[key] = _normalize_value_for_type(raw_value, cat_type, knowledge_content)
+        else:
+            payload[key] = _normalize_value_for_type(raw_value, cat_type, knowledge_content)
+            # Collect text items for cross-scanning timeline dates
+            if cat_type == "text":
+                text_items_for_timeline_scan.extend(
+                    s for s in payload[key] if isinstance(s, str)
+                )
+
+    # Second pass: scan text items for timeline entries and merge into timeline categories
+    for tkey in timeline_keys:
+        existing_timelines = payload[tkey]
+        for text_item in text_items_for_timeline_scan:
+            item = _normalize_timeline_item(text_item)
+            if item:
+                existing_timelines.append(item)
+        payload[tkey] = _dedupe_timelines(existing_timelines)
+
     return payload

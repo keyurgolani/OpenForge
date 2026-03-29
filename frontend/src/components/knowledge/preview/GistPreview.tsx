@@ -5,6 +5,7 @@ import KnowledgeIntelligence, { GenerateIntelligenceButton, getIntelligenceCount
 import PreviewActions from './PreviewActions'
 import { CopyButton } from '@/components/shared/CopyButton'
 import KnowledgeMetadata from '@/components/knowledge/shared/KnowledgeMetadata'
+import { useWorkspace } from '@/hooks/useWorkspace'
 
 interface GistPreviewProps {
     knowledge: any
@@ -13,6 +14,7 @@ interface GistPreviewProps {
 }
 
 export default function GistPreview({ knowledge, workspaceId, onClose }: GistPreviewProps) {
+    const workspace = useWorkspace(workspaceId)
     const navigate = useNavigate()
     const content = knowledge.content || ''
 
@@ -42,8 +44,8 @@ export default function GistPreview({ knowledge, workspaceId, onClose }: GistPre
                 </>
             }
             leftRail={<KnowledgeMetadata knowledge={knowledge} />}
-            siderail={(onCollapse) => <KnowledgeIntelligence knowledge={knowledge} workspaceId={workspaceId} onCollapse={onCollapse} />}
-            railItemCount={getIntelligenceCount(knowledge)}
+            siderail={(onCollapse) => <KnowledgeIntelligence knowledge={knowledge} workspaceId={workspaceId} onCollapse={onCollapse} categories={(workspace as any)?.intelligence_categories} />}
+            railItemCount={getIntelligenceCount(knowledge, (workspace as any)?.intelligence_categories)}
         >
             <div className="space-y-4">
                 {/* Code block */}

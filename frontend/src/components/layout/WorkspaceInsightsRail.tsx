@@ -1,118 +1,156 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import MarkdownIt from 'markdown-it'
-import { Brain, Calendar, CheckSquare, ChevronRight, FileText, Star } from 'lucide-react'
+import {
+  Brain, Calendar, CheckSquare, ChevronRight, FileText, Star,
+  Tag, Link, Hash, ToggleLeft, Sparkles,
+} from 'lucide-react'
 
 import Siderail from '@/components/shared/Siderail'
+import type { IntelligenceCategory } from '@/components/knowledge/shared/KnowledgeIntelligence'
 
-type InsightSectionKey = 'tasks' | 'timelines' | 'facts' | 'crucial_things'
-type InsightItem = { knowledgeId: string; text: string }
-type InsightSections = Record<InsightSectionKey, InsightItem[]>
-
-const INSIGHT_SECTION_ORDER: InsightSectionKey[] = ['tasks', 'timelines', 'facts', 'crucial_things']
-const INSIGHT_SECTION_META: Record<InsightSectionKey, {
-  title: string
-  icon: React.ComponentType<{ className?: string }>
-  emptyLabel: string
-  badgeClass: string
-  dotClass: string
-}> = {
-  tasks: {
-    title: 'Action Items',
-    icon: CheckSquare,
-    emptyLabel: 'No pending action items',
-    badgeClass: 'text-accent bg-accent/15 border border-accent/20',
-    dotClass: 'bg-accent/90',
-  },
-  timelines: {
-    title: 'Timeline Updates',
-    icon: Calendar,
-    emptyLabel: 'No timeline updates',
-    badgeClass: 'text-blue-300 bg-blue-400/10 border border-blue-300/30',
-    dotClass: 'bg-blue-300',
-  },
-  facts: {
-    title: 'Key Facts',
-    icon: FileText,
-    emptyLabel: 'No key facts found',
-    badgeClass: 'text-foreground/90 bg-muted/70 border border-border/70',
-    dotClass: 'bg-foreground/70',
-  },
-  crucial_things: {
-    title: 'Crucial Information',
-    icon: Star,
-    emptyLabel: 'No crucial information yet',
-    badgeClass: 'text-red-300 bg-red-400/10 border border-red-300/30',
-    dotClass: 'bg-red-300',
-  },
+/* ── Icon mapping (mirrors KnowledgeIntelligence) ─────────────── */
+const TYPE_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+  text: FileText,
+  timeline: Calendar,
+  tag: Tag,
+  url: Link,
+  number: Hash,
+  boolean: ToggleLeft,
+  summary: Sparkles,
 }
+
+const KEY_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+  tasks: CheckSquare,
+  facts: FileText,
+  crucial_things: Star,
+  timelines: Calendar,
+  summary: Sparkles,
+}
+
+function getIconForCategory(cat: IntelligenceCategory): React.ComponentType<{ className?: string }> {
+  return KEY_ICON_MAP[cat.key] ?? TYPE_ICON_MAP[cat.type] ?? FileText
+}
+
+/* ── Color palette for section badges / dots ──────────────────── */
+const COLOR_PALETTE: Array<{ badgeClass: string; dotClass: string }> = [
+  { badgeClass: 'text-accent bg-accent/15 border border-accent/20', dotClass: 'bg-accent/90' },
+  { badgeClass: 'text-blue-300 bg-blue-400/10 border border-blue-300/30', dotClass: 'bg-blue-300' },
+  { badgeClass: 'text-foreground/90 bg-muted/70 border border-border/70', dotClass: 'bg-foreground/70' },
+  { badgeClass: 'text-red-300 bg-red-400/10 border border-red-300/30', dotClass: 'bg-red-300' },
+  { badgeClass: 'text-purple-300 bg-purple-400/10 border border-purple-300/30', dotClass: 'bg-purple-300' },
+  { badgeClass: 'text-green-300 bg-green-400/10 border border-green-300/30', dotClass: 'bg-green-300' },
+  { badgeClass: 'text-orange-300 bg-orange-400/10 border border-orange-300/30', dotClass: 'bg-orange-300' },
+]
+
+/* Well-known key → fixed color index for backward compatibility */
+const KEY_COLOR_INDEX: Record<string, number> = {
+  tasks: 0,
+  timelines: 1,
+  facts: 2,
+  crucial_things: 3,
+}
+
+function getColorsForIndex(key: string, idx: number): { badgeClass: string; dotClass: string } {
+  if (key in KEY_COLOR_INDEX) return COLOR_PALETTE[KEY_COLOR_INDEX[key]]
+  return COLOR_PALETTE[idx % COLOR_PALETTE.length]
+}
+
+/* ── Default categories (backward compat — excludes summary) ── */
+const DEFAULT_RAIL_CATEGORIES: IntelligenceCategory[] = [
+  { key: 'tasks', name: 'Action Items', description: 'Action items and todos', type: 'text', sort_order: 1 },
+  { key: 'timelines', name: 'Timeline Updates', description: 'Date and event pairs', type: 'timeline', sort_order: 2 },
+  { key: 'facts', name: 'Key Facts', description: 'Key facts', type: 'text', sort_order: 3 },
+  { key: 'crucial_things', name: 'Crucial Information', description: 'Crucial information', type: 'text', sort_order: 4 },
+]
+
+type InsightItem = { knowledgeId: string; text: string }
 
 const insightsMd = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
 insightsMd.renderer.rules.link_open = () => ''
 insightsMd.renderer.rules.link_close = () => ''
 
+/* ── Format helpers per type ──────────────────────────────────── */
+
+function formatTimelineEntry(entry: unknown): string | null {
+  if (typeof entry === 'string') return entry
+  if (typeof entry === 'object' && entry !== null && !Array.isArray(entry)) {
+    const t = entry as { date?: string; event?: string }
+    const date = typeof t.date === 'string' ? t.date.trim() : ''
+    const event = typeof t.event === 'string' ? t.event.trim() : ''
+    if (date && event) return `**${date}**: ${event}`
+    if (date) return `**${date}**`
+    if (event) return event
+    return null
+  }
+  return String(entry ?? '')
+}
+
+function formatGenericEntry(entry: unknown): string {
+  if (typeof entry === 'string') return entry
+  if (typeof entry === 'boolean') return entry ? '\u2713 true' : '\u2717 false'
+  try { return JSON.stringify(entry) } catch { return String(entry ?? '') }
+}
+
 export interface WorkspaceInsightSource {
   id: string
-  insights?: {
-    tasks?: string[]
-    timelines?: Array<string | { date?: string; event?: string }>
-    facts?: string[]
-    crucial_things?: string[]
-  } | null
+  insights?: Record<string, any> | null
 }
 
 interface WorkspaceInsightsRailProps {
   workspaceId: string
   knowledgeItems: WorkspaceInsightSource[]
+  categories?: IntelligenceCategory[] | null
 }
 
-export function WorkspaceInsightsRail({ workspaceId, knowledgeItems }: WorkspaceInsightsRailProps) {
+export function WorkspaceInsightsRail({ workspaceId, knowledgeItems, categories }: WorkspaceInsightsRailProps) {
   const navigate = useNavigate()
-  const [activeSection, setActiveSection] = useState<InsightSectionKey | null>('tasks')
 
-  const aggregatedInsights = useMemo<InsightSections>(() => {
-    const sections: InsightSections = {
-      tasks: [],
-      timelines: [],
-      facts: [],
-      crucial_things: [],
-    }
+  /* Resolve effective categories: exclude summary types, sort by sort_order */
+  const effectiveCategories = useMemo(() => {
+    if (!categories || categories.length === 0) return DEFAULT_RAIL_CATEGORIES
+    return [...categories]
+      .filter(c => c.type !== 'summary')
+      .sort((a, b) => a.sort_order - b.sort_order)
+  }, [categories])
+
+  const [activeSection, setActiveSection] = useState<string | null>(() => {
+    const first = effectiveCategories[0]
+    return first ? first.key : null
+  })
+
+  /* Aggregate insights across all knowledge items, keyed by category key */
+  const aggregatedInsights = useMemo<Record<string, InsightItem[]>>(() => {
+    const sections: Record<string, InsightItem[]> = {}
+    effectiveCategories.forEach(cat => { sections[cat.key] = [] })
 
     knowledgeItems.forEach((item) => {
       if (!item.insights) return
 
-      item.insights.tasks?.forEach((entry) => {
-        sections.tasks.push({ knowledgeId: item.id, text: entry })
-      })
-      item.insights.timelines?.forEach((entry) => {
-        if (typeof entry === 'string') {
-          sections.timelines.push({ knowledgeId: item.id, text: entry })
-          return
-        }
-        const date = typeof entry?.date === 'string' ? entry.date.trim() : ''
-        const event = typeof entry?.event === 'string' ? entry.event.trim() : ''
-        if (date && event) {
-          sections.timelines.push({ knowledgeId: item.id, text: `**${date}**: ${event}` })
-        } else if (date) {
-          sections.timelines.push({ knowledgeId: item.id, text: `**${date}**` })
-        } else if (event) {
-          sections.timelines.push({ knowledgeId: item.id, text: event })
-        }
-      })
-      item.insights.facts?.forEach((entry) => {
-        sections.facts.push({ knowledgeId: item.id, text: entry })
-      })
-      item.insights.crucial_things?.forEach((entry) => {
-        sections.crucial_things.push({ knowledgeId: item.id, text: entry })
+      effectiveCategories.forEach(cat => {
+        const raw = item.insights?.[cat.key]
+        if (!Array.isArray(raw)) return
+
+        raw.forEach((entry: unknown) => {
+          let text: string | null = null
+          if (cat.type === 'timeline') {
+            text = formatTimelineEntry(entry)
+          } else {
+            text = formatGenericEntry(entry)
+          }
+          if (text) {
+            sections[cat.key].push({ knowledgeId: item.id, text })
+          }
+        })
       })
     })
 
     return sections
-  }, [knowledgeItems])
+  }, [knowledgeItems, effectiveCategories])
 
   const totalCount = useMemo(
-    () => INSIGHT_SECTION_ORDER.reduce((count, section) => count + aggregatedInsights[section].length, 0),
-    [aggregatedInsights],
+    () => effectiveCategories.reduce((count, cat) => count + (aggregatedInsights[cat.key]?.length ?? 0), 0),
+    [aggregatedInsights, effectiveCategories],
   )
 
   return (
@@ -153,30 +191,31 @@ export function WorkspaceInsightsRail({ workspaceId, knowledgeItems }: Workspace
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col gap-2 pr-1">
-            {INSIGHT_SECTION_ORDER.map((section) => {
-              const meta = INSIGHT_SECTION_META[section]
-              const Icon = meta.icon
-              const items = aggregatedInsights[section]
-              const isExpanded = activeSection === section
+            {effectiveCategories.map((cat, catIndex) => {
+              const Icon = getIconForCategory(cat)
+              const items = aggregatedInsights[cat.key] ?? []
+              const isExpanded = activeSection === cat.key
+              const colors = getColorsForIndex(cat.key, catIndex)
+              const emptyLabel = `No ${cat.name.toLowerCase()} yet`
 
               return (
                 <section
-                  key={section}
+                  key={cat.key}
                   className={`rounded-xl border px-2.5 py-2 transition-colors ${isExpanded ? 'flex min-h-0 flex-1 flex-col border-accent/35 bg-card/50' : 'flex-shrink-0 border-border/55 bg-card/22'}`}
                 >
                   <button
                     type="button"
-                    onClick={() => setActiveSection(prev => (prev === section ? null : section))}
+                    onClick={() => setActiveSection(prev => (prev === cat.key ? null : cat.key))}
                     className="flex w-full items-center justify-between gap-3 py-0.5 text-left"
-                    aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${meta.title}`}
+                    aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${cat.name}`}
                   >
                     <div className="flex min-w-0 items-center gap-2.5">
                       <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-                      <div className={`flex h-6 w-6 items-center justify-center rounded-md ${meta.badgeClass}`}>
+                      <div className={`flex h-6 w-6 items-center justify-center rounded-md ${colors.badgeClass}`}>
                         <Icon className="h-3.5 w-3.5" />
                       </div>
                       <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold text-foreground">{meta.title}</div>
+                        <div className="truncate text-sm font-semibold text-foreground">{cat.name}</div>
                         <div className="text-xs leading-5 text-muted-foreground/90">
                           {items.length} knowledge excerpt{items.length === 1 ? '' : 's'}
                         </div>
@@ -198,11 +237,11 @@ export function WorkspaceInsightsRail({ workspaceId, knowledgeItems }: Workspace
                                 onClick={() => navigate(`/w/${workspaceId}/knowledge/${item.knowledgeId}`)}
                                 className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
                               >
-                                <span className={`mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full ${meta.dotClass}`} />
+                                <span className={`mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full ${colors.dotClass}`} />
                                 <span
                                   className="break-words text-[13px] leading-5 text-foreground/90"
                                   dangerouslySetInnerHTML={{
-                                    __html: insightsMd.renderInline(item.text || meta.emptyLabel),
+                                    __html: insightsMd.renderInline(item.text || emptyLabel),
                                   }}
                                 />
                               </button>
@@ -210,7 +249,7 @@ export function WorkspaceInsightsRail({ workspaceId, knowledgeItems }: Workspace
                           ))}
                         </ul>
                       ) : (
-                        <p className="px-2 text-xs text-muted-foreground">{meta.emptyLabel}</p>
+                        <p className="px-2 text-xs text-muted-foreground">{emptyLabel}</p>
                       )}
                     </div>
                   )}

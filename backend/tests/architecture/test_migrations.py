@@ -15,6 +15,8 @@ EXPECTED_MIGRATIONS = [
     "005_global_agent_chat.py",
     "006_nullable_execution_workspace.py",
     "007_agent_definition_restructure.py",
+    "008_drop_retrieval_config.py",
+    "009_add_intelligence_categories.py",
 ]
 
 

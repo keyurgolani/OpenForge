@@ -20,7 +20,7 @@ from openforge.runtime.trust_boundaries import ContentSourceType
 from openforge.utils.text import count_words, normalize_word_count, truncate_text
 from openforge.utils.knowledge_title_generation import derive_knowledge_title
 from openforge.utils.title import normalize_knowledge_title
-from openforge.utils.insights import normalize_insights_payload
+from openforge.utils.insights import normalize_insights_payload, get_workspace_categories
 from openforge.utils.task_audit import start_task_log, mark_task_log_done, mark_task_log_failed
 from openforge.services.automation_config import (
     is_auto_bookmark_content_extraction_enabled,
@@ -126,6 +126,88 @@ class KnowledgeProcessingService:
         from openforge.core.prompt_resolution import resolve_prompt_text
 
         return await resolve_prompt_text(db, prompt_id, **kwargs)
+
+    def _build_extraction_prompt(
+        self,
+        categories: list[dict],
+        workspace_name: str,
+        workspace_description: str,
+        knowledge_title: str,
+        tags: str,
+    ) -> str:
+        """Build a dynamic insights extraction prompt from workspace categories."""
+        _TYPE_FORMAT = {
+            "text": 'a JSON array of strings, e.g. ["{name} item 1", "{name} item 2"]',
+            "timeline": 'a JSON array of objects with "date" (ISO 8601) and "event" keys, e.g. [{{"date":"2026-01-15","event":"Launch"}}]',
+            "tag": "a JSON array of lowercase kebab-case tag strings",
+            "url": "a JSON array of URL strings",
+            "number": "a JSON array of numbers",
+            "boolean": "a JSON array of booleans (true/false)",
+        }
+
+        non_summary = [c for c in categories if c.get("type") != "summary"]
+        if not non_summary:
+            return (
+                "Analyze the following content and return an empty JSON object: {}\n"
+                "There are no extraction categories configured."
+            )
+
+        cat_instructions = []
+        for cat in non_summary:
+            key = cat["key"]
+            name = cat["name"]
+            desc = cat.get("description", "")
+            ctype = cat.get("type", "text")
+            fmt = _TYPE_FORMAT.get(ctype, _TYPE_FORMAT["text"]).format(name=name)
+            line = f'- "{key}": {desc}. Return as {fmt}.'
+            cat_instructions.append(line)
+
+        categories_block = "\n".join(cat_instructions)
+        keys_list = ", ".join(f'"{c["key"]}"' for c in non_summary)
+
+        workspace_ctx = ""
+        if workspace_name:
+            workspace_ctx = f"\nWorkspace: {workspace_name}"
+            if workspace_description:
+                workspace_ctx += f" — {workspace_description}"
+
+        return (
+            f"You are an intelligence extraction engine. Analyze the following content "
+            f"and extract structured insights.\n"
+            f"{workspace_ctx}\n"
+            f"Content title: {knowledge_title}\n"
+            f"Existing tags: {tags}\n\n"
+            f"Extract the following categories:\n{categories_block}\n\n"
+            f"Return ONLY a valid JSON object with these keys: {keys_list}.\n"
+            f"Do not include any text before or after the JSON object."
+        )
+
+    def _build_summary_prompt(
+        self,
+        workspace_name: str,
+        workspace_description: str,
+        knowledge_title: str,
+        knowledge_type: str,
+        tags: str,
+        summary_category: dict | None = None,
+    ) -> str:
+        """Build a summary extraction prompt, optionally customized by category description."""
+        desc = (summary_category or {}).get("description", "A concise markdown summary of the content")
+        workspace_ctx = ""
+        if workspace_name:
+            workspace_ctx = f"\nWorkspace: {workspace_name}"
+            if workspace_description:
+                workspace_ctx += f" — {workspace_description}"
+
+        return (
+            f"You are an intelligence extraction engine. {desc}.\n"
+            f"{workspace_ctx}\n"
+            f"Content title: {knowledge_title}\n"
+            f"Content type: {knowledge_type}\n"
+            f"Tags: {tags}\n\n"
+            f"Produce a concise, well-structured Markdown summary of the content. "
+            f"Focus on the most important information. Do not include a title heading."
+        )
 
     def _knowledge_source_type(self, knowledge_record: Knowledge) -> ContentSourceType:
         if knowledge_record.url:
@@ -326,19 +408,24 @@ class KnowledgeProcessingService:
                 workspace = await db.get(Workspace, workspace_id)
                 workspace_name = workspace.name if workspace else ""
                 workspace_description = workspace.description if workspace else ""
+                categories = get_workspace_categories(workspace.intelligence_categories if workspace else None)
 
-                title_prompt = await self._get_prompt_text(
-                    db,
-                    "generate_title",
-                    workspace_name=workspace_name,
-                    workspace_description=workspace_description,
+                # ── Title generation ──
+                title_system = (
+                    "You are an expert title writer. Generate a concise, descriptive title "
+                    "for the given content. Return ONLY the title text, nothing else."
+                )
+                title_user = (
+                    f"Generate a short, descriptive title for this content."
+                    f"\nWorkspace: {workspace_name}"
+                    + (f" — {workspace_description}" if workspace_description else "")
                 )
                 title_response = await llm_gateway.chat(
                     messages=self._prepare_knowledge_messages(
-                        system_instruction=await self._get_prompt_text(db, "knowledge_title_system"),
+                        system_instruction=title_system,
                         knowledge_record=knowledge_record,
                         content=(knowledge_record.content or "")[:2000],
-                        conversation_messages=[{"role": "user", "content": title_prompt}],
+                        conversation_messages=[{"role": "user", "content": title_user}],
                     ),
                     provider_name=provider_name,
                     api_key=api_key,
@@ -355,59 +442,82 @@ class KnowledgeProcessingService:
                     if title_was_empty or knowledge_record.type in FILE_BASED_TYPES:
                         knowledge_record.title = normalized_title
 
-                insights_prompt = await self._get_prompt_text(
-                    db,
-                    "extract_insights",
-                    knowledge_title=normalize_knowledge_title(knowledge_record.title) or "Untitled",
-                    tags=tags_str,
-                    workspace_name=workspace_name,
-                    workspace_description=workspace_description,
-                )
-                insights_response = await llm_gateway.chat(
-                    messages=self._prepare_knowledge_messages(
-                        system_instruction=insights_prompt,
-                        knowledge_record=knowledge_record,
-                        content=(knowledge_record.content or "")[:8000],
-                    ),
-                    provider_name=provider_name,
-                    api_key=api_key,
-                    model=model,
-                    base_url=base_url,
-                )
-                try:
-                    json_match = re.search(r"\{[\s\S]*\}", insights_response)
-                    parsed = json.loads(json_match.group()) if json_match else {}
-                except Exception:
+                # ── Insights extraction (dynamic categories) ──
+                non_summary_cats = [c for c in categories if c.get("type") != "summary"]
+                summary_cat = next((c for c in categories if c.get("type") == "summary"), None)
+
+                if non_summary_cats:
+                    insights_prompt = self._build_extraction_prompt(
+                        categories=categories,
+                        workspace_name=workspace_name,
+                        workspace_description=workspace_description,
+                        knowledge_title=normalize_knowledge_title(knowledge_record.title) or "Untitled",
+                        tags=tags_str,
+                    )
+                    insights_response = await llm_gateway.chat(
+                        messages=self._prepare_knowledge_messages(
+                            system_instruction=insights_prompt,
+                            knowledge_record=knowledge_record,
+                            content=(knowledge_record.content or "")[:8000],
+                        ),
+                        provider_name=provider_name,
+                        api_key=api_key,
+                        model=model,
+                        base_url=base_url,
+                    )
+                    try:
+                        json_match = re.search(r"\{[\s\S]*\}", insights_response)
+                        parsed = json.loads(json_match.group()) if json_match else {}
+                    except Exception:
+                        parsed = {}
+                else:
                     parsed = {}
-                insights_payload = normalize_insights_payload(parsed, knowledge_record.content or "")
+
+                insights_payload = normalize_insights_payload(parsed, knowledge_record.content or "", categories)
+
+                # ── Summary (if summary category is configured) ──
+                if summary_cat:
+                    summary_prompt = self._build_summary_prompt(
+                        workspace_name=workspace_name,
+                        workspace_description=workspace_description,
+                        knowledge_title=normalize_knowledge_title(knowledge_record.title) or "Untitled",
+                        knowledge_type=knowledge_record.type,
+                        tags=tags_str,
+                        summary_category=summary_cat,
+                    )
+                    summary = await llm_gateway.chat(
+                        messages=self._prepare_knowledge_messages(
+                            system_instruction=summary_prompt,
+                            knowledge_record=knowledge_record,
+                            content=(knowledge_record.content or "")[:8000],
+                        ),
+                        provider_name=provider_name,
+                        api_key=api_key,
+                        model=model,
+                        base_url=base_url,
+                    )
+                    knowledge_record.ai_summary = summary
+                    insights_payload[summary_cat["key"]] = summary
+                else:
+                    knowledge_record.ai_summary = None
+
                 knowledge_record.insights = insights_payload
 
-                summary_prompt = await self._get_prompt_text(
-                    db,
-                    "summarize_knowledge",
-                    knowledge_title=normalize_knowledge_title(knowledge_record.title) or "Untitled",
-                    knowledge_type=knowledge_record.type,
-                    tags=tags_str,
-                    workspace_name=workspace_name,
-                    workspace_description=workspace_description,
-                )
-                summary = await llm_gateway.chat(
-                    messages=self._prepare_knowledge_messages(
-                        system_instruction=summary_prompt,
-                        knowledge_record=knowledge_record,
-                        content=(knowledge_record.content or "")[:8000],
-                    ),
-                    provider_name=provider_name,
-                    api_key=api_key,
-                    model=model,
-                    base_url=base_url,
-                )
-                knowledge_record.ai_summary = summary
-
+                # ── Tags (always extracted as system feature) ──
                 await db.execute(
                     delete(KnowledgeTag).where(KnowledgeTag.knowledge_id == knowledge_id, KnowledgeTag.source == "ai")
                 )
-                for tag in insights_payload.get("tags", []):
+                # Extract tags from insights if a tag-type category exists, otherwise auto-extract
+                tag_keys = [c["key"] for c in categories if c.get("type") == "tag"]
+                all_tags: list[str] = []
+                for tk in tag_keys:
+                    all_tags.extend(insights_payload.get(tk, []))
+                if not all_tags and not tag_keys:
+                    # Always extract tags even if no tag category — system feature
+                    raw_tags = parsed.get("tags", [])
+                    if isinstance(raw_tags, list):
+                        all_tags = [str(t).strip().lower().replace(" ", "-") for t in raw_tags if str(t).strip()]
+                for tag in all_tags:
                     normalized_tag = str(tag).strip().lower()
                     if normalized_tag:
                         db.add(KnowledgeTag(knowledge_id=knowledge_id, tag=normalized_tag, source="ai"))
@@ -425,7 +535,7 @@ class KnowledgeProcessingService:
                     "ai_title": knowledge_record.ai_title,
                     "summary": knowledge_record.ai_summary,
                     "insights": knowledge_record.insights or {},
-                    "tags": [str(tag).strip().lower() for tag in insights_payload.get("tags", []) if str(tag).strip()],
+                    "tags": [str(t).strip().lower() for t in all_tags if str(t).strip()],
                     "embedding_status": knowledge_record.embedding_status,
                 }
 
@@ -449,6 +559,40 @@ class KnowledgeProcessingService:
         except Exception as exc:
             await self._finalize_task_log(log_id, error=exc)
             raise
+
+    async def regenerate_all_intelligence(self, workspace_id: UUID) -> dict:
+        """Regenerate intelligence for all knowledge items in a workspace.
+
+        Runs in the background — enqueues each item's intelligence job sequentially.
+        """
+        from openforge.db.postgres import AsyncSessionLocal
+        from sqlalchemy.orm import selectinload
+
+        count = 0
+        errors = 0
+
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(Knowledge.id)
+                .where(Knowledge.workspace_id == workspace_id)
+                .where(Knowledge.content.isnot(None))
+                .where(Knowledge.content != "")
+            )
+            knowledge_ids = [row[0] for row in result.all()]
+
+        for kid in knowledge_ids:
+            try:
+                await self.run_knowledge_intelligence_job(
+                    knowledge_id=kid,
+                    workspace_id=workspace_id,
+                    audit_task_type="regenerate_workspace_intelligence",
+                )
+                count += 1
+            except Exception as exc:
+                logger.warning("Failed to regenerate intelligence for knowledge %s: %s", kid, exc)
+                errors += 1
+
+        return {"regenerated": count, "errors": errors, "total": len(knowledge_ids)}
 
     async def _backfill_stale_word_counts(self, db: AsyncSession, knowledge_items: list[Knowledge]) -> None:
         changed = False

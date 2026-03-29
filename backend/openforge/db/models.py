@@ -81,6 +81,7 @@ class Workspace(Base):
         UUID(as_uuid=True), ForeignKey("llm_providers.id", ondelete="SET NULL"), nullable=True
     )
     knowledge_intelligence_model: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    intelligence_categories: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     vision_provider_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("llm_providers.id", ondelete="SET NULL"), nullable=True
     )

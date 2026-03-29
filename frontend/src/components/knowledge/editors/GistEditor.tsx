@@ -10,6 +10,7 @@ import { baseExtensions } from '@/components/knowledge/shared/CodeMirrorTheme'
 import EditorShell from '@/components/knowledge/shared/EditorShell'
 import EditorToolbar from '@/components/knowledge/shared/EditorToolbar'
 import KnowledgeIntelligence, { GenerateIntelligenceButton, getIntelligenceCount } from '@/components/knowledge/shared/KnowledgeIntelligence'
+import { useWorkspace } from '@/hooks/useWorkspace'
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -42,6 +43,7 @@ interface GistEditorProps {
 }
 
 export default function GistEditor({ knowledge, workspaceId }: GistEditorProps) {
+    const workspace = useWorkspace(workspaceId)
     const navigate = useNavigate()
     const qc = useQueryClient()
     const editorRef = useRef<HTMLDivElement>(null)
@@ -194,9 +196,10 @@ export default function GistEditor({ knowledge, workspaceId }: GistEditorProps) 
                     knowledge={knowledge}
                     workspaceId={workspaceId}
                     onCollapse={onCollapse}
+                    categories={(workspace as any)?.intelligence_categories}
                 />
             )}
-            railItemCount={getIntelligenceCount(knowledge)}
+            railItemCount={getIntelligenceCount(knowledge, (workspace as any)?.intelligence_categories)}
         >
             <div ref={editorRef} className="flex-1 min-h-0 overflow-y-auto" />
         </EditorShell>

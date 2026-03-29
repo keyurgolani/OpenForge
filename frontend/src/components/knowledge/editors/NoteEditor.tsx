@@ -15,6 +15,7 @@ import { baseExtensions } from '@/components/knowledge/shared/CodeMirrorTheme'
 import EditorShell from '@/components/knowledge/shared/EditorShell'
 import EditorToolbar from '@/components/knowledge/shared/EditorToolbar'
 import KnowledgeIntelligence, { GenerateIntelligenceButton, getIntelligenceCount } from '@/components/knowledge/shared/KnowledgeIntelligence'
+import { useWorkspace } from '@/hooks/useWorkspace'
 import { cn } from '@/lib/utils'
 
 const mdRenderer = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
@@ -27,6 +28,7 @@ interface NoteEditorProps {
 }
 
 export default function NoteEditor({ knowledge, workspaceId }: NoteEditorProps) {
+    const workspace = useWorkspace(workspaceId)
     const navigate = useNavigate()
     const qc = useQueryClient()
     const editorRef = useRef<HTMLDivElement>(null)
@@ -192,9 +194,10 @@ export default function NoteEditor({ knowledge, workspaceId }: NoteEditorProps) 
                     knowledge={knowledge}
                     workspaceId={workspaceId}
                     onCollapse={onCollapse}
+                    categories={(workspace as any)?.intelligence_categories}
                 />
             )}
-            railItemCount={getIntelligenceCount(knowledge)}
+            railItemCount={getIntelligenceCount(knowledge, (workspace as any)?.intelligence_categories)}
         >
             <div className={cn('flex-1 min-h-0', showPreview ? 'flex' : 'flex flex-col')}>
                 {/* Editor pane */}

@@ -8,6 +8,7 @@ import logging
 from openforge.db.models import Workspace, Knowledge, Conversation
 from openforge.db.qdrant_client import get_qdrant
 from openforge.schemas.workspace import WorkspaceCreate, WorkspaceUpdate, WorkspaceResponse
+from openforge.utils.insights import DEFAULT_INTELLIGENCE_CATEGORIES, get_workspace_categories
 from openforge.config import get_settings
 from fastapi import HTTPException
 from qdrant_client.models import Filter, FieldCondition, MatchValue
@@ -26,6 +27,7 @@ def _to_response(workspace: Workspace, knowledge_count: int = 0, conv_count: int
         llm_model=workspace.llm_model,
         knowledge_intelligence_provider_id=workspace.knowledge_intelligence_provider_id,
         knowledge_intelligence_model=workspace.knowledge_intelligence_model,
+        intelligence_categories=get_workspace_categories(workspace.intelligence_categories),
         vision_provider_id=workspace.vision_provider_id,
         vision_model=workspace.vision_model,
         default_agent_id=workspace.default_agent_id,
@@ -48,6 +50,7 @@ class WorkspaceService:
         result = await db.execute(select(func.max(Workspace.sort_order)))
         max_order = result.scalar() or 0
 
+        import copy
         workspace = Workspace(
             name=data.name,
             description=data.description,
@@ -55,6 +58,7 @@ class WorkspaceService:
             color=data.color,
             llm_provider_id=data.llm_provider_id,
             llm_model=data.llm_model,
+            intelligence_categories=data.intelligence_categories or copy.deepcopy(DEFAULT_INTELLIGENCE_CATEGORIES),
             sort_order=max_order + 1,
         )
         db.add(workspace)
@@ -123,6 +127,8 @@ class WorkspaceService:
         if not ws:
             raise HTTPException(status_code=404, detail="Workspace not found")
 
+        categories_changed = False
+
         if data.name is not None:
             ws.name = data.name
         if data.description is not None:
@@ -139,6 +145,17 @@ class WorkspaceService:
             ws.knowledge_intelligence_provider_id = data.knowledge_intelligence_provider_id
         if data.knowledge_intelligence_model is not None:
             ws.knowledge_intelligence_model = data.knowledge_intelligence_model
+        if data.intelligence_categories is not None:
+            old_cats = get_workspace_categories(ws.intelligence_categories)
+            old_keys = {c["key"] for c in old_cats}
+            new_keys = {c["key"] for c in data.intelligence_categories}
+            old_descs = {c["key"]: c.get("description", "") for c in old_cats}
+            new_descs = {c["key"]: c.get("description", "") for c in data.intelligence_categories}
+            old_types = {c["key"]: c.get("type", "text") for c in old_cats}
+            new_types = {c["key"]: c.get("type", "text") for c in data.intelligence_categories}
+            if old_keys != new_keys or old_descs != new_descs or old_types != new_types:
+                categories_changed = True
+            ws.intelligence_categories = data.intelligence_categories
         if data.vision_provider_id is not None:
             ws.vision_provider_id = data.vision_provider_id
         if data.vision_model is not None:
@@ -154,6 +171,16 @@ class WorkspaceService:
 
         await db.commit()
         await db.refresh(ws)
+
+        if categories_changed:
+            try:
+                from openforge.services.knowledge_processing_service import knowledge_processing_service
+                await knowledge_processing_service.regenerate_all_intelligence(
+                    workspace_id=workspace_id,
+                )
+            except Exception as e:
+                logger.warning("Failed to trigger intelligence regeneration for workspace %s: %s", workspace_id, e)
+
         return _to_response(ws)
 
     async def delete_workspace(self, db: AsyncSession, workspace_id: UUID):

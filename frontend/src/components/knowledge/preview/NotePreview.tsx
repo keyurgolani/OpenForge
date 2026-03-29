@@ -6,6 +6,7 @@ import KnowledgeIntelligence, { GenerateIntelligenceButton, getIntelligenceCount
 import PreviewActions from './PreviewActions'
 import { CopyButton } from '@/components/shared/CopyButton'
 import KnowledgeMetadata from '@/components/knowledge/shared/KnowledgeMetadata'
+import { useWorkspace } from '@/hooks/useWorkspace'
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
 
@@ -16,6 +17,7 @@ interface NotePreviewProps {
 }
 
 export default function NotePreview({ knowledge, workspaceId, onClose }: NotePreviewProps) {
+    const workspace = useWorkspace(workspaceId)
     const navigate = useNavigate()
     const content = knowledge.content || ''
     const html = md.render(content)
@@ -45,8 +47,8 @@ export default function NotePreview({ knowledge, workspaceId, onClose }: NotePre
                 </>
             }
             leftRail={<KnowledgeMetadata knowledge={knowledge} />}
-            siderail={(onCollapse) => <KnowledgeIntelligence knowledge={knowledge} workspaceId={workspaceId} onCollapse={onCollapse} />}
-            railItemCount={getIntelligenceCount(knowledge)}
+            siderail={(onCollapse) => <KnowledgeIntelligence knowledge={knowledge} workspaceId={workspaceId} onCollapse={onCollapse} categories={(workspace as any)?.intelligence_categories} />}
+            railItemCount={getIntelligenceCount(knowledge, (workspace as any)?.intelligence_categories)}
         >
             <div className="space-y-5">
                 {/* Rendered markdown */}
