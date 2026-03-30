@@ -27,7 +27,6 @@ import type {
 
 interface AutomationsQueryOptions {
   status?: string
-  agent_id?: string
   skip?: number
   limit?: number
 }

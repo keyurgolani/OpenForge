@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Check, GitBranch, Pencil, Rocket, Trash2, X, Zap } from 'lucide-react'
+import { ArrowLeft, Check, Pencil, Rocket, Trash2, X, Zap } from 'lucide-react'
 
 import AutomationConfigSiderail from '@/components/automations/AutomationConfigSiderail'
 import AutomationGraphEditor from '@/components/automations/AutomationGraphEditor'
@@ -8,15 +8,11 @@ import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import DynamicParameterForm from '@/components/shared/DynamicParameterForm'
 import ErrorState from '@/components/shared/ErrorState'
 import LoadingState from '@/components/shared/LoadingState'
-import StatusBadge from '@/components/shared/StatusBadge'
 import {
   useAutomationQuery,
   useCreateAutomation,
   useUpdateAutomation,
   useDeleteAutomation,
-  usePauseAutomation,
-  useResumeAutomation,
-  useActivateAutomation,
   useAutomationGraphQuery,
   useDeploymentSchemaQuery,
 } from '@/features/automations'
@@ -89,9 +85,6 @@ export default function AutomationDetailPage() {
   const createAutomation = useCreateAutomation()
   const updateAutomation = useUpdateAutomation()
   const deleteAutomation = useDeleteAutomation()
-  const pauseAutomation = usePauseAutomation()
-  const resumeAutomation = useResumeAutomation()
-  const activateAutomation = useActivateAutomation()
   const deployAutomation = useDeployAutomation()
 
   const { data: graphData } = useAutomationGraphQuery(isCreateMode ? undefined : automationId)
@@ -279,30 +272,6 @@ export default function AutomationDetailPage() {
                   >
                     <Pencil className="w-3.5 h-3.5" /> Edit
                   </button>
-                  {automation?.status === 'active' && (
-                    <button
-                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 text-sm text-amber-400 transition hover:bg-amber-500/20"
-                      onClick={() => pauseAutomation.mutate(automationId!)}
-                    >
-                      Pause
-                    </button>
-                  )}
-                  {automation?.status === 'paused' && (
-                    <button
-                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 text-sm text-emerald-400 transition hover:bg-emerald-500/20"
-                      onClick={() => resumeAutomation.mutate(automationId!)}
-                    >
-                      Resume
-                    </button>
-                  )}
-                  {automation?.status === 'draft' && (
-                    <button
-                      className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-600 text-white px-3 text-sm font-semibold transition hover:bg-emerald-600/90"
-                      onClick={() => activateAutomation.mutate(automationId!)}
-                    >
-                      <Zap className="h-3.5 w-3.5" /> Activate
-                    </button>
-                  )}
                   {automation?.active_spec_id && defaultWorkspaceId && (
                     <button
                       className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-600 text-white px-3 text-sm font-semibold transition hover:bg-emerald-600/90"
@@ -355,46 +324,17 @@ export default function AutomationDetailPage() {
           </div>
         </div>
 
-        {/* ── Status bar (view mode only) ── */}
-        {!isCreateMode && automation && (
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <StatusBadge status={automation.status} />
-            <StatusBadge status={automation.health_status} />
-            {automation.compilation_status === 'success' && (
-              <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
-                <Check className="w-3.5 h-3.5" /> Compiled
-              </span>
-            )}
-            {automation.compilation_status === 'failed' && (
-              <span className="inline-flex items-center gap-1 text-xs text-red-400">
-                Compilation failed
-              </span>
-            )}
+        {/* ── Graph Editor ── */}
+        <div className="mt-4 flex-1 min-h-0 flex flex-col">
+          <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground mb-2 flex-shrink-0">Workflow Graph</p>
+          <div className="flex-1 min-h-[300px]">
+            <AutomationGraphEditor
+              automationId={automationId ?? 'new'}
+              graph={graphData ?? null}
+              readOnly={!isEditing}
+            />
           </div>
-        )}
-
-        {/* ── Graph Editor (view mode) ── */}
-        {!isCreateMode && (
-          <div className="mt-4 flex-1 min-h-0 flex flex-col">
-            <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground mb-2">Workflow Graph</p>
-            <div className="flex-1 min-h-[400px]">
-              <AutomationGraphEditor automationId={automationId!} graph={graphData ?? null} readOnly={!isEditing} />
-            </div>
-          </div>
-        )}
-
-        {/* ── Create mode: hint for graph editor ── */}
-        {isCreateMode && (
-          <div className="mt-4 rounded-xl border border-dashed border-border/25 bg-card/20 p-6 text-center">
-            <GitBranch className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">
-              Graph editor will be available after creating the automation.
-            </p>
-            <p className="text-xs text-muted-foreground/70 mt-1">
-              Create the automation first, then use the graph editor to design your workflow.
-            </p>
-          </div>
-        )}
+        </div>
       </div>
 
       {/* ── Config Siderail ── */}

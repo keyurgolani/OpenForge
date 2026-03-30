@@ -45,6 +45,7 @@ export const ROUTES = {
   AGENT_CREATE: '/agents/new',
   AGENT_DETAIL: '/agents/:agentId',
   AUTOMATIONS: '/automations',
+  AUTOMATION_CREATE: '/automations/new',
   AUTOMATION_DETAIL: '/automations/:automationId',
   DEPLOYMENTS: '/deployments',
   DEPLOYMENT_DETAIL: '/deployments/:deploymentId',
@@ -119,6 +120,10 @@ export function automationsRoute(automationId?: string): string {
     return routeWithParams(ROUTES.AUTOMATION_DETAIL, { automationId });
   }
   return ROUTES.AUTOMATIONS;
+}
+
+export function automationCreateRoute(): string {
+  return ROUTES.AUTOMATION_CREATE;
 }
 
 export function deploymentsRoute(deploymentId?: string): string {

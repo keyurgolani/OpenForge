@@ -18,7 +18,9 @@ import '@xyflow/react/dist/style.css'
 import { Save } from 'lucide-react'
 
 import AgentNode from './AgentNode'
-import NodePalette from './NodePalette'
+import SinkNode from './SinkNode'
+import NodePalette, { type SinkTypeDefinition } from './NodePalette'
+import SinkPalette from './SinkPalette'
 import NodeConfigPanel from './NodeConfigPanel'
 import type { AutomationGraph } from '@/types/automations'
 import type { ParameterConfig } from '@/types/agents'
@@ -28,6 +30,7 @@ import { useSaveAutomationGraph } from '@/features/automations'
 interface AutomationGraphEditorProps {
   automationId: string
   graph: AutomationGraph | null
+  readOnly?: boolean
 }
 
 let nodeIdCounter = 0
@@ -35,16 +38,17 @@ function nextNodeId() {
   return `node_${Date.now()}_${++nodeIdCounter}`
 }
 
-const nodeTypes = { agentNode: AgentNode }
+const nodeTypes = { agentNode: AgentNode, sinkNode: SinkNode }
 
 /** Extract input handles from an agent's input_schema */
 function inputHandlesFromSchema(
   inputSchema: ParameterConfig[] | undefined,
-): Array<{ key: string; label: string }> {
+): Array<{ key: string; label: string; required?: boolean }> {
   if (!inputSchema || inputSchema.length === 0) return []
   return inputSchema.map(param => ({
     key: param.name ?? '',
     label: param.label ?? param.name ?? '',
+    required: param.required ?? false,
   }))
 }
 
@@ -80,12 +84,12 @@ export default function AutomationGraphEditor(props: AutomationGraphEditorProps)
   )
 }
 
-function AutomationGraphEditorInner({ automationId, graph }: AutomationGraphEditorProps) {
+function AutomationGraphEditorInner({ automationId, graph, readOnly = false }: AutomationGraphEditorProps) {
   const { data: agentsData } = useAgentsQuery()
   const saveGraph = useSaveAutomationGraph()
   const agents = agentsData?.agents ?? []
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
-  const { screenToFlowPosition } = useReactFlow()
+  const { screenToFlowPosition, fitView: rfFitView } = useReactFlow()
 
   // Convert graph data to React Flow format
   const initialNodes: RFNode[] = useMemo(() => {
@@ -162,13 +166,14 @@ function AutomationGraphEditorInner({ automationId, graph }: AutomationGraphEdit
   )
 
   // Sync nodes when agent data loads asynchronously after graph data.
-  // Track the number of agents so we detect when the agents query resolves.
   const syncedAgentCountRef = useRef(agents.length)
   useEffect(() => {
     if (agents.length > 0 && agents.length !== syncedAgentCountRef.current && graph?.nodes && graph.nodes.length > 0) {
       syncedAgentCountRef.current = agents.length
       setNodes(initialNodes)
       setEdges(initialEdges)
+      // Fit view after nodes render
+      setTimeout(() => rfFitView({ maxZoom: 1, padding: 0.3 }), 100)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agents.length])
@@ -203,6 +208,26 @@ function AutomationGraphEditorInner({ automationId, graph }: AutomationGraphEdit
     [setNodes],
   )
 
+  const handleAddSinkNode = useCallback(
+    (sinkType: SinkTypeDefinition) => {
+      const nodeKey = `sink_${sinkType.type}_${nextNodeId()}`
+      const newNode: RFNode = {
+        id: nodeKey,
+        type: 'sinkNode',
+        position: { x: 500 + Math.random() * 200, y: 100 + Math.random() * 200 },
+        data: {
+          label: sinkType.label,
+          sinkType: sinkType.type,
+          inputHandles: sinkType.inputHandles,
+          nodeKey,
+        },
+      }
+      setNodes(nds => [...nds, newNode])
+      setIsDirty(true)
+    },
+    [setNodes],
+  )
+
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
@@ -211,28 +236,54 @@ function AutomationGraphEditorInner({ automationId, graph }: AutomationGraphEdit
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault()
+      const position = screenToFlowPosition({ x: event.clientX, y: event.clientY })
+
+      // Try agent data first
       const agentData = event.dataTransfer.getData('application/openforge-agent')
-      if (!agentData) return
-      try {
-        const agent = JSON.parse(agentData)
-        const position = screenToFlowPosition({ x: event.clientX, y: event.clientY })
-        const nodeKey = `${agent.slug}_${nextNodeId()}`
-        const newNode: RFNode = {
-          id: nodeKey,
-          type: 'agentNode',
-          position,
-          data: {
-            label: agent.name,
-            agentId: agent.id,
-            agentSlug: agent.slug,
-            inputHandles: inputHandlesFromSchema(agent.input_schema),
-            outputHandles: outputHandlesFromDefinitions(agent.output_definitions),
-            nodeKey,
-          },
-        }
-        setNodes(nds => [...nds, newNode])
-        setIsDirty(true)
-      } catch { /* ignore invalid data */ }
+      if (agentData) {
+        try {
+          const agent = JSON.parse(agentData)
+          const nodeKey = `${agent.slug}_${nextNodeId()}`
+          const newNode: RFNode = {
+            id: nodeKey,
+            type: 'agentNode',
+            position,
+            data: {
+              label: agent.name,
+              agentId: agent.id,
+              agentSlug: agent.slug,
+              inputHandles: inputHandlesFromSchema(agent.input_schema),
+              outputHandles: outputHandlesFromDefinitions(agent.output_definitions),
+              nodeKey,
+            },
+          }
+          setNodes(nds => [...nds, newNode])
+          setIsDirty(true)
+        } catch { /* ignore invalid data */ }
+        return
+      }
+
+      // Try sink data
+      const sinkData = event.dataTransfer.getData('application/openforge-sink')
+      if (sinkData) {
+        try {
+          const sink = JSON.parse(sinkData) as SinkTypeDefinition
+          const nodeKey = `sink_${sink.type}_${nextNodeId()}`
+          const newNode: RFNode = {
+            id: nodeKey,
+            type: 'sinkNode',
+            position,
+            data: {
+              label: sink.label,
+              sinkType: sink.type,
+              inputHandles: sink.inputHandles,
+              nodeKey,
+            },
+          }
+          setNodes(nds => [...nds, newNode])
+          setIsDirty(true)
+        } catch { /* ignore invalid data */ }
+      }
     },
     [screenToFlowPosition, setNodes],
   )
@@ -284,7 +335,9 @@ function AutomationGraphEditorInner({ automationId, graph }: AutomationGraphEdit
   }, [selectedNodeId, edges, nodes])
 
   const handleSave = useCallback(async () => {
-    const graphNodes = nodes.map(n => ({
+    // Only save agent nodes to backend (sink nodes are frontend-only for now)
+    const agentNodes = nodes.filter(n => n.type === 'agentNode')
+    const graphNodes = agentNodes.map(n => ({
       node_key: (n.data as Record<string, unknown>).nodeKey as string || n.id,
       agent_id: (n.data as Record<string, unknown>).agentId as string,
       position: n.position,
@@ -322,10 +375,10 @@ function AutomationGraphEditorInner({ automationId, graph }: AutomationGraphEdit
   }, [automationId, nodes, edges, saveGraph, staticInputsMap])
 
   return (
-    <div className="flex h-[600px] rounded-xl border border-border/25 overflow-hidden">
-      <NodePalette agents={agents} onAddNode={handleAddNode} />
+    <div className="flex h-full rounded-xl border border-border/25 overflow-hidden">
+      {!readOnly && <NodePalette agents={agents} onAddNode={handleAddNode} />}
       <div className="flex-1 relative" ref={reactFlowWrapper}>
-        {isDirty && (
+        {!readOnly && isDirty && (
           <div className="absolute top-3 right-3 z-10">
             <button
               onClick={handleSave}
@@ -340,23 +393,28 @@ function AutomationGraphEditorInner({ automationId, graph }: AutomationGraphEdit
         <ReactFlow
           nodes={nodes}
           edges={edges}
-          onNodesChange={(changes) => {
+          onNodesChange={readOnly ? undefined : (changes) => {
             onNodesChange(changes)
-            // Only mark dirty for user-initiated changes, not React Flow internals (dimensions, select)
             const meaningful = changes.some(c => c.type === 'remove' || (c.type === 'position' && 'dragging' in c && c.dragging))
             if (meaningful) setIsDirty(true)
           }}
-          onEdgesChange={(changes) => {
+          onEdgesChange={readOnly ? undefined : (changes) => {
             onEdgesChange(changes)
             const meaningful = changes.some(c => c.type === 'remove' || c.type === 'add')
             if (meaningful) setIsDirty(true)
           }}
-          onConnect={onConnect}
-          onNodeClick={onNodeClick}
-          onDragOver={onDragOver}
-          onDrop={onDrop}
+          onConnect={readOnly ? undefined : onConnect}
+          onNodeClick={readOnly ? undefined : onNodeClick}
+          onDragOver={readOnly ? undefined : onDragOver}
+          onDrop={readOnly ? undefined : onDrop}
           nodeTypes={nodeTypes}
+          nodesDraggable={!readOnly}
+          nodesConnectable={!readOnly}
+          elementsSelectable={!readOnly}
           fitView
+          fitViewOptions={{ maxZoom: 1, padding: 0.3 }}
+          minZoom={0.2}
+          maxZoom={2}
           className="bg-background"
         >
           <Controls className="!bg-card !border-border/25 !shadow-lg" />
@@ -368,7 +426,10 @@ function AutomationGraphEditorInner({ automationId, graph }: AutomationGraphEdit
           <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#333" />
         </ReactFlow>
       </div>
-      {selectedNode && selectedNodeData && (
+      {!readOnly && <SinkPalette onAddSinkNode={handleAddSinkNode} />}
+
+      {/* Node config modal — rendered outside the flex layout */}
+      {!readOnly && selectedNode && selectedNode.type === 'agentNode' && selectedNodeData && (
         <NodeConfigPanel
           node={{
             id: selectedNode.id,

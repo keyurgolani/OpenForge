@@ -431,7 +431,7 @@ export const getAgentVersion = (agentId: string, versionId: string): Promise<Age
     api.get(`/agents/${agentId}/versions/${versionId}`).then(r => r.data)
 
 // ── Automations ──
-export const listAutomations = (params?: { status?: string; agent_id?: string; skip?: number; limit?: number }): Promise<any> =>
+export const listAutomations = (params?: { status?: string; skip?: number; limit?: number }): Promise<any> =>
     api.get('/automations', { params }).then(r => r.data)
 export const getAutomation = (id: string): Promise<any> => api.get(`/automations/${id}`).then(r => r.data)
 export const createAutomation = (data: AutomationCreate): Promise<any> => api.post('/automations', data).then(r => r.data)

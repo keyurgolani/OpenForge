@@ -204,6 +204,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                 <Route path="/agents/new" element={<ErrorBoundary><AgentDetailPage /></ErrorBoundary>} />
                                 <Route path="/agents/:agentId" element={<ErrorBoundary><AgentDetailPage /></ErrorBoundary>} />
                                 <Route path="/automations" element={<ErrorBoundary><AutomationsPage /></ErrorBoundary>} />
+                                <Route path="/automations/new" element={<ErrorBoundary><AutomationDetailPage /></ErrorBoundary>} />
                                 <Route path="/automations/:automationId" element={<ErrorBoundary><AutomationDetailPage /></ErrorBoundary>} />
                                 <Route path="/deployments" element={<ErrorBoundary><DeploymentsPage /></ErrorBoundary>} />
                                 <Route path="/deployments/:deploymentId" element={<ErrorBoundary><DeploymentDetailPage /></ErrorBoundary>} />
