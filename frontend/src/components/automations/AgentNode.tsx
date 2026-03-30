@@ -32,9 +32,9 @@ function AgentNode({ data, selected }: NodeProps) {
 
       {/* Handles */}
       <div className="px-0.5 py-1">
-        {/* Input handles */}
+        {/* Input handles — target on left, pass-through source on right */}
         {inputs.map((handle) => (
-          <div key={`in-${handle.key}`} className="relative flex items-center h-4 pl-2">
+          <div key={`in-${handle.key}`} className="relative flex items-center justify-between h-4 px-2">
             <Handle
               type="target"
               position={Position.Left}
@@ -42,12 +42,26 @@ function AgentNode({ data, selected }: NodeProps) {
               className="!w-2 !h-2 !bg-blue-400 !border-blue-600"
               style={{ top: '50%', transform: 'translateY(-50%)' }}
             />
-            <span className="text-[9px] text-muted-foreground ml-1 truncate">{handle.label}</span>
-            {handle.required && <span className="text-[8px] text-red-400 ml-0.5">*</span>}
+            <span className="text-[9px] text-muted-foreground truncate mx-0.5">
+              {handle.label}
+              {handle.required && <span className="text-[8px] text-red-400 ml-0.5">*</span>}
+            </span>
+            <Handle
+              type="source"
+              position={Position.Right}
+              id={`pass:${handle.key}`}
+              className="!w-2 !h-2 !bg-blue-400/50 !border-blue-500/60"
+              style={{ top: '50%', transform: 'translateY(-50%)' }}
+            />
           </div>
         ))}
 
-        {/* Output handles */}
+        {/* Divider between inputs and outputs when both exist */}
+        {inputs.length > 0 && outputs.length > 0 && (
+          <div className="mx-2 my-0.5 border-t border-border/20" />
+        )}
+
+        {/* Output handles — agent-produced outputs */}
         {outputs.map((handle) => (
           <div key={`out-${handle.key}`} className="relative flex items-center justify-end h-4 pr-2">
             <span className="text-[9px] text-muted-foreground mr-1 truncate">{handle.label}</span>

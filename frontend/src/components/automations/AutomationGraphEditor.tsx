@@ -40,11 +40,14 @@ function nextNodeId() {
 
 const nodeTypes = { agentNode: AgentNode, sinkNode: SinkNode }
 
-/** Extract input handles from an agent's input_schema */
+/** Extract input handles from an agent's input_schema.
+ *  Agents without explicit inputs get a default "User Request" text input. */
 function inputHandlesFromSchema(
   inputSchema: ParameterConfig[] | undefined,
 ): Array<{ key: string; label: string; required?: boolean }> {
-  if (!inputSchema || inputSchema.length === 0) return []
+  if (!inputSchema || inputSchema.length === 0) {
+    return [{ key: 'user_request', label: 'User Request', required: true }]
+  }
   return inputSchema.map(param => ({
     key: param.name ?? '',
     label: param.label ?? param.name ?? '',
@@ -52,11 +55,19 @@ function inputHandlesFromSchema(
   }))
 }
 
-/** Extract output handles from an agent's output_definitions */
+/** Extract output handles from an agent's output_definitions.
+ *  Agents without explicit outputs get a default "Agent Response" text output.
+ *  A single generic "output" key is also treated as the default. */
 function outputHandlesFromDefinitions(
   outputDefs: Array<{ key: string; type?: string; label?: string }> | undefined,
 ): Array<{ key: string; label: string }> {
-  if (!outputDefs || outputDefs.length === 0) return [{ key: 'output', label: 'output' }]
+  if (!outputDefs || outputDefs.length === 0) {
+    return [{ key: 'response', label: 'Agent Response' }]
+  }
+  // Treat a single generic "output" entry as the default
+  if (outputDefs.length === 1 && outputDefs[0].key === 'output' && !outputDefs[0].label) {
+    return [{ key: 'output', label: 'Agent Response' }]
+  }
   return outputDefs.map(def => ({
     key: def.key,
     label: def.label ?? def.key,
@@ -142,6 +153,7 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false }: A
   const [isDirty, setIsDirty] = useState(false)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [staticInputsMap, setStaticInputsMap] = useState<Record<string, Record<string, unknown>>>(initialStaticInputs)
+  const [contextMenu, setContextMenu] = useState<{ nodeId: string; x: number; y: number } | null>(null)
 
   // Wrap onNodesChange to clean up static inputs when nodes are deleted
   const onNodesChange = useCallback(
@@ -290,7 +302,30 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false }: A
 
   const onNodeClick = useCallback((_event: React.MouseEvent, node: RFNode) => {
     setSelectedNodeId(node.id)
+    setContextMenu(null)
   }, [])
+
+  const onNodeContextMenu = useCallback((event: React.MouseEvent, node: RFNode) => {
+    event.preventDefault()
+    setContextMenu({ nodeId: node.id, x: event.clientX, y: event.clientY })
+  }, [])
+
+  const onPaneClick = useCallback(() => {
+    setContextMenu(null)
+  }, [])
+
+  const handleDeleteNode = useCallback((nodeId: string) => {
+    setNodes(nds => nds.filter(n => n.id !== nodeId))
+    setEdges(eds => eds.filter(e => e.source !== nodeId && e.target !== nodeId))
+    setStaticInputsMap(prev => {
+      const next = { ...prev }
+      delete next[nodeId]
+      return next
+    })
+    if (selectedNodeId === nodeId) setSelectedNodeId(null)
+    setContextMenu(null)
+    setIsDirty(true)
+  }, [setNodes, setEdges, selectedNodeId])
 
   const handleCloseConfigPanel = useCallback(() => {
     setSelectedNodeId(null)
@@ -405,6 +440,8 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false }: A
           }}
           onConnect={readOnly ? undefined : onConnect}
           onNodeClick={readOnly ? undefined : onNodeClick}
+          onNodeContextMenu={readOnly ? undefined : onNodeContextMenu}
+          onPaneClick={readOnly ? undefined : onPaneClick}
           onDragOver={readOnly ? undefined : onDragOver}
           onDrop={readOnly ? undefined : onDrop}
           nodeTypes={nodeTypes}
@@ -427,6 +464,32 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false }: A
         </ReactFlow>
       </div>
       {!readOnly && <SinkPalette onAddSinkNode={handleAddSinkNode} />}
+
+      {/* Context menu */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 rounded-lg border border-border/25 bg-background shadow-xl py-1 min-w-[140px]"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+        >
+          {nodes.find(n => n.id === contextMenu.nodeId)?.type === 'agentNode' && (
+            <button
+              className="w-full text-left px-3 py-1.5 text-xs text-foreground hover:bg-accent/15 transition"
+              onClick={() => {
+                setSelectedNodeId(contextMenu.nodeId)
+                setContextMenu(null)
+              }}
+            >
+              Configure
+            </button>
+          )}
+          <button
+            className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10 transition"
+            onClick={() => handleDeleteNode(contextMenu.nodeId)}
+          >
+            Delete
+          </button>
+        </div>
+      )}
 
       {/* Node config modal — rendered outside the flex layout */}
       {!readOnly && selectedNode && selectedNode.type === 'agentNode' && selectedNodeData && (
