@@ -1163,16 +1163,18 @@ class CompiledAutomationSpecModel(Base):
 
 
 class AutomationNodeModel(Base):
-    """A single agent node in an automation DAG."""
+    """A single node (agent or sink) in an automation DAG."""
     __tablename__ = "automation_nodes"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     automation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("automations.id", ondelete="CASCADE"), nullable=False, index=True,
     )
-    agent_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False,
+    node_type: Mapped[str] = mapped_column(String(20), nullable=False, default="agent")
+    agent_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), nullable=True,
     )
+    sink_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     node_key: Mapped[str] = mapped_column(String(120), nullable=False)
     position_x: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     position_y: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)

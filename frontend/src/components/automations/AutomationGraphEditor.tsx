@@ -19,7 +19,7 @@ import { Save } from 'lucide-react'
 
 import AgentNode from './AgentNode'
 import SinkNode from './SinkNode'
-import NodePalette, { type SinkTypeDefinition } from './NodePalette'
+import NodePalette, { type SinkTypeDefinition, SINK_TYPES } from './NodePalette'
 import SinkPalette from './SinkPalette'
 import NodeConfigPanel from './NodeConfigPanel'
 import type { AutomationGraph } from '@/types/automations'
@@ -114,6 +114,22 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
   const initialNodes: RFNode[] = useMemo(() => {
     if (!graph?.nodes) return []
     return graph.nodes.map(n => {
+      const nodeType = (n as Record<string, unknown>).node_type as string | undefined
+      if (nodeType === 'sink') {
+        const sinkType = (n as Record<string, unknown>).sink_type as string
+        const sinkDef = SINK_TYPES.find(s => s.type === sinkType)
+        return {
+          id: n.id,
+          type: 'sinkNode',
+          position: n.position,
+          data: {
+            label: sinkDef?.label ?? sinkType ?? 'Sink',
+            sinkType,
+            inputHandles: sinkDef?.inputHandles ?? [{ key: 'data', label: 'Data' }],
+            nodeKey: n.node_key,
+          },
+        }
+      }
       const agent = agents.find(a => a.id === n.agent_id)
       return {
         id: n.id,
@@ -166,27 +182,28 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
   // Expose pending graph state to parent for save-on-create flows
   useImperativeHandle(forwardedRef, () => ({
     getPendingGraph: () => {
-      const agentNodes = nodes.filter(n => n.type === 'agentNode')
-      if (agentNodes.length === 0) return null
-      const graphNodes = agentNodes.map(n => ({
-        node_key: (n.data as Record<string, unknown>).nodeKey as string || n.id,
-        agent_id: (n.data as Record<string, unknown>).agentId as string,
-        position: n.position,
-        config: {},
-      }))
-      const agentNodeIds = new Set(agentNodes.map(n => n.id))
+      if (nodes.length === 0) return null
+      const allNodeIds = new Set(nodes.map(n => n.id))
       const nodeIdToKey: Record<string, string> = {}
-      agentNodes.forEach(n => {
+      nodes.forEach(n => {
         nodeIdToKey[n.id] = (n.data as Record<string, unknown>).nodeKey as string || n.id
       })
+      const graphNodes = nodes.map(n => {
+        const data = n.data as Record<string, unknown>
+        if (n.type === 'sinkNode') {
+          return { node_key: data.nodeKey as string || n.id, node_type: 'sink', sink_type: data.sinkType as string, position: n.position, config: {} }
+        }
+        return { node_key: data.nodeKey as string || n.id, node_type: 'agent', agent_id: data.agentId as string, position: n.position, config: {} }
+      })
       const graphEdges = edges
-        .filter(e => agentNodeIds.has(e.source) && agentNodeIds.has(e.target))
+        .filter(e => allNodeIds.has(e.source) && allNodeIds.has(e.target))
         .map(e => ({
           source_node_key: nodeIdToKey[e.source] ?? e.source,
           source_output_key: e.sourceHandle ?? 'output',
           target_node_key: nodeIdToKey[e.target] ?? e.target,
           target_input_key: e.targetHandle ?? '',
         }))
+      const agentNodeIds = new Set(nodes.filter(n => n.type === 'agentNode').map(n => n.id))
       const staticInputs: Array<{ node_key: string; input_key: string; static_value: unknown }> = []
       for (const [nodeId, inputs] of Object.entries(staticInputsMap)) {
         if (!agentNodeIds.has(nodeId)) continue
@@ -420,24 +437,36 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
   }, [selectedNodeId, edges, nodes])
 
   const handleSave = useCallback(async () => {
-    // Only save agent nodes to backend (sink nodes are frontend-only for now)
-    const agentNodes = nodes.filter(n => n.type === 'agentNode')
-    const graphNodes = agentNodes.map(n => ({
-      node_key: (n.data as Record<string, unknown>).nodeKey as string || n.id,
-      agent_id: (n.data as Record<string, unknown>).agentId as string,
-      position: n.position,
-      config: {},
-    }))
-
-    const agentNodeIds = new Set(agentNodes.map(n => n.id))
+    const allNodeIds = new Set(nodes.map(n => n.id))
     const nodeIdToKey: Record<string, string> = {}
-    agentNodes.forEach(n => {
+    nodes.forEach(n => {
       nodeIdToKey[n.id] = (n.data as Record<string, unknown>).nodeKey as string || n.id
     })
 
-    // Only save edges between agent nodes (sink edges are frontend-only)
+    // Serialize all nodes (agent and sink)
+    const graphNodes = nodes.map(n => {
+      const data = n.data as Record<string, unknown>
+      if (n.type === 'sinkNode') {
+        return {
+          node_key: data.nodeKey as string || n.id,
+          node_type: 'sink',
+          sink_type: data.sinkType as string,
+          position: n.position,
+          config: {},
+        }
+      }
+      return {
+        node_key: data.nodeKey as string || n.id,
+        node_type: 'agent',
+        agent_id: data.agentId as string,
+        position: n.position,
+        config: {},
+      }
+    })
+
+    // Save all edges between any nodes
     const graphEdges = edges
-      .filter(e => agentNodeIds.has(e.source) && agentNodeIds.has(e.target))
+      .filter(e => allNodeIds.has(e.source) && allNodeIds.has(e.target))
       .map(e => ({
         source_node_key: nodeIdToKey[e.source] ?? e.source,
         source_output_key: e.sourceHandle ?? 'output',
@@ -446,6 +475,7 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
       }))
 
     // Build static_inputs from the map (agent nodes only)
+    const agentNodeIds = new Set(nodes.filter(n => n.type === 'agentNode').map(n => n.id))
     const staticInputs: Array<{ node_key: string; input_key: string; static_value: unknown }> = []
     for (const [nodeId, inputs] of Object.entries(staticInputsMap)) {
       if (!agentNodeIds.has(nodeId)) continue

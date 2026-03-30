@@ -65,11 +65,7 @@ class AutomationService(CrudDomainService):
                 aid = str(n.automation_id)
                 if aid not in previews:
                     previews[aid] = {"nodes": [], "edges": []}
-                previews[aid]["nodes"].append({
-                    "id": str(n.id),
-                    "x": n.position_x,
-                    "y": n.position_y,
-                })
+                previews[aid]["nodes"].append({"id": str(n.id)})
             for e in edges_result.scalars().all():
                 aid = str(e.automation_id)
                 if aid not in previews:
@@ -126,8 +122,8 @@ class AutomationService(CrudDomainService):
             select(AutomationNodeInputModel).where(AutomationNodeInputModel.automation_id == automation.id)
         )).scalars().all()
 
-        # Build node_key -> agent_slug lookup
-        agent_ids = {n.agent_id for n in nodes}
+        # Build node_key -> agent_slug lookup (agent nodes only)
+        agent_ids = {n.agent_id for n in nodes if n.agent_id is not None}
         agents_by_id = {}
         for aid in agent_ids:
             agent = await self.db.get(AgentModel, aid)
@@ -136,6 +132,8 @@ class AutomationService(CrudDomainService):
 
         node_blueprints = []
         for n in nodes:
+            if (n.node_type or "agent") != "agent" or n.agent_id is None:
+                continue
             agent = agents_by_id.get(n.agent_id)
             if not agent:
                 continue
@@ -146,10 +144,13 @@ class AutomationService(CrudDomainService):
                 config=n.config or {},
             ))
 
-        # Build edge blueprints - we need node_key lookup
+        # Build edge blueprints — only edges between agent nodes
+        agent_node_ids = {n.id for n in nodes if (n.node_type or "agent") == "agent" and n.agent_id is not None}
         node_id_to_key = {n.id: n.node_key for n in nodes}
         edge_blueprints = []
         for e in edges:
+            if e.source_node_id not in agent_node_ids or e.target_node_id not in agent_node_ids:
+                continue
             edge_blueprints.append(AutomationEdgeBlueprint(
                 source_node_key=node_id_to_key.get(e.source_node_id, ""),
                 source_output_key=e.source_output_key,
@@ -249,7 +250,9 @@ class AutomationService(CrudDomainService):
                 {
                     "id": str(n.id),
                     "node_key": n.node_key,
-                    "agent_id": str(n.agent_id),
+                    "node_type": n.node_type or "agent",
+                    "agent_id": str(n.agent_id) if n.agent_id else None,
+                    "sink_type": n.sink_type,
                     "position": {"x": n.position_x, "y": n.position_y},
                     "config": n.config or {},
                 }
@@ -299,12 +302,15 @@ class AutomationService(CrudDomainService):
             delete(AutomationNodeModel).where(AutomationNodeModel.automation_id == automation_id)
         )
 
-        # Create nodes
+        # Create nodes (agent nodes and sink nodes)
         node_key_to_id: dict[str, Any] = {}
         for nd in nodes:
+            node_type = nd.get("node_type", "agent")
             node = AutomationNodeModel(
                 automation_id=automation_id,
-                agent_id=nd["agent_id"],
+                node_type=node_type,
+                agent_id=nd.get("agent_id") if node_type == "agent" else None,
+                sink_type=nd.get("sink_type") if node_type == "sink" else None,
                 node_key=nd["node_key"],
                 position_x=nd.get("position", {}).get("x", 0),
                 position_y=nd.get("position", {}).get("y", 0),

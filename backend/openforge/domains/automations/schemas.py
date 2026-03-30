@@ -84,7 +84,9 @@ class AutomationRunResponse(BaseModel):
 # Graph schemas
 class GraphNodeInput(BaseModel):
     node_key: str
-    agent_id: UUID
+    node_type: str = "agent"
+    agent_id: Optional[UUID] = None
+    sink_type: Optional[str] = None
     position: dict[str, float] = Field(default_factory=lambda: {"x": 0, "y": 0})
     config: dict[str, Any] = Field(default_factory=dict)
 

@@ -28,7 +28,7 @@ export interface Automation {
   created_at: string;
   updated_at: string;
   graph_preview?: {
-    nodes: { id: string; x: number; y: number }[];
+    nodes: { id: string }[];
     edges: { source: string; target: string }[];
   } | null;
 }
@@ -65,7 +65,9 @@ export interface AutomationRunResponse {
 export interface AutomationNode {
   id: string;
   node_key: string;
-  agent_id: string;
+  node_type?: 'agent' | 'sink';
+  agent_id?: string | null;
+  sink_type?: string | null;
   position: { x: number; y: number };
   config: Record<string, unknown>;
 }
