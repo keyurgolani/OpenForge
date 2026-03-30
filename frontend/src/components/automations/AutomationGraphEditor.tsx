@@ -379,21 +379,26 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false }: A
       config: {},
     }))
 
+    const agentNodeIds = new Set(agentNodes.map(n => n.id))
     const nodeIdToKey: Record<string, string> = {}
-    nodes.forEach(n => {
+    agentNodes.forEach(n => {
       nodeIdToKey[n.id] = (n.data as Record<string, unknown>).nodeKey as string || n.id
     })
 
-    const graphEdges = edges.map(e => ({
-      source_node_key: nodeIdToKey[e.source] ?? e.source,
-      source_output_key: e.sourceHandle ?? 'output',
-      target_node_key: nodeIdToKey[e.target] ?? e.target,
-      target_input_key: e.targetHandle ?? '',
-    }))
+    // Only save edges between agent nodes (sink edges are frontend-only)
+    const graphEdges = edges
+      .filter(e => agentNodeIds.has(e.source) && agentNodeIds.has(e.target))
+      .map(e => ({
+        source_node_key: nodeIdToKey[e.source] ?? e.source,
+        source_output_key: e.sourceHandle ?? 'output',
+        target_node_key: nodeIdToKey[e.target] ?? e.target,
+        target_input_key: e.targetHandle ?? '',
+      }))
 
-    // Build static_inputs from the map
+    // Build static_inputs from the map (agent nodes only)
     const staticInputs: Array<{ node_key: string; input_key: string; static_value: unknown }> = []
     for (const [nodeId, inputs] of Object.entries(staticInputsMap)) {
+      if (!agentNodeIds.has(nodeId)) continue
       const nodeKey = nodeIdToKey[nodeId] ?? nodeId
       for (const [inputKey, value] of Object.entries(inputs)) {
         if (value !== '' && value != null) {
