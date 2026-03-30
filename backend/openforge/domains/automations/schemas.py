@@ -52,6 +52,7 @@ class AutomationResponse(BaseModel):
     last_compiled_at: Optional[datetime]
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
+    graph_preview: Optional[dict] = None
 
     model_config = ConfigDict(from_attributes=True)
 

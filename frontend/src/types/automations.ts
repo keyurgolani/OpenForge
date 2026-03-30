@@ -27,6 +27,10 @@ export interface Automation {
   last_compiled_at: string | null;
   created_at: string;
   updated_at: string;
+  graph_preview?: {
+    nodes: { id: string; x: number; y: number }[];
+    edges: { source: string; target: string }[];
+  } | null;
 }
 
 export interface AutomationCreate {

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight, GitBranch, Plus, Zap } from 'lucide-react'
+import { ArrowRight, Plus, Zap } from 'lucide-react'
 
+import MiniGraphPreview from '@/components/automations/MiniGraphPreview'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import EmptyState from '@/components/shared/EmptyState'
 import ErrorState from '@/components/shared/ErrorState'
@@ -69,10 +70,11 @@ export default function AutomationsPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    {automation.graph_version > 0 ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 text-accent px-2 py-0.5 text-xs">
-                        <GitBranch className="w-3 h-3" /> v{automation.graph_version}
-                      </span>
+                    {automation.graph_preview ? (
+                      <MiniGraphPreview
+                        nodes={automation.graph_preview.nodes}
+                        edges={automation.graph_preview.edges}
+                      />
                     ) : (
                       <span className="text-xs text-muted-foreground">No graph</span>
                     )}

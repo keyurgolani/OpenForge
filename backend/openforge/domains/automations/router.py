@@ -212,6 +212,18 @@ async def list_versions(
     return {"versions": versions}
 
 
+@router.get("/{automation_id}/versions/{version_id}")
+async def get_version(
+    automation_id: UUID,
+    version_id: UUID,
+    service: AutomationService = Depends(get_automation_service),
+):
+    version = await service.get_version(automation_id, version_id)
+    if version is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Version not found")
+    return version
+
+
 @router.get("/{automation_id}/deployment-schema")
 async def get_deployment_schema(
     automation_id: UUID,

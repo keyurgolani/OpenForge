@@ -17,6 +17,7 @@ import {
   useDeploymentSchemaQuery,
   useSaveAutomationGraph,
   useAutomationVersionsQuery,
+  useAutomationVersionQuery,
 } from '@/features/automations'
 import { useDeployAutomation } from '@/features/deployments'
 import { useWorkspaces } from '@/hooks/useWorkspace'
@@ -88,6 +89,12 @@ export default function AutomationDetailPage() {
   const [formState, setFormState] = useState<FormState>(defaultFormState)
   const [autoSlug, setAutoSlug] = useState(isCreateMode)
   const [graphResetKey, setGraphResetKey] = useState(0)
+  const [viewingVersion, setViewingVersion] = useState<string | null>(null)
+  const { data: versionSnapshot } = useAutomationVersionQuery(
+    isCreateMode ? undefined : automationId,
+    viewingVersion ?? undefined,
+  )
+  const isViewingVersion = Boolean(viewingVersion && versionSnapshot)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showDeployDialog, setShowDeployDialog] = useState(false)
   const [deployInputValues, setDeployInputValues] = useState<Record<string, unknown>>({})
@@ -193,6 +200,7 @@ export default function AutomationDetailPage() {
   }
 
   const handleEdit = () => {
+    setViewingVersion(null)
     setAutoSlug(false)
     setIsEditing(true)
   }
@@ -310,16 +318,29 @@ export default function AutomationDetailPage() {
 
         </div>
 
+        {/* ── Version viewing banner ── */}
+        {isViewingVersion && versionSnapshot && (
+          <div className="mt-4 flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2">
+            <span className="text-xs text-amber-300">Viewing version v{versionSnapshot.version} snapshot. Graph is read-only.</span>
+            <button
+              className="text-xs text-amber-300 hover:text-amber-200 underline transition"
+              onClick={() => setViewingVersion(null)}
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {/* ── Graph Editor ── */}
         <div className="mt-4 flex-1 min-h-0 flex flex-col">
           <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground mb-2 flex-shrink-0">Workflow Graph</p>
           <div className="flex-1 min-h-[300px]">
             <AutomationGraphEditor
               ref={graphEditorRef}
-              key={`${automationId ?? 'new'}_${graphResetKey}`}
+              key={`${automationId ?? 'new'}_${graphResetKey}_${viewingVersion ?? ''}`}
               automationId={automationId ?? 'new'}
-              graph={graphData ?? null}
-              readOnly={!isEditing}
+              graph={isViewingVersion ? (versionSnapshot?.graph_snapshot as typeof graphData ?? null) : (graphData ?? null)}
+              readOnly={!isEditing || isViewingVersion}
             />
           </div>
         </div>
@@ -330,14 +351,12 @@ export default function AutomationDetailPage() {
         description={formState.description}
         tags={formState.tags}
         isEditing={isEditing}
-        status={automation?.status}
-        healthStatus={automation?.health_status}
-        graphVersion={automation?.graph_version}
+        activeSpecId={automation?.active_spec_id}
         createdAt={automation?.created_at}
         updatedAt={automation?.updated_at}
-        compilationStatus={automation?.compilation_status}
-        compilationError={automation?.compilation_error}
         versions={versionsData?.versions}
+        viewingVersion={viewingVersion}
+        onViewVersion={setViewingVersion}
         onChange={(field, value) => setField(field as keyof FormState, value as FormState[keyof FormState])}
       />
 

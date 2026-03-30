@@ -48,7 +48,43 @@ class AutomationService(CrudDomainService):
 
         total = await self.db.scalar(count_query) or 0
         rows = (await self.db.execute(query.offset(skip).limit(limit))).scalars().all()
-        return [self._serialize(row) for row in rows], int(total)
+
+        # Attach lightweight graph previews for listing thumbnails
+        automation_ids = [r.id for r in rows]
+        previews: dict[str, dict] = {}
+        if automation_ids:
+            nodes_result = await self.db.execute(
+                select(AutomationNodeModel)
+                .where(AutomationNodeModel.automation_id.in_(automation_ids))
+            )
+            edges_result = await self.db.execute(
+                select(AutomationEdgeModel)
+                .where(AutomationEdgeModel.automation_id.in_(automation_ids))
+            )
+            for n in nodes_result.scalars().all():
+                aid = str(n.automation_id)
+                if aid not in previews:
+                    previews[aid] = {"nodes": [], "edges": []}
+                previews[aid]["nodes"].append({
+                    "id": str(n.id),
+                    "x": n.position_x,
+                    "y": n.position_y,
+                })
+            for e in edges_result.scalars().all():
+                aid = str(e.automation_id)
+                if aid not in previews:
+                    previews[aid] = {"nodes": [], "edges": []}
+                previews[aid]["edges"].append({
+                    "source": str(e.source_node_id),
+                    "target": str(e.target_node_id),
+                })
+
+        results = []
+        for row in rows:
+            data = self._serialize(row)
+            data["graph_preview"] = previews.get(str(row.id))
+            results.append(data)
+        return results, int(total)
 
     async def get_automation(self, automation_id: UUID) -> dict[str, Any] | None:
         return await self.get_record(automation_id)
@@ -333,6 +369,7 @@ class AutomationService(CrudDomainService):
             return None
         result = await self.db.execute(
             select(
+                CompiledAutomationSpecModel.id,
                 CompiledAutomationSpecModel.version,
                 CompiledAutomationSpecModel.is_valid,
                 CompiledAutomationSpecModel.created_at,
@@ -341,9 +378,66 @@ class AutomationService(CrudDomainService):
             .order_by(CompiledAutomationSpecModel.version.desc())
         )
         return [
-            {"version": row.version, "is_valid": row.is_valid, "created_at": row.created_at.isoformat() if row.created_at else None}
+            {"id": str(row.id), "version": row.version, "is_valid": row.is_valid, "created_at": row.created_at.isoformat() if row.created_at else None}
             for row in result.all()
         ]
+
+    async def get_version(self, automation_id: UUID, version_id: UUID) -> dict | None:
+        """Return a specific compiled spec version with its graph snapshot
+        in the same format as the get_graph API response."""
+        spec = await self.db.get(CompiledAutomationSpecModel, version_id)
+        if spec is None or spec.automation_id != automation_id:
+            return None
+        snapshot = spec.graph_snapshot or {}
+        # Enrich nodes with agent_id (snapshot stores agent_slug)
+        enriched_nodes = []
+        for node in snapshot.get("nodes", []):
+            agent_slug = node.get("agent_slug")
+            agent_id = None
+            if agent_slug:
+                agent = await self.db.scalar(
+                    select(AgentModel).where(AgentModel.slug == agent_slug)
+                )
+                if agent:
+                    agent_id = str(agent.id)
+            enriched_nodes.append({
+                "id": node.get("node_key", ""),
+                "node_key": node.get("node_key", ""),
+                "agent_id": agent_id or "",
+                "position": node.get("position", {"x": 0, "y": 0}),
+                "config": node.get("config", {}),
+            })
+        # Convert edges from node_key references to node_id references
+        enriched_edges = []
+        for edge in snapshot.get("edges", []):
+            enriched_edges.append({
+                "id": f"{edge.get('source_node_key', '')}_{edge.get('target_node_key', '')}",
+                "source_node_id": edge.get("source_node_key", ""),
+                "source_output_key": edge.get("source_output_key", ""),
+                "target_node_id": edge.get("target_node_key", ""),
+                "target_input_key": edge.get("target_input_key", ""),
+            })
+        # Build enriched static_inputs with node_id = node_key
+        enriched_statics = []
+        for si in snapshot.get("static_inputs", []):
+            enriched_statics.append({
+                "node_id": si.get("node_key", ""),
+                "input_key": si.get("input_key", ""),
+                "static_value": si.get("value"),
+            })
+        return {
+            "id": str(spec.id),
+            "version": spec.version,
+            "is_valid": spec.is_valid,
+            "graph_snapshot": {
+                "automation_id": str(automation_id),
+                "graph_version": spec.version,
+                "nodes": enriched_nodes,
+                "edges": enriched_edges,
+                "static_inputs": enriched_statics,
+            },
+            "created_at": spec.created_at.isoformat() if spec.created_at else None,
+        }
 
     async def _latest_version(self, automation_id: UUID) -> int:
         result = await self.db.scalar(

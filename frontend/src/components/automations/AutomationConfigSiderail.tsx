@@ -4,6 +4,7 @@ import Siderail from '@/components/shared/Siderail'
 import AccordionSection from '@/components/agents/sections/AccordionSection'
 
 export interface VersionEntry {
+  id: string
   version: number
   created_at: string
   is_valid: boolean
@@ -13,14 +14,12 @@ export interface AutomationConfigSiderailProps {
   description: string
   tags: string[]
   isEditing: boolean
-  status?: string
-  healthStatus?: string
-  graphVersion?: number
+  activeSpecId?: string | null
   createdAt?: string
   updatedAt?: string
-  compilationStatus?: string
-  compilationError?: string | null
   versions?: VersionEntry[]
+  viewingVersion?: string | null
+  onViewVersion?: (versionId: string | null) => void
   onChange: (field: string, value: unknown) => void
 }
 
@@ -42,14 +41,12 @@ export default function AutomationConfigSiderail({
   description,
   tags,
   isEditing,
-  status,
-  healthStatus,
-  graphVersion,
+  activeSpecId,
   createdAt,
   updatedAt,
-  compilationStatus,
-  compilationError,
   versions,
+  viewingVersion,
+  onViewVersion,
   onChange,
 }: AutomationConfigSiderailProps) {
   const [expandedSection, setExpandedSection] = useState<SectionKey>('description')
@@ -57,6 +54,9 @@ export default function AutomationConfigSiderail({
   const toggle = (key: SectionKey) => {
     setExpandedSection((prev) => (prev === key ? null : key))
   }
+
+  const viewingVersionEntry = versions?.find(v => v.id === viewingVersion)
+  const latestVersion = versions?.[0]
 
   return (
     <Siderail
@@ -164,34 +164,21 @@ export default function AutomationConfigSiderail({
             </AccordionSection>
 
             {/* Timeline */}
-            {(createdAt || updatedAt) && (
+            {(createdAt || updatedAt || (versions && versions.length > 0)) && (
               <AccordionSection
                 title="Timeline"
-                summary={`${status ?? 'draft'} · ${formatDate(updatedAt)}`}
+                summary={
+                  viewingVersionEntry
+                    ? `Viewing v${viewingVersionEntry.version}`
+                    : latestVersion
+                      ? `v${latestVersion.version} · ${formatDate(updatedAt)}`
+                      : formatDate(updatedAt)
+                }
                 icon={History}
                 expanded={expandedSection === 'timeline'}
                 onToggle={() => toggle('timeline')}
               >
                 <div className="space-y-3 text-xs text-muted-foreground">
-                  <div className="space-y-1">
-                    {status && (
-                      <div><span className="font-medium text-foreground/80">Status:</span> <span className="capitalize">{status}</span></div>
-                    )}
-                    {healthStatus && (
-                      <div><span className="font-medium text-foreground/80">Health:</span> <span className="capitalize">{healthStatus}</span></div>
-                    )}
-                    {compilationStatus && (
-                      <div>
-                        <span className="font-medium text-foreground/80">Compilation:</span>{' '}
-                        <span className={compilationStatus === 'failed' ? 'text-red-400' : compilationStatus === 'success' ? 'text-emerald-400' : ''}>
-                          {compilationStatus}
-                        </span>
-                      </div>
-                    )}
-                    {compilationError && (
-                      <div className="mt-1 rounded-md bg-red-500/10 border border-red-500/20 px-2 py-1 text-[10px] text-red-300">{compilationError}</div>
-                    )}
-                  </div>
                   <div className="space-y-1">
                     {createdAt && (
                       <div><span className="font-medium text-foreground/80">Created:</span> {formatDate(createdAt)}</div>
@@ -204,16 +191,29 @@ export default function AutomationConfigSiderail({
                   {versions && versions.length > 0 && (
                     <div className="space-y-1.5 pt-1 border-t border-border/40">
                       <span className="font-medium text-foreground/80">Versions</span>
-                      <div className="space-y-1">
+                      <div className="space-y-0.5">
+                        {/* Current button */}
+                        <button
+                          className={`flex w-full items-center justify-between rounded px-1.5 py-1 text-left transition-colors ${!viewingVersion ? 'bg-accent/10 text-accent' : 'hover:bg-muted/50'}`}
+                          onClick={() => onViewVersion?.(null)}
+                        >
+                          <span className="font-medium">Current</span>
+                          <span className="text-[10px] opacity-60">{formatDate(updatedAt)}</span>
+                        </button>
+                        {/* Historical versions */}
                         {versions.map((v) => (
-                          <div key={v.version} className={`flex items-center justify-between rounded px-1.5 py-0.5 ${v.version === graphVersion ? 'bg-accent/10 text-accent' : ''}`}>
+                          <button
+                            key={v.id}
+                            className={`flex w-full items-center justify-between rounded px-1.5 py-1 text-left transition-colors ${viewingVersion === v.id ? 'bg-accent/10 text-accent' : 'hover:bg-muted/50'}`}
+                            onClick={() => onViewVersion?.(v.id)}
+                          >
                             <span>
                               v{v.version}
-                              {v.version === graphVersion && <span className="ml-1 text-[10px] opacity-70">(current)</span>}
+                              {v.id === activeSpecId && <span className="ml-1 text-[10px] opacity-70">(active)</span>}
                               {!v.is_valid && <span className="ml-1 text-[10px] text-red-400">invalid</span>}
                             </span>
                             <span className="text-[10px] opacity-60">{formatDate(v.created_at)}</span>
-                          </div>
+                          </button>
                         ))}
                       </div>
                     </div>
