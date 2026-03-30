@@ -8,13 +8,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class AutomationCreate(BaseModel):
-    agent_id: Optional[UUID] = None
     name: str = Field(..., min_length=1, max_length=255)
     slug: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = Field(default=None, max_length=2000)
     trigger_config: dict[str, Any] = Field(default_factory=dict)
-    budget_config: dict[str, Any] = Field(default_factory=dict)
-    output_config: dict[str, Any] = Field(default_factory=dict)
     status: str = Field(default="draft", max_length=50)
     icon: Optional[str] = Field(default=None, max_length=100)
     is_template: bool = False
@@ -23,13 +20,10 @@ class AutomationCreate(BaseModel):
 
 
 class AutomationUpdate(BaseModel):
-    agent_id: Optional[UUID] = None
     name: Optional[str] = Field(default=None, min_length=1, max_length=255)
     slug: Optional[str] = Field(default=None, min_length=1, max_length=100)
     description: Optional[str] = Field(default=None, max_length=2000)
     trigger_config: Optional[dict[str, Any]] = None
-    budget_config: Optional[dict[str, Any]] = None
-    output_config: Optional[dict[str, Any]] = None
     status: Optional[str] = Field(default=None, max_length=50)
     icon: Optional[str] = Field(default=None, max_length=100)
     is_template: Optional[bool] = None
@@ -39,15 +33,12 @@ class AutomationUpdate(BaseModel):
 
 class AutomationResponse(BaseModel):
     id: UUID
-    agent_id: Optional[UUID] = None
     name: str
     slug: str
     description: Optional[str]
     active_spec_id: Optional[UUID]
     graph_version: int = 0
     trigger_config: dict[str, Any] = Field(default_factory=dict)
-    budget_config: dict[str, Any] = Field(default_factory=dict)
-    output_config: dict[str, Any] = Field(default_factory=dict)
     status: str
     icon: Optional[str]
     is_template: bool

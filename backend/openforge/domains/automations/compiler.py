@@ -1,7 +1,6 @@
 """Automation blueprint compiler.
 
 Resolves an AutomationBlueprint into a CompiledAutomationSpec and persists it.
-Supports both single-agent and multi-node graph automations.
 """
 
 from __future__ import annotations
@@ -37,18 +36,13 @@ class AutomationBlueprintCompiler:
         self,
         automation: AutomationModel,
         blueprint: AutomationBlueprint,
-        agent: AgentModel | None = None,
     ) -> CompiledAutomationSpec:
         """Compile an automation blueprint into an immutable spec."""
         try:
-            is_multi_node = len(blueprint.nodes) > 0
+            if len(blueprint.nodes) == 0:
+                raise ValueError("Automation requires at least one node")
 
-            if is_multi_node:
-                spec = await self._compile_multi_node(automation, blueprint)
-            else:
-                if agent is None:
-                    raise ValueError("Single-agent automation requires an agent")
-                spec = await self._compile_single_agent(automation, blueprint, agent)
+            spec = await self._compile_multi_node(automation, blueprint)
 
             # Determine next version
             next_version = await self._next_version(automation.id)
@@ -97,61 +91,6 @@ class AutomationBlueprintCompiler:
             logger.error("Failed to compile automation %s: %s", automation.slug, e)
             raise
 
-    async def _compile_single_agent(
-        self,
-        automation: AutomationModel,
-        blueprint: AutomationBlueprint,
-        agent: AgentModel,
-    ) -> CompiledAutomationSpec:
-        """Compile a single-agent automation (legacy path)."""
-        if not agent.active_version_id:
-            raise ValueError(f"Agent {agent.slug} has no active compiled spec")
-
-        agent_spec = await self.db.get(CompiledAgentSpecModel, agent.active_version_id)
-        if agent_spec is None:
-            raise ValueError(f"Agent spec {agent.active_version_id} not found")
-
-        trigger = await self._upsert_trigger(automation, blueprint)
-
-        # Build deployment_input_schema from the agent's input parameters
-        resolved = agent_spec.resolved_config or {}
-        input_schema = resolved.get("input_schema", [])
-        deployment_input_schema = [
-            {
-                "node_key": None,
-                "input_key": param.get("name", ""),
-                "type": param.get("type", "text"),
-                "label": param.get("label", param.get("name", "")),
-                "description": param.get("description"),
-                "required": param.get("required", False),
-                "default": param.get("default"),
-                "options": param.get("options"),
-            }
-            for param in input_schema
-        ]
-
-        return CompiledAutomationSpec(
-            automation_id=automation.id,
-            automation_slug=automation.slug,
-            name=blueprint.name,
-            agent_id=agent.id,
-            agent_spec_id=agent_spec.id,
-            agent_spec_version=agent_spec.version,
-            trigger_type=blueprint.trigger.type,
-            schedule_expression=blueprint.trigger.schedule,
-            interval_seconds=blueprint.trigger.interval_seconds,
-            event_type=blueprint.trigger.event_type,
-            max_runs_per_day=blueprint.budget.max_runs_per_day,
-            max_concurrent_runs=blueprint.budget.max_concurrent_runs,
-            max_token_budget_per_day=blueprint.budget.max_token_budget_per_day,
-            cooldown_seconds_after_failure=blueprint.budget.cooldown_seconds_after_failure,
-            artifact_types=blueprint.output.artifact_types,
-            is_multi_node=False,
-            deployment_input_schema=deployment_input_schema,
-            trigger_id=trigger.id if trigger else None,
-            compiler_version=COMPILER_VERSION,
-        )
-
     async def _compile_multi_node(
         self,
         automation: AutomationModel,
@@ -184,7 +123,7 @@ class AutomationBlueprintCompiler:
             if not agent_spec:
                 raise ValueError(f"Agent spec not found for '{node_bp.agent_slug}'")
 
-            resolved = agent_spec.resolved_config or {}
+            resolved = agent_spec.snapshot or {}
             input_schema = resolved.get("input_schema", [])
             output_defs = resolved.get("output_definitions", [{"key": "output", "type": "text"}])
 
@@ -242,11 +181,6 @@ class AutomationBlueprintCompiler:
             schedule_expression=blueprint.trigger.schedule,
             interval_seconds=blueprint.trigger.interval_seconds,
             event_type=blueprint.trigger.event_type,
-            max_runs_per_day=blueprint.budget.max_runs_per_day,
-            max_concurrent_runs=blueprint.budget.max_concurrent_runs,
-            max_token_budget_per_day=blueprint.budget.max_token_budget_per_day,
-            cooldown_seconds_after_failure=blueprint.budget.cooldown_seconds_after_failure,
-            artifact_types=blueprint.output.artifact_types,
             is_multi_node=True,
             nodes=compiled_nodes,
             edges=edge_dicts,

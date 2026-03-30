@@ -48,11 +48,10 @@ async def list_automations(
     skip: int = 0,
     limit: int = 100,
     status_filter: str | None = Query(default=None, alias="status"),
-    agent_id: UUID | None = None,
     service: AutomationService = Depends(get_automation_service),
 ):
     automations, total = await service.list_automations(
-        skip=skip, limit=limit, status=status_filter, agent_id=agent_id
+        skip=skip, limit=limit, status=status_filter
     )
     return {"automations": automations, "total": total}
 
@@ -243,15 +242,11 @@ async def run_automation(
 
     run_id = _uuid.uuid4()
 
-    # Build composite metadata — detect multi-node automations
+    # Build composite metadata
     composite_metadata: dict = {
         "automation_id": str(automation["id"]),
+        "automation_spec_id": str(automation["active_spec_id"]),
     }
-    if automation.get("agent_id"):
-        composite_metadata["agent_id"] = str(automation["agent_id"])
-    if automation.get("graph_version", 0) > 0:
-        composite_metadata["is_multi_node"] = True
-        composite_metadata["automation_spec_id"] = str(automation["active_spec_id"])
 
     run = RunModel(
         id=run_id,

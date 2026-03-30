@@ -1063,12 +1063,6 @@ class AutomationModel(Base):
     __tablename__ = "automations"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    agent_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("agents.id", ondelete="CASCADE"),
-        nullable=True,
-        index=True,
-    )
     graph_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
@@ -1080,8 +1074,6 @@ class AutomationModel(Base):
         index=True,
     )
     trigger_config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    budget_config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    output_config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="draft")
     icon: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     is_template: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -1101,7 +1093,6 @@ class AutomationModel(Base):
 
     __table_args__ = (
         Index("idx_automations_status", "status"),
-        Index("idx_automations_agent_id", "agent_id"),
     )
 
 

@@ -40,15 +40,6 @@ class CompiledAutomationSpec(BaseModel):
     interval_seconds: Optional[int] = None
     event_type: Optional[str] = None
 
-    # Resolved budget
-    max_runs_per_day: Optional[int] = None
-    max_concurrent_runs: Optional[int] = None
-    max_token_budget_per_day: Optional[int] = None
-    cooldown_seconds_after_failure: Optional[int] = None
-
-    # Output routing
-    artifact_types: list[str] = Field(default_factory=list)
-
     # Multi-node graph
     is_multi_node: bool = False
     nodes: list[CompiledNodeSpec] = Field(default_factory=list)

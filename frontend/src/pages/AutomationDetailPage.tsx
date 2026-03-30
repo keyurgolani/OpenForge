@@ -1,60 +1,140 @@
-import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Play, Pause, Zap, Activity, Settings, Rocket, GitBranch, AlertTriangle, CheckCircle } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { ArrowLeft, Check, GitBranch, Pencil, Rocket, Trash2, X, Zap } from 'lucide-react'
 
+import AutomationConfigSiderail from '@/components/automations/AutomationConfigSiderail'
 import AutomationGraphEditor from '@/components/automations/AutomationGraphEditor'
-import ErrorState from '@/components/shared/ErrorState'
+import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import DynamicParameterForm from '@/components/shared/DynamicParameterForm'
-import LiveTerminalLog from '@/components/shared/LiveTerminalLog'
+import ErrorState from '@/components/shared/ErrorState'
 import LoadingState from '@/components/shared/LoadingState'
-import PageHeader from '@/components/shared/PageHeader'
 import StatusBadge from '@/components/shared/StatusBadge'
 import {
   useAutomationQuery,
+  useCreateAutomation,
   useUpdateAutomation,
+  useDeleteAutomation,
   usePauseAutomation,
   useResumeAutomation,
   useActivateAutomation,
   useAutomationGraphQuery,
   useDeploymentSchemaQuery,
 } from '@/features/automations'
-import { useDeployAutomation, useDeploymentsQuery } from '@/features/deployments'
-import { useAgentQuery } from '@/features/agents'
-import { useRunsQuery } from '@/features/runs'
+import { useDeployAutomation } from '@/features/deployments'
 import { useWorkspaces } from '@/hooks/useWorkspace'
-import { formatDateTime, formatRelativeTime } from '@/lib/formatters'
-import { automationsRoute, agentsRoute, deploymentsRoute, runsRoute } from '@/lib/routes'
+import { automationsRoute } from '@/lib/routes'
+import type { TriggerConfig } from '@/components/automations/AutomationConfigSiderail'
+import type { AutomationCreate, AutomationUpdate } from '@/types/automations'
 import type { ParameterDefinition } from '@/types/deployments'
 
-type Tab = 'overview' | 'graph' | 'config' | 'deployments' | 'activity'
+// ── Defaults ──
+
+const DEFAULT_TRIGGER: TriggerConfig = { type: 'manual' }
+
+// ── Form State ──
+
+interface FormState {
+  name: string
+  slug: string
+  description: string
+  trigger_config: TriggerConfig
+  tags: string[]
+}
+
+function defaultFormState(): FormState {
+  return {
+    name: '',
+    slug: '',
+    description: '',
+    trigger_config: { ...DEFAULT_TRIGGER },
+    tags: [],
+  }
+}
+
+function automationToFormState(auto: {
+  name: string
+  slug: string
+  description: string | null
+  trigger_config: Record<string, unknown>
+  tags: string[]
+}): FormState {
+  return {
+    name: auto.name,
+    slug: auto.slug,
+    description: auto.description ?? '',
+    trigger_config: {
+      type: (auto.trigger_config?.type as string) || 'manual',
+      cron: auto.trigger_config?.cron as string | undefined,
+      interval_seconds: auto.trigger_config?.interval_seconds as number | undefined,
+    },
+    tags: auto.tags ?? [],
+  }
+}
+
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+// ── Component ──
 
 export default function AutomationDetailPage() {
-  const { automationId = '' } = useParams<{ automationId: string }>()
-  const { data: automation, isLoading, error } = useAutomationQuery(automationId)
+  const { automationId } = useParams<{ automationId: string }>()
+  const navigate = useNavigate()
+  const isCreateMode = !automationId || automationId === 'new'
+
+  const { data: automation, isLoading, error } = useAutomationQuery(isCreateMode ? undefined : automationId)
+  const createAutomation = useCreateAutomation()
   const updateAutomation = useUpdateAutomation()
+  const deleteAutomation = useDeleteAutomation()
   const pauseAutomation = usePauseAutomation()
   const resumeAutomation = useResumeAutomation()
   const activateAutomation = useActivateAutomation()
   const deployAutomation = useDeployAutomation()
-  const { data: agentData, isLoading: isAgentLoading } = useAgentQuery(automation?.agent_id ?? undefined)
+
+  const { data: graphData } = useAutomationGraphQuery(isCreateMode ? undefined : automationId)
+  const { data: deploySchemaData } = useDeploymentSchemaQuery(isCreateMode ? undefined : automationId)
   const { data: workspaces } = useWorkspaces()
   const defaultWorkspaceId = (workspaces as { id: string }[] | undefined)?.[0]?.id
-  const { data: deploymentsData } = useDeploymentsQuery({ automation_id: automationId })
-  const { data: graphData } = useAutomationGraphQuery(automationId)
-  const { data: deploySchemaData } = useDeploymentSchemaQuery(automationId)
 
-  const [activeTab, setActiveTab] = useState<Tab>('overview')
-  const [triggerDraft, setTriggerDraft] = useState<string | null>(null)
-  const [budgetDraft, setBudgetDraft] = useState<string | null>(null)
-  const [outputDraft, setOutputDraft] = useState<string | null>(null)
+  const [isEditing, setIsEditing] = useState(isCreateMode)
+  const [formState, setFormState] = useState<FormState>(defaultFormState)
+  const [autoSlug, setAutoSlug] = useState(isCreateMode)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showDeployDialog, setShowDeployDialog] = useState(false)
   const [deployInputValues, setDeployInputValues] = useState<Record<string, unknown>>({})
   const [deploySchedule, setDeploySchedule] = useState('')
 
-  if (isLoading) return <LoadingState label="Loading automation..." />
-  if (error || !automation) return <ErrorState message="Automation could not be loaded." />
+  // Reset editing mode when automationId changes
+  useEffect(() => {
+    setIsEditing(isCreateMode)
+    setAutoSlug(isCreateMode)
+    if (isCreateMode) {
+      setFormState(defaultFormState())
+    }
+  }, [automationId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Use deployment schema if available, fall back to agent's input_schema
+  // Sync form state from loaded automation
+  useEffect(() => {
+    if (automation && !isCreateMode) {
+      setFormState(automationToFormState(automation))
+    }
+  }, [automation, isCreateMode])
+
+  // ── Field updaters ──
+  const setField = useCallback(<K extends keyof FormState>(key: K, value: FormState[K]) => {
+    setFormState((prev) => {
+      const next = { ...prev, [key]: value }
+      if (key === 'name' && autoSlug) {
+        next.slug = slugify(value as string)
+      }
+      return next
+    })
+  }, [autoSlug])
+
+  // ── Deployment schema ──
   const deploymentSchema: ParameterDefinition[] = (deploySchemaData?.deployment_input_schema ?? []).map((item: Record<string, unknown>) => ({
     name: item.node_key ? `${item.node_key}.${item.input_key}` : item.input_key ?? item.name,
     type: item.type ?? 'text',
@@ -65,266 +145,301 @@ export default function AutomationDetailPage() {
     options: item.options as string[] | undefined,
   })) as ParameterDefinition[]
 
-  const inputSchema: ParameterDefinition[] = deploymentSchema
-
-  const handleSaveConfig = async () => {
-    const updates: Record<string, unknown> = {}
-    if (triggerDraft !== null) {
-      try { updates.trigger_config = JSON.parse(triggerDraft) } catch { return }
+  // ── Actions ──
+  const handleSave = async () => {
+    if (isCreateMode) {
+      if (!formState.name.trim() || !formState.slug.trim()) return
+      const payload: AutomationCreate = {
+        name: formState.name.trim(),
+        slug: formState.slug.trim(),
+        description: formState.description.trim() || undefined,
+        trigger_config: { ...formState.trigger_config },
+        tags: formState.tags,
+      }
+      try {
+        const created = await createAutomation.mutateAsync(payload)
+        navigate(automationsRoute(created.id))
+      } catch {
+        // handled by global interceptor
+      }
+    } else {
+      if (!automationId) return
+      const payload: AutomationUpdate = {
+        name: formState.name.trim(),
+        slug: formState.slug.trim(),
+        description: formState.description.trim() || undefined,
+        trigger_config: { ...formState.trigger_config },
+        tags: formState.tags,
+      }
+      try {
+        await updateAutomation.mutateAsync({ id: automationId, data: payload })
+        setIsEditing(false)
+      } catch {
+        // handled by global interceptor
+      }
     }
-    if (budgetDraft !== null) {
-      try { updates.budget_config = JSON.parse(budgetDraft) } catch { return }
-    }
-    if (outputDraft !== null) {
-      try { updates.output_config = JSON.parse(outputDraft) } catch { return }
-    }
-    await updateAutomation.mutateAsync({ id: automationId, data: updates })
-    setTriggerDraft(null)
-    setBudgetDraft(null)
-    setOutputDraft(null)
   }
 
-  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: 'overview', label: 'Overview', icon: <Zap className="w-4 h-4" /> },
-    { id: 'graph', label: 'Graph', icon: <GitBranch className="w-4 h-4" /> },
-    { id: 'config', label: 'Config', icon: <Settings className="w-4 h-4" /> },
-    { id: 'deployments', label: 'Deployments', icon: <Rocket className="w-4 h-4" /> },
-    { id: 'activity', label: 'Activity', icon: <Activity className="w-4 h-4" /> },
-  ]
+  const handleCancel = () => {
+    if (isCreateMode) {
+      navigate(automationsRoute())
+    } else if (automation) {
+      setFormState(automationToFormState(automation))
+      setIsEditing(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!automationId) return
+    try {
+      await deleteAutomation.mutateAsync(automationId)
+      setShowDeleteModal(false)
+      navigate(automationsRoute())
+    } catch {
+      // handled by global interceptor
+    }
+  }
+
+  const handleEdit = () => {
+    setAutoSlug(false)
+    setIsEditing(true)
+  }
+
+  // ── Loading / error states ──
+  if (!isCreateMode && isLoading) return <LoadingState label="Loading automation..." />
+  if (!isCreateMode && (error || !automation)) return <ErrorState message="Automation could not be loaded." />
+
+  const isSaving = createAutomation.isPending || updateAutomation.isPending
 
   return (
-    <div className="space-y-6 p-6">
-      <PageHeader
-        title={automation.name}
-        description={automation.description ?? `Automation ${automation.slug}`}
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              to={automationsRoute()}
-              className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/25 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
-            >
-              <ArrowLeft className="h-4 w-4" /> Back
-            </Link>
-            {automation.status === 'active' && (
-              <button
-                className="inline-flex h-9 items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 text-sm text-amber-400 transition hover:bg-amber-500/20"
-                onClick={() => pauseAutomation.mutate(automationId)}
-              >
-                <Pause className="h-4 w-4" /> Pause
-              </button>
-            )}
-            {automation.status === 'paused' && (
-              <button
-                className="inline-flex h-9 items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 text-sm text-emerald-400 transition hover:bg-emerald-500/20"
-                onClick={() => resumeAutomation.mutate(automationId)}
-              >
-                <Play className="h-4 w-4" /> Resume
-              </button>
-            )}
-            {automation.status === 'draft' && (
-              <button
-                className="inline-flex h-9 items-center gap-2 rounded-lg bg-accent text-accent-foreground px-3 text-sm font-semibold transition hover:bg-accent/90"
-                onClick={() => activateAutomation.mutate(automationId)}
-              >
-                <Zap className="h-4 w-4" /> Activate
-              </button>
-            )}
-            {automation.active_spec_id && defaultWorkspaceId && (
-              <button
-                className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-600 text-white px-3 text-sm font-semibold transition hover:bg-emerald-600/90"
-                onClick={() => {
-                  // Pre-populate form values with schema defaults
-                  const defaults: Record<string, unknown> = {}
-                  for (const p of inputSchema) {
-                    if (p.default !== undefined && p.default !== null) {
-                      defaults[p.name] = p.default
-                    }
-                  }
-                  setDeployInputValues(defaults)
-                  setDeploySchedule(String(automation.trigger_config?.cron ?? ''))
-                  setShowDeployDialog(true)
-                }}
-                disabled={deployAutomation.isPending}
-              >
-                <Rocket className="h-4 w-4" />
-                {deployAutomation.isPending ? 'Deploying...' : 'Deploy'}
-              </button>
-            )}
-          </div>
-        }
-      />
+    <div className="flex h-full gap-4 p-6 overflow-hidden">
+      {/* ── Main area ── */}
+      <div className="flex flex-1 flex-col gap-0 min-w-0 overflow-y-auto min-h-0">
 
-      {/* Compilation status banner */}
-      {automation.compilation_status === 'failed' && (
-        <div className="flex items-start gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3">
-          <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-red-300">Compilation failed</p>
-            <p className="text-xs text-red-300/80 mt-0.5">{automation.compilation_error || 'The last save produced a compilation error. Update the configuration or graph and save again to retry.'}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Status bar */}
-      <div className="flex flex-wrap items-center gap-3">
-        <StatusBadge status={automation.status} />
-        <StatusBadge status={automation.health_status} />
-        {automation.compilation_status && automation.compilation_status !== 'failed' && (
-          <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
-            <CheckCircle className="w-3.5 h-3.5" /> Compiled
-          </span>
-        )}
-        {automation.tags.length > 0 && automation.tags.map(tag => (
-          <span key={tag} className="chip-muted text-xs">{tag}</span>
-        ))}
-      </div>
-
-      {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-border/25">
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition border-b-2 ${
-              activeTab === tab.id
-                ? 'border-accent text-accent'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            {tab.icon} {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab content */}
-      {activeTab === 'overview' && (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {[
-            { label: 'Name', value: automation.name },
-            { label: 'Slug', value: automation.slug },
-            { label: 'Status', value: automation.status },
-            { label: 'Health', value: automation.health_status },
-            ...(automation.graph_version > 0
-              ? [{ label: 'Agents', value: `${graphData?.nodes?.length ?? '...'} node${(graphData?.nodes?.length ?? 0) !== 1 ? 's' : ''} (Graph v${automation.graph_version})` }]
-              : automation.agent_id
-                ? [{ label: 'Agent', value: isAgentLoading ? 'Loading...' : (agentData?.name ?? automation.agent_id.slice(0, 12) + '...'), link: agentsRoute(automation.agent_id) }]
-                : []),
-            { label: 'Graph Version', value: String(automation.graph_version ?? 0) },
-            { label: 'Last Run', value: automation.last_run_at ? formatRelativeTime(automation.last_run_at) : 'Never' },
-            { label: 'Last Success', value: automation.last_success_at ? formatRelativeTime(automation.last_success_at) : 'None' },
-            { label: 'Last Failure', value: automation.last_failure_at ? formatRelativeTime(automation.last_failure_at) : 'None' },
-            { label: 'Last Triggered', value: automation.last_triggered_at ? formatRelativeTime(automation.last_triggered_at) : 'Never' },
-            { label: 'Created', value: formatDateTime(automation.created_at) },
-            { label: 'Updated', value: formatDateTime(automation.updated_at) },
-          ].map(item => (
-            <div key={item.label} className="rounded-xl border border-border/25 bg-background/35 p-3">
-              <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70">{item.label}</p>
-              {'link' in item && item.link ? (
-                <Link to={item.link} className="mt-1 text-sm font-medium text-accent hover:text-accent/80 transition">{item.value}</Link>
+        {/* ── Header Zone: Name + Slug + Description + Actions ── */}
+        <div className="rounded-2xl border border-border/25 bg-card/35 px-6 py-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex-1 min-w-0">
+              {isEditing ? (
+                <input
+                  className="input text-2xl font-semibold tracking-tight w-full"
+                  value={formState.name}
+                  onChange={(e) => setField('name', e.target.value)}
+                  placeholder="Automation name"
+                  autoFocus={isCreateMode}
+                />
               ) : (
-                <p className="mt-1 text-sm font-medium text-foreground capitalize">{item.value}</p>
+                <div className="flex items-center gap-3">
+                  <Zap className="h-6 w-6 text-accent flex-shrink-0" />
+                  <h2 className="text-2xl font-semibold tracking-tight text-foreground truncate">
+                    {formState.name || 'Untitled Automation'}
+                  </h2>
+                </div>
+              )}
+              <p className="mt-1 text-xs text-muted-foreground font-mono">
+                {isEditing ? (
+                  <input
+                    className="input text-xs font-mono w-full max-w-xs mt-1"
+                    value={formState.slug}
+                    onChange={(e) => {
+                      setAutoSlug(false)
+                      setField('slug', e.target.value)
+                    }}
+                    placeholder="automation-slug"
+                  />
+                ) : (
+                  formState.slug || 'automation-slug'
+                )}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+              {isEditing ? (
+                <>
+                  <button
+                    className="bg-accent text-accent-foreground hover:bg-accent/90 px-3.5 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                    onClick={handleSave}
+                    disabled={isSaving}
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    {isSaving ? 'Saving...' : isCreateMode ? 'Create' : 'Save'}
+                  </button>
+                  <button
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border/25 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
+                    onClick={handleCancel}
+                  >
+                    <X className="w-3.5 h-3.5" /> Cancel
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    className="bg-accent text-accent-foreground hover:bg-accent/90 px-3.5 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                    onClick={handleEdit}
+                  >
+                    <Pencil className="w-3.5 h-3.5" /> Edit
+                  </button>
+                  {automation?.status === 'active' && (
+                    <button
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 text-sm text-amber-400 transition hover:bg-amber-500/20"
+                      onClick={() => pauseAutomation.mutate(automationId!)}
+                    >
+                      Pause
+                    </button>
+                  )}
+                  {automation?.status === 'paused' && (
+                    <button
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 text-sm text-emerald-400 transition hover:bg-emerald-500/20"
+                      onClick={() => resumeAutomation.mutate(automationId!)}
+                    >
+                      Resume
+                    </button>
+                  )}
+                  {automation?.status === 'draft' && (
+                    <button
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-600 text-white px-3 text-sm font-semibold transition hover:bg-emerald-600/90"
+                      onClick={() => activateAutomation.mutate(automationId!)}
+                    >
+                      <Zap className="h-3.5 w-3.5" /> Activate
+                    </button>
+                  )}
+                  {automation?.active_spec_id && defaultWorkspaceId && (
+                    <button
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-600 text-white px-3 text-sm font-semibold transition hover:bg-emerald-600/90"
+                      onClick={() => {
+                        const defaults: Record<string, unknown> = {}
+                        for (const p of deploymentSchema) {
+                          if (p.default !== undefined && p.default !== null) defaults[p.name] = p.default
+                        }
+                        setDeployInputValues(defaults)
+                        setDeploySchedule(String(automation?.trigger_config?.cron ?? ''))
+                        setShowDeployDialog(true)
+                      }}
+                      disabled={deployAutomation.isPending}
+                    >
+                      <Rocket className="h-3.5 w-3.5" />
+                      {deployAutomation.isPending ? 'Deploying...' : 'Deploy'}
+                    </button>
+                  )}
+                  <button
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 text-sm text-red-400 transition hover:text-red-300 hover:bg-red-500/20"
+                    onClick={() => setShowDeleteModal(true)}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Delete
+                  </button>
+                  <button
+                    className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/25 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
+                    onClick={() => navigate(automationsRoute())}
+                  >
+                    <ArrowLeft className="h-4 w-4" /> Back
+                  </button>
+                </>
               )}
             </div>
-          ))}
-        </div>
-      )}
+          </div>
 
-      {activeTab === 'graph' && (
-        <AutomationGraphEditor automationId={automationId} graph={graphData ?? null} />
-      )}
-
-      {activeTab === 'config' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">Edit automation configuration (JSON)</p>
-            {(triggerDraft !== null || budgetDraft !== null || outputDraft !== null) && (
-              <button
-                className="bg-accent text-accent-foreground hover:bg-accent/90 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
-                onClick={handleSaveConfig}
-                disabled={updateAutomation.isPending}
-              >
-                {updateAutomation.isPending ? 'Saving...' : 'Save All'}
-              </button>
+          {/* Description */}
+          <div className="mt-4">
+            {isEditing ? (
+              <textarea
+                className="input w-full min-h-[60px] text-sm resize-y"
+                value={formState.description}
+                onChange={(e) => setField('description', e.target.value)}
+                placeholder="Describe what this automation does..."
+              />
+            ) : (
+              <p className="text-sm text-foreground/90 whitespace-pre-wrap">
+                {formState.description || <span className="text-muted-foreground italic">No description</span>}
+              </p>
             )}
           </div>
-          {[
-            { label: 'Trigger Config', value: automation.trigger_config, draft: triggerDraft, setDraft: setTriggerDraft },
-            { label: 'Budget Config', value: automation.budget_config, draft: budgetDraft, setDraft: setBudgetDraft },
-            { label: 'Output Config', value: automation.output_config, draft: outputDraft, setDraft: setOutputDraft },
-          ].map(({ label, value, draft, setDraft }) => (
-            <div key={label}>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/75">{label}</p>
-              <textarea
-                className="w-full min-h-[150px] rounded-xl border border-border/25 bg-background/50 p-4 font-mono text-xs text-foreground/90 resize-y focus:outline-none focus:border-accent/40"
-                value={draft ?? JSON.stringify(value, null, 2)}
-                onChange={e => setDraft(e.target.value)}
-              />
-            </div>
-          ))}
         </div>
-      )}
 
-      {activeTab === 'deployments' && (
-        <div className="space-y-3">
-          {!deploymentsData?.deployments?.length ? (
-            <div className="rounded-2xl border border-dashed border-border/25 bg-card/20 p-6 text-sm text-muted-foreground/80">
-              No deployments yet. Deploy this automation to get started.
+        {/* ── Status bar (view mode only) ── */}
+        {!isCreateMode && automation && (
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <StatusBadge status={automation.status} />
+            <StatusBadge status={automation.health_status} />
+            {automation.compilation_status === 'success' && (
+              <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
+                <Check className="w-3.5 h-3.5" /> Compiled
+              </span>
+            )}
+            {automation.compilation_status === 'failed' && (
+              <span className="inline-flex items-center gap-1 text-xs text-red-400">
+                Compilation failed
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* ── Graph Editor (view mode) ── */}
+        {!isCreateMode && (
+          <div className="mt-4 flex-1 min-h-0 flex flex-col">
+            <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground mb-2">Workflow Graph</p>
+            <div className="flex-1 min-h-[400px]">
+              <AutomationGraphEditor automationId={automationId!} graph={graphData ?? null} readOnly={!isEditing} />
             </div>
-          ) : (
-            <div className="space-y-2">
-              {deploymentsData.deployments.map(d => (
-                <Link
-                  key={d.id}
-                  to={deploymentsRoute(d.id)}
-                  className="flex items-center justify-between rounded-xl border border-border/25 bg-card/40 p-3 hover:bg-card/60 transition"
-                >
-                  <div className="flex items-center gap-3">
-                    <StatusBadge status={d.status} />
-                    <span className="text-sm font-mono">{d.id.slice(0, 8)}</span>
-                    {Object.keys(d.input_values).length > 0 && (
-                      <span className="text-xs text-muted-foreground">
-                        {Object.entries(d.input_values).slice(0, 3).map(([k, v]) => {
-                          const dotIdx = k.indexOf('.')
-                          const label = dotIdx > 0
-                            ? k.slice(dotIdx + 1).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
-                            : k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
-                          return `${label}: ${String(v)}`
-                        }).join(', ')}
-                        {Object.keys(d.input_values).length > 3 && ` +${Object.keys(d.input_values).length - 3} more`}
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-xs text-muted-foreground">
-                    {d.created_at ? formatRelativeTime(d.created_at) : ''}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
 
-      {activeTab === 'activity' && (
-        <AutomationActivityTab automationId={automationId} />
-      )}
+        {/* ── Create mode: hint for graph editor ── */}
+        {isCreateMode && (
+          <div className="mt-4 rounded-xl border border-dashed border-border/25 bg-card/20 p-6 text-center">
+            <GitBranch className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">
+              Graph editor will be available after creating the automation.
+            </p>
+            <p className="text-xs text-muted-foreground/70 mt-1">
+              Create the automation first, then use the graph editor to design your workflow.
+            </p>
+          </div>
+        )}
+      </div>
 
-      {/* Deploy dialog */}
+      {/* ── Config Siderail ── */}
+      <AutomationConfigSiderail
+        triggerConfig={formState.trigger_config}
+        tags={formState.tags}
+        isEditing={isEditing}
+        status={automation?.status}
+        healthStatus={automation?.health_status}
+        createdAt={automation?.created_at}
+        updatedAt={automation?.updated_at}
+        compilationStatus={automation?.compilation_status}
+        compilationError={automation?.compilation_error}
+        onChange={(field, value) => setField(field as keyof FormState, value as FormState[keyof FormState])}
+      />
+
+      {/* ── Delete Confirmation Modal ── */}
+      <ConfirmModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={handleDelete}
+        title="Delete Automation"
+        message={`Are you sure you want to delete "${formState.name}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        icon="trash"
+        loading={deleteAutomation.isPending}
+      />
+
+      {/* ── Deploy dialog ── */}
       {showDeployDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl border border-border/25 bg-background p-6 shadow-xl space-y-4">
-            <h3 className="text-lg font-semibold text-foreground">Deploy {automation.name}</h3>
-            {inputSchema.length > 0 && (
+            <h3 className="text-lg font-semibold text-foreground">Deploy {automation?.name}</h3>
+            {deploymentSchema.length > 0 && (
               <>
                 <p className="text-sm text-muted-foreground">Configure the deployment inputs.</p>
                 <DynamicParameterForm
-                  schema={inputSchema}
+                  schema={deploymentSchema}
                   values={deployInputValues}
                   onChange={setDeployInputValues}
                 />
               </>
             )}
-
-            {/* Schedule section */}
             <div className="border-t border-border/25 pt-4">
               <label className="block text-sm font-medium text-foreground mb-1">Schedule</label>
               <p className="text-xs text-muted-foreground mb-2">
@@ -334,16 +449,10 @@ export default function AutomationDetailPage() {
                 type="text"
                 value={deploySchedule}
                 onChange={(e) => setDeploySchedule(e.target.value)}
-                placeholder={String(automation.trigger_config?.cron ?? 'e.g. 0 7 * * *')}
+                placeholder={String(automation?.trigger_config?.cron ?? 'e.g. 0 7 * * *')}
                 className="w-full rounded-lg border border-border/25 bg-background/50 px-3 py-2 text-sm text-foreground font-mono focus:outline-none focus:border-accent/40"
               />
-              {automation.trigger_config?.cron && !deploySchedule && (
-                <p className="mt-1 text-xs text-muted-foreground/70">
-                  Default: <code className="font-mono text-accent/70">{String(automation.trigger_config.cron)}</code>
-                </p>
-              )}
             </div>
-
             <div className="flex justify-end gap-2">
               <button
                 className="px-4 py-2 rounded-lg border border-border/25 text-sm text-muted-foreground hover:text-foreground transition"
@@ -355,7 +464,7 @@ export default function AutomationDetailPage() {
                 className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold transition hover:bg-emerald-600/90"
                 disabled={deployAutomation.isPending}
                 onClick={() => {
-                  if (!defaultWorkspaceId) return
+                  if (!defaultWorkspaceId || !automationId) return
                   deployAutomation.mutate({
                     automationId,
                     data: {
@@ -378,42 +487,6 @@ export default function AutomationDetailPage() {
           </div>
         </div>
       )}
-    </div>
-  )
-}
-
-function AutomationActivityTab({ automationId }: { automationId: string }) {
-  const { data: runsData, isLoading } = useRunsQuery({ automationId, limit: 1 })
-  const latestRun = runsData?.runs?.[0]
-
-  if (isLoading) return <LoadingState label="Loading activity..." />
-
-  if (!latestRun) {
-    return (
-      <div className="rounded-2xl border border-dashed border-border/25 bg-card/20 p-6 text-sm text-muted-foreground/80">
-        No runs found for this automation. Run this automation to see activity here.
-      </div>
-    )
-  }
-
-  if (latestRun.status === 'running' || latestRun.status === 'pending') {
-    return (
-      <div className="h-[500px]">
-        <LiveTerminalLog runId={latestRun.id} />
-      </div>
-    )
-  }
-
-  return (
-    <div className="rounded-2xl border border-border/25 bg-card/20 p-6 text-sm text-muted-foreground/80 space-y-2">
-      <div className="flex items-center gap-3">
-        <span className="text-foreground font-medium">Latest run:</span>
-        <Link to={runsRoute(latestRun.id)} className="text-accent hover:text-accent/80 transition font-mono text-xs">
-          {latestRun.id.slice(0, 12)}...
-        </Link>
-        <StatusBadge status={latestRun.status} />
-      </div>
-      <p>No active run. Trigger the automation to see live output.</p>
     </div>
   )
 }

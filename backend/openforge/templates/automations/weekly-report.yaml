@@ -5,13 +5,6 @@ agent_slug: content-builder
 trigger_config:
   type: cron
   cron: "0 9 * * 1"
-budget_config:
-  max_steps: 25
-  max_tokens: 80000
-  timeout_seconds: 600
-output_config:
-  save_to_knowledge: true
-  artifact_type: report
 tags:
   - report
   - weekly

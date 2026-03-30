@@ -31,17 +31,6 @@ class TriggerBlueprintConfig(BaseModel):
         super().__init__(**data)
 
 
-class BudgetBlueprintConfig(BaseModel):
-    max_runs_per_day: Optional[int] = None
-    max_concurrent_runs: Optional[int] = None
-    max_token_budget_per_day: Optional[int] = None
-    cooldown_seconds_after_failure: Optional[int] = None
-
-
-class OutputRoutingConfig(BaseModel):
-    artifact_types: list[str] = Field(default_factory=list)
-
-
 class AutomationNodeBlueprint(BaseModel):
     node_key: str
     agent_slug: str
@@ -68,8 +57,6 @@ class AutomationBlueprint(BaseModel):
     description: Optional[str] = None
     agent_slug: Optional[str] = None  # nullable for multi-node automations
     trigger: TriggerBlueprintConfig = Field(default_factory=TriggerBlueprintConfig)
-    budget: BudgetBlueprintConfig = Field(default_factory=BudgetBlueprintConfig)
-    output: OutputRoutingConfig = Field(default_factory=OutputRoutingConfig)
     tags: list[str] = Field(default_factory=list)
     icon: Optional[str] = None
     # Multi-node graph fields

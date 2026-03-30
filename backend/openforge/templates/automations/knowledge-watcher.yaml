@@ -5,13 +5,6 @@ agent_slug: change-watcher
 trigger_config:
   type: interval
   interval_seconds: 21600
-budget_config:
-  max_steps: 15
-  max_tokens: 30000
-  timeout_seconds: 180
-output_config:
-  save_to_knowledge: true
-  artifact_type: alert
 tags:
   - monitoring
   - knowledge

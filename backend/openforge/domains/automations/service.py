@@ -34,7 +34,6 @@ class AutomationService(CrudDomainService):
         skip: int = 0,
         limit: int = 100,
         status: str | None = None,
-        agent_id: UUID | None = None,
         is_template: bool | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         query = select(AutomationModel).order_by(AutomationModel.updated_at.desc())
@@ -43,9 +42,6 @@ class AutomationService(CrudDomainService):
         if status is not None:
             query = query.where(AutomationModel.status == status)
             count_query = count_query.where(AutomationModel.status == status)
-        if agent_id is not None:
-            query = query.where(AutomationModel.agent_id == agent_id)
-            count_query = count_query.where(AutomationModel.agent_id == agent_id)
         if is_template is not None:
             query = query.where(AutomationModel.is_template == is_template)
             count_query = count_query.where(AutomationModel.is_template == is_template)
@@ -58,67 +54,20 @@ class AutomationService(CrudDomainService):
         return await self.get_record(automation_id)
 
     async def create_automation(self, data: dict[str, Any]) -> dict[str, Any]:
-        result = await self.create_record(data)
-
-        # Auto-compile if agent_id is set (single-agent automation)
-        agent_id = data.get("agent_id")
-        if agent_id:
-            try:
-                automation = await self.db.get(AutomationModel, result["id"])
-                agent = await self.db.get(AgentModel, automation.agent_id)
-                if agent is None:
-                    raise ValueError(f"Agent {automation.agent_id} not found")
-
-                blueprint = AutomationBlueprint(
-                    name=automation.name,
-                    slug=automation.slug,
-                    description=automation.description,
-                    agent_slug=agent.slug,
-                    trigger=automation.trigger_config or {},
-                    budget=automation.budget_config or {},
-                    output=automation.output_config or {},
-                    tags=automation.tags or [],
-                    icon=automation.icon,
-                )
-                compiler = AutomationBlueprintCompiler(self.db)
-                await compiler.compile(automation, blueprint, agent)
-                await self.db.refresh(automation)
-                result = self._serialize(automation)
-            except Exception as e:
-                logger.warning("Auto-compilation failed for automation %s: %s", result.get("slug"), e)
-
-        return result
+        return await self.create_record(data)
 
     async def update_automation(self, automation_id: UUID, data: dict[str, Any]) -> dict[str, Any] | None:
         result = await self.update_record(automation_id, data)
         if result is None:
             return None
 
-        # Auto-recompile if trigger/budget/output config changed
-        recompile_keys = {"trigger_config", "budget_config", "output_config", "agent_id"}
+        # Auto-recompile if trigger config changed
+        recompile_keys = {"trigger_config"}
         if recompile_keys & set(data.keys()):
             try:
+                await self.compile_automation(automation_id)
                 automation = await self.db.get(AutomationModel, automation_id)
-                if automation.agent_id:
-                    agent = await self.db.get(AgentModel, automation.agent_id)
-                    if agent is None:
-                        raise ValueError(f"Agent {automation.agent_id} not found")
-
-                    blueprint = AutomationBlueprint(
-                        name=automation.name,
-                        slug=automation.slug,
-                        description=automation.description,
-                        agent_slug=agent.slug,
-                        trigger=automation.trigger_config or {},
-                        budget=automation.budget_config or {},
-                        output=automation.output_config or {},
-                        tags=automation.tags or [],
-                        icon=automation.icon,
-                    )
-                    compiler = AutomationBlueprintCompiler(self.db)
-                    await compiler.compile(automation, blueprint, agent)
-                    await self.db.refresh(automation)
-                    result = self._serialize(automation)
+                result = self._serialize(automation)
             except Exception as e:
                 logger.warning("Auto-recompilation failed for automation %s: %s", automation_id, e)
 
@@ -128,58 +77,12 @@ class AutomationService(CrudDomainService):
         return await self.delete_record(automation_id)
 
     async def compile_automation(self, automation_id: UUID) -> dict[str, Any] | None:
-        """Force recompilation of an automation."""
+        """Force recompilation of an automation from its stored graph."""
         automation = await self.db.get(AutomationModel, automation_id)
         if automation is None:
             return None
 
-        # Check if this is a multi-node automation
-        node_count = await self.db.scalar(
-            select(func.count()).select_from(AutomationNodeModel)
-            .where(AutomationNodeModel.automation_id == automation_id)
-        )
-
-        if node_count and node_count > 0:
-            return await self._compile_multi_node(automation)
-
-        # Single-agent compilation
-        if not automation.agent_id:
-            return {
-                "automation_id": automation.id,
-                "compilation_status": "failed",
-                "compilation_error": "No agent_id set and no graph nodes defined",
-            }
-
-        agent = await self.db.get(AgentModel, automation.agent_id)
-        if agent is None:
-            return {
-                "automation_id": automation.id,
-                "compilation_status": "failed",
-                "compilation_error": f"Agent {automation.agent_id} not found",
-            }
-
-        blueprint = AutomationBlueprint(
-            name=automation.name,
-            slug=automation.slug,
-            description=automation.description,
-            agent_slug=agent.slug,
-            trigger=automation.trigger_config or {},
-            budget=automation.budget_config or {},
-            output=automation.output_config or {},
-            tags=automation.tags or [],
-            icon=automation.icon,
-        )
-        compiler = AutomationBlueprintCompiler(self.db)
-        await compiler.compile(automation, blueprint, agent)
-        await self.db.refresh(automation)
-
-        return {
-            "automation_id": automation.id,
-            "spec_id": automation.active_spec_id,
-            "version": await self._latest_version(automation.id),
-            "compilation_status": automation.compilation_status,
-            "compilation_error": automation.compilation_error,
-        }
+        return await self._compile_multi_node(automation)
 
     async def _compile_multi_node(self, automation: AutomationModel) -> dict[str, Any]:
         """Compile a multi-node automation from its stored graph."""
@@ -242,8 +145,6 @@ class AutomationService(CrudDomainService):
             slug=automation.slug,
             description=automation.description,
             trigger=automation.trigger_config or {},
-            budget=automation.budget_config or {},
-            output=automation.output_config or {},
             tags=automation.tags or [],
             icon=automation.icon,
             nodes=node_blueprints,
@@ -447,6 +348,4 @@ class AutomationService(CrudDomainService):
         if isinstance(instance, AutomationModel):
             data["tags"] = data.get("tags") or []
             data["trigger_config"] = data.get("trigger_config") or {}
-            data["budget_config"] = data.get("budget_config") or {}
-            data["output_config"] = data.get("output_config") or {}
         return data

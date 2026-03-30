@@ -6,15 +6,12 @@ export type AutomationStatus = 'draft' | 'active' | 'paused' | 'disabled' | 'arc
 
 export interface Automation {
   id: string;
-  agent_id: string | null;
   name: string;
   slug: string;
   description: string | null;
   active_spec_id: string | null;
   graph_version: number;
   trigger_config: Record<string, unknown>;
-  budget_config: Record<string, unknown>;
-  output_config: Record<string, unknown>;
   status: AutomationStatus;
   icon: string | null;
   is_template: boolean;
@@ -34,13 +31,10 @@ export interface Automation {
 }
 
 export interface AutomationCreate {
-  agent_id?: string;
   name: string;
   slug: string;
   description?: string;
   trigger_config?: Record<string, unknown>;
-  budget_config?: Record<string, unknown>;
-  output_config?: Record<string, unknown>;
   status?: AutomationStatus;
   icon?: string;
   is_template?: boolean;
