@@ -128,12 +128,6 @@ async def _run_strategy(run_id: str):
                         await db.commit()
                         return
 
-            if automation_id:
-                from openforge.db.models import AutomationModel
-                automation = await db.get(AutomationModel, UUID(automation_id))
-                if automation and automation.agent_id:
-                    agent_id = str(automation.agent_id)
-
             if agent_id:
                 agent = await db.get(AgentModel, UUID(agent_id))
                 if agent and agent.active_version_id:

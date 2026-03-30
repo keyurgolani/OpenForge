@@ -31,7 +31,6 @@ def sample_automation():
     auto.name = "Test Automation"
     auto.description = None
     auto.agent_id = uuid4()
-    auto.trigger_config = {}
     auto.budget_config = {}
     auto.output_config = {}
     auto.tags = []

@@ -11,7 +11,6 @@ export interface Automation {
   description: string | null;
   active_spec_id: string | null;
   graph_version: number;
-  trigger_config: Record<string, unknown>;
   status: AutomationStatus;
   icon: string | null;
   is_template: boolean;
@@ -34,7 +33,6 @@ export interface AutomationCreate {
   name: string;
   slug: string;
   description?: string;
-  trigger_config?: Record<string, unknown>;
   status?: AutomationStatus;
   icon?: string;
   is_template?: boolean;

@@ -124,7 +124,7 @@ class AutomationBlueprintCompiler:
                 raise ValueError(f"Agent spec not found for '{node_bp.agent_slug}'")
 
             resolved = agent_spec.snapshot or {}
-            input_schema = resolved.get("input_schema", [])
+            input_schema = resolved.get("parameters") or resolved.get("input_schema", [])
             output_defs = resolved.get("output_definitions", [{"key": "output", "type": "text"}])
 
             agent_specs[node_bp.node_key] = {

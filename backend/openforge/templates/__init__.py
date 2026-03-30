@@ -164,7 +164,6 @@ async def seed_automation_templates(db: AsyncSession) -> None:
                 "name": data["name"],
                 "slug": slug,
                 "description": data.get("description", ""),
-                "trigger_config": data.get("trigger_config", {}),
                 "tags": data.get("tags", []),
                 "status": "active",
                 "is_template": True,

@@ -61,16 +61,6 @@ class AutomationService(CrudDomainService):
         if result is None:
             return None
 
-        # Auto-recompile if trigger config changed
-        recompile_keys = {"trigger_config"}
-        if recompile_keys & set(data.keys()):
-            try:
-                await self.compile_automation(automation_id)
-                automation = await self.db.get(AutomationModel, automation_id)
-                result = self._serialize(automation)
-            except Exception as e:
-                logger.warning("Auto-recompilation failed for automation %s: %s", automation_id, e)
-
         return result
 
     async def delete_automation(self, automation_id: UUID) -> bool:
@@ -144,7 +134,7 @@ class AutomationService(CrudDomainService):
             name=automation.name,
             slug=automation.slug,
             description=automation.description,
-            trigger=automation.trigger_config or {},
+            trigger={},
             tags=automation.tags or [],
             icon=automation.icon,
             nodes=node_blueprints,
@@ -336,6 +326,25 @@ class AutomationService(CrudDomainService):
         resolved = spec.resolved_config or {}
         return resolved.get("deployment_input_schema", [])
 
+    async def list_versions(self, automation_id: UUID) -> list[dict] | None:
+        """Return all compiled spec versions for an automation, newest first."""
+        automation = await self.db.get(AutomationModel, automation_id)
+        if automation is None:
+            return None
+        result = await self.db.execute(
+            select(
+                CompiledAutomationSpecModel.version,
+                CompiledAutomationSpecModel.is_valid,
+                CompiledAutomationSpecModel.created_at,
+            )
+            .where(CompiledAutomationSpecModel.automation_id == automation_id)
+            .order_by(CompiledAutomationSpecModel.version.desc())
+        )
+        return [
+            {"version": row.version, "is_valid": row.is_valid, "created_at": row.created_at.isoformat() if row.created_at else None}
+            for row in result.all()
+        ]
+
     async def _latest_version(self, automation_id: UUID) -> int:
         result = await self.db.scalar(
             select(func.max(CompiledAutomationSpecModel.version))
@@ -347,5 +356,4 @@ class AutomationService(CrudDomainService):
         data = super()._serialize(instance)
         if isinstance(instance, AutomationModel):
             data["tags"] = data.get("tags") or []
-            data["trigger_config"] = data.get("trigger_config") or {}
         return data

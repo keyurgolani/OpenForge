@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Bot, Check, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { ArrowLeft, Bot, Check, MessageSquare, Pencil, Plus, Trash2, X } from 'lucide-react'
 
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import PromptTemplateEditor, { extractVariables } from '@/components/shared/PromptTemplateEditor'
@@ -16,7 +16,7 @@ import {
   useAgentVersionQuery,
 } from '@/features/agents'
 import { getTemplateReference } from '@/lib/api'
-import { agentsRoute } from '@/lib/routes'
+import { agentsRoute, globalChatRoute } from '@/lib/routes'
 import type {
   AgentDefinition,
   AgentDefinitionCreate,
@@ -377,7 +377,7 @@ export default function AgentDetailPage() {
               {isEditing && !isViewingVersion ? (
                 <>
                   <button
-                    className="bg-accent text-accent-foreground hover:bg-accent/90 px-3.5 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-accent px-3 text-xs font-medium text-accent-foreground transition-colors hover:bg-accent/90 disabled:opacity-50"
                     onClick={handleSave}
                     disabled={isSaving}
                   >
@@ -385,7 +385,7 @@ export default function AgentDetailPage() {
                     {isSaving ? 'Saving...' : isCreateMode ? 'Create' : 'Save'}
                   </button>
                   <button
-                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border/25 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border/25 bg-background/40 px-3 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
                     onClick={handleCancel}
                   >
                     <X className="w-3.5 h-3.5" /> Cancel
@@ -394,22 +394,30 @@ export default function AgentDetailPage() {
               ) : (
                 <>
                   <button
-                    className="bg-accent text-accent-foreground hover:bg-accent/90 px-3.5 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-accent px-3 text-xs font-medium text-accent-foreground transition-colors hover:bg-accent/90"
                     onClick={handleEdit}
                   >
                     <Pencil className="w-3.5 h-3.5" /> Edit
                   </button>
+                  {!isCreateMode && (
+                    <button
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-xs font-medium text-white transition-colors hover:bg-emerald-600/90"
+                      onClick={() => navigate(globalChatRoute(undefined, { agentId: agentId }))}
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" /> Chat
+                    </button>
+                  )}
                   <button
-                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 text-sm text-red-400 transition hover:text-red-300 hover:bg-red-500/20"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 text-xs font-medium text-red-400 transition-colors hover:text-red-300 hover:bg-red-500/20"
                     onClick={() => setShowDeleteModal(true)}
                   >
                     <Trash2 className="w-3.5 h-3.5" /> Delete
                   </button>
                   <button
-                    className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/25 bg-background/40 px-3 text-sm text-muted-foreground transition hover:text-foreground"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border/25 bg-background/40 px-3 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
                     onClick={() => navigate(agentsRoute())}
                   >
-                    <ArrowLeft className="h-4 w-4" /> Back
+                    <ArrowLeft className="h-3.5 w-3.5" /> Back
                   </button>
                 </>
               )}

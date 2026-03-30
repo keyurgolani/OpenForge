@@ -54,17 +54,7 @@ class DeploymentService:
                 input_schema = resolved.get("deployment_input_schema", [])
                 agent_spec_id = auto_spec.agent_spec_id
 
-        # If no automation spec or no deployment schema, fall back to agent spec
-        if not input_schema and automation.agent_id:
-            agent = await self.db.get(AgentModel, automation.agent_id)
-            if agent and agent.active_version_id:
-                agent_spec_id = agent.active_version_id
-                spec_row = await self.db.get(CompiledAgentSpecModel, agent_spec_id)
-                if spec_row:
-                    resolved = spec_row.snapshot or {}
-                    input_schema = resolved.get("parameters", [])
-
-        if not agent_spec_id and not automation_spec_id:
+        if not automation_spec_id:
             raise ValueError("Automation has no compiled spec")
 
         # Validate required fields and apply defaults.
@@ -86,27 +76,18 @@ class DeploymentService:
                     label = param.get("label", lookup_key)
                     raise ValueError(f"Required parameter '{label}' not provided")
 
-        # Create per-deployment trigger if automation has trigger config
+        # Create per-deployment trigger from schedule_expression
         trigger_id = None
-        trigger_config = automation.trigger_config or {}
-        trigger_type = trigger_config.get("type", "manual")
+        trigger_type = "manual"
+        effective_cron = schedule_expression if schedule_expression else None
 
-        # Allow schedule override from deployment request
-        effective_cron = schedule_expression if schedule_expression is not None else trigger_config.get("cron")
-        # If schedule_expression is empty string, treat as manual (no schedule)
-        if schedule_expression == "":
-            trigger_type = "manual"
-            effective_cron = None
-        elif schedule_expression is not None and (not trigger_type or trigger_type == "manual"):
+        if effective_cron:
             trigger_type = "cron"
 
-        if trigger_type and trigger_type != "manual":
-            # Compute initial next_fire_at from schedule or interval
+        if trigger_type != "manual":
+            # Compute initial next_fire_at from schedule
             next_fire: datetime | None = None
-            interval_secs = trigger_config.get("interval_seconds")
-            if interval_secs:
-                next_fire = datetime.now(timezone.utc) + timedelta(seconds=interval_secs)
-            elif effective_cron:
+            if effective_cron:
                 try:
                     from croniter import croniter
                     cron = croniter(effective_cron, datetime.now(timezone.utc))
@@ -120,7 +101,7 @@ class DeploymentService:
                 target_type="deployment",
                 target_id=automation_id,
                 schedule_expression=effective_cron,
-                interval_seconds=interval_secs,
+                interval_seconds=None,
                 is_enabled=True,
                 status="active",
                 next_fire_at=next_fire,

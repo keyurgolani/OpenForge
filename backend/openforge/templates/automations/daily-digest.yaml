@@ -2,9 +2,6 @@ name: Daily Digest
 slug: daily-digest
 description: Runs the Deep Researcher agent every morning at 7 AM to compile a digest of recent knowledge updates and web developments.
 agent_slug: deep-researcher
-trigger_config:
-  type: cron
-  cron: "0 7 * * *"
 tags:
   - digest
   - daily

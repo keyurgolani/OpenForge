@@ -16,6 +16,7 @@ import {
   getAutomationGraph,
   saveAutomationGraph,
   getDeploymentSchema,
+  getAutomationVersions,
 } from '@/lib/api'
 import type {
   Automation,
@@ -169,6 +170,14 @@ export function useDeploymentSchemaQuery(id?: string) {
   return useQuery({
     queryKey: ['automation', id, 'deployment-schema'],
     queryFn: () => getDeploymentSchema(id as string),
+    enabled: Boolean(id),
+  })
+}
+
+export function useAutomationVersionsQuery(id?: string) {
+  return useQuery<{ versions: { version: number; is_valid: boolean; created_at: string }[] }>({
+    queryKey: ['automation', id, 'versions'],
+    queryFn: () => getAutomationVersions(id as string),
     enabled: Boolean(id),
   })
 }

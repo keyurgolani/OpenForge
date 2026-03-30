@@ -31,7 +31,6 @@ def test_agent_model_fields():
 
 def test_automation_model_fields():
     assert hasattr(AutomationModel, "agent_id")
-    assert hasattr(AutomationModel, "trigger_config")
     assert hasattr(AutomationModel, "budget_config")
 
 

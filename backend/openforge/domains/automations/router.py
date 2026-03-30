@@ -201,6 +201,17 @@ async def save_graph(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
+@router.get("/{automation_id}/versions")
+async def list_versions(
+    automation_id: UUID,
+    service: AutomationService = Depends(get_automation_service),
+):
+    versions = await service.list_versions(automation_id)
+    if versions is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Automation not found")
+    return {"versions": versions}
+
+
 @router.get("/{automation_id}/deployment-schema")
 async def get_deployment_schema(
     automation_id: UUID,

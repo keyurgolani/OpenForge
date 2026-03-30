@@ -454,6 +454,8 @@ export const saveAutomationGraph = async (id: string, graph: { nodes: unknown[];
     (await api.put(`/automations/${id}/graph`, graph)).data
 export const getDeploymentSchema = async (id: string) =>
     (await api.get(`/automations/${id}/deployment-schema`)).data
+export const getAutomationVersions = async (id: string) =>
+    (await api.get(`/automations/${id}/versions`)).data
 
 // --- Deployments ---
 export const deployAutomation = async (automationId: string, data: { workspace_id: string; input_values: Record<string, unknown>; schedule_expression?: string }) =>

@@ -1073,7 +1073,6 @@ class AutomationModel(Base):
         nullable=True,
         index=True,
     )
-    trigger_config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="draft")
     icon: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     is_template: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

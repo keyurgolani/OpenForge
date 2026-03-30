@@ -1,24 +1,26 @@
 import { useState } from 'react'
-import { ChevronRight, Clock, History, Settings, Tag } from 'lucide-react'
+import { ChevronRight, FileText, History, Settings, Tag } from 'lucide-react'
 import Siderail from '@/components/shared/Siderail'
 import AccordionSection from '@/components/agents/sections/AccordionSection'
 
-export interface TriggerConfig {
-  type: string
-  cron?: string
-  interval_seconds?: number
+export interface VersionEntry {
+  version: number
+  created_at: string
+  is_valid: boolean
 }
 
 export interface AutomationConfigSiderailProps {
-  triggerConfig: TriggerConfig
+  description: string
   tags: string[]
   isEditing: boolean
   status?: string
   healthStatus?: string
+  graphVersion?: number
   createdAt?: string
   updatedAt?: string
   compilationStatus?: string
   compilationError?: string | null
+  versions?: VersionEntry[]
   onChange: (field: string, value: unknown) => void
 }
 
@@ -34,31 +36,27 @@ function formatDate(iso: string | undefined): string {
   })
 }
 
-type SectionKey = 'trigger' | 'tags' | 'timeline' | null
+type SectionKey = 'description' | 'tags' | 'timeline' | null
 
 export default function AutomationConfigSiderail({
-  triggerConfig,
+  description,
   tags,
   isEditing,
   status,
   healthStatus,
+  graphVersion,
   createdAt,
   updatedAt,
   compilationStatus,
   compilationError,
+  versions,
   onChange,
 }: AutomationConfigSiderailProps) {
-  const [expandedSection, setExpandedSection] = useState<SectionKey>('trigger')
+  const [expandedSection, setExpandedSection] = useState<SectionKey>('description')
 
   const toggle = (key: SectionKey) => {
     setExpandedSection((prev) => (prev === key ? null : key))
   }
-
-  const triggerSummary = triggerConfig.type === 'cron'
-    ? `Cron: ${triggerConfig.cron ?? '—'}`
-    : triggerConfig.type === 'interval'
-      ? `Every ${triggerConfig.interval_seconds ?? 0}s`
-      : 'Manual'
 
   return (
     <Siderail
@@ -91,66 +89,26 @@ export default function AutomationConfigSiderail({
           </div>
 
           {/* Sections */}
-          <div className="flex min-h-0 flex-1 flex-col gap-1.5 pb-2">
-            {/* Trigger Config */}
+          <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pb-2">
+            {/* Description */}
             <AccordionSection
-              title="Trigger"
-              summary={triggerSummary}
-              icon={Clock}
-              expanded={expandedSection === 'trigger'}
-              onToggle={() => toggle('trigger')}
+              title="Description"
+              summary={description || 'No description'}
+              icon={FileText}
+              expanded={expandedSection === 'description'}
+              onToggle={() => toggle('description')}
             >
               {isEditing ? (
-                <div className="space-y-3 text-sm">
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground">Type</label>
-                    <select
-                      className="input w-full mt-1"
-                      value={triggerConfig.type || 'manual'}
-                      onChange={(e) => onChange('trigger_config', { ...triggerConfig, type: e.target.value })}
-                    >
-                      <option value="manual">Manual</option>
-                      <option value="cron">Cron Schedule</option>
-                      <option value="interval">Interval</option>
-                    </select>
-                  </div>
-                  {triggerConfig.type === 'cron' && (
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground">Cron Expression</label>
-                      <input
-                        className="input w-full mt-1 font-mono text-xs"
-                        value={triggerConfig.cron || ''}
-                        onChange={(e) => onChange('trigger_config', { ...triggerConfig, cron: e.target.value })}
-                        placeholder="0 9 * * 1"
-                      />
-                      <p className="mt-1 text-[10px] text-muted-foreground/70">e.g. "0 9 * * 1" = every Monday at 9 AM</p>
-                    </div>
-                  )}
-                  {triggerConfig.type === 'interval' && (
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground">Interval (seconds)</label>
-                      <input
-                        type="number"
-                        className="input w-full mt-1"
-                        value={triggerConfig.interval_seconds ?? ''}
-                        onChange={(e) => onChange('trigger_config', { ...triggerConfig, interval_seconds: e.target.value ? Number(e.target.value) : undefined })}
-                        placeholder="3600"
-                        min={1}
-                      />
-                      <p className="mt-1 text-[10px] text-muted-foreground/70">e.g. 3600 = every hour</p>
-                    </div>
-                  )}
-                </div>
+                <textarea
+                  className="input w-full min-h-[60px] text-xs resize-y"
+                  value={description}
+                  onChange={(e) => onChange('description', e.target.value)}
+                  placeholder="Describe what this automation does..."
+                />
               ) : (
-                <div className="space-y-1.5 text-xs text-muted-foreground">
-                  <div><span className="font-medium text-foreground/80">Type:</span> {triggerConfig.type || 'manual'}</div>
-                  {triggerConfig.type === 'cron' && triggerConfig.cron && (
-                    <div><span className="font-medium text-foreground/80">Schedule:</span> <code className="font-mono text-accent/80">{triggerConfig.cron}</code></div>
-                  )}
-                  {triggerConfig.type === 'interval' && triggerConfig.interval_seconds && (
-                    <div><span className="font-medium text-foreground/80">Interval:</span> {triggerConfig.interval_seconds}s</div>
-                  )}
-                </div>
+                <p className="text-xs text-muted-foreground whitespace-pre-wrap">
+                  {description || <span className="italic">No description</span>}
+                </p>
               )}
             </AccordionSection>
 
@@ -242,6 +200,24 @@ export default function AutomationConfigSiderail({
                       <div><span className="font-medium text-foreground/80">Updated:</span> {formatDate(updatedAt)}</div>
                     )}
                   </div>
+                  {/* Version history */}
+                  {versions && versions.length > 0 && (
+                    <div className="space-y-1.5 pt-1 border-t border-border/40">
+                      <span className="font-medium text-foreground/80">Versions</span>
+                      <div className="space-y-1">
+                        {versions.map((v) => (
+                          <div key={v.version} className={`flex items-center justify-between rounded px-1.5 py-0.5 ${v.version === graphVersion ? 'bg-accent/10 text-accent' : ''}`}>
+                            <span>
+                              v{v.version}
+                              {v.version === graphVersion && <span className="ml-1 text-[10px] opacity-70">(current)</span>}
+                              {!v.is_valid && <span className="ml-1 text-[10px] text-red-400">invalid</span>}
+                            </span>
+                            <span className="text-[10px] opacity-60">{formatDate(v.created_at)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </AccordionSection>
             )}

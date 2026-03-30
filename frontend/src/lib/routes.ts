@@ -97,9 +97,12 @@ export function searchRoute(workspaceId: string): string {
   return routeWithParams(ROUTES.SEARCH, { workspaceId });
 }
 
-export function globalChatRoute(conversationId?: string): string {
+export function globalChatRoute(conversationId?: string, options?: { agentId?: string }): string {
   if (conversationId) {
     return routeWithParams(ROUTES.CHAT_GLOBAL_CONVERSATION, { conversationId });
+  }
+  if (options?.agentId) {
+    return `${ROUTES.CHAT_GLOBAL}?agent=${encodeURIComponent(options.agentId)}`;
   }
   return ROUTES.CHAT_GLOBAL;
 }

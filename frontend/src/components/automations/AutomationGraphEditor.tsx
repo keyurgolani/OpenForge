@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState, useRef } from 'react'
 import {
   ReactFlow,
   Controls,
@@ -31,6 +31,11 @@ interface AutomationGraphEditorProps {
   automationId: string
   graph: AutomationGraph | null
   readOnly?: boolean
+}
+
+export interface AutomationGraphEditorHandle {
+  /** Return the current graph payload if there are unsaved changes, or null if clean. */
+  getPendingGraph: () => { nodes: unknown[]; edges: unknown[]; static_inputs: unknown[] } | null
 }
 
 let nodeIdCounter = 0
@@ -87,15 +92,18 @@ function typedInputSchema(
   }))
 }
 
-export default function AutomationGraphEditor(props: AutomationGraphEditorProps) {
-  return (
-    <ReactFlowProvider>
-      <AutomationGraphEditorInner {...props} />
-    </ReactFlowProvider>
-  )
-}
+const AutomationGraphEditor = forwardRef<AutomationGraphEditorHandle, AutomationGraphEditorProps>(
+  function AutomationGraphEditor(props, ref) {
+    return (
+      <ReactFlowProvider>
+        <AutomationGraphEditorInner {...props} forwardedRef={ref} />
+      </ReactFlowProvider>
+    )
+  },
+)
+export default AutomationGraphEditor
 
-function AutomationGraphEditorInner({ automationId, graph, readOnly = false }: AutomationGraphEditorProps) {
+function AutomationGraphEditorInner({ automationId, graph, readOnly = false, forwardedRef }: AutomationGraphEditorProps & { forwardedRef?: React.Ref<AutomationGraphEditorHandle> }) {
   const { data: agentsData } = useAgentsQuery()
   const saveGraph = useSaveAutomationGraph()
   const agents = agentsData?.agents ?? []
@@ -155,6 +163,44 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false }: A
   const [staticInputsMap, setStaticInputsMap] = useState<Record<string, Record<string, unknown>>>(initialStaticInputs)
   const [contextMenu, setContextMenu] = useState<{ nodeId: string; x: number; y: number } | null>(null)
 
+  // Expose pending graph state to parent for save-on-create flows
+  useImperativeHandle(forwardedRef, () => ({
+    getPendingGraph: () => {
+      const agentNodes = nodes.filter(n => n.type === 'agentNode')
+      if (agentNodes.length === 0) return null
+      const graphNodes = agentNodes.map(n => ({
+        node_key: (n.data as Record<string, unknown>).nodeKey as string || n.id,
+        agent_id: (n.data as Record<string, unknown>).agentId as string,
+        position: n.position,
+        config: {},
+      }))
+      const agentNodeIds = new Set(agentNodes.map(n => n.id))
+      const nodeIdToKey: Record<string, string> = {}
+      agentNodes.forEach(n => {
+        nodeIdToKey[n.id] = (n.data as Record<string, unknown>).nodeKey as string || n.id
+      })
+      const graphEdges = edges
+        .filter(e => agentNodeIds.has(e.source) && agentNodeIds.has(e.target))
+        .map(e => ({
+          source_node_key: nodeIdToKey[e.source] ?? e.source,
+          source_output_key: e.sourceHandle ?? 'output',
+          target_node_key: nodeIdToKey[e.target] ?? e.target,
+          target_input_key: e.targetHandle ?? '',
+        }))
+      const staticInputs: Array<{ node_key: string; input_key: string; static_value: unknown }> = []
+      for (const [nodeId, inputs] of Object.entries(staticInputsMap)) {
+        if (!agentNodeIds.has(nodeId)) continue
+        const nodeKey = nodeIdToKey[nodeId] ?? nodeId
+        for (const [inputKey, value] of Object.entries(inputs)) {
+          if (value !== '' && value != null) {
+            staticInputs.push({ node_key: nodeKey, input_key: inputKey, static_value: value })
+          }
+        }
+      }
+      return { nodes: graphNodes, edges: graphEdges, static_inputs: staticInputs }
+    },
+  }), [nodes, edges, staticInputsMap])
+
   // Wrap onNodesChange to clean up static inputs when nodes are deleted
   const onNodesChange = useCallback(
     (changes: Parameters<typeof onNodesChangeBase>[0]) => {
@@ -177,18 +223,22 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false }: A
     [onNodesChangeBase],
   )
 
-  // Sync nodes when agent data loads asynchronously after graph data.
-  const syncedAgentCountRef = useRef(agents.length)
+  // Sync internal state when graph/agents data loads asynchronously.
+  // Uses a stable string key derived from graph identity and agent count
+  // to avoid infinite re-render loops from unstable array references.
+  // Guarded by !isDirty so in-progress edits are not clobbered.
+  const syncKey = `${graph?.automation_id ?? ''}_${graph?.graph_version ?? 0}_${agents.length}`
   useEffect(() => {
-    if (agents.length > 0 && agents.length !== syncedAgentCountRef.current && graph?.nodes && graph.nodes.length > 0) {
-      syncedAgentCountRef.current = agents.length
+    if (!isDirty) {
       setNodes(initialNodes)
       setEdges(initialEdges)
-      // Fit view after nodes render
-      setTimeout(() => rfFitView({ maxZoom: 1, padding: 0.3 }), 100)
+      setStaticInputsMap(initialStaticInputs)
+      if (initialNodes.length > 0) {
+        setTimeout(() => rfFitView({ maxZoom: 1, padding: 0.3 }), 100)
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agents.length])
+  }, [syncKey])
 
   const onConnect = useCallback(
     (params: Connection) => {

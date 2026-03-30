@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
 import {
@@ -146,6 +146,7 @@ interface ConversationWithMessages extends Conversation {
 export default function AgentChatPage() {
     const { workspaceId, conversationId } = useParams<{ workspaceId: string; conversationId?: string }>()
     const navigate = useNavigate()
+    const [searchParams] = useSearchParams()
     const qc = useQueryClient()
     const { success: showSuccess, error: showError } = useToast()
     const chatApi = useChatApi(workspaceId || null)
@@ -607,6 +608,18 @@ export default function AgentChatPage() {
         }
     }
 
+    // Auto-create conversation when navigated with ?agent=<id> (e.g. from agent detail Chat button)
+    const autoCreateAgentRef = useRef<string | null>(null)
+    useEffect(() => {
+        const agentId = searchParams.get('agent')
+        if (!agentId || autoCreateAgentRef.current === agentId) return
+        autoCreateAgentRef.current = agentId
+        // Create conversation with the agent, then navigation inside handleNewChat
+        // will replace the URL (removing the ?agent param)
+        handleNewChat(agentId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchParams])
+
     const handleDeleteConv = async (cid: string) => {
         await chatApi.deleteConversation(cid)
         qc.invalidateQueries({ queryKey: [...chatApi.queryKeyPrefix] })
@@ -1044,7 +1057,7 @@ export default function AgentChatPage() {
                                                     <span className="text-[10px] text-muted-foreground/50 ml-1">System Prompt</span>
                                                 </div>
                                                 <pre className="text-xs text-foreground/80 whitespace-pre-wrap font-mono leading-relaxed max-h-[50vh] overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
-                                                    {renderedSystemPrompt || 'System prompt will appear after the agent responds.'}
+                                                    {renderedSystemPrompt || 'System prompt will appear after the agent sees it.'}
                                                 </pre>
                                             </div>
                                         ) : (

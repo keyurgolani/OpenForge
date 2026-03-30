@@ -341,7 +341,7 @@ export const SETTINGS_MODEL_DESCRIPTIONS: Record<SettingsModelSubsection, string
  *    - Profile → replaced by Agent
  *    - Workflow → removed (agents use strategies directly)
  *    - Mission → replaced by Automation
- *    - Trigger → folded into Automation trigger_config
+ *    - Trigger → moved to Deployment (schedule configured at deploy time)
  *    - Catalog → removed
  *    - Artifact → replaced by Output
  */
