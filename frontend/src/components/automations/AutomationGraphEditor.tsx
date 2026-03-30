@@ -535,6 +535,10 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
           elementsSelectable={!readOnly}
           fitView
           fitViewOptions={{ maxZoom: 1, padding: 0.3 }}
+          onInit={(instance) => {
+            // Delayed fitView ensures minimap renders correctly after nodes load
+            setTimeout(() => instance.fitView({ maxZoom: 1, padding: 0.3 }), 200)
+          }}
           minZoom={0.2}
           maxZoom={2}
           className="bg-background"
@@ -543,6 +547,7 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
           <MiniMap
             className="!bg-card !border-border/25"
             nodeColor="#6366f1"
+            nodeStrokeWidth={2}
             maskColor="rgba(0,0,0,0.3)"
           />
           <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#333" />

@@ -32,7 +32,6 @@ function computeLevels(nodes: GraphNode[], edges: GraphEdge[]): string[][] {
     }
   }
 
-  // Assign levels via BFS
   const level = new Map<string, number>()
   const queue: string[] = []
   for (const [id, deg] of inDegree) {
@@ -54,12 +53,10 @@ function computeLevels(nodes: GraphNode[], edges: GraphEdge[]): string[][] {
     }
   }
 
-  // Handle any nodes not reached (disconnected) — put at level 0
   for (const id of ids) {
     if (!level.has(id)) level.set(id, 0)
   }
 
-  // Group by level
   const levels: string[][] = Array.from({ length: maxLevel + 1 }, () => [])
   for (const [id, lvl] of level) levels[lvl].push(id)
   return levels
@@ -69,19 +66,25 @@ export default function MiniGraphPreview({ nodes, edges, width = 120, height = 5
   const layout = useMemo(() => {
     if (nodes.length === 0) return null
 
-    const levels = computeLevels(nodes, edges)
-    const levelCount = levels.length
-    const maxPerLevel = Math.max(...levels.map(l => l.length))
+    // Deduplicate edges by source+target pair
+    const edgeSet = new Set<string>()
+    const uniqueEdges = edges.filter(e => {
+      const key = `${e.source}->${e.target}`
+      if (edgeSet.has(key)) return false
+      edgeSet.add(key)
+      return true
+    })
 
-    // Layout params
-    const padX = 10
-    const padY = 8
-    const nodeW = 16
-    const nodeH = 8
+    const levels = computeLevels(nodes, uniqueEdges)
+    const levelCount = levels.length
+
+    const padX = 16
+    const padY = 12
+    const nodeW = 28
+    const nodeH = 14
     const innerW = width - padX * 2
     const innerH = height - padY * 2
 
-    // Compute positions: levels flow left-to-right, nodes within a level stack vertically
     const positions = new Map<string, { cx: number; cy: number }>()
     for (let li = 0; li < levelCount; li++) {
       const count = levels[li].length
@@ -92,31 +95,46 @@ export default function MiniGraphPreview({ nodes, edges, width = 120, height = 5
       }
     }
 
-    return { positions, nodeW, nodeH }
+    return { positions, nodeW, nodeH, uniqueEdges }
   }, [nodes, edges, width, height])
 
   if (!layout) return null
 
-  const { positions, nodeW, nodeH } = layout
+  const { positions, nodeW, nodeH, uniqueEdges } = layout
+
+  // Use hsl() wrapper since Tailwind CSS vars store raw HSL values
+  const edgeColor = 'hsl(var(--muted-foreground))'
+  const nodeColor = 'hsl(var(--accent))'
 
   return (
-    <svg width={width} height={height} className="rounded-lg border border-border/30 bg-background/50">
+    <svg width={width} height={height}>
       {/* Edges */}
-      {edges.map((e, i) => {
+      {uniqueEdges.map((e, i) => {
         const from = positions.get(e.source)
         const to = positions.get(e.target)
         if (!from || !to) return null
+        const x1 = from.cx + nodeW / 2
+        const y1 = from.cy
+        const x2 = to.cx - nodeW / 2
+        const y2 = to.cy
+        // Cubic bezier with horizontal control points for a natural curve
+        const cpOffset = Math.abs(x2 - x1) * 0.4
+        const d = `M ${x1} ${y1} C ${x1 + cpOffset} ${y1}, ${x2 - cpOffset} ${y2}, ${x2} ${y2}`
+        // Arrowhead direction from last control point to end
+        const dx = x2 - (x2 - cpOffset)
+        const dy = y2 - y2
+        const len = Math.sqrt(dx * dx + dy * dy) || 1
+        const ux = dx / len
+        const uy = dy / len
+        const arrowSize = 4
         return (
-          <line
-            key={i}
-            x1={from.cx + nodeW / 2}
-            y1={from.cy}
-            x2={to.cx - nodeW / 2}
-            y2={to.cy}
-            stroke="var(--accent)"
-            strokeOpacity={0.35}
-            strokeWidth={1}
-          />
+          <g key={i}>
+            <path d={d} style={{ stroke: edgeColor, strokeWidth: 1.5, fill: 'none' }} />
+            <polygon
+              points={`${x2},${y2} ${x2 - ux * arrowSize + uy * arrowSize},${y2 - uy * arrowSize - ux * arrowSize} ${x2 - ux * arrowSize - uy * arrowSize},${y2 - uy * arrowSize + ux * arrowSize}`}
+              style={{ fill: edgeColor }}
+            />
+          </g>
         )
       })}
       {/* Nodes */}
@@ -127,9 +145,8 @@ export default function MiniGraphPreview({ nodes, edges, width = 120, height = 5
           y={pos.cy - nodeH / 2}
           width={nodeW}
           height={nodeH}
-          rx={2}
-          fill="var(--accent)"
-          fillOpacity={0.7}
+          rx={3}
+          style={{ fill: nodeColor }}
         />
       ))}
     </svg>
