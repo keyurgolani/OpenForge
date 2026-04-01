@@ -32,7 +32,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: '../static',
+    outDir: 'dist',
     sourcemap: false,
     rollupOptions: {
       output: {

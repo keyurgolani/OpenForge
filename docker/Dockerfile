@@ -33,8 +33,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 COPY backend/ ./backend/
 
 # Copy built frontend assets
-# Vite outDir is '../static' relative to frontend/, so the build outputs to /app/static/
-COPY --from=frontend-build /app/static ./static/
+COPY --from=frontend-build /app/frontend/dist ./static/
 
 # Create workspace, uploads, and model cache directories
 RUN mkdir -p /workspace /uploads /models
