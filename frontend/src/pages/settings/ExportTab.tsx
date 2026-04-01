@@ -62,7 +62,7 @@ function ExportTab() {
             <div>
                 <h3 className="font-semibold text-sm">Export Data</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                    Download your data as ZIP archives. Exports include chat threads, knowledge, attachments, and settings.
+                    Download your data as ZIP archives. Exports include knowledge, chats, agents, automations, sinks, attachments, and settings.
                 </p>
             </div>
 
@@ -83,7 +83,7 @@ function ExportTab() {
                         <div>
                             <p className="font-medium text-sm">Export All Data</p>
                             <p className="text-xs text-muted-foreground mt-0.5">
-                                Download a complete backup of all workspaces, including chat threads, knowledge, attachments, and settings configuration.
+                                Download a complete backup including all workspaces, knowledge, chats, agents, automations, sinks, attachments, and settings.
                             </p>
                         </div>
                     </div>
@@ -111,7 +111,7 @@ function ExportTab() {
                                 <div>
                                     <span className="font-medium text-sm">{ws.name}</span>
                                     <p className="text-xs text-muted-foreground">
-                                        {ws.knowledge_count} knowledge · {ws.conversation_count} chats
+                                        {ws.knowledge_count} knowledge
                                     </p>
                                 </div>
                             </div>

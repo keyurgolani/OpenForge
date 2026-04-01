@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Archive, Globe2, Image, StickyNote } from 'lucide-react'
 import { OpenForgeImportSubTab } from './import/OpenForgeImportSubTab'
 import { BookmarkImportSubTab } from './import/BookmarkImportSubTab'
@@ -21,8 +21,16 @@ const IMPORT_SUB_TABS: Array<{
 
 /* ── Component ──────────────────────────────────────────────────────────── */
 
-export default function ImportTab() {
-    const [activeSubTab, setActiveSubTab] = useState<ImportSubTab>('openforge')
+interface ImportTabProps {
+    defaultSubTab?: 'openforge' | 'bookmarks'
+}
+
+export default function ImportTab({ defaultSubTab }: ImportTabProps) {
+    const [activeSubTab, setActiveSubTab] = useState<ImportSubTab>(defaultSubTab ?? 'openforge')
+
+    useEffect(() => {
+        if (defaultSubTab) setActiveSubTab(defaultSubTab)
+    }, [defaultSubTab])
 
     return (
         <div className="flex-1 min-h-0 flex flex-col gap-5">

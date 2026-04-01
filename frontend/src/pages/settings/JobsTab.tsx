@@ -54,7 +54,7 @@ function JobsTab() {
     )
 }
 
-function IndexingJobsTab() {
+export function IndexingJobsTab() {
     const [reindexingImages, setReindexingImages] = useState(false)
     const [reindexingKnowledge, setReindexingKnowledge] = useState(false)
     const [imageStarted, setImageStarted] = useState(false)
@@ -142,7 +142,7 @@ function IndexingJobsTab() {
     )
 }
 
-function AutomatedTriggersTab() {
+export function AutomatedTriggersTab() {
     const qc = useQueryClient()
     const { data: settings = [], isLoading } = useQuery<Array<{ key: string; value: unknown; category: string }>>({
         queryKey: ['app-settings'],

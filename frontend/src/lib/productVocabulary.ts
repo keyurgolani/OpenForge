@@ -266,7 +266,7 @@ export function getEmptyStateCopy(domain: DomainNoun): { title: string; descript
 export type SettingsSection =
   | 'workspaces'
   | 'models'
-  | 'tools'
+  | 'capabilities'
   | 'data'
   | 'appearance'
   | 'advanced';
@@ -276,14 +276,15 @@ export type SettingsModelSubsection =
   | 'reasoning'
   | 'vision'
   | 'embedding'
-  | 'audio'
   | 'clip'
-  | 'pdf';
+  | 'pdf'
+  | 'stt'
+  | 'tts';
 
 export const SETTINGS_LABELS: Record<SettingsSection, string> = {
   workspaces: 'Workspaces',
   models: 'AI Models',
-  tools: 'Tools & Connections',
+  capabilities: 'AI Capabilities',
   data: 'Import / Export',
   appearance: 'Appearance',
   advanced: 'Advanced',
@@ -292,7 +293,7 @@ export const SETTINGS_LABELS: Record<SettingsSection, string> = {
 export const SETTINGS_DESCRIPTIONS: Record<SettingsSection, string> = {
   workspaces: 'Manage workspaces and their configurations.',
   models: 'Configure AI model providers and model assignments.',
-  tools: 'Manage tools, skills, and MCP server connections.',
+  capabilities: 'Manage tools, skills, and MCP server connections.',
   data: 'Import and export workspace data.',
   appearance: 'Color scheme, light and dark mode preferences.',
   advanced: 'Pipelines, audit logs, and system configuration.',
@@ -302,10 +303,11 @@ export const SETTINGS_MODEL_LABELS: Record<SettingsModelSubsection, string> = {
   providers: 'Providers',
   reasoning: 'Reasoning',
   vision: 'Vision',
-  embedding: 'Embedding',
-  audio: 'Speech',
+  embedding: 'Text Embedding',
   clip: 'CLIP',
   pdf: 'PDF',
+  stt: 'Speech to Text',
+  tts: 'Text to Speech',
 };
 
 export const SETTINGS_MODEL_DESCRIPTIONS: Record<SettingsModelSubsection, string> = {
@@ -313,9 +315,10 @@ export const SETTINGS_MODEL_DESCRIPTIONS: Record<SettingsModelSubsection, string
   reasoning: 'Assign reasoning models for chat and analysis.',
   vision: 'Assign vision models for image understanding.',
   embedding: 'Assign embedding models for vector search.',
-  audio: 'Assign audio models for speech processing.',
   clip: 'Assign CLIP models for multimodal search.',
   pdf: 'Assign PDF processing models.',
+  stt: 'Assign speech-to-text models for audio transcription.',
+  tts: 'Assign text-to-speech models for audio synthesis.',
 };
 
 // =============================================================================

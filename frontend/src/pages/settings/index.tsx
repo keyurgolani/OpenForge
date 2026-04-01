@@ -14,14 +14,14 @@ function resolveLegacySettingsRoute(searchParams: URLSearchParams): string {
 
   const tabToRoute: Record<string, string> = {
     workspaces: '/settings/workspaces',
-    llm: '/settings/models/providers',
-    jobs: '/settings/pipelines',
-    tools: '/settings/tools',
-    skills: '/settings/skills',
-    mcp: '/settings/mcp',
-    audit: '/settings/audit',
-    export: '/settings/export',
-    import: '/settings/import',
+    llm: '/settings/models',
+    jobs: '/settings/advanced',
+    tools: '/settings/capabilities',
+    skills: '/settings/capabilities',
+    mcp: '/settings/capabilities',
+    audit: '/settings/advanced',
+    export: '/settings/data',
+    import: '/settings/data',
   };
 
   const route = tab ? tabToRoute[tab] : null;

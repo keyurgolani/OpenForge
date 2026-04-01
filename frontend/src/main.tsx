@@ -34,16 +34,9 @@ const SearchPage = lazy(() => import('./pages/SearchPage'))
 // Settings pages
 const SettingsIndex = lazy(() => import('./pages/settings'))
 const SettingsLayout = lazy(() => import('./pages/settings/SettingsLayout'))
-const ModelsLayout = lazy(() => import('./pages/settings/models/ModelsLayout'))
-const WorkspacesPage = lazy(() => import('./pages/settings/workspaces/WorkspacesPage'))
-const ProvidersPage = lazy(() => import('./pages/settings/models/providers/ProvidersPage'))
-const ReasoningPage = lazy(() => import('./pages/settings/models/reasoning/ReasoningPage'))
-const VisionPage = lazy(() => import('./pages/settings/models/vision/VisionPage'))
-const EmbeddingPage = lazy(() => import('./pages/settings/models/embedding/EmbeddingPage'))
-const AudioPage = lazy(() => import('./pages/settings/models/audio/AudioPage'))
-const CLIPPage = lazy(() => import('./pages/settings/models/clip/CLIPPage'))
-const PDFPage = lazy(() => import('./pages/settings/models/pdf/PDFPage'))
-const ToolsAndConnectionsPage = lazy(() => import('./pages/settings/ToolsAndConnectionsPage'))
+const WorkspacesPage = lazy(() => import('./pages/settings/WorkspacesPage'))
+const ModelsPage = lazy(() => import('./pages/settings/ModelsPage'))
+const CapabilitiesPage = lazy(() => import('./pages/settings/CapabilitiesPage'))
 const DataPage = lazy(() => import('./pages/settings/DataPage'))
 const AdvancedPage = lazy(() => import('./pages/settings/AdvancedPage'))
 const AppearancePage = lazy(() => import('./pages/settings/AppearancePage'))
@@ -220,23 +213,16 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                 <Route path="/settings" element={<ErrorBoundary><SettingsLayout /></ErrorBoundary>}>
                                     <Route index element={<SettingsIndex />} />
                                     <Route path="workspaces" element={<ErrorBoundary><WorkspacesPage /></ErrorBoundary>} />
-                                    <Route path="models" element={<ErrorBoundary><ModelsLayout /></ErrorBoundary>}>
-                                        <Route index element={<Navigate to="/settings/models/providers" replace />} />
-                                        <Route path="providers" element={<ErrorBoundary><ProvidersPage /></ErrorBoundary>} />
-                                        <Route path="reasoning" element={<ErrorBoundary><ReasoningPage /></ErrorBoundary>} />
-                                        <Route path="vision" element={<ErrorBoundary><VisionPage /></ErrorBoundary>} />
-                                        <Route path="embedding" element={<ErrorBoundary><EmbeddingPage /></ErrorBoundary>} />
-                                        <Route path="audio" element={<ErrorBoundary><AudioPage /></ErrorBoundary>} />
-                                        <Route path="clip" element={<ErrorBoundary><CLIPPage /></ErrorBoundary>} />
-                                        <Route path="pdf" element={<ErrorBoundary><PDFPage /></ErrorBoundary>} />
-                                    </Route>
-                                    <Route path="tools" element={<ErrorBoundary><ToolsAndConnectionsPage /></ErrorBoundary>} />
+                                    <Route path="models" element={<ErrorBoundary><ModelsPage /></ErrorBoundary>} />
+                                    <Route path="capabilities" element={<ErrorBoundary><CapabilitiesPage /></ErrorBoundary>} />
                                     <Route path="data" element={<ErrorBoundary><DataPage /></ErrorBoundary>} />
                                     <Route path="appearance" element={<ErrorBoundary><AppearancePage /></ErrorBoundary>} />
                                     <Route path="advanced" element={<ErrorBoundary><AdvancedPage /></ErrorBoundary>} />
                                     {/* Redirects from old routes */}
-                                    <Route path="skills" element={<Navigate to="/settings/tools" replace />} />
-                                    <Route path="mcp" element={<Navigate to="/settings/tools" replace />} />
+                                    <Route path="tools" element={<Navigate to="/settings/capabilities" replace />} />
+                                    <Route path="skills" element={<Navigate to="/settings/capabilities" replace />} />
+                                    <Route path="mcp" element={<Navigate to="/settings/capabilities" replace />} />
+                                    <Route path="models/*" element={<Navigate to="/settings/models" replace />} />
                                     <Route path="pipelines" element={<Navigate to="/settings/advanced" replace />} />
                                     <Route path="audit" element={<Navigate to="/settings/advanced" replace />} />
                                     <Route path="import" element={<Navigate to="/settings/data" replace />} />
