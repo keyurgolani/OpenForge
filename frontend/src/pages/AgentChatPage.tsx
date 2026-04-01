@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import MarkdownIt from 'markdown-it'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
@@ -42,6 +43,8 @@ import Siderail from '@/components/shared/Siderail'
 import { AgentChatView } from '@/components/chat/AgentChatView'
 import { useAttachmentUpload } from '@/hooks/chat/useAttachmentUpload'
 import { ConfirmModal } from '@/components/ui/confirm-modal'
+
+const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
 
 function stripMarkdown(text: string): string {
     return text
@@ -1056,9 +1059,11 @@ export default function AgentChatPage() {
                                                     <span className="text-xs font-medium text-foreground/70">{activeConversationRecord.agent_name}</span>
                                                     <span className="text-[10px] text-muted-foreground/50 ml-1">System Prompt</span>
                                                 </div>
-                                                <pre className="text-xs text-foreground/80 whitespace-pre-wrap font-mono leading-relaxed max-h-[50vh] overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
-                                                    {renderedSystemPrompt || 'System prompt will appear after the agent sees it.'}
-                                                </pre>
+                                                <div
+                                                    className="prose prose-invert prose-xs max-w-none text-xs text-foreground/80 leading-relaxed max-h-[50vh] overflow-y-auto [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:mb-2 [&_h2]:text-xs [&_h2]:font-semibold [&_h2]:mb-1.5 [&_h3]:text-xs [&_h3]:font-medium [&_h3]:mb-1 [&_p]:mb-2 [&_ul]:mb-2 [&_ol]:mb-2 [&_li]:mb-0.5 [&_code]:text-[11px] [&_code]:bg-muted/50 [&_code]:px-1 [&_code]:rounded"
+                                                    style={{ scrollbarWidth: 'thin' }}
+                                                    dangerouslySetInnerHTML={{ __html: md.render(renderedSystemPrompt || '*System prompt will appear after the agent sees it.*') }}
+                                                />
                                             </div>
                                         ) : (
                                             <>
