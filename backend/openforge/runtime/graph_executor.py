@@ -15,7 +15,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from openforge.db.models import CompiledAgentSpecModel, RunModel, RunStepModel
+from openforge.db.models import AgentDefinitionVersionModel, RunModel, RunStepModel
 from openforge.domains.agents.compiled_spec import AgentRuntimeConfig, build_runtime_config_from_snapshot
 from openforge.domains.automations.compiled_spec import CompiledAutomationSpec, CompiledNodeSpec
 from openforge.runtime.template_engine import render
@@ -30,13 +30,11 @@ class GraphExecutor:
         self,
         db: AsyncSession,
         event_publisher=None,
-        checkpoint_store=None,
         tool_dispatcher=None,
         llm_gateway=None,
     ):
         self.db = db
         self.event_publisher = event_publisher
-        self.checkpoint_store = checkpoint_store
         self.tool_dispatcher = tool_dispatcher
         self.llm_gateway = llm_gateway
 
@@ -94,7 +92,7 @@ class GraphExecutor:
         1. Resolve all inputs (wired from output_store, static, or deployment)
         2. Render agent system_prompt_template with resolved inputs
         3. Create a child RunModel for this node
-        4. Execute via StrategyExecutor (which manages its own steps)
+        4. Execute via agent_executor (which manages its own steps)
         5. Parse output
         6. Return outputs dict
         """
@@ -123,7 +121,7 @@ class GraphExecutor:
                 resolved_inputs.setdefault(full_key, value)
 
         # 2. Load agent spec and render template
-        agent_spec_row = await self.db.get(CompiledAgentSpecModel, node_spec.agent_spec_id)
+        agent_spec_row = await self.db.get(AgentDefinitionVersionModel, node_spec.agent_spec_id)
         if not agent_spec_row:
             raise ValueError(f"Agent spec {node_spec.agent_spec_id} not found for node {node_spec.node_key}")
 
@@ -197,7 +195,7 @@ class GraphExecutor:
             prompt_parts.append(automation_postamble)
         rendered_prompt = "\n\n---\n\n".join(prompt_parts)
 
-        # 3. Create a child run for this node so StrategyExecutor can manage
+        # 3. Create a child run for this node so agent_executor can manage
         #    its own steps without step_index collisions.
         child_run = RunModel(
             id=_uuid.uuid4(),
@@ -221,9 +219,9 @@ class GraphExecutor:
         self.db.add(child_run)
         await self.db.flush()
 
-        # 4. Execute via StrategyExecutor
+        # 4. Execute via agent_executor
         try:
-            from openforge.runtime.strategy_executor import StrategyExecutor
+            from openforge.runtime.agent_executor import execute_agent
 
             spec = build_runtime_config_from_snapshot(
                 snapshot=snapshot,
@@ -234,22 +232,19 @@ class GraphExecutor:
             )
             spec.system_prompt = rendered_prompt
 
-            executor = StrategyExecutor(
-                self.db,
-                event_publisher=self.event_publisher,
-                checkpoint_store=self.checkpoint_store,
-                tool_dispatcher=self.tool_dispatcher,
-                llm_gateway=self.llm_gateway,
-            )
-            result = await executor.execute(
+            result = await execute_agent(
                 spec,
                 {
                     "input_values": resolved_inputs,
                     "rendered_system_prompt": rendered_prompt,
                     "instruction": rendered_prompt,
                 },
+                db=self.db,
                 workspace_id=parent_run.workspace_id,
                 run_id=child_run.id,
+                event_publisher=self.event_publisher,
+                tool_dispatcher=self.tool_dispatcher,
+                llm_gateway=self.llm_gateway,
             )
 
             # 5. Parse output
@@ -276,7 +271,7 @@ class GraphExecutor:
             return outputs
 
         except Exception as exc:
-            # Update child run to failed if not already done by StrategyExecutor
+            # Update child run to failed if not already done by agent_executor
             try:
                 child_run_fresh = await self.db.get(RunModel, child_run.id)
                 if child_run_fresh and child_run_fresh.status not in ("failed", "completed"):

@@ -8,8 +8,6 @@ tags:
   - code
   - review
   - template
-mode: interactive
-strategy: reviewer
 model:
   allow_override: true
   temperature: 0.2

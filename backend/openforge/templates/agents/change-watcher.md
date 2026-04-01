@@ -8,8 +8,6 @@ tags:
   - monitoring
   - autonomous
   - template
-mode: autonomous
-strategy: watcher
 model:
   allow_override: true
   temperature: 0.2

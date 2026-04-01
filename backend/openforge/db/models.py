@@ -446,71 +446,12 @@ class TaskLog(Base):
     )
 
 
-class AgentMemory(Base):
-    """Persistent agent memory entries with vector embeddings and time-weighted recall."""
-    __tablename__ = "agent_memory"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    workspace_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
-    )
-    agent_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
-    memory_type: Mapped[str] = mapped_column(String(20), nullable=False, default="observation")
-    decay_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0.01)
-    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
-    access_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=now_utc
-    )
-    last_accessed_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=now_utc
-    )
-
-    __table_args__ = (
-        Index("idx_agent_memory_workspace", "workspace_id", "is_active"),
-        Index("idx_agent_memory_agent", "agent_id", "is_active"),
-    )
-
 # =============================================================================
 # NEW DOMAIN MODELS
 # =============================================================================
 
 # These models represent the final architecture nouns and will be used
 # for all new development. They align with the canonical product vocabulary.
-
-
-class AgentProfileModel(Base):
-    """Agent Profile - a worker abstraction defining capabilities."""
-    __tablename__ = "agent_profiles"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    version: Mapped[str] = mapped_column(String(20), nullable=False, default="1.0.0")
-    role: Mapped[str] = mapped_column(String(50), default="assistant")
-    system_prompt_ref: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    model_policy_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
-    memory_policy_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
-    safety_policy_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
-    capability_bundle_ids: Mapped[list] = mapped_column(JSONB, default=list)
-    output_contract_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
-    is_system: Mapped[bool] = mapped_column(Boolean, default=False)
-    is_template: Mapped[bool] = mapped_column(Boolean, default=False)
-    status: Mapped[str] = mapped_column(String(50), default="draft")
-    icon: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    # Catalog metadata
-    tags: Mapped[list] = mapped_column(JSONB, default=list)
-    catalog_metadata: Mapped[dict] = mapped_column(JSONB, default=dict)
-    is_featured: Mapped[bool] = mapped_column(Boolean, default=False)
-    is_recommended: Mapped[bool] = mapped_column(Boolean, default=False)
-    sort_priority: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
-    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
 
 
 class TriggerDefinitionModel(Base):
@@ -544,7 +485,6 @@ class TriggerFireHistoryModel(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     trigger_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
-    mission_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
     run_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
     fired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
     launch_status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
@@ -558,9 +498,6 @@ class RunModel(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     run_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    workflow_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
-    workflow_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
-    mission_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     trigger_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     parent_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     root_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
@@ -630,27 +567,6 @@ class RunStepModel(Base):
     )
 
 
-class CheckpointModel(Base):
-    """Persisted run checkpoint."""
-    __tablename__ = "checkpoints"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    run_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("runs.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    step_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("run_steps.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-    checkpoint_type: Mapped[str] = mapped_column(String(50), nullable=False, default="after_step")
-    state_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
-
-    __table_args__ = (
-        Index("idx_checkpoints_run_created", "run_id", "created_at"),
-    )
-
-
 class RuntimeEventModel(Base):
     """Persisted runtime event for a run."""
     __tablename__ = "runtime_events"
@@ -662,8 +578,6 @@ class RuntimeEventModel(Base):
     step_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("run_steps.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    workflow_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
-    workflow_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     node_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     node_key: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     event_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
@@ -683,8 +597,6 @@ class ArtifactModel(Base):
     artifact_type: Mapped[str] = mapped_column(String(50), nullable=False)
     workspace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     source_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
-    source_workflow_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
-    source_mission_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     source_profile_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -953,8 +865,6 @@ class UsageRecordModel(Base):
     step_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("run_steps.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    workflow_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
-    mission_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     profile_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     record_type: Mapped[str] = mapped_column(String(50), nullable=False)
     model_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
@@ -975,10 +885,6 @@ class UsageRecordModel(Base):
     __table_args__ = (
         Index("idx_usage_records_run_created", "run_id", "created_at"),
         Index("idx_usage_records_ws_type_created", "workspace_id", "record_type", "created_at"),
-        Index(
-            "idx_usage_records_mission_created", "mission_id", "created_at",
-            postgresql_where="mission_id IS NOT NULL",
-        ),
     )
 
 
@@ -994,8 +900,6 @@ class FailureEventModel(Base):
     step_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("run_steps.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    workflow_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
-    mission_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     trigger_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     failure_class: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     error_code: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -1012,10 +916,6 @@ class FailureEventModel(Base):
     __table_args__ = (
         Index("idx_failure_events_ws_class_created", "workspace_id", "failure_class", "created_at"),
         Index("idx_failure_events_run_created", "run_id", "created_at"),
-        Index(
-            "idx_failure_events_mission_created", "mission_id", "created_at",
-            postgresql_where="mission_id IS NOT NULL",
-        ),
     )
 
 
@@ -1072,10 +972,6 @@ class AgentDefinitionVersionModel(Base):
     __table_args__ = (
         UniqueConstraint("agent_id", "version", name="uq_compiled_agent_specs_agent_version"),
     )
-
-
-# Backward-compat alias — existing code imports CompiledAgentSpecModel
-CompiledAgentSpecModel = AgentDefinitionVersionModel
 
 
 class AutomationModel(Base):
@@ -1251,18 +1147,3 @@ class AutomationNodeInputModel(Base):
     __table_args__ = (
         UniqueConstraint("node_id", "input_key", name="uq_automation_node_inputs_node_input"),
     )
-
-
-class StrategyPluginModel(Base):
-    """Strategy plugin - extensible agent behavior strategy."""
-    __tablename__ = "strategy_plugins"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
-    version: Mapped[str] = mapped_column(String(20), nullable=False, default="1.0.0")
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    manifest: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
-    is_builtin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)

@@ -17,6 +17,13 @@ EXPECTED_MIGRATIONS = [
     "007_agent_definition_restructure.py",
     "008_drop_retrieval_config.py",
     "009_add_intelligence_categories.py",
+    "010_automation_remove_budget_agent_rename_sink.py",
+    "011_remove_sink_config.py",
+    "012_remove_trigger_config.py",
+    "013_sink_node_support.py",
+    "014_create_sinks_table.py",
+    "015_drop_strategy_plugins.py",
+    "016_drop_dead_tables_and_columns.py",
 ]
 
 

@@ -81,34 +81,6 @@ class CostAccountingService:
         rows = result.scalars().all()
         return aggregate_usage_records([_row_to_dict(r) for r in rows])
 
-    async def get_workflow_usage(
-        self, db: AsyncSession, workflow_id: UUID, *, limit: int = 50
-    ) -> UsageAggregation:
-        """Aggregate usage across recent runs of a workflow."""
-        stmt = (
-            select(UsageRecordModel)
-            .where(UsageRecordModel.workflow_id == workflow_id)
-            .order_by(desc(UsageRecordModel.created_at))
-            .limit(limit)
-        )
-        result = await db.execute(stmt)
-        rows = result.scalars().all()
-        return aggregate_usage_records([_row_to_dict(r) for r in rows])
-
-    async def get_mission_usage(
-        self, db: AsyncSession, mission_id: UUID, *, limit: int = 50
-    ) -> UsageAggregation:
-        """Aggregate usage for a mission."""
-        stmt = (
-            select(UsageRecordModel)
-            .where(UsageRecordModel.mission_id == mission_id)
-            .order_by(desc(UsageRecordModel.created_at))
-            .limit(limit)
-        )
-        result = await db.execute(stmt)
-        rows = result.scalars().all()
-        return aggregate_usage_records([_row_to_dict(r) for r in rows])
-
     async def get_cost_hotspots(
         self, db: AsyncSession, workspace_id: UUID, *, limit: int = 20
     ) -> list[dict[str, Any]]:

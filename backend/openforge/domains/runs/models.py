@@ -1,5 +1,5 @@
 """Run domain database model exports."""
 
-from openforge.db.models import CheckpointModel, RunModel, RunStepModel, RuntimeEventModel
+from openforge.db.models import RunModel, RunStepModel, RuntimeEventModel
 
-__all__ = ["RunModel", "RunStepModel", "CheckpointModel", "RuntimeEventModel"]
+__all__ = ["RunModel", "RunStepModel", "RuntimeEventModel"]

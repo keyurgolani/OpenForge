@@ -27,8 +27,6 @@ interface OutputQueryOptions {
   status?: OutputStatus
   visibility?: OutputVisibility
   sourceRunId?: string
-  sourceWorkflowId?: string
-  sourceMissionId?: string
   createdByType?: string
 }
 
@@ -39,12 +37,10 @@ export function useOutputsQuery({
   status,
   visibility,
   sourceRunId,
-  sourceWorkflowId,
-  sourceMissionId,
   createdByType,
 }: OutputQueryOptions = {}) {
   return useQuery<OutputsResponse>({
-    queryKey: ['outputs', limit, q ?? '', artifactType ?? 'all', status ?? 'all', visibility ?? 'all', sourceRunId ?? 'all', sourceWorkflowId ?? 'all', sourceMissionId ?? 'all', createdByType ?? 'all'],
+    queryKey: ['outputs', limit, q ?? '', artifactType ?? 'all', status ?? 'all', visibility ?? 'all', sourceRunId ?? 'all', createdByType ?? 'all'],
     queryFn: () => listOutputs({
       limit,
       q,
@@ -52,8 +48,6 @@ export function useOutputsQuery({
       status,
       visibility,
       source_run_id: sourceRunId,
-      source_workflow_id: sourceWorkflowId,
-      source_mission_id: sourceMissionId,
       created_by_type: createdByType,
     }),
   })

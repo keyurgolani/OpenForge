@@ -27,33 +27,29 @@ class HandoffEngine:
     ) -> dict[str, Any]:
         """Delegate a task to another agent.
 
-        Uses agent_registry → StrategyExecutor, falls back to
+        Uses agent_registry → execute_agent, falls back to
         chat_handler.execute_subagent.
         """
         spec = await agent_registry.resolve(db, slug=target_agent_slug)
         if spec is not None:
-            from openforge.runtime.strategy_executor import StrategyExecutor
-            from openforge.runtime.checkpoint_store import CheckpointStore
+            from openforge.runtime.agent_executor import execute_agent
             from openforge.runtime.event_publisher import EventPublisher
             from openforge.core.llm_gateway import llm_gateway
             from openforge.integrations.tools.dispatcher import tool_dispatcher
 
-            executor = StrategyExecutor(
+            result = await execute_agent(
+                spec,
+                {"instruction": instruction, "message": instruction},
                 db=db,
+                workspace_id=workspace_id,
                 event_publisher=EventPublisher(db),
-                checkpoint_store=CheckpointStore(db),
                 tool_dispatcher=tool_dispatcher,
                 llm_gateway=llm_gateway,
             )
-            result = await executor.execute(
-                spec,
-                {"instruction": instruction, "message": instruction},
-                workspace_id=workspace_id,
-            )
             return {
                 "response": result.get("output", ""),
-                "timeline": [],
-                "strategy_run": True,
+                "timeline": result.get("timeline", []),
+                "agent_run": True,
             }
 
         # Fallback: use chat_handler for agents without compiled specs

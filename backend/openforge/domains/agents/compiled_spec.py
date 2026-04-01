@@ -58,9 +58,6 @@ class AgentRuntimeConfig(BaseModel):
     # Output definitions
     output_definitions: list[dict] = Field(default_factory=lambda: [{"key": "output", "type": "text"}])
 
-    # Strategy
-    strategy: str = "chat"
-
 
 # Backward compat alias
 CompiledAgentSpec = AgentRuntimeConfig
@@ -130,7 +127,6 @@ def build_runtime_config(
         input_schema=params,
         is_parameterized=len(params) > 0,
         output_definitions=outputs,
-        strategy="chat",
     )
 
 

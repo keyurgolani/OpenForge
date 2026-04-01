@@ -67,19 +67,15 @@ def execute_agent_strategy(self, run_id: str):
 
 
 async def _run_strategy(run_id: str):
-    """Async wrapper that resolves the agent spec and executes the strategy."""
+    """Async wrapper that resolves the agent spec and executes via agent_executor."""
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
     from openforge.config import get_settings
     from openforge.core.llm_gateway import LLMGateway
-    from openforge.db.models import RunModel, AutomationModel, AgentModel, CompiledAgentSpecModel
+    from openforge.db.models import RunModel, AutomationModel, AgentModel, AgentDefinitionVersionModel
     from openforge.domains.agents.compiled_spec import AgentRuntimeConfig, build_runtime_config_from_snapshot
     from openforge.integrations.tools.dispatcher import tool_dispatcher
-    from openforge.runtime.checkpoint_store import CheckpointStore
+    from openforge.runtime.agent_executor import execute_agent
     from openforge.runtime.event_publisher import EventPublisher
-    from openforge.runtime.strategy_executor import StrategyExecutor
-    from openforge.runtime.strategies.registry import strategy_registry
-
-    strategy_registry.load_builtins()
 
     settings = get_settings()
     worker_engine = create_async_engine(
@@ -116,7 +112,6 @@ async def _run_strategy(run_id: str):
                         graph_executor = GraphExecutor(
                             db,
                             event_publisher=EventPublisher(db),
-                            checkpoint_store=CheckpointStore(db),
                             tool_dispatcher=tool_dispatcher,
                             llm_gateway=LLMGateway(),
                         )
@@ -131,7 +126,7 @@ async def _run_strategy(run_id: str):
             if agent_id:
                 agent = await db.get(AgentModel, UUID(agent_id))
                 if agent and agent.active_version_id:
-                    spec_model = await db.get(CompiledAgentSpecModel, agent.active_version_id)
+                    spec_model = await db.get(AgentDefinitionVersionModel, agent.active_version_id)
                     if spec_model and spec_model.snapshot:
                         snapshot = spec_model.snapshot or {}
                         spec = build_runtime_config_from_snapshot(
@@ -146,7 +141,7 @@ async def _run_strategy(run_id: str):
             if spec is None:
                 agent_spec_id = metadata.get("agent_spec_id")
                 if agent_spec_id:
-                    spec_model = await db.get(CompiledAgentSpecModel, UUID(agent_spec_id))
+                    spec_model = await db.get(AgentDefinitionVersionModel, UUID(agent_spec_id))
                     if spec_model and spec_model.snapshot:
                         snapshot = spec_model.snapshot or {}
                         spec = build_runtime_config_from_snapshot(
@@ -160,19 +155,15 @@ async def _run_strategy(run_id: str):
             if spec is None:
                 raise RuntimeError(f"Cannot resolve AgentRuntimeConfig for run {run_id}")
 
-            executor = StrategyExecutor(
-                db=db,
-                event_publisher=EventPublisher(db),
-                checkpoint_store=CheckpointStore(db),
-                tool_dispatcher=tool_dispatcher,
-                llm_gateway=LLMGateway(),
-            )
-            await executor.execute(
+            await execute_agent(
                 spec,
                 run.input_payload or {},
+                db=db,
                 workspace_id=run.workspace_id,
                 run_id=run.id,
-                run_type=run.run_type or "strategy",
+                event_publisher=EventPublisher(db),
+                tool_dispatcher=tool_dispatcher,
+                llm_gateway=LLMGateway(),
             )
     finally:
         await worker_engine.dispose()

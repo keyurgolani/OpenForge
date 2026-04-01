@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from openforge.db.models import (
     AgentModel,
     AutomationModel,
-    CompiledAgentSpecModel,
+    AgentDefinitionVersionModel,
     CompiledAutomationSpecModel,
     TriggerDefinitionModel,
 )
@@ -119,7 +119,7 @@ class AutomationBlueprintCompiler:
             if not agent.active_version_id:
                 raise ValueError(f"Agent '{node_bp.agent_slug}' has no compiled spec")
 
-            agent_spec = await self.db.get(CompiledAgentSpecModel, agent.active_version_id)
+            agent_spec = await self.db.get(AgentDefinitionVersionModel, agent.active_version_id)
             if not agent_spec:
                 raise ValueError(f"Agent spec not found for '{node_bp.agent_slug}'")
 

@@ -120,7 +120,7 @@ OpenForge/
 │       ├── middleware/             # HTTP middleware (auth)
 │       ├── runtime/               # Execution engines
 │       │   ├── chat_handler.py     # Interactive chat execution (global, workspace-agnostic)
-│       │   ├── strategy_executor.py # Strategy-based run execution
+│       │   ├── agent_executor.py    # Background agent execution
 │       │   ├── graph_executor.py   # DAG workflow execution for deployments
 │       │   ├── tool_loop.py        # LLM + tool dispatch cycle
 │       │   ├── agent_registry.py   # Agent resolution at runtime
@@ -337,60 +337,25 @@ OpenForge/
 | **outputs** | versioning.py, lineage.py, sinks.py, publishing.py | Versioned artifacts with provenance |
 | **common** | enums.py | Shared types and enums |
 
-## Strategy Authoring Guide
+## Background Agent Execution
 
-To add a new execution strategy:
+Background agent runs (automations, deployments, handoffs) use `agent_executor.execute_agent()`:
 
-1. Create a new file in `backend/openforge/runtime/strategies/`:
+```python
+from openforge.runtime.agent_executor import execute_agent
 
-   ```python
-   from openforge.runtime.strategies.interface import BaseStrategy, RunContext, StepResult
+result = await execute_agent(
+    spec,
+    {"message": "..."},
+    db=db,
+    workspace_id=workspace_id,
+    event_publisher=event_publisher,
+    tool_dispatcher=tool_dispatcher,
+    llm_gateway=llm_gateway,
+)
+```
 
-   class MyStrategy(BaseStrategy):
-       @property
-       def name(self) -> str:
-           return "my_strategy"
-
-       async def plan(self, ctx: RunContext) -> dict:
-           # Return a plan with steps
-           return {"steps": [
-               {"action": "analyze"},
-               {"action": "synthesize"},
-           ]}
-
-       async def execute_step(self, ctx: RunContext, step: dict) -> StepResult:
-           action = step.get("action")
-           if action == "analyze":
-               # Do analysis
-               return StepResult(output="analysis done", should_continue=False)
-           elif action == "synthesize":
-               # Do synthesis
-               return StepResult(output="synthesis done", should_continue=False)
-           return StepResult(output="unknown action")
-
-       # should_continue and aggregate use BaseStrategy defaults
-   ```
-
-2. Register in `backend/openforge/runtime/strategies/registry.py`:
-
-   ```python
-   from .my_strategy import MyStrategy
-   strategy_registry.register(MyStrategy())
-   ```
-
-3. Use in agent blueprints:
-   ```yaml
-   strategy: my_strategy
-   ```
-
-### Strategy Lifecycle
-
-- `plan()` returns a list of steps
-- `execute_step()` is called for each step in the plan
-- `should_continue()` is checked after each step (return `True` to repeat, `False` to advance)
-- `aggregate()` combines all step results into a final output
-
-For loop-driven strategies (like chat), return a single-step plan and use `should_continue` to control the loop.
+This creates a RunModel, builds messages from the agent spec, loads tools, resolves the LLM provider, and calls `execute_tool_loop()` — the same engine used by interactive chat.
 
 ## Tool Development Guide
 

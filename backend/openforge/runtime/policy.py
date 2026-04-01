@@ -27,9 +27,6 @@ logger = logging.getLogger("openforge.runtime.policy")
 
 class PolicyScopeType(StrEnum):
     SYSTEM = "system"
-    PROFILE = "profile"
-    WORKFLOW = "workflow"
-    MISSION = "mission"
     WORKSPACE = "workspace"
 
 
@@ -66,9 +63,6 @@ class PolicyEvaluationResult(BaseModel):
 SCOPE_PRECEDENCE: dict[str, int] = {
     PolicyScopeType.SYSTEM.value: 0,
     PolicyScopeType.WORKSPACE.value: 1,
-    PolicyScopeType.PROFILE.value: 2,
-    PolicyScopeType.WORKFLOW.value: 3,
-    PolicyScopeType.MISSION.value: 4,
 }
 
 

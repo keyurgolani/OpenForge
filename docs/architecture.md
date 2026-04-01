@@ -38,8 +38,7 @@ The main application server built with **FastAPI** (Python 3.11). Handles:
 - `api/` — HTTP route handlers (thin layer, delegates to services)
 - `core/` — Core business logic (embedding, search, context assembly, LLM gateway, prompt resolution)
 - `services/` — Application services (knowledge processing, LLM management, conversations, automation config)
-- `runtime/` — Execution engines (chat_handler, strategy_executor, tool_loop, handoff_engine, agent_registry, graph_executor, deployment_scheduler, input_extraction, prompt_context)
-- `runtime/strategies/` — Strategy plugins (chat, researcher, reviewer, builder, watcher, coordinator)
+- `runtime/` — Execution engines (chat_handler, agent_executor, tool_loop, handoff_engine, agent_registry, graph_executor, deployment_scheduler, input_extraction, prompt_context)
 - `runtime/template_engine/` — Template engine (parser, renderer, variable extractor, built-in functions, types)
 - `domains/` — Domain-driven services (agents, automations, deployments, knowledge, retrieval, runs, outputs, common)
 - `db/` — Database models, migrations, and clients (PostgreSQL, Qdrant, Redis)
@@ -165,15 +164,11 @@ Agent Definition (structured fields)
      g. Stream events via Redis pub/sub to WebSocket
      h. Persist assistant message with timeline
 
-   Strategy Run (StrategyExecutor):
-     a. Lookup strategy from registry (fallback to "chat")
-     b. Create RunModel
-     c. Build RunContext with provider config
-     d. Execute run_strategy_loop:
-        - plan() — strategy generates execution plan
-        - execute_step() — strategy executes each step
-        - should_continue() — strategy decides whether to continue
-        - aggregate() — strategy combines results
+   Background Agent Run (execute_agent):
+     a. Create or load RunModel
+     b. Build messages with system prompt
+     c. Load tools, resolve LLM provider
+     d. Execute tool_loop (same engine as interactive chat)
      e. Persist run output and transition status
 
    Deployment (GraphExecutor):

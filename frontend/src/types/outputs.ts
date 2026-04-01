@@ -6,12 +6,10 @@ import type { ArtifactType } from './common'
 
 export type OutputStatus = 'draft' | 'active' | 'superseded' | 'archived' | 'failed' | 'deleted'
 export type OutputVisibility = 'private' | 'workspace' | 'export_ready' | 'hidden'
-export type OutputCreationMode = 'user_created' | 'run_generated' | 'mission_generated' | 'imported' | 'derived'
+export type OutputCreationMode = 'user_created' | 'run_generated' | 'imported' | 'derived'
 export type OutputLinkType = 'source' | 'informed_by' | 'derived_from' | 'related'
 export type OutputObjectType =
   | 'run'
-  | 'workflow'
-  | 'mission'
   | 'profile'
   | 'evidence_packet'
   | 'knowledge'
@@ -77,8 +75,6 @@ export interface Output {
   current_version_id?: string | null
   current_version_number: number
   source_run_id?: string | null
-  source_workflow_id?: string | null
-  source_mission_id?: string | null
   source_profile_id?: string | null
   created_by_type?: string | null
   created_by_id?: string | null
@@ -122,8 +118,6 @@ export interface OutputCreate {
   visibility?: OutputVisibility
   creation_mode?: OutputCreationMode
   source_run_id?: string
-  source_workflow_id?: string
-  source_mission_id?: string
   source_profile_id?: string
   created_by_type?: string
   created_by_id?: string
@@ -170,8 +164,6 @@ export interface OutputQueryParams {
   status?: OutputStatus
   visibility?: OutputVisibility
   source_run_id?: string
-  source_workflow_id?: string
-  source_mission_id?: string
   created_by_type?: string
   q?: string
 }

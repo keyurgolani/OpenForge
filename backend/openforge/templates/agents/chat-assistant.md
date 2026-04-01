@@ -8,8 +8,6 @@ tags:
   - chat
   - general
   - template
-mode: interactive
-strategy: chat
 model:
   allow_override: true
 memory:

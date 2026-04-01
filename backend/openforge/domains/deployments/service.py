@@ -14,7 +14,7 @@ from openforge.db.models import (
     AgentModel,
     AutomationModel,
     AutomationNodeModel,
-    CompiledAgentSpecModel,
+    AgentDefinitionVersionModel,
     CompiledAutomationSpecModel,
     DeploymentModel,
     RunModel,
@@ -197,7 +197,7 @@ class DeploymentService:
         else:
             # Single-agent: load the pinned agent spec and render the template
             spec_row = (
-                await self.db.get(CompiledAgentSpecModel, deployment.agent_spec_id)
+                await self.db.get(AgentDefinitionVersionModel, deployment.agent_spec_id)
                 if deployment.agent_spec_id else None
             )
             if not spec_row:

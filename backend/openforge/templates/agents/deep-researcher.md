@@ -8,8 +8,6 @@ tags:
   - research
   - analysis
   - template
-mode: interactive
-strategy: researcher
 model:
   allow_override: true
   temperature: 0.3

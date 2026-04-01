@@ -2,23 +2,19 @@
 OpenForge Runtime Package
 
 Components:
-- checkpoint_store: Handles execution checkpoints
 - event_publisher: Event publishing and subscription
 - events: Event type definitions
 - hitl: Human-in-the-loop service
 - policy: Policy engine for tool call evaluation
-- strategies: Strategy plugin system for agent execution
-- strategy_executor: Drives strategy runs
+- agent_executor: Background agent execution
 - agent_registry: Resolves agents to compiled specs
 - chat_handler: Interactive chat execution
 - handoff_engine: Agent-to-agent delegation
 - tool_loop: Shared tool dispatch loop
 """
 
-from .checkpoint_store import CheckpointStore
 from .event_publisher import EventPublisher
 from .events import RuntimeEvent
-from .state_store import StateStore
 from .hitl import HITLService, hitl_service
 from .policy import PolicyEngine, policy_engine, ToolCallRateLimiter
 
@@ -35,9 +31,9 @@ except ModuleNotFoundError:  # pragma: no cover
     handoff_engine = None
 
 try:
-    from .strategy_executor import StrategyExecutor
+    from .agent_executor import execute_agent
 except ModuleNotFoundError:  # pragma: no cover
-    StrategyExecutor = None
+    execute_agent = None
 
 try:
     from .agent_registry import AgentRegistry, agent_registry
@@ -46,8 +42,6 @@ except ModuleNotFoundError:  # pragma: no cover
     agent_registry = None
 
 __all__ = [
-    "StateStore",
-    "CheckpointStore",
     "EventPublisher",
     "RuntimeEvent",
     "HITLService",
@@ -59,7 +53,7 @@ __all__ = [
     "chat_handler",
     "HandoffEngine",
     "handoff_engine",
-    "StrategyExecutor",
+    "execute_agent",
     "AgentRegistry",
     "agent_registry",
 ]

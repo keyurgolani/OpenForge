@@ -32,15 +32,12 @@ const VISIBILITY_LABELS: Record<OutputVisibility, string> = {
 const ORIGIN_LABELS: Record<OutputCreationMode, string> = {
   user_created: 'User Authored',
   run_generated: 'Run Generated',
-  mission_generated: 'Mission Generated',
   imported: 'Imported',
   derived: 'Derived',
 }
 
 const LINK_TARGET_LABELS: Record<OutputObjectType, string> = {
   run: 'Run',
-  workflow: 'Workflow',
-  mission: 'Mission',
   profile: 'Profile',
   evidence_packet: 'Evidence Packet',
   knowledge: 'Knowledge',
@@ -72,8 +69,6 @@ export function getOutputLinkTargetLabel(targetType: OutputObjectType): string {
 
 export function getOutputSourceChips(output: Output): string[] {
   const chips = [getOutputOriginLabel(output.creation_mode)]
-  if (output.source_mission_id) chips.push('Mission-linked')
-  if (output.source_workflow_id) chips.push('Workflow-linked')
   if (output.source_run_id) chips.push('Run-linked')
   if (output.source_profile_id) chips.push('Profile-linked')
   return chips
@@ -88,10 +83,6 @@ export function getOutputLinkHref(link: OutputLink): string | null {
       return `/knowledge/${link.target_id}`
     case 'run':
       return `/runs`
-    case 'mission':
-      return `/missions`
-    case 'workflow':
-      return `/workflows`
     case 'profile':
       return `/profiles/${link.target_id}`
     default:

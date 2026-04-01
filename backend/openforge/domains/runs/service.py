@@ -8,7 +8,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from openforge.db.models import CheckpointModel, RunModel, RunStepModel, RuntimeEventModel
+from openforge.db.models import RunModel, RunStepModel, RuntimeEventModel
 
 
 class RunService:
@@ -76,24 +76,11 @@ class RunService:
             "updated_at": instance.updated_at,
         }
 
-    def _serialize_checkpoint(self, instance: CheckpointModel) -> dict[str, Any]:
-        return {
-            "id": instance.id,
-            "run_id": instance.run_id,
-            "step_id": instance.step_id,
-            "checkpoint_type": instance.checkpoint_type,
-            "state_snapshot": instance.state_snapshot or {},
-            "metadata": instance.metadata_json or {},
-            "created_at": instance.created_at,
-        }
-
     def _serialize_event(self, instance: RuntimeEventModel) -> dict[str, Any]:
         return {
             "id": instance.id,
             "run_id": instance.run_id,
             "step_id": instance.step_id,
-            "workflow_id": instance.workflow_id,
-            "workflow_version_id": instance.workflow_version_id,
             "node_id": instance.node_id,
             "node_key": instance.node_key,
             "event_type": instance.event_type,
@@ -237,9 +224,7 @@ class RunService:
         }
 
     async def list_checkpoints(self, run_id: UUID) -> list[dict[str, Any]]:
-        query = select(CheckpointModel).where(CheckpointModel.run_id == run_id).order_by(CheckpointModel.created_at.asc())
-        rows = (await self.db.execute(query)).scalars().all()
-        return [self._serialize_checkpoint(row) for row in rows]
+        return []
 
     async def list_events(self, run_id: UUID) -> list[dict[str, Any]]:
         query = select(RuntimeEventModel).where(RuntimeEventModel.run_id == run_id).order_by(RuntimeEventModel.created_at.asc())
@@ -284,11 +269,7 @@ class RunService:
                 break
 
         state_snapshot = {}
-        if target_step and target_step.get("checkpoint_id"):
-            checkpoint = await self.db.get(CheckpointModel, target_step["checkpoint_id"])
-            if checkpoint:
-                state_snapshot = checkpoint.state_snapshot or {}
-        elif from_step == 0:
+        if from_step == 0:
             state_snapshot = original.state_snapshot or {}
 
         new_composite = dict(original.composite_metadata or {})

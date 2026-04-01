@@ -8,8 +8,6 @@ tags:
   - coordination
   - multi-agent
   - template
-mode: interactive
-strategy: coordinator
 model:
   allow_override: true
   temperature: 0.3

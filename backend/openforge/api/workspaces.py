@@ -8,7 +8,7 @@ from uuid import UUID
 
 from openforge.db.postgres import get_db
 from openforge.db.models import (
-    Knowledge, Conversation, AgentExecution, AgentMemory,
+    Knowledge, Conversation, AgentExecution,
     ArtifactModel, RunModel,
     TriggerDefinitionModel,
     HITLRequest, ToolCallLog, TaskLog,
@@ -71,7 +71,6 @@ _WORKSPACE_SCOPED_MODELS = [
     Knowledge,
     Conversation,
     AgentExecution,
-    AgentMemory,
     ArtifactModel,
     RunModel,
     TriggerDefinitionModel,

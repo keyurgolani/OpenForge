@@ -110,21 +110,6 @@ class FailureRecordingService:
             for row in rows
         ]
 
-    async def get_mission_failures(
-        self, db: AsyncSession, mission_id: UUID, *, limit: int = 50
-    ) -> list[dict[str, Any]]:
-        """Return failures for a mission, ordered by most recent first."""
-        stmt = (
-            select(FailureEventModel)
-            .where(FailureEventModel.mission_id == mission_id)
-            .order_by(desc(FailureEventModel.created_at))
-            .limit(limit)
-        )
-        result = await db.execute(stmt)
-        rows = result.scalars().all()
-        return [_failure_to_dict(r) for r in rows]
-
-
 def _failure_to_dict(row: FailureEventModel) -> dict[str, Any]:
     """Convert a FailureEventModel to a plain dict."""
     return {

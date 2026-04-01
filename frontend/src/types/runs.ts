@@ -9,9 +9,6 @@ export type RunType = 'strategy' | 'step' | string;
 export interface Run {
   id: string;
   run_type: RunType;
-  workflow_id?: string | null;
-  workflow_version_id?: string | null;
-  mission_id?: string | null;
   parent_run_id?: string | null;
   root_run_id?: string | null;
   spawned_by_step_id?: string | null;
@@ -77,8 +74,6 @@ export interface RuntimeEvent {
   id: string;
   run_id: string;
   step_id?: string | null;
-  workflow_id?: string | null;
-  workflow_version_id?: string | null;
   node_id?: string | null;
   node_key?: string | null;
   event_type: string;
@@ -97,9 +92,6 @@ export interface RunLineage {
 
 export interface RunCreate {
   run_type: RunType;
-  workflow_id?: string | null;
-  workflow_version_id?: string | null;
-  mission_id?: string | null;
   parent_run_id?: string | null;
   root_run_id?: string | null;
   spawned_by_step_id?: string | null;

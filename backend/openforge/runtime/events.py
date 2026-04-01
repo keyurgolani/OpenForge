@@ -17,8 +17,6 @@ class RuntimeEvent:
     run_id: UUID
     event_type: str
     step_id: UUID | None = None
-    workflow_id: UUID | None = None
-    workflow_version_id: UUID | None = None
     node_id: UUID | None = None
     node_key: str | None = None
     payload: dict[str, Any] = field(default_factory=dict)
@@ -42,13 +40,4 @@ OUTPUT_EMITTED = "output_emitted"
 RUN_COMPLETED = "run_completed"
 RUN_FAILED = "run_failed"
 RUN_CANCELLED = "run_cancelled"
-MISSION_LAUNCHED = "mission_launched"
-MISSION_PAUSED = "mission_paused"
-MISSION_RESUMED = "mission_resumed"
-MISSION_DISABLED = "mission_disabled"
 TRIGGER_FIRED = "trigger_fired"
-
-# Strategy execution events
-STRATEGY_THOUGHT = "strategy_thought"
-STRATEGY_ACTION = "strategy_action"
-STRATEGY_OBSERVATION = "strategy_observation"

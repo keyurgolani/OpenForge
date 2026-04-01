@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openforge.db.models import (
-    CompiledAgentSpecModel,
+    AgentDefinitionVersionModel,
     DeploymentModel,
     RunModel,
     TriggerDefinitionModel,
@@ -44,7 +44,7 @@ async def poll_and_fire(db: AsyncSession) -> int:
     for deployment, trigger in rows:
         try:
             # Load pinned agent spec
-            spec_row = await db.get(CompiledAgentSpecModel, deployment.agent_spec_id)
+            spec_row = await db.get(AgentDefinitionVersionModel, deployment.agent_spec_id)
             if not spec_row:
                 logger.warning("Deployment %s has no valid agent spec", deployment.id)
                 continue

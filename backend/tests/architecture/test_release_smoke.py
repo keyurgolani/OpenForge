@@ -60,9 +60,9 @@ class TestRuntimeContracts:
         from openforge.runtime.chat_handler import ChatHandler
         assert ChatHandler is not None
 
-    def test_strategy_executor_importable(self):
-        from openforge.runtime.strategy_executor import StrategyExecutor
-        assert StrategyExecutor is not None
+    def test_agent_executor_importable(self):
+        from openforge.runtime.agent_executor import execute_agent
+        assert execute_agent is not None
 
     def test_agent_registry_importable(self):
         from openforge.runtime.agent_registry import AgentRegistry
@@ -80,7 +80,6 @@ class TestRuntimeContracts:
         from openforge.runtime.policy import PolicyEngine
         assert PolicyEngine is not None
 
-    def test_strategy_registry_has_chat(self):
-        from openforge.runtime.strategies.registry import strategy_registry
-        strategy_registry.load_builtins()
-        assert strategy_registry.get("chat") is not None
+    def test_graph_executor_importable(self):
+        from openforge.runtime.graph_executor import GraphExecutor
+        assert GraphExecutor is not None
