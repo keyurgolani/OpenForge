@@ -68,6 +68,7 @@ export interface AutomationNode {
   node_type?: 'agent' | 'sink';
   agent_id?: string | null;
   sink_type?: string | null;
+  sink_id?: string | null;
   position: { x: number; y: number };
   config: Record<string, unknown>;
 }

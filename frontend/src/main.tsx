@@ -26,8 +26,8 @@ const DeploymentsPage = lazy(() => import('./pages/DeploymentsPage'))
 const DeploymentDetailPage = lazy(() => import('./pages/DeploymentDetailPage'))
 const RunsPage = lazy(() => import('./pages/RunsPage'))
 const RunDetailPage = lazy(() => import('./pages/RunDetailPage'))
-const OutputsPage = lazy(() => import('./pages/OutputsPage'))
-const OutputDetailPage = lazy(() => import('./pages/OutputDetailPage'))
+const SinksPage = lazy(() => import('./pages/SinksPage'))
+const SinkDetailPage = lazy(() => import('./pages/SinkDetailPage'))
 const EditorDispatcher = lazy(() => import('./components/knowledge/editors/EditorDispatcher'))
 const AgentChatPage = lazy(() => import('./pages/AgentChatPage'))
 const SearchPage = lazy(() => import('./pages/SearchPage'))
@@ -211,8 +211,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                 <Route path="/deployments/:deploymentId/runs/:runId" element={<ErrorBoundary><RunDetailPage /></ErrorBoundary>} />
                                 <Route path="/runs" element={<Navigate to="/deployments" replace />} />
                                 <Route path="/runs/:runId" element={<ErrorBoundary><RunDetailPage /></ErrorBoundary>} />
-                                <Route path="/outputs" element={<ErrorBoundary><OutputsPage /></ErrorBoundary>} />
-                                <Route path="/outputs/:outputId" element={<ErrorBoundary><OutputDetailPage /></ErrorBoundary>} />
+                                <Route path="/sinks" element={<ErrorBoundary><SinksPage /></ErrorBoundary>} />
+                                <Route path="/sinks/new" element={<ErrorBoundary><SinkDetailPage /></ErrorBoundary>} />
+                                <Route path="/sinks/:sinkId" element={<ErrorBoundary><SinkDetailPage /></ErrorBoundary>} />
+                                {/* Legacy redirect from outputs to sinks */}
+                                <Route path="/outputs" element={<Navigate to="/sinks" replace />} />
+                                <Route path="/outputs/:outputId" element={<Navigate to="/sinks" replace />} />
                                 <Route path="/settings" element={<ErrorBoundary><SettingsLayout /></ErrorBoundary>}>
                                     <Route index element={<SettingsIndex />} />
                                     <Route path="workspaces" element={<ErrorBoundary><WorkspacesPage /></ErrorBoundary>} />

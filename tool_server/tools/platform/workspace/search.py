@@ -4,10 +4,10 @@ from protocol import BaseTool, ToolContext, ToolResult
 
 class WorkspaceSearchTool(BaseTool):
     @property
-    def id(self): return "workspace.search"
+    def id(self): return "platform.workspace.search"
 
     @property
-    def category(self): return "workspace"
+    def category(self): return "platform.workspace"
 
     @property
     def display_name(self): return "Search Workspace"
@@ -23,7 +23,7 @@ class WorkspaceSearchTool(BaseTool):
             "or to locate a past conversation by topic. "
             "You MUST provide the workspace_id of the workspace you want to search. "
             "Refer to the application context in your system prompt for available workspace IDs. "
-            "Results for chat conversations include a `conversation_id` field — use workspace.read_chat "
+            "Results for chat conversations include a `conversation_id` field — use platform.agent.read_chat "
             "to retrieve the full message history. "
             "NOT the same as memory.recall — this searches user-visible workspace content, not agent scratchpad."
         )
@@ -48,10 +48,10 @@ class WorkspaceSearchTool(BaseTool):
         url = f"{context.main_app_url}/api/v1/workspaces/{workspace_id}/search"
         try:
             query_params = {
-                    "q": params["query"],
-                    "limit": params.get("limit", 5),
-                    "mode": "chat",
-                }
+                "q": params["query"],
+                "limit": params.get("limit", 5),
+                "mode": "chat",
+            }
             if params.get("expand_context"):
                 query_params["expand_context"] = "true"
             async with httpx.AsyncClient(timeout=15.0) as client:

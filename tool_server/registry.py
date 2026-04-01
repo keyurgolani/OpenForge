@@ -80,24 +80,98 @@ TOOL_ALIASES: dict[str, str] = {
     "code_editor.open":       "filesystem.read_file",
     "code_editor.read":       "filesystem.read_file",
 
-    # workspace tools — models often invent read_knowledge or use wrong names
-    "workspace.read_knowledge":     "workspace.search",
-    "workspace.get_knowledge":      "workspace.search",
-    "workspace.find_knowledge":     "workspace.search",
-    "workspace.query":              "workspace.search",
-    "workspace.read":               "workspace.search",
-    "workspace.find":               "workspace.search",
-    "workspace.create_knowledge":   "workspace.save_knowledge",
-    "workspace.add_knowledge":      "workspace.save_knowledge",
-    "workspace.remove_knowledge":   "workspace.delete_knowledge",
+    # ── Legacy workspace.* → platform.workspace.* ──
+    "workspace.search":             "platform.workspace.search",
+    "workspace.save_knowledge":     "platform.workspace.save_knowledge",
+    "workspace.list_knowledge":     "platform.workspace.list_knowledge",
+    "workspace.delete_knowledge":   "platform.workspace.delete_knowledge",
+    "workspace.read_knowledge":     "platform.workspace.search",
+    "workspace.get_knowledge":      "platform.workspace.search",
+    "workspace.find_knowledge":     "platform.workspace.search",
+    "workspace.query":              "platform.workspace.search",
+    "workspace.read":               "platform.workspace.search",
+    "workspace.find":               "platform.workspace.search",
+    "workspace.create_knowledge":   "platform.workspace.save_knowledge",
+    "workspace.add_knowledge":      "platform.workspace.save_knowledge",
+    "workspace.remove_knowledge":   "platform.workspace.delete_knowledge",
+    "workspace.list_workspaces":    "platform.workspace.list_workspaces",
+    "workspace.get_workspace":      "platform.workspace.get_workspace",
 
     # Unprefixed workspace shorthands
-    "workspace_search":             "workspace.search",
-    "search_knowledge":             "workspace.search",
-    "read_knowledge":               "workspace.search",
-    "list_knowledge":               "workspace.list_knowledge",
-    "save_knowledge":               "workspace.save_knowledge",
-    "delete_knowledge":             "workspace.delete_knowledge",
+    "workspace_search":             "platform.workspace.search",
+    "search_knowledge":             "platform.workspace.search",
+    "read_knowledge":               "platform.workspace.search",
+    "list_knowledge":               "platform.workspace.list_knowledge",
+    "save_knowledge":               "platform.workspace.save_knowledge",
+    "delete_knowledge":             "platform.workspace.delete_knowledge",
+    "list_workspaces":              "platform.workspace.list_workspaces",
+    "get_workspace":                "platform.workspace.get_workspace",
+
+    # ── Legacy agent.* → platform.agent.* ──
+    "agent.invoke":                 "platform.agent.invoke",
+    "agent.list_agents":            "platform.agent.list_agents",
+    "agent.get_agent":              "platform.agent.get_agent",
+
+    # Unprefixed agent shorthands
+    "invoke_agent":                 "platform.agent.invoke",
+    "list_agents":                  "platform.agent.list_agents",
+    "get_agent":                    "platform.agent.get_agent",
+
+    # ── Legacy chat aliases → platform.chat.* ──
+    "agent.list_chats":             "platform.chat.list_chats",
+    "agent.read_chat":              "platform.chat.read_chat",
+    "platform.agent.list_chats":    "platform.chat.list_chats",
+    "platform.agent.read_chat":     "platform.chat.read_chat",
+    "workspace.list_chats":         "platform.chat.list_chats",
+    "workspace.read_chat":          "platform.chat.read_chat",
+    "memory.list_conversations":    "platform.chat.list_chats",
+    "memory.read_conversation":     "platform.chat.read_chat",
+    "chat.list_chats":              "platform.chat.list_chats",
+    "chat.read_chat":               "platform.chat.read_chat",
+
+    # Unprefixed chat shorthands
+    "list_chats":                   "platform.chat.list_chats",
+    "read_chat":                    "platform.chat.read_chat",
+
+    # ── Automation aliases ──
+    "automation.list":              "platform.automation.list",
+    "automation.get":               "platform.automation.get",
+    "automation.create":            "platform.automation.create",
+    "automation.update":            "platform.automation.update",
+    "automation.delete":            "platform.automation.delete",
+    "list_automations":             "platform.automation.list",
+    "get_automation":               "platform.automation.get",
+    "create_automation":            "platform.automation.create",
+    "update_automation":            "platform.automation.update",
+    "delete_automation":            "platform.automation.delete",
+
+    # ── Deployment aliases ──
+    "deployment.list":              "platform.deployment.list",
+    "deployment.get":               "platform.deployment.get",
+    "deployment.deploy":            "platform.deployment.deploy",
+    "deployment.pause":             "platform.deployment.pause",
+    "deployment.resume":            "platform.deployment.resume",
+    "deployment.teardown":          "platform.deployment.teardown",
+    "deployment.run_now":           "platform.deployment.run_now",
+    "list_deployments":             "platform.deployment.list",
+    "get_deployment":               "platform.deployment.get",
+    "deploy_automation":            "platform.deployment.deploy",
+    "pause_deployment":             "platform.deployment.pause",
+    "resume_deployment":            "platform.deployment.resume",
+    "teardown_deployment":          "platform.deployment.teardown",
+    "run_deployment":               "platform.deployment.run_now",
+
+    # ── Sink aliases ──
+    "sink.list":                    "platform.sink.list",
+    "sink.get":                     "platform.sink.get",
+    "sink.create":                  "platform.sink.create",
+    "sink.update":                  "platform.sink.update",
+    "sink.delete":                  "platform.sink.delete",
+    "list_sinks":                   "platform.sink.list",
+    "get_sink":                     "platform.sink.get",
+    "create_sink":                  "platform.sink.create",
+    "update_sink":                  "platform.sink.update",
+    "delete_sink":                  "platform.sink.delete",
 
     # memory tools — common mistakes
     "memory.save":                  "memory.store",
@@ -105,16 +179,6 @@ TOOL_ALIASES: dict[str, str] = {
     "memory.retrieve":              "memory.recall",
     "memory.delete":                "memory.forget",
     "memory.remove":                "memory.forget",
-
-    # Chat tools moved from workspace to agent
-    "workspace.list_chats":         "agent.list_chats",
-    "workspace.read_chat":          "agent.read_chat",
-    "memory.list_conversations":    "agent.list_chats",
-    "memory.read_conversation":     "agent.read_chat",
-
-    # Unprefixed chat shorthands
-    "list_chats":                   "agent.list_chats",
-    "read_chat":                    "agent.read_chat",
 }
 
 

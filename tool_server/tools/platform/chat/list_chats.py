@@ -4,10 +4,10 @@ from protocol import BaseTool, ToolContext, ToolResult
 
 class ListChatsTool(BaseTool):
     @property
-    def id(self): return "agent.list_chats"
+    def id(self): return "platform.chat.list_chats"
 
     @property
-    def category(self): return "agent"
+    def category(self): return "platform.chat"
 
     @property
     def display_name(self): return "List Chats"
@@ -15,9 +15,9 @@ class ListChatsTool(BaseTool):
     @property
     def description(self):
         return (
-            "List agent chat conversations. Returns conversation titles, IDs, agent associations, "
+            "List chat conversations. Returns conversation titles, IDs, agent associations, "
             "and message counts. Optionally filter by agent_id to see only that agent's conversations. "
-            "Use agent.read_chat to read a specific conversation's messages."
+            "Use platform.chat.read_chat to read a specific conversation's messages."
         )
 
     @property

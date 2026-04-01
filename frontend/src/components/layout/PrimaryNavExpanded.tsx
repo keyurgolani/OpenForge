@@ -12,6 +12,7 @@ import {
   MessageSquare,
   Folder,
   Bot,
+  Download,
   FileText,
   Settings,
   Pin,
@@ -81,7 +82,7 @@ interface PrimaryNavExpandedProps {
     automations: string;
     deployments: string;
     runs: string;
-    outputs: string;
+    sinks: string;
     settings: string;
   };
   onCreateWorkspace?: () => void;
@@ -297,10 +298,10 @@ export function PrimaryNavExpanded({
               />
 
               <NavItem
-                to={routes.outputs}
-                icon={<FileText className="w-4 h-4" />}
-                label="Outputs"
-                isActive={isActive('/outputs')}
+                to={routes.sinks}
+                icon={<Download className="w-4 h-4" />}
+                label="Sinks"
+                isActive={isActive('/sinks')}
               />
             </nav>
           </div>

@@ -115,6 +115,23 @@ const PRIMARY_ARG: Record<string, string> = {
     'task.create_plan': 'title', 'task.update_step': 'step_id',
     'skills.read': 'name', 'skills.install': 'source', 'skills.remove': 'name',
     'agent.invoke': 'instruction',
+    // platform.* tool IDs
+    'platform.workspace.search': 'query', 'platform.workspace.save_knowledge': 'title',
+    'platform.workspace.list_knowledge': 'type', 'platform.workspace.delete_knowledge': 'knowledge_id',
+    'platform.workspace.list_workspaces': '', 'platform.workspace.get_workspace': 'workspace_id',
+    'platform.agent.invoke': 'instruction', 'platform.agent.list_agents': '',
+    'platform.agent.get_agent': 'agent_id',
+    'platform.chat.list_chats': 'agent_id', 'platform.chat.read_chat': 'conversation_id',
+    'platform.automation.list': 'status', 'platform.automation.get': 'automation_id',
+    'platform.automation.create': 'name', 'platform.automation.update': 'automation_id',
+    'platform.automation.delete': 'automation_id',
+    'platform.deployment.list': 'status', 'platform.deployment.get': 'deployment_id',
+    'platform.deployment.deploy': 'automation_id', 'platform.deployment.pause': 'deployment_id',
+    'platform.deployment.resume': 'deployment_id', 'platform.deployment.teardown': 'deployment_id',
+    'platform.deployment.run_now': 'deployment_id',
+    'platform.sink.list': 'sink_type', 'platform.sink.get': 'sink_id',
+    'platform.sink.create': 'name', 'platform.sink.update': 'sink_id',
+    'platform.sink.delete': 'sink_id',
 }
 
 function getHeaderHint(toolName: string, args: Record<string, unknown>): string | null {

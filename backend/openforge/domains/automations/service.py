@@ -253,6 +253,7 @@ class AutomationService(CrudDomainService):
                     "node_type": n.node_type or "agent",
                     "agent_id": str(n.agent_id) if n.agent_id else None,
                     "sink_type": n.sink_type,
+                    "sink_id": str(n.sink_id) if n.sink_id else None,
                     "position": {"x": n.position_x, "y": n.position_y},
                     "config": n.config or {},
                 }
@@ -311,6 +312,7 @@ class AutomationService(CrudDomainService):
                 node_type=node_type,
                 agent_id=nd.get("agent_id") if node_type == "agent" else None,
                 sink_type=nd.get("sink_type") if node_type == "sink" else None,
+                sink_id=nd.get("sink_id") if node_type == "sink" else None,
                 node_key=nd["node_key"],
                 position_x=nd.get("position", {}).get("x", 0),
                 position_y=nd.get("position", {}).get("y", 0),

@@ -12,6 +12,7 @@ class DomainNoun(StrEnum):
     AUTOMATION = "automation"
     RUN = "run"
     OUTPUT = "output"
+    SINK = "sink"
     KNOWLEDGE = "knowledge"
     DEPLOYMENT = "deployment"
 
@@ -21,6 +22,7 @@ DOMAIN_LABELS: dict[DomainNoun, str] = {
     DomainNoun.AUTOMATION: "Automation",
     DomainNoun.RUN: "Run",
     DomainNoun.OUTPUT: "Output",
+    DomainNoun.SINK: "Sink",
     DomainNoun.KNOWLEDGE: "Knowledge",
     DomainNoun.DEPLOYMENT: "Deployment",
 }
@@ -30,6 +32,7 @@ DOMAIN_LABELS_PLURAL: dict[DomainNoun, str] = {
     DomainNoun.AUTOMATION: "Automations",
     DomainNoun.RUN: "Runs",
     DomainNoun.OUTPUT: "Outputs",
+    DomainNoun.SINK: "Sinks",
     DomainNoun.KNOWLEDGE: "Knowledge",
     DomainNoun.DEPLOYMENT: "Deployments",
 }
@@ -39,6 +42,7 @@ DOMAIN_DESCRIPTIONS: dict[DomainNoun, str] = {
     DomainNoun.AUTOMATION: "Automations are agent-powered background tasks with triggers and budgets.",
     DomainNoun.RUN: "Runs are durable execution instances.",
     DomainNoun.OUTPUT: "Outputs are persistent results produced by runs.",
+    DomainNoun.SINK: "Sinks define what happens with agent output values in automations.",
     DomainNoun.KNOWLEDGE: "Knowledge is user-provided context and source material.",
     DomainNoun.DEPLOYMENT: "Deployments are live instances of automations with baked-in inputs.",
 }

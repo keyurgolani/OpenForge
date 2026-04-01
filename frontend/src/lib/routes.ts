@@ -52,6 +52,10 @@ export const ROUTES = {
   DEPLOYMENT_RUN_DETAIL: '/deployments/:deploymentId/runs/:runId',
   RUNS: '/runs',
   RUN_DETAIL: '/runs/:runId',
+  SINKS: '/sinks',
+  SINK_CREATE: '/sinks/new',
+  SINK_DETAIL: '/sinks/:sinkId',
+  // Legacy routes — kept for backward compat redirects
   OUTPUTS: '/outputs',
   OUTPUT_DETAIL: '/outputs/:outputId',
 } as const;
@@ -147,6 +151,14 @@ export function runsRoute(runId?: string): string {
   return ROUTES.RUNS;
 }
 
+export function sinksRoute(sinkId?: string): string {
+  if (sinkId) {
+    return routeWithParams(ROUTES.SINK_DETAIL, { sinkId });
+  }
+  return ROUTES.SINKS;
+}
+
+/** @deprecated Use sinksRoute instead */
 export function outputsRoute(outputId?: string): string {
   if (outputId) {
     return routeWithParams(ROUTES.OUTPUT_DETAIL, { outputId });

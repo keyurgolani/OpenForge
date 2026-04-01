@@ -29,6 +29,7 @@ async def deploy_automation(
             workspace_id=body.workspace_id,
             input_values=body.input_values,
             schedule_expression=body.schedule_expression,
+            interval_seconds=body.interval_seconds,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

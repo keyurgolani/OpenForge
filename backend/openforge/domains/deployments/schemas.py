@@ -15,6 +15,11 @@ class DeploymentCreate(BaseModel):
         description="Cron expression to override the automation's default schedule. "
         "Set to empty string for manual-only (no schedule).",
     )
+    interval_seconds: Optional[int] = Field(
+        default=None,
+        description="Interval in seconds for recurring execution. "
+        "Mutually exclusive with schedule_expression.",
+    )
 
 
 class DeploymentResponse(BaseModel):
@@ -27,7 +32,9 @@ class DeploymentResponse(BaseModel):
     input_values: dict[str, Any] = Field(default_factory=dict)
     status: str
     trigger_id: Optional[UUID] = None
+    trigger_type: Optional[str] = None
     schedule_expression: Optional[str] = None
+    interval_seconds: Optional[int] = None
     last_run_id: Optional[UUID] = None
     last_run_at: Optional[datetime] = None
     last_success_at: Optional[datetime] = None

@@ -36,6 +36,7 @@ class DeploymentService:
         input_values: dict[str, Any],
         deployed_by: str | None = None,
         schedule_expression: str | None = None,
+        interval_seconds: int | None = None,
     ) -> dict:
         """Deploy an automation with baked-in input values."""
         automation = await self.db.get(AutomationModel, automation_id)
@@ -76,16 +77,19 @@ class DeploymentService:
                     label = param.get("label", lookup_key)
                     raise ValueError(f"Required parameter '{label}' not provided")
 
-        # Create per-deployment trigger from schedule_expression
+        # Create per-deployment trigger from schedule_expression or interval_seconds
         trigger_id = None
         trigger_type = "manual"
         effective_cron = schedule_expression if schedule_expression else None
+        effective_interval = interval_seconds
 
         if effective_cron:
             trigger_type = "cron"
+        elif effective_interval and effective_interval > 0:
+            trigger_type = "interval"
 
         if trigger_type != "manual":
-            # Compute initial next_fire_at from schedule
+            # Compute initial next_fire_at from schedule or interval
             next_fire: datetime | None = None
             if effective_cron:
                 try:
@@ -94,6 +98,8 @@ class DeploymentService:
                     next_fire = cron.get_next(datetime)
                 except Exception:
                     logger.warning("Invalid cron expression: %s", effective_cron)
+            elif effective_interval:
+                next_fire = datetime.now(timezone.utc) + timedelta(seconds=effective_interval)
 
             trigger = TriggerDefinitionModel(
                 name=f"{automation.slug}__deploy_trigger",
@@ -101,7 +107,7 @@ class DeploymentService:
                 target_type="deployment",
                 target_id=automation_id,
                 schedule_expression=effective_cron,
-                interval_seconds=None,
+                interval_seconds=effective_interval,
                 is_enabled=True,
                 status="active",
                 next_fire_at=next_fire,
@@ -241,7 +247,13 @@ class DeploymentService:
 
     async def get_deployment(self, deployment_id: UUID) -> dict | None:
         query = (
-            select(DeploymentModel, AutomationModel.name, TriggerDefinitionModel.schedule_expression)
+            select(
+                DeploymentModel,
+                AutomationModel.name,
+                TriggerDefinitionModel.schedule_expression,
+                TriggerDefinitionModel.trigger_type,
+                TriggerDefinitionModel.interval_seconds,
+            )
             .outerjoin(AutomationModel, DeploymentModel.automation_id == AutomationModel.id)
             .outerjoin(TriggerDefinitionModel, DeploymentModel.trigger_id == TriggerDefinitionModel.id)
             .where(DeploymentModel.id == deployment_id)
@@ -249,7 +261,7 @@ class DeploymentService:
         row = (await self.db.execute(query)).first()
         if not row:
             return None
-        return self._serialize(row[0], automation_name=row[1], schedule_expression=row[2])
+        return self._serialize(row[0], automation_name=row[1], schedule_expression=row[2], trigger_type=row[3], interval_seconds=row[4])
 
     async def list_deployments(
         self,
@@ -260,7 +272,13 @@ class DeploymentService:
         workspace_id: UUID | None = None,
     ) -> tuple[list[dict], int]:
         query = (
-            select(DeploymentModel, AutomationModel.name, TriggerDefinitionModel.schedule_expression)
+            select(
+                DeploymentModel,
+                AutomationModel.name,
+                TriggerDefinitionModel.schedule_expression,
+                TriggerDefinitionModel.trigger_type,
+                TriggerDefinitionModel.interval_seconds,
+            )
             .outerjoin(AutomationModel, DeploymentModel.automation_id == AutomationModel.id)
             .outerjoin(TriggerDefinitionModel, DeploymentModel.trigger_id == TriggerDefinitionModel.id)
         )
@@ -280,18 +298,22 @@ class DeploymentService:
         total = await self.db.scalar(count_query) or 0
         result = await self.db.execute(query)
         rows = result.all()
-        return [self._serialize(row[0], automation_name=row[1], schedule_expression=row[2]) for row in rows], total
+        return [self._serialize(row[0], automation_name=row[1], schedule_expression=row[2], trigger_type=row[3], interval_seconds=row[4]) for row in rows], total
 
     async def _serialize_full(self, deployment: DeploymentModel) -> dict:
         """Serialize with automation name and schedule looked up from related models."""
         automation = await self.db.get(AutomationModel, deployment.automation_id)
         automation_name = automation.name if automation else None
         schedule_expr = None
+        trig_type = None
+        trig_interval = None
         if deployment.trigger_id:
             trigger = await self.db.get(TriggerDefinitionModel, deployment.trigger_id)
             if trigger:
                 schedule_expr = trigger.schedule_expression
-        return self._serialize(deployment, automation_name=automation_name, schedule_expression=schedule_expr)
+                trig_type = trigger.trigger_type
+                trig_interval = trigger.interval_seconds
+        return self._serialize(deployment, automation_name=automation_name, schedule_expression=schedule_expr, trigger_type=trig_type, interval_seconds=trig_interval)
 
     async def _get(self, deployment_id: UUID) -> DeploymentModel:
         deployment = await self.db.get(DeploymentModel, deployment_id)
@@ -304,7 +326,16 @@ class DeploymentService:
         deployment: DeploymentModel,
         automation_name: str | None = None,
         schedule_expression: str | None = None,
+        trigger_type: str | None = None,
+        interval_seconds: int | None = None,
     ) -> dict:
+        # Normalize trigger_type for the frontend: "schedule" -> "cron"
+        normalized_trigger_type = trigger_type
+        if trigger_type == "schedule":
+            normalized_trigger_type = "cron"
+        elif trigger_type is None and deployment.trigger_id is None:
+            normalized_trigger_type = "manual"
+
         return {
             "id": deployment.id,
             "automation_id": deployment.automation_id,
@@ -315,7 +346,9 @@ class DeploymentService:
             "input_values": deployment.input_values or {},
             "status": deployment.status,
             "trigger_id": deployment.trigger_id,
+            "trigger_type": normalized_trigger_type,
             "schedule_expression": schedule_expression,
+            "interval_seconds": interval_seconds,
             "last_run_id": deployment.last_run_id,
             "last_run_at": deployment.last_run_at,
             "last_success_at": deployment.last_success_at,

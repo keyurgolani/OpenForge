@@ -1,7 +1,0 @@
-category: agent
-description: "Delegate work to other agents"
-tools:
-  - name: agent.invoke
-    description: "Invoke another agent to handle a sub-task"
-    risk_category: medium
-    confirm_by_default: false

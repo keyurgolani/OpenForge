@@ -10,7 +10,7 @@ import {
   MessageSquare,
   Folder,
   Bot,
-  FileText,
+  Download,
   Settings,
   Zap,
   Rocket,
@@ -33,7 +33,7 @@ interface PrimaryNavCollapsedProps {
     automations: string;
     deployments: string;
     runs: string;
-    outputs: string;
+    sinks: string;
     settings: string;
   };
   onExpand?: () => void;
@@ -134,10 +134,10 @@ export function PrimaryNavCollapsed({
               icon={<Rocket className="w-4 h-4" />}
             />
             <NavIcon
-              to={routes.outputs}
-              title="Outputs"
-              isActive={isActive('/outputs')}
-              icon={<FileText className="w-4 h-4" />}
+              to={routes.sinks}
+              title="Sinks"
+              isActive={isActive('/sinks')}
+              icon={<Download className="w-4 h-4" />}
             />
 
         <div className="flex-1" />

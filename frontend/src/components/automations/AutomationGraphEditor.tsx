@@ -20,11 +20,13 @@ import { Save } from 'lucide-react'
 import AgentNode from './AgentNode'
 import SinkNode from './SinkNode'
 import NodePalette, { type SinkTypeDefinition, SINK_TYPES } from './NodePalette'
-import SinkPalette from './SinkPalette'
+import SinkPalette, { type SinkPaletteItem } from './SinkPalette'
 import NodeConfigPanel from './NodeConfigPanel'
 import type { AutomationGraph } from '@/types/automations'
 import type { ParameterConfig } from '@/types/agents'
 import { useAgentsQuery } from '@/features/agents'
+import { useSinksQuery } from '@/features/sinks'
+import { getActiveInputHandles, type SinkType } from '@/types/sinks'
 import { useSaveAutomationGraph } from '@/features/automations'
 
 interface AutomationGraphEditorProps {
@@ -105,8 +107,10 @@ export default AutomationGraphEditor
 
 function AutomationGraphEditorInner({ automationId, graph, readOnly = false, forwardedRef }: AutomationGraphEditorProps & { forwardedRef?: React.Ref<AutomationGraphEditorHandle> }) {
   const { data: agentsData } = useAgentsQuery()
+  const { data: sinksData } = useSinksQuery()
   const saveGraph = useSaveAutomationGraph()
   const agents = agentsData?.agents ?? []
+  const dbSinks = sinksData?.sinks ?? []
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const { screenToFlowPosition, fitView: rfFitView } = useReactFlow()
 
@@ -117,15 +121,21 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
       const nodeType = (n as Record<string, unknown>).node_type as string | undefined
       if (nodeType === 'sink') {
         const sinkType = (n as Record<string, unknown>).sink_type as string
+        const sinkId = (n as Record<string, unknown>).sink_id as string | undefined
+        const dbSink = sinkId ? dbSinks.find(s => s.id === sinkId) : undefined
         const sinkDef = SINK_TYPES.find(s => s.type === sinkType)
+        const inputHandles = dbSink
+          ? getActiveInputHandles(dbSink.sink_type, dbSink.config ?? {})
+          : sinkDef?.inputHandles ?? [{ key: 'data', label: 'Data' }]
         return {
           id: n.id,
           type: 'sinkNode',
           position: n.position,
           data: {
-            label: sinkDef?.label ?? sinkType ?? 'Sink',
+            label: dbSink?.name ?? sinkDef?.label ?? sinkType ?? 'Sink',
             sinkType,
-            inputHandles: sinkDef?.inputHandles ?? [{ key: 'data', label: 'Data' }],
+            sinkId,
+            inputHandles,
             nodeKey: n.node_key,
           },
         }
@@ -145,7 +155,7 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
         },
       }
     })
-  }, [graph?.nodes, agents])
+  }, [graph?.nodes, agents, dbSinks])
 
   const initialEdges: RFEdge[] = useMemo(() => {
     if (!graph?.edges) return []
@@ -191,7 +201,7 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
       const graphNodes = nodes.map(n => {
         const data = n.data as Record<string, unknown>
         if (n.type === 'sinkNode') {
-          return { node_key: data.nodeKey as string || n.id, node_type: 'sink', sink_type: data.sinkType as string, position: n.position, config: {} }
+          return { node_key: data.nodeKey as string || n.id, node_type: 'sink', sink_type: data.sinkType as string, sink_id: data.sinkId as string | undefined, position: n.position, config: {} }
         }
         return { node_key: data.nodeKey as string || n.id, node_type: 'agent', agent_id: data.agentId as string, position: n.position, config: {} }
       })
@@ -244,7 +254,7 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
   // Uses a stable string key derived from graph identity and agent count
   // to avoid infinite re-render loops from unstable array references.
   // Guarded by !isDirty so in-progress edits are not clobbered.
-  const syncKey = `${graph?.automation_id ?? ''}_${graph?.graph_version ?? 0}_${agents.length}`
+  const syncKey = `${graph?.automation_id ?? ''}_${graph?.graph_version ?? 0}_${agents.length}_${dbSinks.length}`
   useEffect(() => {
     if (!isDirty) {
       setNodes(initialNodes)
@@ -307,6 +317,27 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
     [setNodes],
   )
 
+  const handleAddDbSinkNode = useCallback(
+    (item: SinkPaletteItem) => {
+      const nodeKey = `sink_${item.sinkType}_${nextNodeId()}`
+      const newNode: RFNode = {
+        id: nodeKey,
+        type: 'sinkNode',
+        position: { x: 500 + Math.random() * 200, y: 100 + Math.random() * 200 },
+        data: {
+          label: item.label,
+          sinkType: item.sinkType,
+          sinkId: item.sinkId,
+          inputHandles: item.inputHandles,
+          nodeKey,
+        },
+      }
+      setNodes(nds => [...nds, newNode])
+      setIsDirty(true)
+    },
+    [setNodes],
+  )
+
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
@@ -342,20 +373,26 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
         return
       }
 
-      // Try sink data
+      // Try sink data (may be a DB SinkPaletteItem or a legacy SinkTypeDefinition)
       const sinkData = event.dataTransfer.getData('application/openforge-sink')
       if (sinkData) {
         try {
-          const sink = JSON.parse(sinkData) as SinkTypeDefinition
-          const nodeKey = `sink_${sink.type}_${nextNodeId()}`
+          const sink = JSON.parse(sinkData)
+          // Detect DB sink item (has sinkId) vs legacy type definition (has type)
+          const sinkType = sink.sinkType ?? sink.type
+          const label = sink.label ?? sinkType
+          const sinkId = sink.sinkId as string | undefined
+          const inputHandles = sink.inputHandles ?? [{ key: 'data', label: 'Data' }]
+          const nodeKey = `sink_${sinkType}_${nextNodeId()}`
           const newNode: RFNode = {
             id: nodeKey,
             type: 'sinkNode',
             position,
             data: {
-              label: sink.label,
-              sinkType: sink.type,
-              inputHandles: sink.inputHandles,
+              label,
+              sinkType,
+              sinkId,
+              inputHandles,
               nodeKey,
             },
           }
@@ -451,6 +488,7 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
           node_key: data.nodeKey as string || n.id,
           node_type: 'sink',
           sink_type: data.sinkType as string,
+          sink_id: data.sinkId as string | undefined,
           position: n.position,
           config: {},
         }
@@ -553,7 +591,7 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
           <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#333" />
         </ReactFlow>
       </div>
-      {!readOnly && <SinkPalette onAddSinkNode={handleAddSinkNode} />}
+      {!readOnly && <SinkPalette onAddSinkNode={handleAddSinkNode} onAddDbSinkNode={handleAddDbSinkNode} />}
 
       {/* Context menu */}
       {contextMenu && (

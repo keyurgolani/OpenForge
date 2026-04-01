@@ -72,10 +72,10 @@ SYSTEM_VARIABLES = [
         "name": "system.tools", "category": "tools",
         "description": "List of tools — use contains(system.tools, \"tool.id\") to check availability",
         "children": [
-            {"name": "id", "description": "Tool identifier (e.g. agent.invoke)"},
+            {"name": "id", "description": "Tool identifier (e.g. platform.agent.invoke)"},
             {"name": "name", "description": "Tool display name"},
             {"name": "description", "description": "Tool description"},
-            {"name": "category", "description": "Tool category (e.g. agent, filesystem)"},
+            {"name": "category", "description": "Tool category (e.g. platform.agent, filesystem)"},
         ],
     },
     {

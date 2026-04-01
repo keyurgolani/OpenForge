@@ -4,10 +4,10 @@ from protocol import BaseTool, ToolContext, ToolResult
 
 class SaveKnowledgeTool(BaseTool):
     @property
-    def id(self): return "workspace.save_knowledge"
+    def id(self): return "platform.workspace.save_knowledge"
 
     @property
-    def category(self): return "workspace"
+    def category(self): return "platform.workspace"
 
     @property
     def display_name(self): return "Save Knowledge"

@@ -1,11 +1,11 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-    Loader2, ChevronDown, ChevronRight, Search, AlertCircle, Settings2, Wrench,
+    Loader2, ChevronDown, ChevronRight, Search, AlertCircle, Settings2, Wrench, Blocks, LayoutGrid, Plug,
 } from 'lucide-react'
 import { getToolRegistry, listToolPermissions, setToolPermission } from '@/lib/api'
 import type { ToolMeta, ToolParam } from './types'
-import { RISK_STYLES, CATEGORY_ICONS, PERMISSION_OPTIONS } from './constants'
+import { RISK_STYLES, CATEGORY_ICONS, CATEGORY_LABELS_TOOLS, PERMISSION_OPTIONS } from './constants'
 import { extractParams } from './components'
 
 function ToolCard({ tool, permission, onPermissionChange }: {
@@ -16,7 +16,7 @@ function ToolCard({ tool, permission, onPermissionChange }: {
     const [expanded, setExpanded] = useState(false)
     const [showRaw, setShowRaw] = useState(false)
     const params = extractParams(tool)
-    const action = tool.id.split('.').slice(1).join('.')
+    const action = tool.id.startsWith(tool.category + '.') ? tool.id.slice(tool.category.length + 1) : tool.id.split('.').pop() ?? tool.id
 
     return (
         <div className="glass-card rounded-xl border-border/20 overflow-hidden">
@@ -144,6 +144,23 @@ function ToolCard({ tool, permission, onPermissionChange }: {
     )
 }
 
+/** Return a short display label for a category. */
+function categoryLabel(cat: string): string {
+    if (CATEGORY_LABELS_TOOLS[cat]) return CATEGORY_LABELS_TOOLS[cat]
+    if (cat.startsWith('mcp:')) return cat.slice(4)
+    return cat
+}
+
+/** True if the category belongs to the platform group. */
+function isPlatformCategory(cat: string): boolean {
+    return cat.startsWith('platform.')
+}
+
+/** True if the category belongs to MCP. */
+function isMcpCategory(cat: string): boolean {
+    return cat.startsWith('mcp:')
+}
+
 function ToolsTab() {
     const qc = useQueryClient()
     const [query, setQuery] = useState('')
@@ -163,7 +180,6 @@ function ToolsTab() {
         staleTime: 30_000,
     })
 
-    // Build permission lookup map: tool_id → permission string
     const permMap = useMemo(() => {
         const m: Record<string, string> = {}
         if (Array.isArray(permData)) {
@@ -184,7 +200,19 @@ function ToolsTab() {
     const tools: ToolMeta[] = data?.tools ?? []
     const available: boolean = data?.tool_server_available !== false
 
-    const categories = ['all', ...Array.from(new Set(tools.map(t => t.category))).sort()]
+    // Build category counts
+    const categoryCounts = useMemo(() => {
+        const counts: Record<string, number> = {}
+        for (const t of tools) {
+            counts[t.category] = (counts[t.category] ?? 0) + 1
+        }
+        return counts
+    }, [tools])
+
+    const allCategories = Object.keys(categoryCounts).sort()
+    const coreCategories = allCategories.filter(c => !isPlatformCategory(c) && !isMcpCategory(c))
+    const platformCategories = allCategories.filter(c => isPlatformCategory(c))
+    const mcpCategories = allCategories.filter(c => isMcpCategory(c))
 
     const filtered = tools.filter(t => {
         const matchCat = activeCategory === 'all' || t.category === activeCategory
@@ -199,7 +227,7 @@ function ToolsTab() {
     }, {})
 
     return (
-        <div className="space-y-5">
+        <div className="space-y-4">
             <div>
                 <h3 className="font-semibold text-sm">Agent Tools</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
@@ -224,62 +252,158 @@ function ToolsTab() {
             )}
 
             {!isLoading && available && (
-                <>
-                    {/* Search + category filter */}
-                    <div className="flex flex-col sm:flex-row gap-2">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-                            <input
-                                className="input text-sm pl-8"
-                                placeholder="Search tools by name, ID, or description…"
-                                value={query}
-                                onChange={e => setQuery(e.target.value)}
-                            />
+                <div className="rounded-2xl border border-border/25 flex h-[calc(100vh-220px)] min-h-[400px] overflow-hidden">
+                    {/* Left sidebar — category list */}
+                    <div className="w-[30%] min-w-[180px] max-w-[260px] overflow-y-auto flex-shrink-0 bg-card/30 border-r border-border/25">
+                        {/* All */}
+                        <button
+                            type="button"
+                            onClick={() => setActiveCategory('all')}
+                            className={`w-full text-left px-4 py-2.5 transition-all relative border-l-2 ${
+                                activeCategory === 'all'
+                                    ? 'bg-accent/[0.08] border-l-accent text-foreground'
+                                    : 'border-l-transparent hover:bg-card/60 text-muted-foreground'
+                            }`}
+                        >
+                            <div className="flex items-center gap-2">
+                                <LayoutGrid className="w-3.5 h-3.5 flex-shrink-0" />
+                                <span className="text-xs font-medium">All Tools</span>
+                                <span className="ml-auto text-[10px] text-muted-foreground/60">{tools.length}</span>
+                            </div>
+                        </button>
+
+                        {/* Core categories */}
+                        {coreCategories.length > 0 && (
+                            <div className="border-t border-border/20">
+                                <div className="px-4 pt-3 pb-1">
+                                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground/40 font-semibold">Core</span>
+                                </div>
+                                {coreCategories.map(cat => (
+                                    <button
+                                        key={cat}
+                                        type="button"
+                                        onClick={() => setActiveCategory(cat)}
+                                        className={`w-full text-left px-4 py-2 transition-all relative border-l-2 ${
+                                            activeCategory === cat
+                                                ? 'bg-accent/[0.08] border-l-accent text-foreground'
+                                                : 'border-l-transparent hover:bg-card/60 text-muted-foreground'
+                                        }`}
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <span className="flex-shrink-0">{CATEGORY_ICONS[cat] ?? <Wrench className="w-3.5 h-3.5" />}</span>
+                                            <span className="text-xs font-medium capitalize">{categoryLabel(cat)}</span>
+                                            <span className="ml-auto text-[10px] text-muted-foreground/50">{categoryCounts[cat]}</span>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Platform categories */}
+                        {platformCategories.length > 0 && (
+                            <div className="border-t border-border/20">
+                                <div className="px-4 pt-3 pb-1">
+                                    <div className="flex items-center gap-1">
+                                        <Blocks className="w-3 h-3 text-muted-foreground/40" />
+                                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground/40 font-semibold">Platform</span>
+                                    </div>
+                                </div>
+                                {platformCategories.map(cat => (
+                                    <button
+                                        key={cat}
+                                        type="button"
+                                        onClick={() => setActiveCategory(cat)}
+                                        className={`w-full text-left px-4 py-2 transition-all relative border-l-2 ${
+                                            activeCategory === cat
+                                                ? 'bg-accent/[0.08] border-l-accent text-foreground'
+                                                : 'border-l-transparent hover:bg-card/60 text-muted-foreground'
+                                        }`}
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <span className="flex-shrink-0">{CATEGORY_ICONS[cat] ?? <Wrench className="w-3.5 h-3.5" />}</span>
+                                            <span className="text-xs font-medium">{categoryLabel(cat)}</span>
+                                            <span className="ml-auto text-[10px] text-muted-foreground/50">{categoryCounts[cat]}</span>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* MCP categories */}
+                        {mcpCategories.length > 0 && (
+                            <div className="border-t border-border/20">
+                                <div className="px-4 pt-3 pb-1">
+                                    <div className="flex items-center gap-1">
+                                        <Plug className="w-3 h-3 text-muted-foreground/40" />
+                                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground/40 font-semibold">MCP</span>
+                                    </div>
+                                </div>
+                                {mcpCategories.map(cat => (
+                                    <button
+                                        key={cat}
+                                        type="button"
+                                        onClick={() => setActiveCategory(cat)}
+                                        className={`w-full text-left px-4 py-2 transition-all relative border-l-2 ${
+                                            activeCategory === cat
+                                                ? 'bg-accent/[0.08] border-l-accent text-foreground'
+                                                : 'border-l-transparent hover:bg-card/60 text-muted-foreground'
+                                        }`}
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <Plug className="w-3.5 h-3.5 flex-shrink-0" />
+                                            <span className="text-xs font-medium">{categoryLabel(cat)}</span>
+                                            <span className="ml-auto text-[10px] text-muted-foreground/50">{categoryCounts[cat]}</span>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Right content — tools list */}
+                    <div className="flex-1 overflow-y-auto">
+                        {/* Search bar pinned at top */}
+                        <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm border-b border-border/20 px-4 py-3">
+                            <div className="relative">
+                                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                                <input
+                                    className="input text-sm pl-8 w-full"
+                                    placeholder="Search tools by name, ID, or description…"
+                                    value={query}
+                                    onChange={e => setQuery(e.target.value)}
+                                />
+                            </div>
                         </div>
-                        <div className="flex gap-1 flex-wrap">
-                            {categories.map(cat => (
-                                <button
-                                    key={cat}
-                                    type="button"
-                                    onClick={() => setActiveCategory(cat)}
-                                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors capitalize ${activeCategory === cat
-                                        ? 'bg-accent/25 text-accent ring-1 ring-accent/30'
-                                        : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'}`}
-                                >
-                                    {cat !== 'all' && (CATEGORY_ICONS[cat] ?? <Wrench className="w-3.5 h-3.5" />)}
-                                    {cat === 'all' ? `All (${tools.length})` : cat}
-                                </button>
+
+                        <div className="p-4 space-y-5">
+                            {filtered.length === 0 && (
+                                <div className="text-center py-12 text-muted-foreground">
+                                    <Settings2 className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                                    <p className="text-sm">No tools match your search.</p>
+                                </div>
+                            )}
+
+                            {Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([cat, catTools]) => (
+                                <div key={cat} className="space-y-2">
+                                    <div className="flex items-center gap-2 py-1">
+                                        <span className="text-muted-foreground/60">{CATEGORY_ICONS[cat] ?? <Wrench className="w-4 h-4" />}</span>
+                                        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{categoryLabel(cat)}</h4>
+                                        <span className="text-[10px] text-muted-foreground/70">{catTools.length} tool{catTools.length !== 1 ? 's' : ''}</span>
+                                        <div className="flex-1 h-px bg-border/40" />
+                                    </div>
+                                    {catTools.map(tool => (
+                                        <ToolCard
+                                            key={tool.id}
+                                            tool={tool}
+                                            permission={permMap[tool.id] ?? 'default'}
+                                            onPermissionChange={handlePermissionChange}
+                                        />
+                                    ))}
+                                </div>
                             ))}
                         </div>
                     </div>
-
-                    {/* Tool groups */}
-                    {filtered.length === 0 && (
-                        <div className="text-center py-12 text-muted-foreground glass-card rounded-xl">
-                            <Settings2 className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                            <p className="text-sm">No tools match your search.</p>
-                        </div>
-                    )}
-
-                    {Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([cat, catTools]) => (
-                        <div key={cat} className="space-y-2">
-                            <div className="flex items-center gap-2 py-1">
-                                <span className="text-muted-foreground/60">{CATEGORY_ICONS[cat] ?? <Wrench className="w-4 h-4" />}</span>
-                                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground capitalize">{cat}</h4>
-                                <span className="text-[10px] text-muted-foreground/70">{catTools.length} tool{catTools.length !== 1 ? 's' : ''}</span>
-                                <div className="flex-1 h-px bg-border/40" />
-                            </div>
-                            {catTools.map(tool => (
-                                <ToolCard
-                                    key={tool.id}
-                                    tool={tool}
-                                    permission={permMap[tool.id] ?? 'default'}
-                                    onPermissionChange={handlePermissionChange}
-                                />
-                            ))}
-                        </div>
-                    ))}
-                </>
+                </div>
             )}
         </div>
     )

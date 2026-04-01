@@ -421,8 +421,8 @@ async def execute_tool_loop(
             result.timeline[entry_idx]["error"] = tool_result.get("error")
             result.timeline[entry_idx]["duration_ms"] = duration_ms
 
-            # Handle agent.invoke special case
-            if tool_id == "agent.invoke" and tool_result.get("success"):
+            # Handle platform.agent.invoke special case
+            if tool_id in ("platform.agent.invoke", "agent.invoke") and tool_result.get("success"):
                 nested = output_for_timeline or {}
                 if isinstance(nested, dict):
                     result.timeline[entry_idx]["output"] = nested.get("response", "")

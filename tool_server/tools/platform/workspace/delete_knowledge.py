@@ -2,12 +2,12 @@ import httpx
 from protocol import BaseTool, ToolContext, ToolResult
 
 
-class WorkspaceDeleteKnowledgeTool(BaseTool):
+class DeleteKnowledgeTool(BaseTool):
     @property
-    def id(self): return "workspace.delete_knowledge"
+    def id(self): return "platform.workspace.delete_knowledge"
 
     @property
-    def category(self): return "workspace"
+    def category(self): return "platform.workspace"
 
     @property
     def display_name(self): return "Delete Knowledge"
@@ -16,7 +16,7 @@ class WorkspaceDeleteKnowledgeTool(BaseTool):
     def description(self):
         return (
             "Permanently delete a knowledge record from the user's workspace by its ID. "
-            "Use workspace.list_knowledge or workspace.search first to find the correct ID. "
+            "Use platform.workspace.list_knowledge or platform.workspace.search first to find the correct ID. "
             "This removes the record from the user's knowledge base and cannot be undone."
         )
 

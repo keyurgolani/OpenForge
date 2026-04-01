@@ -741,6 +741,26 @@ class ArtifactVersionModel(Base):
 
 
 
+class SinkModel(Base):
+    """First-class sink definition — what happens with agent output values."""
+    __tablename__ = "sinks"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    sink_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    icon: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    tags_json: Mapped[list] = mapped_column("tags", JSONB, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+
+    __table_args__ = (
+        Index("idx_sinks_sink_type", "sink_type"),
+    )
+
+
 class ApprovalRequestModel(Base):
     """Durable approval request record."""
     __tablename__ = "approval_requests"
@@ -1175,6 +1195,9 @@ class AutomationNodeModel(Base):
         UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), nullable=True,
     )
     sink_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    sink_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sinks.id", ondelete="SET NULL"), nullable=True,
+    )
     node_key: Mapped[str] = mapped_column(String(120), nullable=False)
     position_x: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     position_y: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)

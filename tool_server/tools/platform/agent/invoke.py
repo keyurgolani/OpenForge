@@ -4,10 +4,10 @@ from protocol import BaseTool, ToolContext, ToolResult
 
 class InvokeAgentTool(BaseTool):
     @property
-    def id(self): return "agent.invoke"
+    def id(self): return "platform.agent.invoke"
 
     @property
-    def category(self): return "agent"
+    def category(self): return "platform.agent"
 
     @property
     def display_name(self): return "Invoke Agent"
@@ -78,7 +78,6 @@ class InvokeAgentTool(BaseTool):
         transfer = params.get("transfer", False)
 
         if transfer:
-            # Swarm-style transfer: switch active agent for conversation
             agent_id = params.get("agent_id")
             if not agent_id:
                 return ToolResult(success=False, error="agent_id is required for transfer mode")
@@ -116,7 +115,6 @@ class InvokeAgentTool(BaseTool):
         agent_id = params.get("agent_id")
         if agent_id:
             payload["agent_id"] = agent_id
-        # scope_path is injected by the parent engine when available
         scope_path = params.get("_scope_path")
         if scope_path is not None:
             payload["scope_path"] = scope_path

@@ -157,11 +157,12 @@ def build_postamble(
 
     # Agents section
     has_agent_invoke = any(
-        t.get("id") == "agent.invoke" or t.get("name") == "agent.invoke"
+        t.get("id") in ("platform.agent.invoke", "agent.invoke")
+        or t.get("name") in ("platform.agent.invoke", "agent.invoke")
         for t in tools_data
     )
     if has_agent_invoke and agents_data:
-        ag_lines = ["\n## Available Agents", "You can invoke these agents via the `agent.invoke` tool:"]
+        ag_lines = ["\n## Available Agents", "You can invoke these agents via the `platform.agent.invoke` tool:"]
         for ag in agents_data:
             tags_str = f" [{', '.join(ag.get('tags', []))}]" if ag.get("tags") else ""
             ag_lines.append(f"- **{ag.get('slug', '')}**{tags_str}: {ag.get('description', '')}")

@@ -14,7 +14,9 @@ export interface Deployment {
   input_values: Record<string, unknown>;
   status: DeploymentStatus;
   trigger_id: string | null;
+  trigger_type: string | null;
   schedule_expression: string | null;
+  interval_seconds: number | null;
   last_run_id: string | null;
   last_run_at: string | null;
   last_success_at: string | null;
@@ -28,6 +30,7 @@ export interface DeploymentCreate {
   workspace_id: string;
   input_values: Record<string, unknown>;
   schedule_expression?: string;
+  interval_seconds?: number;
 }
 
 export interface DeploymentListResponse {

@@ -3,7 +3,7 @@ import { useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import MarkdownIt from 'markdown-it'
 import {
-  BookOpenText, Bot, FileOutput, MessageSquare, Zap, Boxes,
+  BookOpenText, Bot, Download, MessageSquare, Zap, Boxes,
   ArrowRight,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
@@ -11,7 +11,7 @@ import { useQuery } from '@tanstack/react-query'
 import ErrorState from '@/components/shared/ErrorState'
 import LoadingState from '@/components/shared/LoadingState'
 import StatusBadge from '@/components/shared/StatusBadge'
-import { useOutputsQuery } from '@/features/outputs'
+import { useSinksQuery } from '@/features/sinks'
 import { type KnowledgeSummaryItem, useKnowledgeSummaryQuery } from '@/features/knowledge'
 import { useAgentsQuery } from '@/features/agents'
 import { useAutomationsQuery } from '@/features/automations'
@@ -19,7 +19,7 @@ import { useDeploymentsQuery } from '@/features/deployments'
 import { listGlobalConversations } from '@/lib/api'
 import {
   agentsRoute,
-  outputsRoute,
+  sinksRoute,
   automationsRoute,
   globalChatRoute,
   deploymentsRoute,
@@ -92,7 +92,7 @@ export default function DashboardPage() {
   const agentsQuery = useAgentsQuery({ limit: 6 })
   const automationsQuery = useAutomationsQuery({ limit: 6 })
   const deploymentsQuery = useDeploymentsQuery({ limit: 6 })
-  const outputsQuery = useOutputsQuery({ limit: 6 })
+  const sinksQuery = useSinksQuery({ limit: 6 })
   // Fetch a larger page to compute per-type breakdowns client-side
   const knowledgeQuery = useKnowledgeSummaryQuery(workspaceId, 500)
   // Separate recent-only query for the list
@@ -107,7 +107,7 @@ export default function DashboardPage() {
     agentsQuery.isLoading,
     automationsQuery.isLoading,
     deploymentsQuery.isLoading,
-    outputsQuery.isLoading,
+    sinksQuery.isLoading,
     knowledgeQuery.isLoading,
   ].some(Boolean)
 
@@ -115,7 +115,7 @@ export default function DashboardPage() {
     agentsQuery.error,
     automationsQuery.error,
     deploymentsQuery.error,
-    outputsQuery.error,
+    sinksQuery.error,
     knowledgeQuery.error,
   ].find(Boolean)
 
@@ -142,7 +142,7 @@ export default function DashboardPage() {
   const agentsTotal = agentsQuery.data?.total ?? 0
   const automationsTotal = automationsQuery.data?.total ?? 0
   const deploymentsTotal = deploymentsQuery.data?.total ?? 0
-  const outputsTotal = outputsQuery.data?.total ?? 0
+  const sinksTotal = sinksQuery.data?.total ?? 0
   const conversationsTotal = conversationsQuery.data?.total ?? (conversationsQuery.data?.conversations?.length ?? 0)
 
   return (
@@ -237,7 +237,7 @@ export default function DashboardPage() {
               <PlatformCard label="Agents" value={agentsTotal} icon={<Bot className="h-4 w-4" />} to={agentsRoute()} />
               <PlatformCard label="Automations" value={automationsTotal} icon={<Zap className="h-4 w-4" />} to={automationsRoute()} />
               <PlatformCard label="Deployments" value={deploymentsTotal} icon={<Boxes className="h-4 w-4" />} to={deploymentsRoute()} />
-              <PlatformCard label="Outputs" value={outputsTotal} icon={<FileOutput className="h-4 w-4" />} to={outputsRoute()} />
+              <PlatformCard label="Sinks" value={sinksTotal} icon={<Download className="h-4 w-4" />} to={sinksRoute()} />
               <PlatformCard label="Conversations" value={conversationsTotal} icon={<MessageSquare className="h-4 w-4" />} to={globalChatRoute()} />
             </div>
           </section>

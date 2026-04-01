@@ -4,10 +4,10 @@ from protocol import BaseTool, ToolContext, ToolResult
 
 class ReadChatTool(BaseTool):
     @property
-    def id(self): return "agent.read_chat"
+    def id(self): return "platform.chat.read_chat"
 
     @property
-    def category(self): return "agent"
+    def category(self): return "platform.chat"
 
     @property
     def display_name(self): return "Read Chat"
@@ -18,7 +18,7 @@ class ReadChatTool(BaseTool):
             "Read messages from a chat conversation. If conversation_id is omitted, reads the "
             "current conversation — useful for reviewing older messages beyond the context window. "
             "Supports cursor-based pagination via before_id to page through older messages. "
-            "Use agent.list_chats to find conversation IDs."
+            "Use platform.chat.list_chats to find conversation IDs."
         )
 
     @property

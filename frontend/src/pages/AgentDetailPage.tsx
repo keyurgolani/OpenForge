@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Bot, Check, MessageSquare, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { ArrowLeft, Bot, Check, Copy, MessageSquare, Pencil, Plus, Trash2, X } from 'lucide-react'
 
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import PromptTemplateEditor, { extractVariables } from '@/components/shared/PromptTemplateEditor'
@@ -136,6 +136,7 @@ export default function AgentDetailPage() {
   const [referenceData, setReferenceData] = useState<TemplateReferenceData | null>(null)
   const [autoSlug, setAutoSlug] = useState(isCreateMode)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [isDuplicating, setIsDuplicating] = useState(false)
 
   // Reset editing mode when agentId changes (e.g. after creation navigates to detail)
   useEffect(() => {
@@ -310,6 +311,31 @@ export default function AgentDetailPage() {
     setIsEditing(true)
   }
 
+  const handleDuplicate = async () => {
+    if (!agent) return
+    setIsDuplicating(true)
+    try {
+      const copy = await createAgent.mutateAsync({
+        name: `${agent.name} (Copy)`,
+        slug: `${agent.slug}-copy`,
+        description: agent.description ?? undefined,
+        icon: agent.icon ?? undefined,
+        tags: agent.tags,
+        system_prompt: agent.system_prompt,
+        llm_config: agent.llm_config,
+        tools_config: agent.tools_config,
+        memory_config: agent.memory_config,
+        parameters: agent.parameters,
+        output_definitions: agent.output_definitions,
+      })
+      navigate(`/agents/${copy.id}`)
+    } catch {
+      // handled by global interceptor
+    } finally {
+      setIsDuplicating(false)
+    }
+  }
+
   // ── Loading / error states ──
   if (!isCreateMode && isLoading) return <LoadingState label="Loading agent..." />
   if (!isCreateMode && (error || !agent)) return <ErrorState message="Agent could not be loaded." />
@@ -400,12 +426,21 @@ export default function AgentDetailPage() {
                     <Pencil className="w-3.5 h-3.5" /> Edit
                   </button>
                   {!isCreateMode && (
-                    <button
-                      className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-xs font-medium text-white transition-colors hover:bg-emerald-600/90"
-                      onClick={() => navigate(globalChatRoute(undefined, { agentId: agentId }))}
-                    >
-                      <MessageSquare className="w-3.5 h-3.5" /> Chat
-                    </button>
+                    <>
+                      <button
+                        className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-xs font-medium text-white transition-colors hover:bg-emerald-600/90"
+                        onClick={() => navigate(globalChatRoute(undefined, { agentId: agentId }))}
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" /> Chat
+                      </button>
+                      <button
+                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border/25 bg-background/40 px-3 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground hover:bg-muted/30"
+                        onClick={handleDuplicate}
+                        disabled={isDuplicating}
+                      >
+                        <Copy className="w-3.5 h-3.5" /> {isDuplicating ? 'Duplicating...' : 'Duplicate'}
+                      </button>
+                    </>
                   )}
                   <button
                     className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 text-xs font-medium text-red-400 transition-colors hover:text-red-300 hover:bg-red-500/20"
@@ -587,9 +622,9 @@ const POSTAMBLE_TEMPLATE = `# OpenForge Application Context
 {% endfor %}
 {% endif %}
 
-{% if contains(system.tools, "agent.invoke") %}
+{% if contains(system.tools, "platform.agent.invoke") %}
 ## Available Agents
-You can invoke these agents via the \`agent.invoke\` tool:
+You can invoke these agents via the \`platform.agent.invoke\` tool:
 {% for ag in system.agents %}
 - **{{ag.slug}}**{% if ag.tags %} [{{join(ag.tags, ", ")}}]{% endif %}: {{ag.description}}
 {% endfor %}

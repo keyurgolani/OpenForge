@@ -700,7 +700,7 @@ class ChatHandler:
                     parts.append(
                         "\n## Cross-workspace delegation required\n"
                         f"The user explicitly mentioned workspace '@{mention_name}' ({mention_id}). "
-                        "Use the `agent.invoke` tool if you need data or actions from that workspace. "
+                        "Use the `platform.agent.invoke` tool if you need data or actions from that workspace. "
                         "Do not use current-workspace tools to guess or fake cross-workspace access."
                     )
         return "\n".join(parts)

@@ -3,7 +3,7 @@ import {
     Brain, Folder, Briefcase, Microscope, BookOpen, Target, Globe, Lightbulb,
     Wrench, Palette, BarChart3, Rocket, Shield, FlaskConical, Leaf, Key,
     Settings2, PenLine, Database, Sprout, FolderOpen, Bot, FileText, Terminal,
-    GitBranch,
+    GitBranch, MessageSquare, Workflow, Play, ArrowDownToLine,
 } from 'lucide-react'
 import type { SettingsTab, ModelQuality, VramTier, LocalModel, CLIPModelInfo, LogLevel } from './types'
 
@@ -111,16 +111,31 @@ export const RISK_STYLES: Record<string, string> = {
 
 // ── Category icons for tools ────────────────────────────────────────────────
 export const CATEGORY_ICONS: Record<string, React.ReactNode> = {
-    filesystem: React.createElement(FolderOpen, { className: 'w-4 h-4' }),
-    http: React.createElement(Globe, { className: 'w-4 h-4' }),
-    shell: React.createElement(Terminal, { className: 'w-4 h-4' }),
-    memory: React.createElement(Brain, { className: 'w-4 h-4' }),
-    git: React.createElement(GitBranch, { className: 'w-4 h-4' }),
-    task: React.createElement(Target, { className: 'w-4 h-4' }),
-    language: React.createElement(FileText, { className: 'w-4 h-4' }),
-    skills: React.createElement(Wrench, { className: 'w-4 h-4' }),
-    agent: React.createElement(Bot, { className: 'w-4 h-4' }),
-    workspace: React.createElement(FolderOpen, { className: 'w-4 h-4' }),
+    filesystem: React.createElement(FolderOpen, { className: 'w-3.5 h-3.5' }),
+    http: React.createElement(Globe, { className: 'w-3.5 h-3.5' }),
+    shell: React.createElement(Terminal, { className: 'w-3.5 h-3.5' }),
+    memory: React.createElement(Brain, { className: 'w-3.5 h-3.5' }),
+    git: React.createElement(GitBranch, { className: 'w-3.5 h-3.5' }),
+    task: React.createElement(Target, { className: 'w-3.5 h-3.5' }),
+    language: React.createElement(FileText, { className: 'w-3.5 h-3.5' }),
+    skills: React.createElement(Wrench, { className: 'w-3.5 h-3.5' }),
+    // platform subcategories
+    'platform.workspace': React.createElement(Database, { className: 'w-3.5 h-3.5' }),
+    'platform.agent': React.createElement(Bot, { className: 'w-3.5 h-3.5' }),
+    'platform.chat': React.createElement(MessageSquare, { className: 'w-3.5 h-3.5' }),
+    'platform.automation': React.createElement(Workflow, { className: 'w-3.5 h-3.5' }),
+    'platform.deployment': React.createElement(Play, { className: 'w-3.5 h-3.5' }),
+    'platform.sink': React.createElement(ArrowDownToLine, { className: 'w-3.5 h-3.5' }),
+}
+
+/** Display-friendly labels for tool categories. */
+export const CATEGORY_LABELS_TOOLS: Record<string, string> = {
+    'platform.workspace': 'Workspace',
+    'platform.agent': 'Agent',
+    'platform.chat': 'Chat',
+    'platform.automation': 'Automation',
+    'platform.deployment': 'Deployment',
+    'platform.sink': 'Sink',
 }
 
 // ── Task label registry ─────────────────────────────────────────────────────

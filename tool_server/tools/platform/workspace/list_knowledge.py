@@ -2,12 +2,12 @@ import httpx
 from protocol import BaseTool, ToolContext, ToolResult
 
 
-class WorkspaceListKnowledgeTool(BaseTool):
+class ListKnowledgeTool(BaseTool):
     @property
-    def id(self): return "workspace.list_knowledge"
+    def id(self): return "platform.workspace.list_knowledge"
 
     @property
-    def category(self): return "workspace"
+    def category(self): return "platform.workspace"
 
     @property
     def display_name(self): return "List Knowledge"
@@ -19,7 +19,7 @@ class WorkspaceListKnowledgeTool(BaseTool):
             "gists, uploaded documents, and other content the user created or imported. "
             "Returns titles, IDs, types, and tags for each record. "
             "Use this to browse available knowledge or find records by type. "
-            "To find knowledge by topic or content, use workspace.search instead. "
+            "To find knowledge by topic or content, use platform.workspace.search instead. "
             "These are user-created records — NOT the agent's own working scratchpad (use memory.recall for that)."
         )
 

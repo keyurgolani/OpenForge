@@ -11,6 +11,7 @@ from openforge.core.product_vocabulary import API_PREFIXES, DomainNoun
 from .agents.router import router as agents_router
 from .automations.router import router as automations_router
 from .outputs.router import router as outputs_router
+from .sinks.router import router as sinks_router
 from .knowledge.router import global_router as knowledge_global_router
 from .knowledge.router import router as knowledge_router
 from .retrieval.router import router as retrieval_router
@@ -55,6 +56,12 @@ def register_domain_routers(app: FastAPI) -> None:
         outputs_router,
         prefix=API_PREFIXES[DomainNoun.OUTPUT],
         tags=["outputs"],
+    )
+
+    app.include_router(
+        sinks_router,
+        prefix=API_PREFIXES[DomainNoun.SINK],
+        tags=["sinks"],
     )
 
     app.include_router(

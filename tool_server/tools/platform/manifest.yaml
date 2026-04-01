@@ -1,0 +1,125 @@
+category: platform
+description: "Manage OpenForge platform entities — workspaces, agents, chats, automations, deployments, and sinks"
+tools:
+  # platform.workspace
+  - name: platform.workspace.search
+    description: "Search workspace knowledge base using semantic similarity"
+    risk_category: safe
+    confirm_by_default: false
+  - name: platform.workspace.save_knowledge
+    description: "Save content to workspace knowledge base"
+    risk_category: moderate
+    confirm_by_default: false
+  - name: platform.workspace.list_knowledge
+    description: "List knowledge items in a workspace"
+    risk_category: safe
+    confirm_by_default: false
+  - name: platform.workspace.delete_knowledge
+    description: "Delete a knowledge item from a workspace"
+    risk_category: destructive
+    confirm_by_default: true
+  - name: platform.workspace.list_workspaces
+    description: "List all workspaces in the system"
+    risk_category: safe
+    confirm_by_default: false
+  - name: platform.workspace.get_workspace
+    description: "Get detailed workspace information"
+    risk_category: safe
+    confirm_by_default: false
+
+  # platform.agent
+  - name: platform.agent.invoke
+    description: "Invoke another agent to handle a sub-task"
+    risk_category: moderate
+    confirm_by_default: false
+  - name: platform.agent.list_agents
+    description: "List all agent definitions"
+    risk_category: safe
+    confirm_by_default: false
+  - name: platform.agent.get_agent
+    description: "Get detailed agent definition"
+    risk_category: safe
+    confirm_by_default: false
+  # platform.chat
+  - name: platform.chat.list_chats
+    description: "List chat conversations"
+    risk_category: safe
+    confirm_by_default: false
+  - name: platform.chat.read_chat
+    description: "Read messages from a chat conversation"
+    risk_category: safe
+    confirm_by_default: false
+
+  # platform.automation
+  - name: platform.automation.list
+    description: "List all automation definitions"
+    risk_category: safe
+    confirm_by_default: false
+  - name: platform.automation.get
+    description: "Get detailed automation information"
+    risk_category: safe
+    confirm_by_default: false
+  - name: platform.automation.create
+    description: "Create a new automation definition"
+    risk_category: moderate
+    confirm_by_default: false
+  - name: platform.automation.update
+    description: "Update an automation definition"
+    risk_category: moderate
+    confirm_by_default: false
+  - name: platform.automation.delete
+    description: "Delete an automation definition"
+    risk_category: destructive
+    confirm_by_default: true
+
+  # platform.deployment
+  - name: platform.deployment.list
+    description: "List all deployments"
+    risk_category: safe
+    confirm_by_default: false
+  - name: platform.deployment.get
+    description: "Get detailed deployment information"
+    risk_category: safe
+    confirm_by_default: false
+  - name: platform.deployment.deploy
+    description: "Deploy an automation as a live instance"
+    risk_category: moderate
+    confirm_by_default: false
+  - name: platform.deployment.pause
+    description: "Pause an active deployment"
+    risk_category: moderate
+    confirm_by_default: false
+  - name: platform.deployment.resume
+    description: "Resume a paused deployment"
+    risk_category: moderate
+    confirm_by_default: false
+  - name: platform.deployment.teardown
+    description: "Permanently tear down a deployment"
+    risk_category: destructive
+    confirm_by_default: true
+  - name: platform.deployment.run_now
+    description: "Trigger an immediate run of a deployment"
+    risk_category: moderate
+    confirm_by_default: false
+
+  # platform.sink
+  - name: platform.sink.list
+    description: "List all sink definitions"
+    risk_category: safe
+    confirm_by_default: false
+  - name: platform.sink.get
+    description: "Get detailed sink information"
+    risk_category: safe
+    confirm_by_default: false
+  - name: platform.sink.create
+    description: "Create a new sink definition"
+    risk_category: moderate
+    confirm_by_default: false
+  - name: platform.sink.update
+    description: "Update a sink definition"
+    risk_category: moderate
+    confirm_by_default: false
+  - name: platform.sink.delete
+    description: "Delete a sink definition"
+    risk_category: destructive
+    confirm_by_default: true

@@ -9,7 +9,7 @@ import { useUIStore } from '@/stores/uiStore'
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
 import { getShortcutDisplay } from '@/lib/keyboard'
 import { onQuickKnowledgeOpen, type QuickKnowledgeType } from '@/lib/quick-knowledge'
-import { agentsRoute, outputsRoute, automationsRoute, chatRoute, dashboardRoute, deploymentsRoute, knowledgeRoute, runsRoute, searchRoute } from '@/lib/routes'
+import { agentsRoute, sinksRoute, automationsRoute, chatRoute, dashboardRoute, deploymentsRoute, knowledgeRoute, runsRoute, searchRoute } from '@/lib/routes'
 import CommandPalette from '@/components/shared/CommandPalette'
 import CreateDispatcher from '@/components/knowledge/create/CreateDispatcher'
 import KnowledgeTypeGrid from '@/components/knowledge/KnowledgeTypeGrid'
@@ -287,10 +287,10 @@ export default function AppShell() {
         description: 'Automated workflows that run agents on triggers and schedules.',
       }
     }
-    if (location.pathname.includes('/outputs')) {
+    if (location.pathname.includes('/sinks')) {
       return {
-        title: 'Outputs',
-        description: 'Persistent outputs produced by workspace runs and automations.',
+        title: 'Sinks',
+        description: 'Define what happens with agent output values in automations.',
       }
     }
     if (location.pathname.includes('/deployments')) {
@@ -328,7 +328,7 @@ export default function AppShell() {
     automations: automationsRoute(),
     deployments: deploymentsRoute(),
     runs: runsRoute(),
-    outputs: outputsRoute(),
+    sinks: sinksRoute(),
     settings: '/settings',
   }), [workspaceId])
 
@@ -341,7 +341,7 @@ export default function AppShell() {
   const isRunsPage = location.pathname.includes('/runs')
   const isAgentsPage = location.pathname.includes('/agents')
   const isAutomationsPage = location.pathname.includes('/automations')
-  const isOutputsPage = location.pathname.includes('/outputs')
+  const isSinksPage = location.pathname.includes('/sinks')
   const isDeploymentsPage = location.pathname.includes('/deployments')
   const isPrimarySurface = (
     isDashboard
@@ -353,7 +353,7 @@ export default function AppShell() {
     || isRunsPage
     || isAgentsPage
     || isAutomationsPage
-    || isOutputsPage
+    || isSinksPage
     || isDeploymentsPage
   )
 

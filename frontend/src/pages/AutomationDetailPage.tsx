@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Check, Pencil, Rocket, Trash2, X, Zap } from 'lucide-react'
+import { ArrowLeft, Check, Copy, Pencil, Rocket, Trash2, X, Zap } from 'lucide-react'
 
 import AutomationConfigSiderail from '@/components/automations/AutomationConfigSiderail'
 import AutomationGraphEditor, { type AutomationGraphEditorHandle } from '@/components/automations/AutomationGraphEditor'
@@ -96,6 +96,7 @@ export default function AutomationDetailPage() {
   )
   const isViewingVersion = Boolean(viewingVersion && versionSnapshot)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [isDuplicating, setIsDuplicating] = useState(false)
   const [showDeployDialog, setShowDeployDialog] = useState(false)
   const [deployInputValues, setDeployInputValues] = useState<Record<string, unknown>>({})
   const [deployTriggerType, setDeployTriggerType] = useState<'manual' | 'cron' | 'interval'>('manual')
@@ -205,6 +206,36 @@ export default function AutomationDetailPage() {
     setIsEditing(true)
   }
 
+  const handleDuplicate = async () => {
+    if (!automation) return
+    setIsDuplicating(true)
+    try {
+      const copy = await createAutomation.mutateAsync({
+        name: `${automation.name} (Copy)`,
+        slug: `${automation.slug}-copy`,
+        description: automation.description ?? undefined,
+        icon: automation.icon ?? undefined,
+        tags: automation.tags,
+      })
+      // Copy the graph if there is one
+      if (graphData?.nodes?.length) {
+        await saveGraphMutation.mutateAsync({
+          id: copy.id,
+          graph: {
+            nodes: graphData.nodes,
+            edges: graphData.edges ?? [],
+            static_inputs: graphData.static_inputs ?? [],
+          },
+        })
+      }
+      navigate(`/automations/${copy.id}`)
+    } catch {
+      // handled by global interceptor
+    } finally {
+      setIsDuplicating(false)
+    }
+  }
+
   // ── Loading / error states ──
   if (!isCreateMode && isLoading) return <LoadingState label="Loading automation..." />
   if (!isCreateMode && (error || !automation)) return <ErrorState message="Automation could not be loaded." />
@@ -297,6 +328,15 @@ export default function AutomationDetailPage() {
                     >
                       <Rocket className="h-3.5 w-3.5" />
                       {deployAutomation.isPending ? 'Deploying...' : 'Deploy'}
+                    </button>
+                  )}
+                  {!isCreateMode && (
+                    <button
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border/25 bg-background/40 px-3 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground hover:bg-muted/30"
+                      onClick={handleDuplicate}
+                      disabled={isDuplicating}
+                    >
+                      <Copy className="w-3.5 h-3.5" /> {isDuplicating ? 'Duplicating...' : 'Duplicate'}
                     </button>
                   )}
                   <button

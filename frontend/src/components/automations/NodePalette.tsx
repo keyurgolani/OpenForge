@@ -1,5 +1,6 @@
 import { Bot, GripVertical } from 'lucide-react'
 import type { ParameterConfig } from '@/types/agents'
+import { SINK_TYPE_INFO } from '@/types/sinks'
 
 interface Agent {
   id: string
@@ -15,14 +16,12 @@ export interface SinkTypeDefinition {
   inputHandles: Array<{ key: string; label: string }>
 }
 
-export const SINK_TYPES: SinkTypeDefinition[] = [
-  { type: 'article', label: 'Article', inputHandles: [{ key: 'content', label: 'Content' }, { key: 'title', label: 'Title' }] },
-  { type: 'knowledge_create', label: 'Knowledge Create', inputHandles: [{ key: 'content', label: 'Content' }, { key: 'title', label: 'Title' }, { key: 'workspace_id', label: 'Workspace' }] },
-  { type: 'knowledge_update', label: 'Knowledge Update', inputHandles: [{ key: 'content', label: 'Content' }, { key: 'knowledge_id', label: 'Knowledge ID' }] },
-  { type: 'rest_api', label: 'REST API', inputHandles: [{ key: 'body', label: 'Body' }, { key: 'url', label: 'URL' }] },
-  { type: 'notification', label: 'Notification', inputHandles: [{ key: 'message', label: 'Message' }] },
-  { type: 'log', label: 'Log', inputHandles: [{ key: 'data', label: 'Data' }] },
-]
+/** Derive fallback sink type list from canonical SINK_TYPE_INFO (all inputs become handles) */
+export const SINK_TYPES: SinkTypeDefinition[] = SINK_TYPE_INFO.map(info => ({
+  type: info.type,
+  label: info.label,
+  inputHandles: info.inputs.map(i => ({ key: i.key, label: i.label })),
+}))
 
 interface NodePaletteProps {
   agents: Agent[]

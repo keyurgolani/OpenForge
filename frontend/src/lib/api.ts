@@ -13,6 +13,7 @@ import type {
     OutputVersionCreate,
     OutputVersionsResponse,
 } from '@/types/outputs'
+import type { Sink, SinkCreate, SinkUpdate, SinksResponse, SinkQueryParams } from '@/types/sinks'
 import type { Checkpoint, Run, RunCompositeDebug, RunLineage, RunStep, RuntimeEvent } from '@/types/runs'
 import type {
     AgentDefinition,
@@ -418,6 +419,18 @@ export const addOutputSink = (
     data: Pick<OutputSink, 'sink_type' | 'sink_state' | 'destination_ref' | 'sync_status' | 'metadata'>,
 ): Promise<OutputSink> => api.post(`/outputs/${id}/sinks`, data).then(r => r.data)
 
+// ── Sinks ──
+export const listSinks = (params?: SinkQueryParams): Promise<SinksResponse> =>
+    api.get('/sinks', { params }).then(r => {
+        const d = r.data
+        return { sinks: d.sinks ?? [], total: d.total ?? 0 }
+    })
+export const getSink = (id: string): Promise<Sink> => api.get(`/sinks/${id}`).then(r => r.data)
+export const createSink = (data: SinkCreate): Promise<Sink> => api.post('/sinks', data).then(r => r.data)
+export const updateSink = (id: string, data: SinkUpdate): Promise<Sink> =>
+    api.patch(`/sinks/${id}`, data).then(r => r.data)
+export const deleteSink = (id: string): Promise<void> => api.delete(`/sinks/${id}`)
+
 // ── Agents ──
 export const listAgents = (params?: { skip?: number; limit?: number }): Promise<AgentDefinitionListResponse> =>
     api.get('/agents', { params }).then(r => r.data)
@@ -460,7 +473,7 @@ export const getAutomationVersion = async (id: string, versionId: string) =>
     (await api.get(`/automations/${id}/versions/${versionId}`)).data
 
 // --- Deployments ---
-export const deployAutomation = async (automationId: string, data: { workspace_id: string; input_values: Record<string, unknown>; schedule_expression?: string }) =>
+export const deployAutomation = async (automationId: string, data: { workspace_id: string; input_values: Record<string, unknown>; schedule_expression?: string; interval_seconds?: number }) =>
     (await api.post(`/automations/${automationId}/deploy`, data)).data
 export const listDeployments = async (params?: { status?: string; automation_id?: string; workspace_id?: string; skip?: number; limit?: number }) =>
     (await api.get('/deployments', { params })).data
