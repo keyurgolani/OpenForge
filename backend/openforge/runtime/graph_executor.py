@@ -24,6 +24,19 @@ from openforge.runtime.template_engine import render
 
 logger = logging.getLogger("openforge.runtime.graph_executor")
 
+
+def _sanitize_pg_json(value):
+    """Strip null bytes that PostgreSQL JSONB columns reject."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, list):
+        return [_sanitize_pg_json(item) for item in value]
+    if isinstance(value, dict):
+        return {k: _sanitize_pg_json(v) for k, v in value.items()}
+    return value
+
 # Pattern to extract the ```output ... ``` fenced block that the automation
 # preamble instructs agents to produce.
 _FENCED_OUTPUT_RE = re.compile(
@@ -420,7 +433,7 @@ class GraphExecutor:
 
             # 4. Update child run
             child_run.status = "completed"
-            child_run.output_payload = result
+            child_run.output_payload = _sanitize_pg_json(result)
             child_run.completed_at = datetime.now(timezone.utc)
             await self.db.flush()
 

@@ -29,6 +29,18 @@ from openforge.runtime.tool_loop import (
     execute_tool_loop,
 )
 
+def _sanitize_pg_json(value):
+    """Strip null bytes that PostgreSQL JSONB columns reject."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, list):
+        return [_sanitize_pg_json(item) for item in value]
+    if isinstance(value, dict):
+        return {k: _sanitize_pg_json(v) for k, v in value.items()}
+    return value
+
 if TYPE_CHECKING:
     from openforge.runtime.event_publisher import EventPublisher
     from openforge.integrations.tools.dispatcher import ToolDispatcher
@@ -224,7 +236,7 @@ async def execute_agent(
             "was_cancelled": result.was_cancelled,
         }
         transition_run(run, "completed")
-        run.output_payload = output
+        run.output_payload = _sanitize_pg_json(output)
         await db.commit()
 
         if event_publisher:
