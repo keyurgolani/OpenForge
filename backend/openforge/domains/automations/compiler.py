@@ -132,14 +132,23 @@ class AutomationBlueprintCompiler:
                 "output_definitions": output_defs,
             }
 
-            # Build wired inputs for this node
-            wired_inputs: dict[str, dict] = {}
+            # Build wired inputs for this node (supports fan-in: multiple
+            # sources can wire to the same target input key).
+            wired_inputs: dict[str, list | dict] = {}
             for edge in blueprint.edges:
                 if edge.target_node_key == node_bp.node_key:
-                    wired_inputs[edge.target_input_key] = {
+                    source_info = {
                         "source_node_key": edge.source_node_key,
                         "source_output_key": edge.source_output_key,
                     }
+                    if edge.target_input_key in wired_inputs:
+                        existing = wired_inputs[edge.target_input_key]
+                        if isinstance(existing, dict):
+                            wired_inputs[edge.target_input_key] = [existing, source_info]
+                        else:
+                            existing.append(source_info)
+                    else:
+                        wired_inputs[edge.target_input_key] = source_info
 
             # Build static inputs for this node
             static_vals: dict[str, object] = {}

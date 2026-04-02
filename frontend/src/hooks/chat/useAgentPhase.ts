@@ -158,10 +158,10 @@ export function useAgentPhase(emitter: AgentEmitter) {
       }])
     }
 
-    const onToolCallResult = (data: { call_id: string; success: boolean; output?: unknown; error?: string | null; duration_ms?: number | null }) => {
+    const onToolCallResult = (data: { call_id: string; success: boolean; output?: unknown; error?: string | null; duration_ms?: number | null; nested_timeline?: unknown[] | null; delegated_conversation_id?: string | null }) => {
       setTimeline((prev) => prev.map((item) =>
         item.type === 'tool_call' && item.call_id === data.call_id
-          ? { ...item, status: data.success ? 'complete' as const : 'error' as const, success: data.success, output: data.output, error: data.error, duration_ms: data.duration_ms }
+          ? { ...item, status: data.success ? 'complete' as const : 'error' as const, success: data.success, output: data.output, error: data.error, duration_ms: data.duration_ms, nested_timeline: (data.nested_timeline as TimelineItem[] | null) ?? item.nested_timeline ?? null }
           : item
       ))
     }
@@ -304,6 +304,103 @@ export function useAgentPhase(emitter: AgentEmitter) {
       }
     }
 
+    /**
+     * Apply an inner event to a mutable TimelineItem[] (the nested_timeline at the target depth).
+     * Returns the mutated array for convenience.
+     */
+    function applyInnerEvent(target: TimelineItem[], inner: { type: string; data: unknown }): TimelineItem[] {
+      switch (inner.type) {
+        case 'agent_thinking': {
+          const last = target[target.length - 1]
+          if (!last || last.type !== 'thinking' || last.status !== 'running') {
+            target.push({
+              type: 'thinking',
+              id: `nested-thinking-${Date.now()}`,
+              status: 'running',
+              duration_ms: null,
+              sentences: [],
+            })
+          }
+          break
+        }
+        case 'agent_tool_call_start': {
+          const d = inner.data as { call_id: string; tool_name: string; arguments: Record<string, unknown> }
+          const lastThinking = target[target.length - 1]
+          if (lastThinking?.type === 'thinking' && lastThinking.status === 'running') {
+            target[target.length - 1] = { ...lastThinking, status: 'complete' }
+          }
+          target.push({
+            type: 'tool_call',
+            call_id: d.call_id,
+            tool_name: d.tool_name,
+            arguments: d.arguments,
+            status: 'running',
+            hitl: null,
+          })
+          break
+        }
+        case 'agent_tool_call_result': {
+          const d = inner.data as { call_id: string; success: boolean; output?: unknown; error?: string | null; duration_ms?: number | null; nested_timeline?: unknown[] | null }
+          for (let i = target.length - 1; i >= 0; i--) {
+            const entry = target[i]
+            if (entry.type === 'tool_call' && entry.call_id === d.call_id) {
+              target[i] = {
+                ...entry,
+                status: d.success ? 'complete' : 'error',
+                success: d.success,
+                output: d.output,
+                error: d.error,
+                duration_ms: d.duration_ms,
+                nested_timeline: (d.nested_timeline as TimelineItem[] | null) ?? entry.nested_timeline ?? null,
+              }
+              break
+            }
+          }
+          break
+        }
+      }
+      return target
+    }
+
+    /** Apply a nested subagent event, navigating call_id_path for deep nesting. */
+    const onNestedEvent = (data: { call_id?: string; call_id_path?: string[]; scope_path?: number[]; event: { type: string; data: unknown } }) => {
+      const path = data.call_id_path ?? (data.call_id ? [data.call_id] : [])
+      if (path.length === 0) return
+
+      setTimeline((prev) => {
+        // Deep-clone along the path so React detects changes
+        const updated = [...prev]
+
+        // Navigate the call_id_path: each element is the call_id of a tool_call
+        // whose nested_timeline we descend into.
+        let currentLevel = updated
+        for (let depth = 0; depth < path.length; depth++) {
+          const cid = path[depth]
+          const idx = currentLevel.findIndex(
+            (item) => item.type === 'tool_call' && item.call_id === cid,
+          )
+          if (idx === -1) return prev // path not found
+
+          const item = currentLevel[idx]
+          if (item.type !== 'tool_call') return prev
+
+          if (depth < path.length - 1) {
+            // Intermediate level: descend into nested_timeline
+            const nested = [...(item.nested_timeline ?? [])]
+            currentLevel[idx] = { ...item, nested_timeline: nested }
+            currentLevel = nested
+          } else {
+            // Deepest level: apply the inner event here
+            const nested = [...(item.nested_timeline ?? [])]
+            applyInnerEvent(nested, data.event)
+            currentLevel[idx] = { ...item, nested_timeline: nested }
+          }
+        }
+
+        return updated
+      })
+    }
+
     emitter.on('thinking_chunk', onThinking)
     emitter.on('token', onToken)
     emitter.on('tool_call_start', onToolCallStart)
@@ -315,6 +412,7 @@ export function useAgentPhase(emitter: AgentEmitter) {
     emitter.on('error', onError)
     emitter.on('intermediate_response', onIntermediateResponse)
     emitter.on('snapshot', onSnapshot)
+    emitter.on('nested_event', onNestedEvent)
 
     return () => {
       emitter.off('thinking_chunk', onThinking)
@@ -328,6 +426,7 @@ export function useAgentPhase(emitter: AgentEmitter) {
       emitter.off('error', onError)
       emitter.off('intermediate_response', onIntermediateResponse)
       emitter.off('snapshot', onSnapshot)
+      emitter.off('nested_event', onNestedEvent)
     }
   }, [emitter, finalizeActiveThinking])
 

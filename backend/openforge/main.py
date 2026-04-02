@@ -259,12 +259,18 @@ async def lifespan(app: FastAPI):
     # Seed agent & automation templates
     try:
         from openforge.db.postgres import AsyncSessionLocal
-        from openforge.templates import seed_agent_templates, seed_automation_templates
+        from openforge.templates import (
+            seed_agent_templates, seed_automation_templates, seed_skill_templates,
+            seed_sink_templates, seed_mcp_recommendations,
+        )
 
         async with AsyncSessionLocal() as db:
             await seed_agent_templates(db)
             await seed_automation_templates(db)
-        logger.info("Agent and automation templates seeded.")
+            await seed_skill_templates(db)
+            await seed_sink_templates(db)
+            await seed_mcp_recommendations(db)
+        logger.info("Agent, automation, skill, sink, and MCP templates seeded.")
     except Exception as e:
         logger.warning("Template seeding skipped: %s", e)
 

@@ -112,10 +112,15 @@ TOOL_ALIASES: dict[str, str] = {
     "agent.list_agents":            "platform.agent.list_agents",
     "agent.get_agent":              "platform.agent.get_agent",
 
+    "agent.create_agent":           "platform.agent.create_agent",
+    "agent.update_agent":           "platform.agent.update_agent",
+
     # Unprefixed agent shorthands
     "invoke_agent":                 "platform.agent.invoke",
     "list_agents":                  "platform.agent.list_agents",
     "get_agent":                    "platform.agent.get_agent",
+    "create_agent":                 "platform.agent.create_agent",
+    "update_agent":                 "platform.agent.update_agent",
 
     # ── Legacy chat aliases → platform.chat.* ──
     "agent.list_chats":             "platform.chat.list_chats",
@@ -179,6 +184,22 @@ TOOL_ALIASES: dict[str, str] = {
     "memory.retrieve":              "memory.recall",
     "memory.delete":                "memory.forget",
     "memory.remove":                "memory.forget",
+
+    # ── New tool aliases ──
+    "http.news_search":             "http.search_news",
+    "search_news":                  "http.search_news",
+    "news_search":                  "http.search_news",
+    "http.fetch_pages":             "http.fetch_multiple",
+    "http.fetch_urls":              "http.fetch_multiple",
+    "fetch_multiple":               "http.fetch_multiple",
+    "fetch_pages":                  "http.fetch_multiple",
+    "workspace.update_knowledge":   "platform.workspace.update_knowledge",
+    "workspace.edit_knowledge":     "platform.workspace.update_knowledge",
+    "workspace.modify_knowledge":   "platform.workspace.update_knowledge",
+    "update_knowledge":             "platform.workspace.update_knowledge",
+    "workspace.knowledge_stats":    "platform.workspace.knowledge_stats",
+    "workspace.stats":              "platform.workspace.knowledge_stats",
+    "knowledge_stats":              "platform.workspace.knowledge_stats",
 }
 
 

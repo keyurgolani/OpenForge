@@ -1,4 +1,5 @@
 import json
+from urllib.parse import urlparse
 
 import httpx
 from protocol import BaseTool, ToolContext, ToolResult
@@ -79,11 +80,14 @@ class SearchWebTool(BaseTool):
 
         results = []
         for r in data.get("results", [])[:max_results]:
+            url = r.get("url", "")
             results.append({
                 "title": r.get("title", ""),
-                "url": r.get("url", ""),
+                "url": url,
                 "snippet": r.get("content", ""),
                 "engine": r.get("engine", ""),
+                "published_date": r.get("publishedDate", ""),
+                "source_domain": urlparse(url).netloc if url else "",
             })
 
         if not results:

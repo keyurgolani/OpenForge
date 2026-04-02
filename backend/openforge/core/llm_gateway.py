@@ -31,7 +31,7 @@ PREFIX_MAP = {
     "openrouter":       "openrouter/",
     "xai":              "xai/",
     "cohere":           "cohere/",
-    "zhipuai":          "zhipuai/",
+    "zhipuai":          "openai/",    # OpenAI-compatible API; routed via base_url
     "huggingface":      "huggingface/",
     "custom-openai":    "",       # user sets base_url; model name passed as-is
     "custom-anthropic": "anthropic/",

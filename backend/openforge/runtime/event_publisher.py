@@ -23,8 +23,6 @@ class EventPublisher:
         record = RuntimeEventModel(
             run_id=event.run_id,
             step_id=event.step_id,
-            workflow_id=event.workflow_id,
-            workflow_version_id=event.workflow_version_id,
             node_id=event.node_id,
             node_key=event.node_key,
             event_type=event.event_type,
@@ -38,8 +36,6 @@ class EventPublisher:
             "id": record.id,
             "run_id": record.run_id,
             "step_id": record.step_id,
-            "workflow_id": record.workflow_id,
-            "workflow_version_id": record.workflow_version_id,
             "node_id": record.node_id,
             "node_key": record.node_key,
             "event_type": record.event_type,

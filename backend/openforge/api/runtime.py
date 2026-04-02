@@ -25,6 +25,12 @@ class DelegationRequest(BaseModel):
     parent_workspace_id: Optional[str] = None
     execution_chain_id: Optional[str] = None
     scope_path: Optional[list[int]] = None
+    call_id: Optional[str] = None
+    # Root forwarding context for deep nesting (2+ levels)
+    root_execution_id: Optional[str] = None
+    root_conversation_id: Optional[str] = None
+    root_workspace_id: Optional[str] = None
+    call_id_path: Optional[list[str]] = None
 
 
 class DelegationResponse(BaseModel):
@@ -57,6 +63,8 @@ async def invoke_delegation(req: DelegationRequest, db: AsyncSession = Depends(g
 
     parent_conversation_id: UUID | None = None
     parent_workspace_id: UUID | None = None
+    root_conversation_id: UUID | None = None
+    root_workspace_id: UUID | None = None
     if req.parent_conversation_id:
         try:
             parent_conversation_id = UUID(req.parent_conversation_id)
@@ -67,6 +75,16 @@ async def invoke_delegation(req: DelegationRequest, db: AsyncSession = Depends(g
             parent_workspace_id = UUID(req.parent_workspace_id)
         except ValueError:
             parent_workspace_id = None
+    if req.root_conversation_id:
+        try:
+            root_conversation_id = UUID(req.root_conversation_id)
+        except ValueError:
+            root_conversation_id = None
+    if req.root_workspace_id:
+        try:
+            root_workspace_id = UUID(req.root_workspace_id)
+        except ValueError:
+            root_workspace_id = None
 
     try:
         result = await chat_handler.execute_subagent(
@@ -79,6 +97,11 @@ async def invoke_delegation(req: DelegationRequest, db: AsyncSession = Depends(g
             parent_workspace_id=parent_workspace_id,
             scope_path=req.scope_path,
             execution_chain_id=req.execution_chain_id,
+            call_id=req.call_id,
+            root_execution_id=req.root_execution_id,
+            root_conversation_id=root_conversation_id,
+            root_workspace_id=root_workspace_id,
+            call_id_path=req.call_id_path,
         )
         return DelegationResponse(**result)
     except Exception as exc:

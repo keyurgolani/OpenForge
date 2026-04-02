@@ -18,7 +18,7 @@ class ListDeploymentsTool(BaseTool):
             "List all deployments in the system. A deployment is a live instance of an automation "
             "with concrete input values and an attached trigger. "
             "Returns deployment IDs, automation names, statuses, trigger types, and timing info. "
-            "Optionally filter by status (active, paused, torn_down), automation_id, or workspace_id."
+            "Optionally filter by status (active, paused, torn_down) or automation_id."
         )
 
     @property
@@ -34,10 +34,6 @@ class ListDeploymentsTool(BaseTool):
                     "type": "string",
                     "description": "Filter by the source automation ID",
                 },
-                "workspace_id": {
-                    "type": "string",
-                    "description": "Filter by workspace ID",
-                },
                 "limit": {
                     "type": "integer",
                     "default": 50,
@@ -49,7 +45,7 @@ class ListDeploymentsTool(BaseTool):
     async def execute(self, params: dict, context: ToolContext) -> ToolResult:
         url = f"{context.main_app_url}/api/v1/deployments"
         query: dict = {"limit": params.get("limit", 50)}
-        for key in ("status", "automation_id", "workspace_id"):
+        for key in ("status", "automation_id"):
             if key in params:
                 query[key] = params[key]
         try:
@@ -63,7 +59,6 @@ class ListDeploymentsTool(BaseTool):
                     "id": d.get("id"),
                     "automation_id": d.get("automation_id"),
                     "automation_name": d.get("automation_name"),
-                    "workspace_id": d.get("workspace_id"),
                     "status": d.get("status"),
                     "trigger_type": d.get("trigger_type"),
                     "schedule_expression": d.get("schedule_expression"),

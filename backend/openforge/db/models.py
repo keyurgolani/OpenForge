@@ -1125,7 +1125,7 @@ class AutomationEdgeModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
 
     __table_args__ = (
-        UniqueConstraint("automation_id", "target_node_id", "target_input_key", name="uq_automation_edges_target_input"),
+        Index("ix_automation_edges_target", "automation_id", "target_node_id", "target_input_key"),
     )
 
 
@@ -1147,3 +1147,17 @@ class AutomationNodeInputModel(Base):
     __table_args__ = (
         UniqueConstraint("node_id", "input_key", name="uq_automation_node_inputs_node_input"),
     )
+
+
+class SkillTemplateModel(Base):
+    """A built-in skill template that agents can reference for domain expertise."""
+    __tablename__ = "skill_templates"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    tags: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)

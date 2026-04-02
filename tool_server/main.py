@@ -24,6 +24,16 @@ logger = logging.getLogger("tool_server")
 async def lifespan(app: FastAPI):
     registry.auto_discover("tools")
     logger.info("Tool registry loaded %d tools", len(registry.list_tools()))
+
+    # Seed built-in and Tier 1 external skills (idempotent, non-blocking)
+    try:
+        from seed_skills import seed_native_skills, seed_external_skills
+
+        seed_native_skills(settings.skills_dir)
+        await seed_external_skills(settings.skills_root, settings.skills_dir)
+    except Exception:
+        logger.warning("Skill seeding failed; continuing startup", exc_info=True)
+
     yield
 
 

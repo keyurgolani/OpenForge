@@ -10,7 +10,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 from uuid import UUID
 
 from fastapi import WebSocket
@@ -183,6 +183,7 @@ class _AgentCompat:
 
 async def _persist_tool_call_log(
     *,
+    session_factory=None,
     workspace_id: UUID | None,
     conversation_id: UUID,
     call_id: str,
@@ -195,8 +196,6 @@ async def _persist_tool_call_log(
     started_at: datetime,
     finished_at: datetime,
 ) -> None:
-    from openforge.db.postgres import AsyncSessionLocal
-
     output_text: str | None = None
     if output is not None:
         if isinstance(output, str):
@@ -207,7 +206,10 @@ async def _persist_tool_call_log(
             except Exception:
                 output_text = str(output)[:_MAX_OUTPUT_LOG_CHARS]
     try:
-        async with AsyncSessionLocal() as db:
+        if session_factory is None:
+            from openforge.db.postgres import AsyncSessionLocal
+            session_factory = AsyncSessionLocal
+        async with session_factory() as db:
             db.add(
                 ToolCallLog(
                     workspace_id=workspace_id,
@@ -780,8 +782,13 @@ class ChatHandler:
         parent_workspace_id: UUID | None = None,
         scope_path: list[int] | None = None,
         execution_chain_id: str | None = None,
+        call_id: str | None = None,
+        root_execution_id: str | None = None,
+        root_conversation_id: UUID | None = None,
+        root_workspace_id: UUID | None = None,
+        call_id_path: list[str] | None = None,
     ) -> dict[str, Any]:
-        del parent_execution_id, parent_conversation_id, parent_workspace_id, scope_path, execution_chain_id
+        del execution_chain_id
 
         # Resolve target agent via agent_registry
         target_spec = None
@@ -802,6 +809,35 @@ class ChatHandler:
         await db.commit()
         await db.refresh(conversation)
 
+        # Determine forwarding target: always forward to the root parent so
+        # that arbitrarily deep subagent chains stream to the top-level WS.
+        fwd_execution_id = root_execution_id or parent_execution_id
+        fwd_conversation_id = root_conversation_id or parent_conversation_id
+        fwd_workspace_id = root_workspace_id or parent_workspace_id
+        fwd_call_id_path = call_id_path if call_id_path else ([call_id] if call_id else [])
+
+        event_forwarder: Callable[[str, dict[str, Any]], Any] | None = None
+        if fwd_execution_id and (fwd_conversation_id or fwd_workspace_id):
+            async def _forward(event_type: str, event_data: dict[str, Any]) -> None:
+                await self._publish(
+                    fwd_execution_id,
+                    fwd_workspace_id,
+                    "agent_nested_event",
+                    conversation_id=fwd_conversation_id,
+                    data={
+                        "call_id": fwd_call_id_path[-1] if fwd_call_id_path else call_id,
+                        "call_id_path": fwd_call_id_path,
+                        "scope_path": scope_path or [],
+                        "event": {"type": event_type, "data": event_data},
+                    },
+                )
+            event_forwarder = _forward
+
+        # Pass root context so deeper subagent invocations also forward to root
+        _root_exec = fwd_execution_id or parent_execution_id
+        _root_conv = str(fwd_conversation_id) if fwd_conversation_id else (str(parent_conversation_id) if parent_conversation_id else None)
+        _root_ws = str(fwd_workspace_id) if fwd_workspace_id else (str(parent_workspace_id) if parent_workspace_id else None)
+
         execution_id = str(uuid.uuid4())
         await self.run(
             workspace_id=workspace_id,
@@ -810,6 +846,11 @@ class ChatHandler:
             db=db,
             execution_id=execution_id,
             mentions=[],
+            event_forwarder=event_forwarder,
+            root_execution_id=_root_exec,
+            root_conversation_id=_root_conv,
+            root_workspace_id=_root_ws,
+            call_id_path=fwd_call_id_path,
         )
 
         latest_result = await db.execute(
@@ -819,10 +860,12 @@ class ChatHandler:
             .limit(1)
         )
         message = latest_result.scalar_one_or_none()
+        _agent_slug = target_spec.agent_slug if target_spec else None
         return {
             "response": message.content if message else "",
             "timeline": message.timeline if message and message.timeline else [],
             "conversation_id": str(conversation.id),
+            "agent_name": _agent_slug,
         }
 
     async def run(
@@ -837,6 +880,11 @@ class ChatHandler:
         provider_id: str | None = None,
         model_id: str | None = None,
         mentions: list[dict[str, Any]] | None = None,
+        event_forwarder: Callable[[str, dict[str, Any]], Any] | None = None,
+        root_execution_id: str | None = None,
+        root_conversation_id: str | None = None,
+        root_workspace_id: str | None = None,
+        call_id_path: list[str] | None = None,
     ) -> None:
         """Main chat execution loop.
 
@@ -963,6 +1011,13 @@ class ChatHandler:
                 # the expected input variables.
                 if extraction.get("extraction_failed"):
                     logger.info("Input extraction failed; falling through to agent execution")
+                    # Fallback: use the user's raw message as the first required param
+                    # so the system prompt template renders with meaningful content
+                    # instead of empty placeholders.
+                    for param in (agent._spec.input_schema or []):
+                        if param.get("required", True) and param.get("name"):
+                            input_values.setdefault(param["name"], user_content)
+                            break
                 elif not extraction.get("all_filled") and extraction.get("follow_up"):
                     follow_up = extraction["follow_up"].strip()
                     follow_up_message = await conversation_service.add_message(
@@ -1207,6 +1262,8 @@ class ChatHandler:
 
             await self._publish(execution_id, workspace_id, "agent_model_selection", conversation_id=conversation_id, data=model_selection_entry)
             await self._update_stream_state(execution_id, timeline=[model_selection_entry])
+            if event_forwarder:
+                await event_forwarder("agent_model_selection", model_selection_entry)
 
             # Build ToolLoopContext and streaming callbacks
             from openforge.runtime.tool_loop import ToolLoopContext, ToolLoopCallbacks, ToolLoopResult, execute_tool_loop
@@ -1229,6 +1286,12 @@ class ChatHandler:
             if workspace_id is None and workspaces_data and len(workspaces_data) == 1:
                 _default_ws_id = str(workspaces_data[0]["id"])
 
+            # Build a session factory from the current db's engine so that
+            # side-channel operations (policy eval, HITL) get their own
+            # connections and don't conflict with the main session.
+            from sqlalchemy.ext.asyncio import async_sessionmaker as _asm
+            _side_session_factory = _asm(db.bind, expire_on_commit=False)
+
             loop_ctx = ToolLoopContext(
                 workspace_id=workspace_id,
                 conversation_id=conversation_id,
@@ -1240,7 +1303,12 @@ class ChatHandler:
                 hitl_service=hitl_service,
                 cancel_event=cancel_event,
                 db=db,
+                session_factory=_side_session_factory,
                 default_workspace_id=_default_ws_id,
+                root_execution_id=root_execution_id,
+                root_conversation_id=root_conversation_id,
+                root_workspace_id=root_workspace_id,
+                call_id_path=call_id_path or [],
             )
 
             def _effective_content() -> str:
@@ -1251,6 +1319,8 @@ class ChatHandler:
             async def _cb_thinking(chunk: str) -> None:
                 await self._publish(execution_id, workspace_id, "agent_thinking", conversation_id=conversation_id, data=chunk)
                 await self._update_stream_state(execution_id, content=_effective_content(), thinking=loop_result.full_thinking, tool_calls=loop_result.tool_calls, sources=context_sources, attachments_processed=all_attachments_processed, timeline=[model_selection_entry] + loop_result.timeline)
+                if event_forwarder:
+                    await event_forwarder("agent_thinking", {"data": chunk})
 
             async def _cb_token(token: str) -> None:
                 await self._publish(execution_id, workspace_id, "agent_token", conversation_id=conversation_id, data=token)
@@ -1259,10 +1329,14 @@ class ChatHandler:
             async def _cb_tool_start(call_id: str, tool_id: str, arguments: dict) -> None:
                 await self._publish(execution_id, workspace_id, "agent_tool_call_start", conversation_id=conversation_id, data={"call_id": call_id, "tool_name": tool_id, "arguments": arguments})
                 await self._update_stream_state(execution_id, content=_effective_content(), thinking=loop_result.full_thinking, tool_calls=loop_result.tool_calls, sources=context_sources, attachments_processed=all_attachments_processed, timeline=[model_selection_entry] + loop_result.timeline)
+                if event_forwarder:
+                    await event_forwarder("agent_tool_call_start", {"call_id": call_id, "tool_name": tool_id, "arguments": arguments})
 
             async def _cb_tool_result(call_id: str, tool_id: str, success: bool, error: str | None, output: Any = None, duration_ms: int | None = None, nested_timeline: list | None = None, delegated_conversation_id: str | None = None) -> None:
                 await self._publish(execution_id, workspace_id, "agent_tool_call_result", conversation_id=conversation_id, data={"call_id": call_id, "tool_name": tool_id, "success": success, "error": error, "output": output, "duration_ms": duration_ms, "nested_timeline": nested_timeline, "delegated_conversation_id": delegated_conversation_id})
                 await self._update_stream_state(execution_id, content=_effective_content(), thinking=loop_result.full_thinking, tool_calls=loop_result.tool_calls, sources=context_sources, attachments_processed=all_attachments_processed, timeline=[model_selection_entry] + loop_result.timeline)
+                if event_forwarder:
+                    await event_forwarder("agent_tool_call_result", {"call_id": call_id, "tool_name": tool_id, "success": success, "error": error, "output": output, "duration_ms": duration_ms, "nested_timeline": nested_timeline, "delegated_conversation_id": delegated_conversation_id})
 
             async def _cb_hitl_request(call_id: str, hitl_id: str, action_summary: str, risk_level: str) -> None:
                 await self._publish(execution_id, workspace_id, "agent_tool_hitl", conversation_id=conversation_id, data={"call_id": call_id, "hitl_id": hitl_id, "action_summary": action_summary, "risk_level": risk_level, "agent_id": agent.id, "status": "pending"})
@@ -1304,11 +1378,19 @@ class ChatHandler:
             intermediate_response_total = loop_result.intermediate_response_total
             timeline = [model_selection_entry] + loop_result.timeline
 
-            # Persist tool call logs for interactive mode
+            # Persist tool call logs for interactive mode.
+            # Derive a session factory from the current db so fire-and-forget
+            # tasks create sessions on the same engine/event-loop (required
+            # when running inside a Celery worker with its own loop).
+            from sqlalchemy.ext.asyncio import async_sessionmaker
+            _log_session_factory = async_sessionmaker(
+                db.bind, expire_on_commit=False,
+            )
             for entry in loop_result.timeline:
                 if entry.get("type") == "tool_call" and entry.get("success") is not None:
                     asyncio.create_task(
                         _persist_tool_call_log(
+                            session_factory=_log_session_factory,
                             workspace_id=workspace_id,
                             conversation_id=conversation_id,
                             call_id=entry.get("call_id", ""),

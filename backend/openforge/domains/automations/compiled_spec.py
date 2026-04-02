@@ -19,7 +19,7 @@ class CompiledNodeSpec(BaseModel):
     agent_spec_id: UUID
     input_schema: list[dict] = Field(default_factory=list)
     output_definitions: list[dict] = Field(default_factory=lambda: [{"key": "output", "type": "text"}])
-    wired_inputs: dict[str, dict] = Field(default_factory=dict)     # input_key -> {source_node_key, source_output_key}
+    wired_inputs: dict[str, Any] = Field(default_factory=dict)       # input_key -> dict (single) or list[dict] (fan-in)
     static_inputs: dict[str, Any] = Field(default_factory=dict)     # input_key -> value
     unfilled_inputs: list[dict] = Field(default_factory=list)       # remaining required inputs
 

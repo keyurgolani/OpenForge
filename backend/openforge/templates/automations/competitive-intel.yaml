@@ -1,0 +1,46 @@
+name: Competitive Intelligence Monitor
+slug: competitive-intel
+description: >
+  Monitors competitors by combining news scanning, web research,
+  and content synthesis into a structured competitive intelligence report.
+tags:
+  - competitive
+  - intelligence
+  - monitoring
+  - template
+nodes:
+  - agent_slug: news-digest
+    node_key: competitor_news
+    static_inputs:
+      digest_period: last_week
+      max_items: 20
+  - agent_slug: deep-researcher
+    node_key: deep_dive
+    static_inputs:
+      depth: standard
+      source_preference: news
+  - agent_slug: content-builder
+    node_key: intel_report
+    static_inputs:
+      content_type: report
+      tone: professional
+      length: medium
+wiring:
+  - from: competitor_news.digest
+    to: deep_dive.topic
+  - from: deep_dive.research_brief
+    to: intel_report.subject
+deployment_inputs:
+  - competitor_news.topics
+  - intel_report.audience
+suggested_trigger:
+  type: cron
+  expression: "0 8 * * 1"
+  description: "Every Monday at 8 AM"
+sinks:
+  - type: knowledge_create
+    node_key: save_intel
+    wired_from: intel_report.output
+    config:
+      knowledge_type: document
+      title_template: "Competitive Intel - Week of {{date}}"

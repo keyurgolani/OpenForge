@@ -40,8 +40,13 @@ class ToolDispatcher:
         execution_id: str,
         conversation_id: str = "",
         agent_id: str = "",
+        timeout: float | None = None,
     ) -> dict[str, Any]:
-        """Execute a tool via the tool server REST API."""
+        """Execute a tool via the tool server REST API.
+
+        Args:
+            timeout: Optional timeout in seconds. None means no timeout.
+        """
         payload = {
             "tool_id": tool_id,
             "params": params,
@@ -56,7 +61,7 @@ class ToolDispatcher:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            async with httpx.AsyncClient(timeout=timeout) as client:
                 resp = await client.post(
                     f"{self._base_url()}/tools/execute",
                     json=payload,

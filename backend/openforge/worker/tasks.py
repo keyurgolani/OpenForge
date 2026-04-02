@@ -12,6 +12,19 @@ from openforge.worker.celery_app import celery_app
 logger = logging.getLogger("openforge.worker.tasks")
 
 
+def _sanitize_pg_json(value):
+    """Strip null bytes that PostgreSQL JSONB columns reject."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, list):
+        return [_sanitize_pg_json(item) for item in value]
+    if isinstance(value, dict):
+        return {k: _sanitize_pg_json(v) for k, v in value.items()}
+    return value
+
+
 @celery_app.task(name="agent.execute", bind=True, max_retries=0)
 def execute_agent_task(self, execution_id: str, **kwargs):
     """Celery task that runs the agent execution engine in an asyncio event loop."""
@@ -118,7 +131,7 @@ async def _run_strategy(run_id: str):
                         deployment_inputs = (run.input_payload or {}).get("input_values", {})
                         result = await graph_executor.execute(run, auto_spec, deployment_inputs)
                         run.status = "completed"
-                        run.output_payload = result
+                        run.output_payload = _sanitize_pg_json(result)
                         run.completed_at = datetime.now(timezone.utc)
                         await db.commit()
                         return

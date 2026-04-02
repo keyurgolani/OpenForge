@@ -15,6 +15,24 @@ from openforge.core.llm_gateway import llm_gateway
 from fastapi import HTTPException
 import logging
 
+_llm_logger = logging.getLogger("openforge.services.llm_service")
+
+
+def _safe_decrypt(enc_bytes: bytes | None, provider_name: str = "") -> str:
+    """Decrypt API key, returning empty string on failure instead of crashing."""
+    if not enc_bytes:
+        return ""
+    try:
+        return decrypt_value(enc_bytes)
+    except Exception:
+        _llm_logger.warning(
+            "Failed to decrypt API key for provider '%s'. "
+            "Re-enter the key in Settings > Providers.",
+            provider_name,
+        )
+        return ""
+import logging
+
 logger = logging.getLogger("openforge.llm_service")
 
 
@@ -165,17 +183,8 @@ class LLMService:
             )
             provider = p_result.scalar_one_or_none()
 
-        if not provider:
-            # Fall back to system default (skip local-only providers)
-            p_result = await db.execute(
-                select(LLMProvider).where(
-                    LLMProvider.is_system_default == True,
-                    LLMProvider.is_system == False,
-                )
-            )
-            provider = p_result.scalar_one_or_none()
-
-        # Load system_chat_models setting (used for provider and model fallback)
+        # Load system_chat_models setting (user's explicit model selection
+        # from the Settings UI). This takes priority over is_system_default.
         _chat_models_entries: list[dict] = []
         if not provider or not model_override:
             cfg_result = await db.execute(
@@ -194,7 +203,7 @@ class LLMService:
                     _chat_models_entries = raw
 
         if not provider and _chat_models_entries:
-            # Fall back to the default model's provider from system_chat_models
+            # Use the user's default model selection from system_chat_models
             default_entry = next((e for e in _chat_models_entries if e.get("is_default")), None)
             entry = default_entry or _chat_models_entries[0]
             if entry.get("provider_id"):
@@ -207,11 +216,21 @@ class LLMService:
                     pass
 
         if not provider:
+            # Fall back to system default (skip local-only providers)
+            p_result = await db.execute(
+                select(LLMProvider).where(
+                    LLMProvider.is_system_default == True,
+                    LLMProvider.is_system == False,
+                )
+            )
+            provider = p_result.scalar_one_or_none()
+
+        if not provider:
             raise HTTPException(status_code=400, detail="No LLM provider configured")
 
         api_key = ""
         if provider.api_key_enc:
-            api_key = decrypt_value(provider.api_key_enc)
+            api_key = _safe_decrypt(provider.api_key_enc, provider.provider_name)
 
         # Priority: explicit override > workspace override > provider default > system_chat_models setting
         model = (
@@ -310,7 +329,7 @@ class LLMService:
 
         api_key = ""
         if provider.api_key_enc:
-            api_key = decrypt_value(provider.api_key_enc)
+            api_key = _safe_decrypt(provider.api_key_enc, provider.provider_name)
 
         if not model:
             model = provider.default_model or ""
@@ -323,7 +342,7 @@ class LLMService:
         if not provider:
             raise HTTPException(status_code=404, detail="Provider not found")
 
-        api_key = decrypt_value(provider.api_key_enc) if provider.api_key_enc else None
+        api_key = _safe_decrypt(provider.api_key_enc, provider.provider_name) if provider.api_key_enc else None
         models_raw = await llm_gateway.list_models(provider.provider_name, api_key, provider.base_url)
         return [ModelInfo(id=m["id"], name=m["name"]) for m in models_raw]
 
@@ -333,7 +352,7 @@ class LLMService:
         if not provider:
             raise HTTPException(status_code=404, detail="Provider not found")
 
-        api_key = decrypt_value(provider.api_key_enc) if provider.api_key_enc else None
+        api_key = _safe_decrypt(provider.api_key_enc, provider.provider_name) if provider.api_key_enc else None
         test_result = await llm_gateway.test_connection(
             provider.provider_name, api_key, provider.default_model, provider.base_url
         )

@@ -1,8 +1,0 @@
-name: Knowledge Watcher
-slug: knowledge-watcher
-description: Runs the Change Watcher agent every 6 hours to monitor workspace knowledge for updates and flag changes.
-agent_slug: change-watcher
-tags:
-  - monitoring
-  - knowledge
-  - template

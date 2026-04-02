@@ -13,9 +13,7 @@ from .types import Checkpoint, Run, RunLineage, RunStep, RunType, RuntimeEvent
 
 class RunCreate(BaseModel):
     run_type: RunType = RunType.WORKFLOW
-    workflow_id: UUID | None = None
-    workflow_version_id: UUID | None = None
-    mission_id: UUID | None = None
+    deployment_id: UUID | None = None
     parent_run_id: UUID | None = None
     root_run_id: UUID | None = None
     spawned_by_step_id: UUID | None = None
@@ -47,8 +45,8 @@ class RunUpdate(BaseModel):
 
 
 class RunStartRequest(BaseModel):
-    workflow_id: UUID
-    workflow_version_id: UUID | None = None
+    automation_id: UUID | None = None
+    deployment_id: UUID | None = None
     workspace_id: UUID
     input_payload: dict[str, Any] = Field(default_factory=dict)
     parent_run_id: UUID | None = None

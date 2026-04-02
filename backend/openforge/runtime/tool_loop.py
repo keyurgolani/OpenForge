@@ -113,7 +113,14 @@ class ToolLoopContext:
     hitl_service: HITLService | None = None
     cancel_event: asyncio.Event = field(default_factory=asyncio.Event)
     db: AsyncSession | None = None
+    session_factory: Any = None  # async_sessionmaker — used for side-channel DB ops (HITL, policy)
     default_workspace_id: str | None = None
+    # Root forwarding context for nested agent invocations — enables events
+    # from arbitrarily deep subagent chains to reach the top-level WebSocket.
+    root_execution_id: str | None = None
+    root_conversation_id: str | None = None
+    root_workspace_id: str | None = None
+    call_id_path: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -313,10 +320,17 @@ async def execute_tool_loop(
                     _force_hitl = True
 
             if ctx.policy_engine:
-                from openforge.db.postgres import AsyncSessionLocal
-                async with AsyncSessionLocal() as policy_db:
+                # Use a dedicated session for policy/HITL DB operations so they
+                # don't conflict with the main session that the LLM call may be
+                # using concurrently (asyncpg allows only one op per connection).
+                _sf = ctx.session_factory
+                if _sf is None:
+                    from openforge.db.postgres import AsyncSessionLocal
+                    _sf = AsyncSessionLocal
+
+                async with _sf() as _side_db:
                     policy_decision = await ctx.policy_engine.evaluate_async(
-                        tool_id, risk_level, policy_db, agent_spec=ctx.agent_spec,
+                        tool_id, risk_level, _side_db, agent_spec=ctx.agent_spec,
                     )
 
                 if _force_hitl and policy_decision == "approve":
@@ -334,9 +348,9 @@ async def execute_tool_loop(
                 if policy_decision == "hitl_required" and ctx.hitl_service:
                     action_summary = f"Agent wants to execute '{tool_id}' with: {json.dumps(arguments, default=str)[:300]}"
                     _agent_id = str(ctx.agent_spec.agent_id) if ctx.agent_spec else None
-                    async with AsyncSessionLocal() as hitl_db:
+                    async with _sf() as _hitl_db:
                         hitl_request = await ctx.hitl_service.create_request(
-                            hitl_db,
+                            _hitl_db,
                             workspace_id=ctx.workspace_id,
                             conversation_id=ctx.conversation_id,
                             tool_id=tool_id,
@@ -359,8 +373,8 @@ async def execute_tool_loop(
                     approved = await _wait_for_hitl(ctx.hitl_service, hitl_request.id, ctx.cancel_event)
 
                     from openforge.db.models import ApprovalRequestModel
-                    async with AsyncSessionLocal() as hitl_db:
-                        approval_row = await hitl_db.get(ApprovalRequestModel, hitl_request.id)
+                    async with _sf() as _hitl_db:
+                        approval_row = await _hitl_db.get(ApprovalRequestModel, hitl_request.id)
                         if approval_row and approval_row.resolution_note:
                             hitl_note = approval_row.resolution_note
 
@@ -388,8 +402,28 @@ async def execute_tool_loop(
             if ctx.rate_limiter:
                 ctx.rate_limiter.record()
 
+            # For agent.invoke tools, inject forwarding context so subagent
+            # events stream back to the root parent's timeline in real-time.
+            if tool_id in ("platform.agent.invoke", "agent.invoke"):
+                arguments["_call_id"] = call_id
+                arguments["_scope_path"] = [entry_idx]
+                # Propagate root forwarding context for deep nesting
+                if ctx.root_execution_id:
+                    arguments["_root_execution_id"] = ctx.root_execution_id
+                    arguments["_root_conversation_id"] = ctx.root_conversation_id
+                    arguments["_root_workspace_id"] = ctx.root_workspace_id
+                    arguments["_call_id_path"] = ctx.call_id_path + [call_id]
+
             # Resolve workspace_id: explicit context > default > empty
             _ws_id = str(ctx.workspace_id) if ctx.workspace_id else (ctx.default_workspace_id or "")
+
+            # Extract optional _timeout from arguments (seconds); None = no limit
+            _tool_timeout: float | None = None
+            if "_timeout" in arguments:
+                try:
+                    _tool_timeout = float(arguments.pop("_timeout"))
+                except (ValueError, TypeError):
+                    pass
 
             tool_result = await tool_dispatcher.execute(
                 tool_id=tool_id,
@@ -398,6 +432,7 @@ async def execute_tool_loop(
                 execution_id=ctx.execution_id,
                 conversation_id=str(ctx.conversation_id or ""),
                 agent_id=str(ctx.agent_spec.agent_id) if ctx.agent_spec else "",
+                timeout=_tool_timeout,
             )
             finished_at = datetime.now(timezone.utc)
             duration_ms = max(1, int((finished_at - tool_started_at).total_seconds() * 1000))
@@ -428,6 +463,8 @@ async def execute_tool_loop(
                     result.timeline[entry_idx]["output"] = nested.get("response", "")
                     result.timeline[entry_idx]["nested_timeline"] = nested.get("timeline", [])
                     result.timeline[entry_idx]["delegated_conversation_id"] = nested.get("conversation_id")
+                    if nested.get("agent_name"):
+                        result.timeline[entry_idx]["agent_name"] = nested["agent_name"]
 
             if callbacks.on_tool_result:
                 _te = result.timeline[entry_idx]
@@ -460,6 +497,19 @@ async def execute_tool_loop(
             })
 
     result.tool_calls = all_tool_calls
+
+    # Strip leaked raw tool_call XML tags that some models emit when the loop
+    # exhausts max_iterations mid-call.
+    if result.full_response and "<tool_call>" in result.full_response:
+        import re
+        result.full_response = re.sub(
+            r"<tool_call>.*?</tool_call>", "", result.full_response, flags=re.DOTALL
+        ).rstrip()
+        # Also handle unclosed tags at the end
+        idx = result.full_response.find("<tool_call>")
+        if idx != -1:
+            result.full_response = result.full_response[:idx].rstrip()
+
     return result
 
 

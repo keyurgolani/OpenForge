@@ -18,6 +18,10 @@ COPY tool_server/ .
 # Pre-warm the npx skills cache so first run doesn't block
 RUN npx --yes skills --version 2>/dev/null || true
 
+# Tier 1 skills.sh skills are installed at first boot by the tool server
+# startup (seed_skills.py), not at build time, because they need the
+# persistent /skills volume to survive container rebuilds.
+
 EXPOSE 8001
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]

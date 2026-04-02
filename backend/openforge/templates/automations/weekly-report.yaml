@@ -1,8 +1,0 @@
-name: Weekly Report
-slug: weekly-report
-description: Runs the Content Builder agent every Monday at 9 AM to generate a weekly summary report from workspace activity.
-agent_slug: content-builder
-tags:
-  - report
-  - weekly
-  - template

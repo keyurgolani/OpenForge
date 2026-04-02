@@ -73,8 +73,6 @@ class RuntimeEvent(BaseModel):
     id: UUID
     run_id: UUID
     step_id: UUID | None = None
-    workflow_id: UUID | None = None
-    workflow_version_id: UUID | None = None
     node_id: UUID | None = None
     node_key: str | None = None
     event_type: str
@@ -89,9 +87,7 @@ class Run(BaseModel):
 
     id: UUID
     run_type: RunType
-    workflow_id: UUID | None = None
-    workflow_version_id: UUID | None = None
-    mission_id: UUID | None = None
+    deployment_id: UUID | None = None
     parent_run_id: UUID | None = None
     root_run_id: UUID | None = None
     spawned_by_step_id: UUID | None = None

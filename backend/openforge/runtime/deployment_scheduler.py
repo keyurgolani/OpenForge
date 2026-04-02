@@ -12,8 +12,11 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import func
+
 from openforge.db.models import (
     AgentDefinitionVersionModel,
+    AutomationNodeModel,
     DeploymentModel,
     RunModel,
     TriggerDefinitionModel,
@@ -43,21 +46,40 @@ async def poll_and_fire(db: AsyncSession) -> int:
 
     for deployment, trigger in rows:
         try:
-            # Load pinned agent spec
-            spec_row = await db.get(AgentDefinitionVersionModel, deployment.agent_spec_id)
-            if not spec_row:
-                logger.warning("Deployment %s has no valid agent spec", deployment.id)
-                continue
+            # Detect multi-node automation
+            node_count = await db.scalar(
+                select(func.count()).select_from(AutomationNodeModel)
+                .where(AutomationNodeModel.automation_id == deployment.automation_id)
+            )
+            is_multi_node = bool(node_count and node_count > 0)
 
-            resolved = spec_row.snapshot or {}
-            template = resolved.get("system_prompt", "")
-            is_parameterized = bool(resolved.get("parameters"))
+            rendered_prompt = ""
+            composite_metadata: dict = {
+                "automation_id": str(deployment.automation_id),
+                "deployment_id": str(deployment.id),
+            }
 
-            # Render template
-            rendered_prompt = template
-            if is_parameterized and template:
-                render_result = render(template, deployment.input_values or {})
-                rendered_prompt = render_result.output
+            if is_multi_node and deployment.automation_spec_id:
+                composite_metadata["is_multi_node"] = True
+                composite_metadata["automation_spec_id"] = str(deployment.automation_spec_id)
+                if deployment.agent_spec_id:
+                    composite_metadata["agent_spec_id"] = str(deployment.agent_spec_id)
+            else:
+                # Single-agent: load the pinned agent spec and render the template
+                spec_row = await db.get(AgentDefinitionVersionModel, deployment.agent_spec_id)
+                if not spec_row:
+                    logger.warning("Deployment %s has no valid agent spec", deployment.id)
+                    continue
+
+                composite_metadata["agent_spec_id"] = str(deployment.agent_spec_id)
+                resolved = spec_row.snapshot or {}
+                template = resolved.get("system_prompt", "")
+                is_parameterized = bool(resolved.get("parameters"))
+
+                rendered_prompt = template
+                if is_parameterized and template:
+                    render_result = render(template, deployment.input_values or {})
+                    rendered_prompt = render_result.output
 
             # Create run
             run = RunModel(
@@ -65,15 +87,11 @@ async def poll_and_fire(db: AsyncSession) -> int:
                 workspace_id=deployment.workspace_id,
                 deployment_id=deployment.id,
                 input_payload={
-                    "input_values": deployment.input_values,
+                    "input_values": deployment.input_values or {},
                     "rendered_system_prompt": rendered_prompt,
                     "instruction": rendered_prompt,
                 },
-                composite_metadata={
-                    "automation_id": str(deployment.automation_id),
-                    "deployment_id": str(deployment.id),
-                    "agent_spec_id": str(deployment.agent_spec_id),
-                },
+                composite_metadata=composite_metadata,
                 status="pending",
             )
             db.add(run)

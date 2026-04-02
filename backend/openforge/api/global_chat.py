@@ -504,6 +504,9 @@ async def add_global_message(
         trigger_auto_title=False,
     )
 
+    # Eagerly load attachments to avoid lazy-load greenlet error in serializer
+    await db.refresh(message, ["attachments"])
+
     # If there's an agent, queue execution (no workspace_id for global chat)
     if conversation.agent_id:
         try:

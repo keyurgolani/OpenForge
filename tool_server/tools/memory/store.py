@@ -39,7 +39,7 @@ class StoreMemoryTool(BaseTool):
                 },
                 "type": {
                     "type": "string",
-                    "enum": ["fact", "synthesis", "observation"],
+                    "enum": ["fact", "preference", "task_state", "note", "decision", "synthesis", "observation"],
                     "default": "observation",
                     "description": "Memory type (only used when persistent=true)",
                 },

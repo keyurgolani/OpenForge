@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid as _uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -21,6 +22,42 @@ from openforge.domains.automations.compiled_spec import CompiledAutomationSpec, 
 from openforge.runtime.template_engine import render
 
 logger = logging.getLogger("openforge.runtime.graph_executor")
+
+# Pattern to extract the ```output ... ``` fenced block that the automation
+# preamble instructs agents to produce.
+_FENCED_OUTPUT_RE = re.compile(
+    r"```output\s*\n(.*?)\n\s*```",
+    re.DOTALL,
+)
+
+
+def _extract_structured_output(text: str) -> dict[str, Any] | None:
+    """Try to extract structured JSON from agent output text.
+
+    Agents in automation context are instructed to wrap output in a
+    ```output ... ``` fenced block.  We try (in order):
+    1. Extract from ```output fenced block
+    2. Parse the entire text as JSON
+    """
+    # 1. Fenced output block
+    m = _FENCED_OUTPUT_RE.search(text)
+    if m:
+        try:
+            parsed = json.loads(m.group(1))
+            if isinstance(parsed, dict):
+                return parsed
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # 2. Whole text as JSON
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    return None
 
 
 class GraphExecutor:
@@ -103,12 +140,26 @@ class GraphExecutor:
         for key, value in node_spec.static_inputs.items():
             resolved_inputs[key] = value
 
-        # Wired inputs (from upstream node outputs)
+        # Wired inputs (from upstream node outputs).
+        # Supports fan-in: wire_info can be a single dict or a list of dicts
+        # when multiple upstream nodes wire to the same input key.
         for input_key, wire_info in node_spec.wired_inputs.items():
-            src_key = wire_info.get("source_node_key", "")
-            src_output = wire_info.get("source_output_key", "output")
-            if src_key in output_store:
-                resolved_inputs[input_key] = output_store[src_key].get(src_output, "")
+            if isinstance(wire_info, list):
+                # Fan-in: concatenate outputs from multiple sources
+                parts = []
+                for src in wire_info:
+                    src_key = src.get("source_node_key", "")
+                    src_output = src.get("source_output_key", "output")
+                    if src_key in output_store:
+                        val = output_store[src_key].get(src_output, "")
+                        if val:
+                            parts.append(str(val))
+                resolved_inputs[input_key] = "\n\n---\n\n".join(parts) if parts else ""
+            else:
+                src_key = wire_info.get("source_node_key", "")
+                src_output = wire_info.get("source_output_key", "output")
+                if src_key in output_store:
+                    resolved_inputs[input_key] = output_store[src_key].get(src_output, "")
 
         # Deployment inputs for this node.
         node_prefix = f"{node_spec.node_key}."
@@ -256,17 +307,19 @@ class GraphExecutor:
             else:
                 output_text = str(result)
 
-            # Try to parse as JSON for structured outputs
+            # Try to parse structured outputs from the response.
+            # Agents in automation context are instructed to wrap output in
+            # a ```output ... ``` fenced block containing JSON.
             outputs: dict[str, Any] = {"output": output_text}
             output_defs = node_spec.output_definitions
-            if any(od.get("type") == "json" and od.get("schema") for od in output_defs):
-                try:
-                    parsed = json.loads(output_text)
-                    if isinstance(parsed, dict):
-                        outputs = parsed
-                        outputs.setdefault("output", output_text)
-                except (json.JSONDecodeError, TypeError):
-                    pass
+            expected_keys = {od.get("key") for od in output_defs if od.get("key")}
+
+            if expected_keys:
+                parsed = _extract_structured_output(output_text)
+                if parsed and isinstance(parsed, dict):
+                    for k, v in parsed.items():
+                        outputs[k] = v
+                    outputs.setdefault("output", output_text)
 
             return outputs
 

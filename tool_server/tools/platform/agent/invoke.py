@@ -15,15 +15,14 @@ class InvokeAgentTool(BaseTool):
     @property
     def description(self):
         return (
-            "Invoke an AI agent to perform a task in a workspace and return its response. "
-            "THIS IS THE ONLY WAY to access content in another workspace — memory and filesystem "
-            "tools only reach the current workspace. "
-            "Use this when: (1) the user @mentions another workspace, (2) you need information "
-            "from a different workspace, or (3) you need to delegate a subtask to another workspace's agent. "
+            "Invoke an AI agent to perform a task and return its response. "
+            "Use this to delegate sub-tasks to specialist agents — for example, "
+            "invoke a researcher for deep research, a code-engineer for technical work, "
+            "or a geopolitical-monitor for situation analysis. "
             "Provide a clear, specific, self-contained instruction. "
-            "Specify workspace_id to target a specific workspace (required for cross-workspace access); "
-            "omit to run in the current workspace. "
-            "Returns the subagent's full text response and execution timeline."
+            "Optionally specify agent_id to target a specific agent; "
+            "if omitted, the default agent handles the task. "
+            "Returns the agent's full text response and execution timeline."
         )
 
     @property
@@ -38,18 +37,11 @@ class InvokeAgentTool(BaseTool):
                         "The agent will reason, use tools, and return a full response."
                     ),
                 },
-                "workspace_id": {
-                    "type": "string",
-                    "description": (
-                        "Target workspace ID. If omitted, the current workspace is used. "
-                        "Provide this when delegating to a different workspace."
-                    ),
-                },
                 "agent_id": {
                     "type": "string",
                     "description": (
-                        "ID of a specific agent to invoke (e.g. 'optimizer_agent'). "
-                        "If omitted, the workspace's default agent is used."
+                        "Slug or ID of a specific agent to invoke (e.g. 'researcher', 'geopolitical-monitor'). "
+                        "If omitted, the default agent handles the task."
                     ),
                 },
                 "transfer": {
@@ -74,7 +66,7 @@ class InvokeAgentTool(BaseTool):
         if not instruction:
             return ToolResult(success=False, error="instruction is required")
 
-        workspace_id = params.get("workspace_id") or context.workspace_id
+        workspace_id = context.workspace_id
         transfer = params.get("transfer", False)
 
         if transfer:
@@ -118,6 +110,14 @@ class InvokeAgentTool(BaseTool):
         scope_path = params.get("_scope_path")
         if scope_path is not None:
             payload["scope_path"] = scope_path
+        call_id = params.get("_call_id")
+        if call_id is not None:
+            payload["call_id"] = call_id
+        # Root forwarding context for deep nesting
+        for key in ("_root_execution_id", "_root_conversation_id", "_root_workspace_id", "_call_id_path"):
+            val = params.get(key)
+            if val is not None:
+                payload[key.lstrip("_")] = val
 
         try:
             async with httpx.AsyncClient(timeout=300.0) as client:

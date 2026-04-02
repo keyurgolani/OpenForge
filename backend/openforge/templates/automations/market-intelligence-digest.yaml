@@ -1,0 +1,55 @@
+name: Daily Market Intelligence Digest
+slug: market-intelligence-digest
+description: >
+  Every morning, compiles a market intelligence digest by first monitoring geopolitical developments,
+  then scanning news for specified sectors, generating market analysis,
+  and synthesizing everything into a comprehensive daily brief.
+tags:
+  - finance
+  - daily
+  - intelligence
+  - template
+nodes:
+  - agent_slug: geopolitical-monitor
+    node_key: geo_scan
+    static_inputs:
+      impact_lens: financial_markets
+      report_type: situation_report
+  - agent_slug: news-digest
+    node_key: news_scan
+    static_inputs:
+      digest_period: last_24h
+      max_items: 10
+  - agent_slug: market-intelligence
+    node_key: market_analysis
+    static_inputs:
+      analysis_dimensions: multi_dimensional
+      time_horizon: swing_days
+  - agent_slug: content-builder
+    node_key: synthesis
+    static_inputs:
+      content_type: report
+      tone: professional
+      length: medium
+wiring:
+  - from: geo_scan.situation_report
+    to: synthesis.subject
+  - from: news_scan.digest
+    to: synthesis.subject
+  - from: market_analysis.intelligence_brief
+    to: synthesis.subject
+deployment_inputs:
+  - geo_scan.region_or_topic
+  - news_scan.topics
+  - market_analysis.focus
+suggested_trigger:
+  type: cron
+  expression: "0 7 * * 1-5"
+  description: "Every weekday at 7 AM"
+sinks:
+  - type: knowledge_create
+    node_key: save_brief
+    wired_from: synthesis.output
+    config:
+      knowledge_type: note
+      title_template: "Daily Intelligence Brief - {{date}}"

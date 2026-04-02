@@ -21,9 +21,7 @@ class RunService:
         return {
             "id": instance.id,
             "run_type": instance.run_type,
-            "workflow_id": instance.workflow_id,
-            "workflow_version_id": getattr(instance, "workflow_version_id", None),
-            "mission_id": instance.mission_id,
+            "deployment_id": getattr(instance, "deployment_id", None),
             "parent_run_id": instance.parent_run_id,
             "root_run_id": getattr(instance, "root_run_id", None),
             "spawned_by_step_id": getattr(instance, "spawned_by_step_id", None),
@@ -132,9 +130,6 @@ class RunService:
     async def create_run(self, run_data: dict[str, Any]) -> dict[str, Any]:
         run = RunModel(
             run_type=getattr(run_data.get("run_type"), "value", run_data.get("run_type", "workflow")),
-            workflow_id=run_data.get("workflow_id"),
-            workflow_version_id=run_data.get("workflow_version_id"),
-            mission_id=run_data.get("mission_id"),
             parent_run_id=run_data.get("parent_run_id"),
             root_run_id=run_data.get("root_run_id"),
             spawned_by_step_id=run_data.get("spawned_by_step_id"),
@@ -278,9 +273,7 @@ class RunService:
 
         new_run = RunModel(
             run_type=original.run_type,
-            workflow_id=original.workflow_id,
-            workflow_version_id=getattr(original, "workflow_version_id", None),
-            mission_id=original.mission_id,
+            deployment_id=getattr(original, "deployment_id", None),
             parent_run_id=run_id,
             root_run_id=getattr(original, "root_run_id", None) or run_id,
             workspace_id=original.workspace_id,

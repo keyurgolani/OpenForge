@@ -877,6 +877,55 @@
     background: var(--toggle-bg-open, linear-gradient(140deg, hsla(var(--muted) / 0.52), hsla(var(--input) / 0.52)));
   }
 
+  /* ── Agent invoke toggle (distinct from regular tool call toggles) ── */
+  .chat-agent-invoke-toggle {
+    @apply text-[11px] flex items-center gap-1.5 rounded-full transition-colors;
+    color: hsl(var(--foreground) / 0.75);
+    border: 1px solid hsla(168 60% 50% / 0.2);
+    background: linear-gradient(140deg, hsla(168 60% 50% / 0.06), hsla(168 60% 50% / 0.03));
+    min-height: 1.6rem;
+    padding: 0.25rem 0.65rem 0.25rem 0.4rem;
+  }
+  .chat-agent-invoke-toggle:hover {
+    color: hsl(var(--foreground));
+    border-color: hsla(168 60% 50% / 0.35);
+    background: linear-gradient(140deg, hsla(168 60% 50% / 0.10), hsla(168 60% 50% / 0.05));
+  }
+  .chat-agent-invoke-toggle-open {
+    border-radius: 0.75rem 0.75rem 0 0;
+    border-bottom-color: transparent;
+    background: linear-gradient(140deg, hsla(168 60% 50% / 0.10), hsla(168 60% 50% / 0.06));
+  }
+
+  /* Bordered detail card below an open agent invoke toggle */
+  .chat-agent-invoke-detail {
+    border: 1px solid hsla(168 60% 50% / 0.2);
+    border-top: 1px solid hsla(168 60% 50% / 0.1);
+    border-radius: 0 0.75rem 0.75rem 0.75rem;
+    background: linear-gradient(160deg, hsla(168 60% 50% / 0.04), hsla(168 60% 50% / 0.02));
+    padding: 0.5rem 0.5rem 0.5rem 0.5rem;
+  }
+  /* Sync dot positioning with actual padding inside nested agent cards */
+  .chat-agent-invoke-detail .chat-workflow-stack {
+    --chat-workflow-pad-left: 1.5rem;
+    --chat-workflow-dot-size: 1.25rem;
+    --chat-workflow-dot-radius: 0.625rem;
+    padding-left: 1.5rem !important;
+  }
+
+  /* Instruction preview below collapsed toggle */
+  .chat-agent-invoke-instruction {
+    @apply text-[10px] text-muted-foreground/45 leading-relaxed;
+    padding: 0.15rem 0.65rem 0 2rem;
+  }
+
+  /* Instruction inside expanded card */
+  .chat-agent-invoke-instruction-expanded {
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid hsla(var(--border) / 0.15);
+    margin-bottom: 0.25rem;
+  }
+
   .chat-step-detail-card {
     border: 1px solid var(--card-border, hsla(var(--border) / 0.35));
     border-top: 1px solid var(--card-border-top, hsla(var(--border) / 0.18));

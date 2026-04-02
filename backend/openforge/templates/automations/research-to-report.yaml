@@ -1,0 +1,38 @@
+name: Research to Report Pipeline
+slug: research-to-report
+description: >
+  End-to-end content pipeline: Deep Researcher gathers findings,
+  Content Builder transforms them into a polished report,
+  and the result is saved to workspace knowledge.
+tags:
+  - research
+  - content
+  - pipeline
+  - template
+nodes:
+  - agent_slug: deep-researcher
+    node_key: research
+    static_inputs:
+      depth: exhaustive
+      output_format: detailed_report
+  - agent_slug: content-builder
+    node_key: writing
+    static_inputs:
+      content_type: report
+      tone: professional
+      length: long
+wiring:
+  - from: research.research_brief
+    to: writing.subject
+deployment_inputs:
+  - research.topic
+  - research.focus_area
+  - writing.audience
+suggested_trigger:
+  type: manual
+sinks:
+  - type: knowledge_create
+    node_key: save_report
+    wired_from: writing.output
+    config:
+      knowledge_type: document

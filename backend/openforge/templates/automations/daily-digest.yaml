@@ -1,8 +1,0 @@
-name: Daily Digest
-slug: daily-digest
-description: Runs the Deep Researcher agent every morning at 7 AM to compile a digest of recent knowledge updates and web developments.
-agent_slug: deep-researcher
-tags:
-  - digest
-  - daily
-  - template

@@ -7,11 +7,16 @@ import { Timeline } from './Timeline'
 import { ThinkingTicker } from './ThinkingTicker'
 import type { TimelineItem } from '@/hooks/chat/useAgentPhase'
 
+const AGENT_INVOKE_TOOLS = new Set(['platform.agent.invoke', 'agent.invoke'])
+
 function getStepType(item: TimelineItem): string {
   if (item.type === 'thinking') return 'thinking'
   if (item.type === 'intermediate_response') return 'intermediate'
   if (item.type === 'tool_call' && item.status === 'awaiting_approval') return 'hitl'
-  if (item.type === 'tool_call' && item.nested_timeline && item.nested_timeline.length > 0) return 'delegated'
+  if (item.type === 'tool_call' && (
+    (item.nested_timeline && item.nested_timeline.length > 0) ||
+    AGENT_INVOKE_TOOLS.has(item.tool_name)
+  )) return 'delegated'
   return 'tool'
 }
 
@@ -100,7 +105,9 @@ export function TimelineStep({ item, isLast, depth, onApproveHITL, onDenyHITL, c
           onApprove={() => onApproveHITL(item.hitl!.hitl_id)}
           onDeny={() => onDenyHITL(item.hitl!.hitl_id)}
         />
-      ) : item.type === 'tool_call' && item.nested_timeline && item.nested_timeline.length > 0 && depth < 3 ? (
+      ) : item.type === 'tool_call' && depth < 3 && (
+        (item.nested_timeline && item.nested_timeline.length > 0) || AGENT_INVOKE_TOOLS.has(item.tool_name)
+      ) ? (
         <SubAgentNode
           item={item} depth={depth} onApproveHITL={onApproveHITL} onDenyHITL={onDenyHITL}
           renderTimeline={(props) => <Timeline items={props.items} depth={props.depth} onApproveHITL={props.onApproveHITL} onDenyHITL={props.onDenyHITL} />}

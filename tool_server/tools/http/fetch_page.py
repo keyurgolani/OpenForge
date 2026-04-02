@@ -1,4 +1,6 @@
+import json
 import re
+
 import httpx
 from protocol import BaseTool, ToolContext, ToolResult
 from security import security
@@ -26,13 +28,18 @@ def _strip_html(html: str) -> str:
     return text.strip()
 
 
-def _extract_content(html: str, url: str) -> str:
+_META_RE = re.compile(r'<meta\s+[^>]*?(?:name|property)\s*=\s*["\']([^"\']+)["\'][^>]*?content\s*=\s*["\']([^"\']*)["\']', re.IGNORECASE)
+_META_REV_RE = re.compile(r'<meta\s+[^>]*?content\s*=\s*["\']([^"\']*)["\'][^>]*?(?:name|property)\s*=\s*["\']([^"\']+)["\']', re.IGNORECASE)
+_TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.DOTALL | re.IGNORECASE)
+
+
+def _extract_content(html: str, url: str, include_links: bool = True) -> str:
     """Extract readable content from HTML using trafilatura with regex fallback."""
     if _HAS_TRAFILATURA:
         extracted = trafilatura.extract(
             html,
             url=url,
-            include_links=True,
+            include_links=include_links,
             include_tables=True,
             favor_recall=True,
             deduplicate=True,
@@ -41,6 +48,29 @@ def _extract_content(html: str, url: str) -> str:
             return extracted.strip()
     # Fallback to basic regex stripping
     return _strip_html(html)
+
+
+def _extract_metadata(html: str) -> dict:
+    """Extract title, description, and OG tags from HTML."""
+    metadata = {}
+    title_match = _TITLE_RE.search(html)
+    if title_match:
+        metadata["title"] = _strip_html(title_match.group(1)).strip()
+
+    for match in _META_RE.finditer(html):
+        name, content = match.group(1).lower(), match.group(2)
+        if name in ("description", "og:title", "og:description", "og:image", "og:url", "og:type", "og:site_name",
+                     "twitter:title", "twitter:description", "twitter:image", "twitter:card", "author", "keywords"):
+            metadata[name] = content
+
+    for match in _META_REV_RE.finditer(html):
+        content, name = match.group(1), match.group(2).lower()
+        if name not in metadata and name in ("description", "og:title", "og:description", "og:image", "og:url",
+                                               "og:type", "og:site_name", "twitter:title", "twitter:description",
+                                               "twitter:image", "twitter:card", "author", "keywords"):
+            metadata[name] = content
+
+    return metadata
 
 
 class FetchPageTool(BaseTool):
@@ -64,12 +94,27 @@ class FetchPageTool(BaseTool):
             "properties": {
                 "url": {"type": "string", "description": "URL to fetch"},
                 "timeout": {"type": "number", "default": 30},
+                "extract_mode": {
+                    "type": "string",
+                    "enum": ["text", "text_with_links", "metadata"],
+                    "default": "text",
+                    "description": (
+                        "Extraction mode: 'text' returns plain text content, "
+                        "'text_with_links' preserves hyperlinks in the output, "
+                        "'metadata' returns page title, description, and OG tags"
+                    ),
+                },
+                "max_chars": {
+                    "type": "integer",
+                    "default": 80000,
+                    "description": "Maximum characters to return (max 200000)",
+                },
             },
             "required": ["url"],
         }
 
     @property
-    def max_output(self): return 80000
+    def max_output(self): return 200000
 
     async def execute(self, params: dict, context: ToolContext) -> ToolResult:
         url = params["url"]
@@ -79,6 +124,9 @@ class FetchPageTool(BaseTool):
             return ToolResult(success=False, error=str(exc))
 
         timeout = params.get("timeout", 30)
+        extract_mode = params.get("extract_mode", "text")
+        max_chars = min(params.get("max_chars", 80000), 200000)
+
         try:
             async with httpx.AsyncClient(
                 timeout=timeout,
@@ -90,7 +138,16 @@ class FetchPageTool(BaseTool):
                 },
             ) as client:
                 resp = await client.get(url)
-            text = _extract_content(resp.text, url)
+
+            if extract_mode == "metadata":
+                metadata = _extract_metadata(resp.text)
+                metadata["url"] = url
+                metadata["status_code"] = resp.status_code
+                raw = json.dumps(metadata, ensure_ascii=False)
+                return ToolResult(success=True, output=wrap_untrusted(raw, url))
+
+            include_links = extract_mode == "text_with_links"
+            text = _extract_content(resp.text, url, include_links=include_links)
             if not text or len(text.strip()) < 50:
                 return ToolResult(
                     success=True,
@@ -101,6 +158,8 @@ class FetchPageTool(BaseTool):
                         url,
                     ),
                 )
+            if len(text) > max_chars:
+                text = text[:max_chars] + "\n\n[... truncated]"
             wrapped = wrap_untrusted(text, url)
             return self._maybe_truncate("", wrapped)
         except Exception as exc:

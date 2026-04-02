@@ -16,7 +16,7 @@ class DeployTool(BaseTool):
     def description(self):
         return (
             "Deploy an automation, creating a live deployment instance. "
-            "Requires the automation_id and workspace_id. Provide input_values for all "
+            "Requires the automation_id. Provide input_values for all "
             "mandatory deployment inputs (inputs that are neither wired nor given static values "
             "in the automation graph). "
             "Attach a trigger: omit schedule fields for manual-only trigger, provide "
@@ -34,10 +34,6 @@ class DeployTool(BaseTool):
                     "type": "string",
                     "description": "The UUID of the automation to deploy",
                 },
-                "workspace_id": {
-                    "type": "string",
-                    "description": "The UUID of the workspace context for this deployment",
-                },
                 "input_values": {
                     "type": "object",
                     "description": "Values for the deployment's mandatory inputs. Keys are parameter names (or node-key.param_name for multi-node automations).",
@@ -51,7 +47,7 @@ class DeployTool(BaseTool):
                     "description": "Interval in seconds for interval trigger. Omit for manual trigger.",
                 },
             },
-            "required": ["automation_id", "workspace_id"],
+            "required": ["automation_id"],
         }
 
     @property
@@ -61,9 +57,8 @@ class DeployTool(BaseTool):
         automation_id = params.get("automation_id")
         if not automation_id:
             return ToolResult(success=False, error="automation_id is required")
-        workspace_id = params.get("workspace_id")
-        if not workspace_id:
-            return ToolResult(success=False, error="workspace_id is required")
+        # Use workspace from context; agents discover workspaces from their prompt
+        workspace_id = context.workspace_id
         url = f"{context.main_app_url}/api/v1/automations/{automation_id}/deploy"
         payload: dict = {
             "workspace_id": workspace_id,
