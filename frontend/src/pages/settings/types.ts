@@ -8,6 +8,10 @@ export type WorkspaceRow = {
     vision_provider_id: string | null; vision_model: string | null
     knowledge_count: number
     conversation_count: number
+    ownership_type: string
+    owner_deployment_id: string | null
+    is_readonly_ui: boolean
+    auto_teardown: boolean
 }
 
 export type ProviderRow = { id: string; display_name: string; provider_name: string; default_model: string | null; is_system_default: boolean; is_system?: boolean; has_api_key: boolean; base_url: string | null; enabled_models: { id: string; name: string }[] }

@@ -16,7 +16,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from openforge.db.models import AgentDefinitionVersionModel, RunModel, RunStepModel
+from openforge.db.models import AgentDefinitionVersionModel, DeploymentModel, RunModel, RunStepModel
 from openforge.domains.agents.compiled_spec import AgentRuntimeConfig, build_runtime_config_from_snapshot
 from openforge.domains.automations.compiled_spec import CompiledAutomationSpec, CompiledNodeSpec, CompiledSinkNodeSpec
 from openforge.runtime.events import RuntimeEvent, NODE_STARTED, NODE_COMPLETED, NODE_FAILED
@@ -75,6 +75,27 @@ def _extract_structured_output(text: str) -> dict[str, Any] | None:
     return None
 
 
+def _build_deployment_workspace_preamble(ws_info: dict[str, Any]) -> str:
+    """Build preamble section about the deployment-owned workspace."""
+    lines = [
+        "# Deployment Shared Knowledge",
+        "",
+        f"This deployment has a shared knowledge workspace: "
+        f"**{ws_info['name']}** (id: `{ws_info['id']}`).",
+        "",
+        "Use this workspace to:",
+        "- **Persist findings** that should be available to future runs of this deployment",
+        "- **Read prior findings** from previous runs for continuity",
+        "- **Accumulate data** over time rather than starting from scratch each run",
+        "",
+        "When saving to this workspace, use descriptive titles with dates "
+        "so future runs can search effectively.",
+        "",
+        f"This workspace currently contains {ws_info.get('knowledge_count', 0)} items.",
+    ]
+    return "\n".join(lines)
+
+
 class GraphExecutor:
     """Execute a multi-node automation DAG."""
 
@@ -103,6 +124,11 @@ class GraphExecutor:
         output_store: dict[str, dict[str, Any]] = {}  # node_key -> {output_key: value}
         agent_lookup = {ns.node_key: ns for ns in automation_spec.nodes}
         sink_lookup = {sns.node_key: sns for sns in automation_spec.sink_nodes}
+
+        # Resolve deployment context for workspace propagation
+        self._deployment: DeploymentModel | None = None
+        if run.deployment_id:
+            self._deployment = await self.db.get(DeploymentModel, run.deployment_id)
 
         # Transition parent run to running
         run.status = "running"
@@ -296,6 +322,7 @@ class GraphExecutor:
                 workspaces_data.append({
                     "id": str(ws.id), "name": ws.name,
                     "description": ws.description or "", "knowledge_count": kc,
+                    "ownership_type": ws.ownership_type,
                 })
         except Exception:
             pass
@@ -311,6 +338,14 @@ class GraphExecutor:
         except Exception:
             pass
 
+        # Resolve deployment workspace info for preamble
+        deployment_workspace_info: dict | None = None
+        if self._deployment and self._deployment.owned_workspace_id:
+            for ws in workspaces_data:
+                if ws["id"] == str(self._deployment.owned_workspace_id):
+                    deployment_workspace_info = ws
+                    break
+
         automation_postamble = build_postamble(
             workspace_id=parent_run.workspace_id,
             workspaces_data=workspaces_data,
@@ -320,8 +355,16 @@ class GraphExecutor:
             tools_enabled=snapshot.get("tools_enabled", True),
         )
 
-        # Assemble: preamble + rendered user prompt + postamble
-        prompt_parts = [automation_preamble, rendered_prompt]
+        # Inject deployment workspace guidance into the preamble
+        deployment_preamble = ""
+        if deployment_workspace_info:
+            deployment_preamble = _build_deployment_workspace_preamble(deployment_workspace_info)
+
+        # Assemble: preamble + deployment workspace guidance + rendered user prompt + postamble
+        prompt_parts = [automation_preamble]
+        if deployment_preamble:
+            prompt_parts.append(deployment_preamble)
+        prompt_parts.append(rendered_prompt)
         if automation_postamble:
             prompt_parts.append(automation_postamble)
         rendered_prompt = "\n\n---\n\n".join(prompt_parts)
@@ -388,6 +431,8 @@ class GraphExecutor:
                 event_publisher=self.event_publisher,
                 tool_dispatcher=self.tool_dispatcher,
                 llm_gateway=self.llm_gateway,
+                deployment_id=str(self._deployment.id) if self._deployment else None,
+                deployment_workspace_id=str(self._deployment.owned_workspace_id) if self._deployment and self._deployment.owned_workspace_id else None,
             )
 
             # 5. Parse output

@@ -473,7 +473,7 @@ export const getAutomationVersion = async (id: string, versionId: string) =>
     (await api.get(`/automations/${id}/versions/${versionId}`)).data
 
 // --- Deployments ---
-export const deployAutomation = async (automationId: string, data: { workspace_id: string; input_values: Record<string, unknown>; schedule_expression?: string; interval_seconds?: number }) =>
+export const deployAutomation = async (automationId: string, data: { workspace_id: string; input_values: Record<string, unknown>; schedule_expression?: string; interval_seconds?: number; enable_workspace?: boolean }) =>
     (await api.post(`/automations/${automationId}/deploy`, data)).data
 export const listDeployments = async (params?: { status?: string; automation_id?: string; workspace_id?: string; skip?: number; limit?: number }) =>
     (await api.get('/deployments', { params })).data
@@ -487,6 +487,8 @@ export const teardownDeployment = async (id: string) =>
     (await api.post(`/deployments/${id}/teardown`)).data
 export const runDeploymentNow = async (id: string) =>
     (await api.post(`/deployments/${id}/run-now`)).data
+export const promoteDeploymentWorkspace = async (id: string) =>
+    (await api.post(`/deployments/${id}/workspace/promote`)).data
 
 // --- Global Chat ---
 export const listGlobalConversations = async (params?: { agent_id?: string; skip?: number; limit?: number; category?: string }) =>

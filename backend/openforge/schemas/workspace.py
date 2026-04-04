@@ -75,6 +75,10 @@ class WorkspaceResponse(BaseModel):
     agent_max_tool_loops: int = 20
     knowledge_count: int = 0
     conversation_count: int = 0
+    ownership_type: str = "user"
+    owner_deployment_id: Optional[UUID] = None
+    is_readonly_ui: bool = False
+    auto_teardown: bool = True
     created_at: datetime
     updated_at: datetime
 

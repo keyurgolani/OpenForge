@@ -99,6 +99,26 @@ class Workspace(Base):
     agent_tool_categories: Mapped[List[str]] = mapped_column(JSONB, nullable=False, default=list)
     agent_max_tool_loops: Mapped[int] = mapped_column(Integer, nullable=False, default=20)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Ownership model for deployment workspaces
+    ownership_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="user",
+        comment="'user' = normal user workspace, 'deployment' = owned by a deployment",
+    )
+    owner_deployment_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("deployments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="If ownership_type='deployment', the deployment that owns this workspace",
+    )
+    is_readonly_ui: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False,
+        comment="If true, UI prevents user edits (knowledge CRUD disabled in frontend)",
+    )
+    auto_teardown: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True,
+        comment="If true, workspace is deleted when owning deployment is torn down",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=now_utc
     )
@@ -111,6 +131,10 @@ class Workspace(Base):
     )
     knowledge: Mapped[list["Knowledge"]] = relationship(back_populates="workspace", cascade="all, delete-orphan")
     conversations: Mapped[list["Conversation"]] = relationship(back_populates="workspace", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("idx_workspaces_ownership", "ownership_type", "owner_deployment_id"),
+    )
 
 
 class Knowledge(Base):
@@ -1042,6 +1066,18 @@ class DeploymentModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
     torn_down_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Deployment-owned workspace for cross-run knowledge sharing
+    owned_workspace_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Optional workspace owned by this deployment for cross-run knowledge sharing",
+    )
+    workspace_provisioning: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="none",
+        comment="'none' = no workspace, 'auto' = create on deploy",
+    )
 
 
 class CompiledAutomationSpecModel(Base):

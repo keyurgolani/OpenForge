@@ -2,14 +2,17 @@ import { useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
+  BookOpen,
   CalendarClock,
   ChevronRight,
   Clock,
+  Database,
   Play,
   Pause,
   Rocket,
   Settings,
   Timer,
+  Upload,
   XCircle,
   Zap,
 } from 'lucide-react'
@@ -26,6 +29,7 @@ import {
   useResumeDeployment,
   useTeardownDeployment,
   useRunDeploymentNow,
+  usePromoteDeploymentWorkspace,
 } from '@/features/deployments'
 import { useRunsQuery } from '@/features/runs'
 import { deploymentsRoute, deploymentRunRoute, automationsRoute } from '@/lib/routes'
@@ -54,8 +58,10 @@ export default function DeploymentDetailPage() {
   const resumeDeployment = useResumeDeployment()
   const teardownDeployment = useTeardownDeployment()
   const runNow = useRunDeploymentNow()
+  const promoteWorkspace = usePromoteDeploymentWorkspace()
 
   const [teardownOpen, setTeardownOpen] = useState(false)
+  const [promoteOpen, setPromoteOpen] = useState(false)
   const [siderailSection, setSiderailSection] = useState<SiderailSection>('trigger')
 
   const toggleSection = (key: SiderailSection) =>
@@ -188,6 +194,40 @@ export default function DeploymentDetailPage() {
                   </p>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Shared Knowledge Workspace */}
+        {deployment.owned_workspace_id && (
+          <div className="rounded-2xl border border-border/25 bg-card/30 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Database className="w-4 h-4 text-accent" />
+                <h2 className="text-sm font-semibold text-foreground">Shared Knowledge</h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <Link
+                  to={`/w/${deployment.owned_workspace_id}/knowledge`}
+                  className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-border/25 bg-background/40 px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <BookOpen className="w-3 h-3" /> Browse
+                </Link>
+                {deployment.status !== 'torn_down' && (
+                  <button
+                    onClick={() => setPromoteOpen(true)}
+                    className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-border/25 bg-background/40 px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <Upload className="w-3 h-3" /> Promote to Workspace
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="rounded-xl border border-dashed border-border/25 bg-card/20 p-4 text-sm text-muted-foreground/80">
+              <p>
+                Agents in this deployment share a persistent knowledge workspace that accumulates data across runs.
+                Knowledge is read-only in the UI.
+              </p>
             </div>
           </div>
         )}
@@ -354,6 +394,24 @@ export default function DeploymentDetailPage() {
         variant="danger"
         icon="warning"
         loading={teardownDeployment.isPending}
+      />
+
+      {/* Promote Workspace Confirmation */}
+      <ConfirmModal
+        isOpen={promoteOpen}
+        onClose={() => setPromoteOpen(false)}
+        onConfirm={() => {
+          promoteWorkspace.mutate(deployment.id, {
+            onSuccess: () => setPromoteOpen(false),
+          })
+        }}
+        title="Promote to Regular Workspace"
+        message="This will convert the deployment's shared knowledge workspace into a regular user workspace. The knowledge will become editable, and the deployment will no longer have a shared workspace."
+        confirmLabel="Promote"
+        cancelLabel="Cancel"
+        variant="info"
+        icon="info"
+        loading={promoteWorkspace.isPending}
       />
     </div>
   )

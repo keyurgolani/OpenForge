@@ -168,6 +168,17 @@ async def _run_strategy(run_id: str):
             if spec is None:
                 raise RuntimeError(f"Cannot resolve AgentRuntimeConfig for run {run_id}")
 
+            # Resolve deployment context for workspace enforcement
+            deploy_id_str: str | None = None
+            deploy_ws_id_str: str | None = None
+            if run.deployment_id:
+                from openforge.db.models import DeploymentModel as _DM
+                deployment = await db.get(_DM, run.deployment_id)
+                if deployment:
+                    deploy_id_str = str(deployment.id)
+                    if deployment.owned_workspace_id:
+                        deploy_ws_id_str = str(deployment.owned_workspace_id)
+
             await execute_agent(
                 spec,
                 run.input_payload or {},
@@ -177,6 +188,8 @@ async def _run_strategy(run_id: str):
                 event_publisher=EventPublisher(db),
                 tool_dispatcher=tool_dispatcher,
                 llm_gateway=LLMGateway(),
+                deployment_id=deploy_id_str,
+                deployment_workspace_id=deploy_ws_id_str,
             )
     finally:
         await worker_engine.dispose()

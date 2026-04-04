@@ -71,6 +71,8 @@ async def execute_tool(req: ExecuteRequest):
         main_app_url=req.context.get("main_app_url", settings.main_app_url),
         conversation_id=req.context.get("conversation_id", ""),
         agent_id=req.context.get("agent_id", ""),
+        deployment_id=req.context.get("deployment_id", ""),
+        deployment_workspace_id=req.context.get("deployment_workspace_id", ""),
     )
 
     try:

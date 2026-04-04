@@ -156,6 +156,8 @@ def build_postamble(
             if ws.get("knowledge_count"):
                 line += f", {ws['knowledge_count']} knowledge items"
             line += ")"
+            if ws.get("ownership_type") == "deployment":
+                line += " *[Deployment workspace — shared knowledge that persists across runs]*"
             if ws.get("description"):
                 line += f": {ws['description']}"
             ws_lines.append(line)

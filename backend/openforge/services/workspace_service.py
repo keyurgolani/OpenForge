@@ -37,6 +37,10 @@ def _to_response(workspace: Workspace, knowledge_count: int = 0, conv_count: int
         agent_max_tool_loops=workspace.agent_max_tool_loops,
         knowledge_count=knowledge_count,
         conversation_count=conv_count,
+        ownership_type=workspace.ownership_type,
+        owner_deployment_id=workspace.owner_deployment_id,
+        is_readonly_ui=workspace.is_readonly_ui,
+        auto_teardown=workspace.auto_teardown,
         created_at=workspace.created_at,
         updated_at=workspace.updated_at,
     )

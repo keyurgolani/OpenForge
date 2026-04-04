@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { listKnowledge, deleteKnowledge, togglePin, toggleArchive, extractBookmarkContent, reprocessKnowledge, getKnowledgeFileUrl } from '@/lib/api'
+import { useWorkspace } from '@/hooks/useWorkspace'
 import { useWorkspaceWebSocket } from '@/hooks/useWorkspaceWebSocket'
 import { CopyButton } from '@/components/shared/CopyButton'
 import { openQuickKnowledge, type QuickKnowledgeType, FILE_BASED_TYPES } from '@/lib/quick-knowledge'
@@ -14,7 +15,7 @@ import {
     Search, FileText, Bookmark, Code2, Zap, Pin, Archive,
     Trash2, PinOff, ArchiveX, Loader2, Sparkles,
     Inbox, CheckSquare, Square, ExternalLink, Copy, SortAsc,
-    ChevronDown, Tag, RefreshCw, Download,
+    ChevronDown, Tag, RefreshCw, Download, Lock,
     Image as ImageIcon, Music, FileType2, Table, Presentation,
 } from 'lucide-react'
 import {
@@ -97,6 +98,8 @@ export default function WorkspaceHome() {
     const { workspaceId = '' } = useParams<{ workspaceId: string }>()
     const [searchParams, setSearchParams] = useSearchParams()
     const qc = useQueryClient()
+    const currentWorkspace = useWorkspace(workspaceId) as { ownership_type?: string; is_readonly_ui?: boolean; name?: string } | undefined
+    const isDeploymentWorkspace = currentWorkspace?.ownership_type === 'deployment'
 
     // Track knowledge IDs currently undergoing re-extraction
     const [extractingIds, setExtractingIds] = useState<Set<string>>(new Set())
@@ -349,6 +352,15 @@ export default function WorkspaceHome() {
     return (
         <div className="w-full min-w-0 p-6 lg:p-7" onClick={closeAllMenus}>
             <div data-openforge-knowledge-sheet-anchor="1" className="min-w-0 space-y-5">
+                {isDeploymentWorkspace && (
+                    <div className="flex items-center gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-300/90">
+                        <Lock className="w-4 h-4 flex-shrink-0" />
+                        <span>
+                            This workspace is managed by a deployment. Knowledge is read-only.
+                            Agents within the deployment can add and modify items during runs.
+                        </span>
+                    </div>
+                )}
                 <section className="relative z-30 px-1">
                     <div className="flex flex-wrap items-center gap-2.5">
                         <div className="min-w-[240px] flex-1 relative">

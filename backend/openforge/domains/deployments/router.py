@@ -30,6 +30,7 @@ async def deploy_automation(
             input_values=body.input_values,
             schedule_expression=body.schedule_expression,
             interval_seconds=body.interval_seconds,
+            enable_workspace=body.enable_workspace,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -97,5 +98,15 @@ async def run_now(deployment_id: UUID, db: AsyncSession = Depends(get_db)):
     service = DeploymentService(db)
     try:
         return await service.run_now(deployment_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@listing_router.post("/{deployment_id}/workspace/promote")
+async def promote_workspace(deployment_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Promote a deployment-owned workspace to a regular user workspace."""
+    service = DeploymentService(db)
+    try:
+        return await service.promote_workspace(deployment_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

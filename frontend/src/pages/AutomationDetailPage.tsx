@@ -102,6 +102,7 @@ export default function AutomationDetailPage() {
   const [deployTriggerType, setDeployTriggerType] = useState<'manual' | 'cron' | 'interval'>('manual')
   const [deploySchedule, setDeploySchedule] = useState('')
   const [deployInterval, setDeployInterval] = useState('')
+  const [deployEnableWorkspace, setDeployEnableWorkspace] = useState(false)
 
   // Reset editing mode when automationId changes
   useEffect(() => {
@@ -477,10 +478,28 @@ export default function AutomationDetailPage() {
               </div>
             )}
 
+            {/* Shared knowledge workspace toggle */}
+            <div className="border-t border-border/25 pt-4">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={deployEnableWorkspace}
+                  onChange={(e) => setDeployEnableWorkspace(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-border/25 accent-emerald-600"
+                />
+                <div>
+                  <span className="text-sm font-medium text-foreground">Enable shared knowledge workspace</span>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Agents in this deployment will share a persistent knowledge base across runs.
+                  </p>
+                </div>
+              </label>
+            </div>
+
             <div className="flex justify-end gap-2 border-t border-border/25 pt-4">
               <button
                 className="px-4 py-2 rounded-lg border border-border/25 text-sm text-muted-foreground hover:text-foreground transition"
-                onClick={() => { setShowDeployDialog(false); setDeployInputValues({}); setDeploySchedule(''); setDeployInterval('') }}
+                onClick={() => { setShowDeployDialog(false); setDeployInputValues({}); setDeploySchedule(''); setDeployInterval(''); setDeployEnableWorkspace(false) }}
               >
                 Cancel
               </button>
@@ -496,6 +515,7 @@ export default function AutomationDetailPage() {
                       input_values: deployInputValues,
                       ...(deployTriggerType === 'cron' && deploySchedule ? { schedule_expression: deploySchedule } : {}),
                       ...(deployTriggerType === 'interval' && deployInterval ? { interval_seconds: Number(deployInterval) } : {}),
+                      ...(deployEnableWorkspace ? { enable_workspace: true } : {}),
                     },
                   }, {
                     onSuccess: () => {
@@ -503,6 +523,7 @@ export default function AutomationDetailPage() {
                       setDeployInputValues({})
                       setDeploySchedule('')
                       setDeployInterval('')
+                      setDeployEnableWorkspace(false)
                     },
                   })
                 }}

@@ -127,6 +127,8 @@ async def execute_agent(
     event_publisher: EventPublisher | None = None,
     tool_dispatcher: ToolDispatcher | None = None,
     llm_gateway: LLMGateway | None = None,
+    deployment_id: str | None = None,
+    deployment_workspace_id: str | None = None,
 ) -> dict[str, Any]:
     """Execute an agent run.
 
@@ -200,6 +202,8 @@ async def execute_agent(
         hitl_service=hitl_service,
         cancel_event=cancel_event,
         db=None,
+        deployment_id=deployment_id,
+        deployment_workspace_id=deployment_workspace_id,
     )
 
     try:

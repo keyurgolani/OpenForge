@@ -115,6 +115,9 @@ class ToolLoopContext:
     db: AsyncSession | None = None
     session_factory: Any = None  # async_sessionmaker — used for side-channel DB ops (HITL, policy)
     default_workspace_id: str | None = None
+    # Deployment context for deployment-owned workspace enforcement
+    deployment_id: str | None = None
+    deployment_workspace_id: str | None = None
     # Root forwarding context for nested agent invocations — enables events
     # from arbitrarily deep subagent chains to reach the top-level WebSocket.
     root_execution_id: str | None = None
@@ -433,6 +436,8 @@ async def execute_tool_loop(
                 conversation_id=str(ctx.conversation_id or ""),
                 agent_id=str(ctx.agent_spec.agent_id) if ctx.agent_spec else "",
                 timeout=_tool_timeout,
+                deployment_id=ctx.deployment_id or "",
+                deployment_workspace_id=ctx.deployment_workspace_id or "",
             )
             finished_at = datetime.now(timezone.utc)
             duration_ms = max(1, int((finished_at - tool_started_at).total_seconds() * 1000))

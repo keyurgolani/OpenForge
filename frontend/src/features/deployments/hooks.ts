@@ -8,6 +8,7 @@ import {
   resumeDeployment,
   teardownDeployment,
   runDeploymentNow,
+  promoteDeploymentWorkspace,
   getTemplateReference,
 } from '@/lib/api'
 import type { Deployment, DeploymentListResponse, TemplateReferenceData } from '@/types/deployments'
@@ -86,6 +87,18 @@ export function useRunDeploymentNow() {
     onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: ['deployment', id] })
       queryClient.invalidateQueries({ queryKey: ['deployments'] })
+    },
+  })
+}
+
+export function usePromoteDeploymentWorkspace() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => promoteDeploymentWorkspace(id),
+    onSuccess: (_data, id) => {
+      queryClient.invalidateQueries({ queryKey: ['deployment', id] })
+      queryClient.invalidateQueries({ queryKey: ['deployments'] })
+      queryClient.invalidateQueries({ queryKey: ['workspaces'] })
     },
   })
 }

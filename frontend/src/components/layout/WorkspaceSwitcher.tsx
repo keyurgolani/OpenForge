@@ -10,7 +10,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Search, Plus, ChevronDown, Home, Brain, Folder, Briefcase, Microscope,
   BookOpen, Target, Globe, Lightbulb, Wrench, Palette, BarChart3, Rocket,
-  Shield, FlaskConical, Leaf, Key, Settings2, PenLine, Database, Sprout,
+  Shield, FlaskConical, Leaf, Key, Settings2, PenLine, Database, Sprout, Lock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -19,6 +19,9 @@ export interface WorkspaceInfo {
   name: string;
   icon: string | null;
   color?: string;
+  ownership_type?: string;
+  is_readonly_ui?: boolean;
+  owner_deployment_id?: string | null;
 }
 
 interface WorkspaceSwitcherProps {
@@ -46,9 +49,20 @@ export function WorkspaceSwitcher({
 
   const filteredWorkspaces = useMemo(() => {
     const searchQuery = query.trim().toLowerCase();
-    if (!searchQuery) return workspaces;
-    return workspaces.filter((w) => w.name.toLowerCase().includes(searchQuery));
+    const filtered = searchQuery
+      ? workspaces.filter((w) => w.name.toLowerCase().includes(searchQuery))
+      : workspaces;
+    return filtered;
   }, [workspaces, query]);
+
+  const userWorkspaces = useMemo(
+    () => filteredWorkspaces.filter((w) => w.ownership_type !== 'deployment'),
+    [filteredWorkspaces],
+  );
+  const deploymentWorkspaces = useMemo(
+    () => filteredWorkspaces.filter((w) => w.ownership_type === 'deployment'),
+    [filteredWorkspaces],
+  );
 
   // Close menu on outside click
   useEffect(() => {
@@ -163,31 +177,67 @@ export function WorkspaceSwitcher({
             {filteredWorkspaces.length === 0 ? (
               <p className="px-2 py-2 text-xs text-muted-foreground">No workspaces found.</p>
             ) : (
-              filteredWorkspaces.map((workspace) => (
-                <button
-                  key={workspace.id}
-                  type="button"
-                  className={cn(
-                    'w-full rounded-lg px-2.5 py-2 text-left transition-colors',
-                    workspace.id === currentWorkspaceId
-                      ? 'bg-accent/10'
-                      : 'hover:bg-muted/35'
-                  )}
-                  onClick={() => handleWorkspaceSelect(workspace.id)}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-md bg-accent/8 flex items-center justify-center flex-shrink-0">
-                      {getWorkspaceIcon(workspace.icon)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">{workspace.name}</p>
-                    </div>
-                    {workspace.id === currentWorkspaceId && (
-                      <span className="chip-accent text-[10px]">Current</span>
+              <>
+                {userWorkspaces.map((workspace) => (
+                  <button
+                    key={workspace.id}
+                    type="button"
+                    className={cn(
+                      'w-full rounded-lg px-2.5 py-2 text-left transition-colors',
+                      workspace.id === currentWorkspaceId
+                        ? 'bg-accent/10'
+                        : 'hover:bg-muted/35'
                     )}
-                  </div>
-                </button>
-              ))
+                    onClick={() => handleWorkspaceSelect(workspace.id)}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-md bg-accent/8 flex items-center justify-center flex-shrink-0">
+                        {getWorkspaceIcon(workspace.icon)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">{workspace.name}</p>
+                      </div>
+                      {workspace.id === currentWorkspaceId && (
+                        <span className="chip-accent text-[10px]">Current</span>
+                      )}
+                    </div>
+                  </button>
+                ))}
+                {deploymentWorkspaces.length > 0 && (
+                  <>
+                    <div className="px-2.5 pt-2 pb-1">
+                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground/60 font-semibold">
+                        Deployment Workspaces
+                      </p>
+                    </div>
+                    {deploymentWorkspaces.map((workspace) => (
+                      <button
+                        key={workspace.id}
+                        type="button"
+                        className={cn(
+                          'w-full rounded-lg px-2.5 py-2 text-left transition-colors',
+                          workspace.id === currentWorkspaceId
+                            ? 'bg-accent/10'
+                            : 'hover:bg-muted/35'
+                        )}
+                        onClick={() => handleWorkspaceSelect(workspace.id)}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-md bg-amber-500/10 border border-amber-500/15 flex items-center justify-center flex-shrink-0">
+                            <Lock className="w-3.5 h-3.5 text-amber-500/80" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium truncate">{workspace.name}</p>
+                          </div>
+                          {workspace.id === currentWorkspaceId && (
+                            <span className="chip-accent text-[10px]">Current</span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </>
+                )}
+              </>
             )}
           </div>
           <div className="mt-2 border-t border-border/20 pt-2">

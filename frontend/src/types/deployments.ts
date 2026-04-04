@@ -24,6 +24,8 @@ export interface Deployment {
   created_at: string | null;
   updated_at: string | null;
   torn_down_at: string | null;
+  owned_workspace_id: string | null;
+  workspace_provisioning: string;
 }
 
 export interface DeploymentCreate {
@@ -31,6 +33,7 @@ export interface DeploymentCreate {
   input_values: Record<string, unknown>;
   schedule_expression?: string;
   interval_seconds?: number;
+  enable_workspace?: boolean;
 }
 
 export interface DeploymentListResponse {

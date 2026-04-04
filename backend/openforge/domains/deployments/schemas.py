@@ -20,6 +20,10 @@ class DeploymentCreate(BaseModel):
         description="Interval in seconds for recurring execution. "
         "Mutually exclusive with schedule_expression.",
     )
+    enable_workspace: bool = Field(
+        default=False,
+        description="If true, provision a deployment-owned workspace for cross-run knowledge sharing.",
+    )
 
 
 class DeploymentResponse(BaseModel):
@@ -42,6 +46,8 @@ class DeploymentResponse(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     torn_down_at: Optional[datetime] = None
+    owned_workspace_id: Optional[UUID] = None
+    workspace_provisioning: str = "none"
 
     model_config = ConfigDict(from_attributes=True)
 

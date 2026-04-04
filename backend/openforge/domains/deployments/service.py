@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
@@ -19,6 +20,7 @@ from openforge.db.models import (
     DeploymentModel,
     RunModel,
     TriggerDefinitionModel,
+    Workspace,
 )
 from openforge.runtime.template_engine import render
 
@@ -37,6 +39,7 @@ class DeploymentService:
         deployed_by: str | None = None,
         schedule_expression: str | None = None,
         interval_seconds: int | None = None,
+        enable_workspace: bool = False,
     ) -> dict:
         """Deploy an automation with baked-in input values."""
         automation = await self.db.get(AutomationModel, automation_id)
@@ -125,6 +128,7 @@ class DeploymentService:
             input_values=input_values,
             status="active",
             trigger_id=trigger_id,
+            workspace_provisioning="auto" if enable_workspace else "none",
         )
         self.db.add(deployment)
         await self.db.flush()
@@ -132,6 +136,15 @@ class DeploymentService:
         # Update trigger target_id to point to deployment
         if trigger_id:
             trigger.target_id = deployment.id
+            await self.db.flush()
+
+        # Provision deployment-owned workspace if requested
+        if enable_workspace:
+            source_ws = await self.db.get(Workspace, workspace_id)
+            owned_ws_id = await self._provision_deployment_workspace(
+                deployment, automation.name, source_ws,
+            )
+            deployment.owned_workspace_id = owned_ws_id
             await self.db.flush()
 
         await self.db.commit()
@@ -166,8 +179,83 @@ class DeploymentService:
             if trigger:
                 trigger.is_enabled = False
                 trigger.status = "disabled"
+
+        # Handle deployment-owned workspace
+        if deployment.owned_workspace_id:
+            workspace = await self.db.get(Workspace, deployment.owned_workspace_id)
+            if workspace:
+                if workspace.auto_teardown:
+                    from openforge.services.workspace_service import workspace_service
+                    await workspace_service.delete_workspace(self.db, workspace.id)
+                    deployment.owned_workspace_id = None
+                else:
+                    # Promote to regular user workspace
+                    workspace.ownership_type = "user"
+                    workspace.owner_deployment_id = None
+                    workspace.is_readonly_ui = False
+                    workspace.name = workspace.name.replace("[Deploy] ", "[Archived] ")
+
         await self.db.commit()
         return await self._serialize_full(deployment)
+
+    async def promote_workspace(self, deployment_id: UUID) -> dict:
+        """Convert a deployment workspace into a regular user workspace."""
+        deployment = await self._get(deployment_id)
+        if not deployment.owned_workspace_id:
+            raise ValueError("Deployment has no owned workspace")
+
+        workspace = await self.db.get(Workspace, deployment.owned_workspace_id)
+        if not workspace:
+            raise ValueError("Owned workspace not found")
+
+        workspace.ownership_type = "user"
+        workspace.owner_deployment_id = None
+        workspace.is_readonly_ui = False
+        workspace.auto_teardown = False
+        workspace.name = workspace.name.replace("[Deploy] ", "")
+
+        deployment.owned_workspace_id = None
+        deployment.workspace_provisioning = "none"
+        await self.db.commit()
+
+        return {
+            "workspace_id": workspace.id,
+            "workspace_name": workspace.name,
+        }
+
+    async def _provision_deployment_workspace(
+        self,
+        deployment: DeploymentModel,
+        automation_name: str,
+        source_workspace: Workspace | None,
+    ) -> UUID:
+        """Create a deployment-owned workspace."""
+        from openforge.config import get_settings
+
+        workspace = Workspace(
+            name=f"[Deploy] {automation_name}",
+            description=(
+                f"Shared knowledge workspace for deployment of '{automation_name}'. "
+                f"Agents within this deployment can read and write knowledge here across runs. "
+                f"This workspace is managed by the deployment and read-only in the UI."
+            ),
+            icon="\U0001f512",
+            ownership_type="deployment",
+            owner_deployment_id=deployment.id,
+            is_readonly_ui=True,
+            auto_teardown=True,
+            llm_provider_id=source_workspace.llm_provider_id if source_workspace else None,
+            llm_model=source_workspace.llm_model if source_workspace else None,
+        )
+        self.db.add(workspace)
+        await self.db.flush()
+
+        settings = get_settings()
+        ws_dir = os.path.join(settings.workspace_root, str(workspace.id))
+        os.makedirs(ws_dir, exist_ok=True)
+        os.makedirs(os.path.join(ws_dir, "uploads"), exist_ok=True)
+
+        return workspace.id
 
     async def run_now(self, deployment_id: UUID) -> dict:
         """Trigger an immediate run for an active deployment."""
@@ -356,4 +444,6 @@ class DeploymentService:
             "created_at": deployment.created_at,
             "updated_at": deployment.updated_at,
             "torn_down_at": deployment.torn_down_at,
+            "owned_workspace_id": deployment.owned_workspace_id,
+            "workspace_provisioning": deployment.workspace_provisioning,
         }

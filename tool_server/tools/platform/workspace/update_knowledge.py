@@ -1,5 +1,6 @@
 import httpx
 from protocol import BaseTool, ToolContext, ToolResult
+from tools.platform.workspace._access import _check_deployment_write_access
 
 
 class UpdateKnowledgeTool(BaseTool):
@@ -59,6 +60,11 @@ class UpdateKnowledgeTool(BaseTool):
     async def execute(self, params: dict, context: ToolContext) -> ToolResult:
         workspace_id = params.get("workspace_id") or context.workspace_id
         knowledge_id = params.get("knowledge_id")
+
+        # Enforce deployment workspace write access
+        denied = await _check_deployment_write_access(workspace_id, context)
+        if denied:
+            return denied
         if not knowledge_id:
             return ToolResult(success=False, error="knowledge_id is required")
 

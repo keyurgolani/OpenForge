@@ -1,5 +1,6 @@
 import httpx
 from protocol import BaseTool, ToolContext, ToolResult
+from tools.platform.workspace._access import _check_deployment_write_access
 
 
 class SaveKnowledgeTool(BaseTool):
@@ -51,6 +52,12 @@ class SaveKnowledgeTool(BaseTool):
         workspace_id = params.get("workspace_id")
         if not workspace_id:
             return ToolResult(success=False, error="workspace_id is required. Check your system prompt for available workspace IDs.")
+
+        # Enforce deployment workspace write access
+        denied = await _check_deployment_write_access(workspace_id, context)
+        if denied:
+            return denied
+
         url = f"{context.main_app_url}/api/v1/workspaces/{workspace_id}/knowledge"
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:

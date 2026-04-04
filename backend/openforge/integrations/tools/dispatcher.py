@@ -41,6 +41,8 @@ class ToolDispatcher:
         conversation_id: str = "",
         agent_id: str = "",
         timeout: float | None = None,
+        deployment_id: str = "",
+        deployment_workspace_id: str = "",
     ) -> dict[str, Any]:
         """Execute a tool via the tool server REST API.
 
@@ -57,6 +59,8 @@ class ToolDispatcher:
                 "main_app_url": get_settings().main_app_url,
                 "conversation_id": conversation_id,
                 "agent_id": agent_id,
+                "deployment_id": deployment_id,
+                "deployment_workspace_id": deployment_workspace_id,
             },
         }
 

@@ -33,6 +33,8 @@ class ToolContext:
     main_app_url: str
     conversation_id: str = ""
     agent_id: str = ""
+    deployment_id: str = ""
+    deployment_workspace_id: str = ""
 
 
 class BaseTool(ABC):
