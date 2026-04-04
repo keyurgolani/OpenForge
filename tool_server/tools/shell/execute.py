@@ -24,6 +24,10 @@ class ShellExecuteTool(BaseTool):
             "type": "object",
             "properties": {
                 "command": {"type": "string", "description": "Shell command to execute"},
+                "working_directory": {
+                    "type": "string",
+                    "description": "Subdirectory within the workspace to use as working directory. Optional — defaults to workspace root.",
+                },
                 "timeout": {"type": "number", "default": 30, "description": "Timeout in seconds"},
             },
             "required": ["command"],
@@ -44,10 +48,19 @@ class ShellExecuteTool(BaseTool):
         workspace_dir = security.get_workspace_dir(context.workspace_id)
         timeout = min(params.get("timeout", 30), get_settings().shell_timeout_seconds)
 
+        # Resolve working directory within workspace boundary
+        cwd = workspace_dir
+        working_directory = params.get("working_directory")
+        if working_directory:
+            try:
+                cwd = security.resolve_path(context.workspace_id, working_directory)
+            except ValueError as e:
+                return ToolResult(success=False, error=f"Invalid working_directory: {e}")
+
         try:
             proc = await asyncio.create_subprocess_shell(
                 command,
-                cwd=str(workspace_dir),
+                cwd=str(cwd),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )

@@ -15,6 +15,8 @@ The Agents page, Chat page, and their underlying implementations are considered 
 | **Automation** | A DAG workflow built by wiring agent nodes and sink nodes together on a drag-and-drop canvas. Defines a reusable flow. Does nothing until deployed. | Global | Automations page |
 | **Deployment** | A live instance of an automation, created when a user deploys it with concrete input values and an attached trigger. | Global | Deployments page |
 | **Run** | A single execution of a deployment. | Global | Runs page |
+| **Mission** | A goal-directed autonomous agent that runs continuously toward an objective via repeated OODA cycles. Lifecycle: draft -> active -> paused -> completed/terminated. | Global | Missions page |
+| **MissionCycle** | A single OODA iteration within a mission (perceive -> plan -> act -> evaluate -> reflect). Each cycle is one `execute_agent()` call. | Scoped to Mission | Mission detail page |
 | **Chat** | A direct, one-off agent invocation via the conversational UI. No hidden automations or deployments -- the agent executes directly through the chat handler with a chat-specific preamble/postamble. | Global | Chats page |
 
 ### Entity Relationships
@@ -44,6 +46,13 @@ Chat (direct agent execution)
   |-- selects an Agent + optional model override
   |-- agent executes via ChatHandler with CHAT-context prompts
   |-- no automation/deployment/run artifacts created
+
+Mission (goal-directed autonomous agent)
+  |-- references an Agent Definition
+  |-- owns a Mission Workspace for cross-cycle persistence
+  |-- creates MissionCycles (OODA iterations)
+  |-- evaluated by rubric ratchet (strict/relaxed thresholds)
+  |-- scheduled via Celery Beat (60s poll interval)
 ```
 
 ### Listing Boundaries
@@ -53,6 +62,7 @@ Chat (direct agent execution)
 - **Deployments page**: Currently scheduled/executing automation instances.
 - **Automations page**: Automation definitions (reusable blueprints).
 - **Agents page**: All agent definitions in the system.
+- **Missions page**: All mission definitions and their lifecycle status.
 - **Sinks page**: All sink definitions (replaces the current Outputs page).
 
 ---
@@ -70,6 +80,18 @@ A workspace is the root isolation boundary for knowledge. Workspaces are the **o
 - **Conversations**: workspace-scoped conversations for chat history
 - **Settings overrides**: per-workspace model configuration
 
+### Workspace Ownership Types
+
+| Type | Owner | Behavior |
+|------|-------|----------|
+| **user** | User-created (default) | Standard workspace, appears in all workspace lists |
+| **deployment** | Owned by a Deployment | `is_readonly_ui=True`, `auto_teardown=True`. Provisioned when a deployment needs cross-run knowledge sharing. Torn down with the deployment. |
+| **mission** | Owned by a Mission | Cross-cycle persistence for mission state. Torn down when the mission terminates. |
+
+### Workspace Scoping
+
+Workspace queries in `graph_executor`, `chat_handler`, and the `list_workspaces` tool filter to `ownership_type == "user"` by default. Deployment and mission workspaces do not appear in the main workspace list; instead, they appear in dedicated postamble sections so agents know about them without polluting the user's workspace view.
+
 ### Workspace Agents in Chat
 
 In the chat agent selection list, one workspace agent per workspace appears alongside all global agents. This lets users chat directly with any workspace's dedicated agent from the same UI.
@@ -82,7 +104,9 @@ Knowledge items are always scoped to a workspace.
 
 ### Knowledge Types
 
-note, fleeting note, bookmark, gist, image, audio, pdf, document, sheet, slides
+note, fleeting note, bookmark, gist, image, audio, pdf, document, sheet, slides, journal
+
+**Journal** items are structured mission reflections written by agents during mission cycles. Journal items skip AI intelligence generation (no LLM-generated title, summary, or insights) since the content is already agent-produced.
 
 ### Knowledge Processing Pipeline
 
@@ -98,6 +122,8 @@ note, fleeting note, bookmark, gist, image, audio, pdf, document, sheet, slides
 ---
 
 ## 4. Agents
+
+OpenForge ships with **28 curated agent templates** seeded at first boot, covering research, analysis, writing, code review, planning, and more. Each template defines a complete agent configuration (system prompt, tools, parameters, outputs). Users can use, edit, clone, or delete them. Agent templates use a `mode` field (e.g., `chat`, `automation`) to determine preamble/postamble binding -- there is no strategy system.
 
 ### 4.1 Agent Definition Model
 
@@ -238,7 +264,7 @@ The postamble includes knowledge about OpenForge's native entities so that agent
 - **Deployments**: what a deployment is (a live instance of an automation with concrete inputs and a trigger), what trigger types exist (manual, cron, interval), and the deployment lifecycle (deploy, pause, resume, tear down)
 - **Agents**: what agents look like (identity, parameters, output definitions, system prompt, tools config), so agents can reason about composing other agents into automations
 
-This context enables agents to use the `platform` tools (see section 12.1) to create automations, define sinks, deploy automations, and manage deployments -- all from a chat conversation.
+This context enables agents to use the `platform` tools (see section 13.1) to create automations, define sinks, deploy automations, and manage deployments -- all from a chat conversation.
 
 ### 5.3 Template Variables
 
@@ -406,7 +432,7 @@ Sinks are **first-class entities** that define what happens with agent output va
 
 ## 8. Automations (Target Architecture)
 
-Automations are **drag-and-drop DAG workflows** built on a node canvas.
+Automations are **drag-and-drop DAG workflows** built on a node canvas. OpenForge ships with **15 curated automation templates** seeded at first boot.
 
 ### 8.1 Node Types
 
@@ -448,7 +474,19 @@ Before deployment, the automation graph is validated:
 - All referenced agents exist and have compatible output/input types
 - Sink wiring is valid for the sink type
 
-### 8.6 Execution (GraphExecutor)
+### 8.6 Agent Execution Engine
+
+All agent invocations -- chat, automation nodes, and mission cycles -- share a single execution engine: `agent_executor.py`. The core function is `execute_agent()`, which:
+
+1. Manages `RunModel` state transitions (pending -> running -> completed/failed/waiting_approval)
+2. Renders the system prompt with context-appropriate preamble/postamble
+3. Calls `execute_tool_loop()` for iterative LLM + tool-call cycles
+4. Handles HITL approval flow (pauses execution, resumes via Celery `resume_after_hitl` task)
+5. Extracts structured outputs when in AUTOMATION context
+
+There is no strategy layer or strategy plugin system. The `mode` field on agent templates (`chat`, `automation`) determines which preamble/postamble bindings are used, but execution always flows through the same `execute_agent()` path.
+
+### 8.7 Graph Execution (GraphExecutor)
 
 When a deployment fires:
 1. Load the compiled automation spec
@@ -457,7 +495,7 @@ When a deployment fires:
 4. Execute each level:
    - Resolve inputs for each node (wired outputs from previous nodes, static values, deployment inputs)
    - Render the agent's system prompt template with resolved values
-   - Execute the agent via the strategy executor
+   - Execute the agent via `execute_agent()`
    - Extract structured output from the response
    - Pass outputs to the next level's wired inputs
 5. Route final outputs to sink nodes
@@ -509,6 +547,15 @@ Future trigger types (not yet implemented):
 - Multi-node automations: composite keys (e.g., `node-key.param_name`)
 - Template rendering happens during run creation for parameterized agents
 
+### 9.5 Deployment Workspaces
+
+Deployments can optionally provision an **owned workspace** for cross-run knowledge sharing. When enabled:
+
+- A workspace with `ownership_type="deployment"` is created automatically
+- The workspace has `is_readonly_ui=True` (users cannot edit it from the workspace UI) and `auto_teardown=True` (destroyed when the deployment is torn down)
+- All runs under the deployment share this workspace, enabling agents to persist and retrieve knowledge across executions
+- The deployment workspace appears in a dedicated postamble section rather than the main workspace list
+
 ---
 
 ## 10. Runs
@@ -546,7 +593,70 @@ Checkpoints capture state snapshots at step boundaries, enabling:
 
 ---
 
-## 11. WebSocket Architecture
+## 11. Missions
+
+Missions are **goal-directed autonomous agents** that run continuously toward an objective. Unlike chat-invoked or automation-triggered agents that execute and terminate, missions stay alive and perform ongoing work without repeated user intervention.
+
+### 11.1 OODA Cycle Model
+
+Each mission cycle follows the OODA loop, all executed within a single `execute_agent()` call:
+
+1. **Perceive** -- gather current state from the mission workspace and external context
+2. **Plan** -- determine what actions to take toward the objective
+3. **Act** -- execute tools and produce outputs
+4. **Evaluate** -- assess progress against the mission rubric
+5. **Reflect** -- write a journal entry (knowledge type: `journal`) summarizing findings and decisions
+
+### 11.2 Mission Lifecycle
+
+| State | Description |
+|-------|-------------|
+| **draft** | Created but not yet activated |
+| **active** | Running cycles on the scheduler |
+| **paused** | Temporarily suspended, can be resumed |
+| **completed** | Objective achieved (rubric score meets strict threshold) |
+| **terminated** | Stopped due to budget exhaustion, user action, or unrecoverable failure |
+
+### 11.3 Rubric Ratchet Evaluation
+
+Missions define a rubric with scored criteria. After each cycle, the mission evaluates progress:
+
+- **Strict threshold** -- if met, the mission is marked `completed`
+- **Relaxed threshold** -- if met, progress is considered acceptable and the mission continues
+- Scores only ratchet upward (they never decrease between cycles), preventing regression
+
+### 11.4 Mission Scheduler
+
+The mission scheduler runs as a **Celery Beat** periodic task, polling every **60 seconds**:
+
+1. Query all missions with `status == "active"`
+2. For each active mission, check if it is due for a new cycle (based on configured interval and last cycle timestamp)
+3. Dispatch a cycle execution task to the Celery worker
+4. The worker calls `execute_agent()` with MISSION-context preamble/postamble
+
+### 11.5 Mission Workspaces
+
+Each mission provisions an owned workspace (`ownership_type="mission"`) for cross-cycle persistence:
+
+- Knowledge items (notes, journals, bookmarks) persist across cycles
+- The mission agent reads from and writes to this workspace each cycle
+- The workspace is torn down when the mission terminates
+- Mission workspaces appear in a dedicated postamble section, not the main workspace list
+
+### 11.6 Phase Sinks
+
+Missions can define **phase sinks** to route cycle outputs to specific destinations (e.g., create a knowledge item in a user workspace, call an API, send a notification). Phase sinks use the same sink type system as automations.
+
+### 11.7 Auto-Termination
+
+Missions automatically terminate when:
+- The budget (max cycles or max token spend) is exhausted
+- The rubric strict threshold is met (mission completed)
+- An unrecoverable error occurs
+
+---
+
+## 12. WebSocket Architecture
 
 Each independent concern uses its own dedicated WebSocket connection:
 
@@ -561,14 +671,15 @@ Events flow through Redis pub/sub for Celery worker decoupling: Worker -> Redis 
 
 ---
 
-## 12. Tool System
+## 13. Tool System
 
-### 12.1 Built-in Tools
+### 13.1 Built-in Tools
 
 | Category | Tools | Purpose |
 |----------|-------|---------|
 | **filesystem** | read_file, write_file, list_directory, search_files, file_info, move_file, delete_file | File operations |
-| **shell** | execute, execute_python | Command execution |
+| **shell** | execute (with `working_directory` parameter), execute_python | Command execution |
+| **data** | run_python_analysis | Data science analysis with pre-imported stack (pandas, numpy, matplotlib, seaborn, scipy, sklearn) and auto chart saving |
 | **git** | status, log, diff, add, commit, init | Version control |
 | **language** | parse_ast, find_definition, find_references, apply_diff | Code analysis |
 | **memory** | store, recall, forget | Agent memory |
@@ -581,7 +692,7 @@ Events flow through Redis pub/sub for Celery worker decoupling: Worker -> Redis 
 | **platform.deployment** | list, get, deploy, pause, resume, teardown, run_now | Deployment lifecycle management |
 | **platform.sink** | list, get, create, update, delete | Sink definition CRUD |
 
-### 12.2 Tool Server
+### 13.2 Tool Server
 
 Tools run in a separate microservice with security boundaries:
 - Path traversal protection
@@ -590,15 +701,15 @@ Tools run in a separate microservice with security boundaries:
 - Content boundary wrapping for external HTTP responses
 - All HTTP calls use `httpx` (not aiohttp)
 
-### 12.3 Skills
+### 13.3 Skills
 
-Installable extensions that add new capabilities. Script files with `SKILL.md` descriptors, managed via the skills category tools.
+Installable extensions that add new capabilities. Script files with `SKILL.md` descriptors, managed via the skills category tools. Skills are managed by the **tool-server container** (Node.js + npx runtime). The system ships with **6 native skills** and approximately **15 tier-1 external skills** installed at first boot.
 
-### 12.4 MCP Integration
+### 13.4 MCP Integration
 
 External tool providers connect via Model Context Protocol. Configured in Settings with auto-discovery and per-tool overrides.
 
-### 12.5 Human-in-the-Loop (HITL)
+### 13.5 Human-in-the-Loop (HITL)
 
 When an agent calls a tool configured for HITL:
 1. Execution pauses
@@ -606,15 +717,27 @@ When an agent calls a tool configured for HITL:
 3. User reviews and approves or denies
 4. Agent resumes or adjusts approach
 
+### 13.6 Tool Result Caching
+
+Tool results are cached per-execution with a **300-second TTL**. Identical tool calls within the same agent execution return cached results, reducing redundant API calls and improving response latency.
+
+### 13.7 Tool Usage Analytics
+
+Redis-based analytics track tool invocation counts, latency, and error rates. An admin endpoint exposes aggregated usage data for monitoring which tools are most/least used and identifying performance bottlenecks.
+
+### 13.8 Tool Error Recovery Hints
+
+When a tool call fails, the system provides structured recovery hints to the agent, suggesting alternative approaches or corrective actions. This reduces dead-end tool call loops and improves agent self-recovery.
+
 ---
 
-## 13. LLM Provider System
+## 14. LLM Provider System
 
-### 13.1 Standard Providers
+### 14.1 Standard Providers
 
 OpenAI, Anthropic, Google Gemini, Groq, DeepSeek, Mistral, OpenRouter, xAI, Cohere, ZhipuAI, HuggingFace, Ollama, Custom OpenAI-compatible, Custom Anthropic-compatible.
 
-### 13.2 Virtual Providers
+### 14.2 Virtual Providers
 
 | Type | Behavior |
 |------|----------|
@@ -622,23 +745,23 @@ OpenAI, Anthropic, Google Gemini, Groq, DeepSeek, Mistral, OpenRouter, xAI, Cohe
 | **Council** | Multi-model ensemble for consensus responses |
 | **Optimizer** | Prompt optimization before execution |
 
-### 13.3 Per-Capability Assignment
+### 14.3 Per-Capability Assignment
 
 Different models can be assigned to: chat, vision, embedding, speech-to-text, text-to-speech, CLIP, PDF processing.
 
-### 13.4 Security
+### 14.4 Security
 
 All provider API keys encrypted at rest using Fernet symmetric encryption. The encryption key must be persisted across restarts.
 
 ---
 
-## 14. Authentication
+## 15. Authentication
 
 Optional password-based authentication with JWT sessions. When `ADMIN_PASSWORD` is set, all API routes (except health and auth) require a valid session cookie. When unset, authentication is disabled.
 
 ---
 
-## 15. UI/UX Standards
+## 16. UI/UX Standards
 
 - **No browser-native dialogs**: never use `alert()`, `confirm()`, or `prompt()`. Always use custom, application-designed confirmation or input dialogs.
 - **Workspace-agnostic pages** use workspace-agnostic endpoints, entities, and WebSocket connections.
@@ -707,6 +830,6 @@ A sophisticated memory system will give agents persistent, contextual recall acr
 - **Cross-agent memory sharing** where appropriate, so knowledge gained by one agent can benefit others
 - **Forgetting and decay** mechanisms to prevent memory bloat and keep context fresh
 
-### Autonomous Agents
+### ~~Autonomous Agents~~ (Implemented)
 
-Autonomous agents are long-lived agents that run continuously in the background toward a target goal. Unlike chat-invoked or automation-triggered agents that execute and terminate, autonomous agents stay alive permanently and perform ongoing tasks without repeated user intervention. Use cases include continuous monitoring, periodic research, background optimization, and proactive notifications.
+Autonomous agents are now implemented as **Missions** (see section 11). The mission system provides goal-directed autonomous agents with OODA cycle execution, rubric-based evaluation, cross-cycle persistence via mission workspaces, and Celery Beat scheduling.

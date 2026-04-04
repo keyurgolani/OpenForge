@@ -363,3 +363,46 @@ async def _run_mission_cycle(
         cycle_id=UUID(cycle_id),
         run_id=UUID(run_id),
     )
+
+
+@celery_app.task(name="scheduler.poll_reminders")
+def poll_reminders_task():
+    """Celery Beat task: poll for due reminders and publish notification events."""
+    import json
+    import time
+    import redis
+
+    try:
+        from openforge.common.config import get_settings
+        settings = get_settings()
+        r = redis.from_url(settings.redis_url, decode_responses=True)
+        now = time.time()
+
+        # Get all reminders with score <= now (i.e. due)
+        due = r.zrangebyscore("openforge:reminders", "-inf", now, withscores=True)
+        if not due:
+            return
+
+        for raw, _score in due:
+            try:
+                reminder = json.loads(raw)
+                workspace_id = reminder.get("workspace_id", "")
+                # Publish notification event
+                r.publish(
+                    f"workspace:{workspace_id}:notifications",
+                    json.dumps({
+                        "type": "reminder",
+                        "message": reminder.get("message", ""),
+                        "workspace_id": workspace_id,
+                        "agent_id": reminder.get("agent_id", ""),
+                        "created_at": reminder.get("created_at"),
+                    }),
+                )
+                logger.info("Fired reminder: %s", reminder.get("message", "")[:80])
+            except Exception as exc:
+                logger.warning("Failed to process reminder: %s", exc)
+
+        # Remove all fired reminders
+        r.zremrangebyscore("openforge:reminders", "-inf", now)
+    except Exception as exc:
+        logger.warning("Reminder polling failed: %s", exc)

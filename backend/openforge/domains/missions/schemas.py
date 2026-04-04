@@ -14,9 +14,9 @@ class MissionCreate(BaseModel):
     tags: list[str] = Field(default_factory=list)
     goal: str
     directives: list[str] = Field(default_factory=list)
-    constraints: list[str] = Field(default_factory=list)
+    constraints: list[dict[str, Any]] = Field(default_factory=list)
     rubric: list[dict[str, Any]] = Field(default_factory=list)
-    termination_conditions: list[str] = Field(default_factory=list)
+    termination_conditions: list[dict[str, Any]] = Field(default_factory=list)
     autonomous_agent_id: UUID
     agent_access: dict[str, Any] = Field(default_factory=lambda: {"mode": "all"})
     tool_overrides: Optional[dict[str, Any]] = None
@@ -32,9 +32,9 @@ class MissionUpdate(BaseModel):
     tags: Optional[list[str]] = None
     goal: Optional[str] = None
     directives: Optional[list[str]] = None
-    constraints: Optional[list[str]] = None
+    constraints: Optional[list[dict[str, Any]]] = None
     rubric: Optional[list[dict[str, Any]]] = None
-    termination_conditions: Optional[list[str]] = None
+    termination_conditions: Optional[list[dict[str, Any]]] = None
     autonomous_agent_id: Optional[UUID] = None
     agent_access: Optional[dict[str, Any]] = None
     tool_overrides: Optional[dict[str, Any]] = None
@@ -52,9 +52,9 @@ class MissionResponse(BaseModel):
     tags: list[str] = Field(default_factory=list)
     goal: str
     directives: list[str] = Field(default_factory=list)
-    constraints: list[str] = Field(default_factory=list)
+    constraints: list[dict[str, Any]] = Field(default_factory=list)
     rubric: list[dict[str, Any]] = Field(default_factory=list)
-    termination_conditions: list[str] = Field(default_factory=list)
+    termination_conditions: list[dict[str, Any]] = Field(default_factory=list)
     autonomous_agent_id: UUID
     agent_access: dict[str, Any] = Field(default_factory=lambda: {"mode": "all"})
     tool_overrides: Optional[dict[str, Any]] = None

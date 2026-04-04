@@ -1,3 +1,5 @@
+"""Image search tool using SearXNG images category."""
+
 import json
 from urllib.parse import urlparse
 
@@ -7,10 +9,10 @@ from config import get_settings
 from content_boundary import wrap_untrusted
 
 
-class SearchWebTool(BaseTool):
+class SearchImagesTool(BaseTool):
     @property
     def id(self):
-        return "http.search_web"
+        return "http.search_images"
 
     @property
     def category(self):
@@ -18,11 +20,14 @@ class SearchWebTool(BaseTool):
 
     @property
     def display_name(self):
-        return "Search Web"
+        return "Search Images"
 
     @property
     def description(self):
-        return "Search the web for current information. Returns titles, URLs, and snippets from multiple search engines."
+        return (
+            "Search the web for images. Returns thumbnail URLs, source URLs, "
+            "and dimensions from multiple search engines."
+        )
 
     @property
     def risk_level(self):
@@ -35,7 +40,7 @@ class SearchWebTool(BaseTool):
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "Search query",
+                    "description": "Image search query",
                 },
                 "max_results": {
                     "type": "integer",
@@ -60,7 +65,7 @@ class SearchWebTool(BaseTool):
                     params={
                         "q": query,
                         "format": "json",
-                        "categories": "general",
+                        "categories": "images",
                     },
                 )
                 response.raise_for_status()
@@ -68,42 +73,37 @@ class SearchWebTool(BaseTool):
         except httpx.ConnectError:
             return ToolResult(
                 success=False,
-                error="Search service (SearXNG) is unavailable. It may not be running.",
+                error="Search service (SearXNG) is unavailable.",
                 recovery_hints=[
                     "Try again in 30 seconds",
-                    "Use http.fetch_page on a known URL as an alternative",
+                    "Use http.search_web to find pages containing images instead",
                 ],
             )
         except httpx.TimeoutException:
             return ToolResult(
                 success=False,
-                error="Search request timed out.",
-                recovery_hints=[
-                    "Try a simpler or shorter query",
-                    "Try again — the search service may be temporarily slow",
-                ],
+                error="Image search request timed out.",
+                recovery_hints=["Try a simpler query", "Try again"],
             )
         except Exception as exc:
-            return ToolResult(
-                success=False,
-                error=f"Search failed: {exc}",
-                recovery_hints=["Try a different query or use http.fetch_page on a known URL"],
-            )
+            return ToolResult(success=False, error=f"Image search failed: {exc}")
 
         results = []
         for r in data.get("results", [])[:max_results]:
-            url = r.get("url", "")
+            source_url = r.get("url", "")
             results.append({
                 "title": r.get("title", ""),
-                "url": url,
-                "snippet": r.get("content", ""),
+                "thumbnail_url": r.get("thumbnail_src", r.get("img_src", "")),
+                "source_url": source_url,
+                "img_src": r.get("img_src", ""),
+                "width": r.get("img_format", "").split("x")[0] if "x" in str(r.get("img_format", "")) else None,
+                "height": r.get("img_format", "").split("x")[1] if "x" in str(r.get("img_format", "")) else None,
                 "engine": r.get("engine", ""),
-                "published_date": r.get("publishedDate", ""),
-                "source_domain": urlparse(url).netloc if url else "",
+                "source_domain": urlparse(source_url).netloc if source_url else "",
             })
 
         if not results:
-            return ToolResult(success=True, output={"results": [], "message": "No results found."})
+            return ToolResult(success=True, output={"results": [], "message": "No image results found."})
 
         raw_output = json.dumps({"results": results, "query": query}, ensure_ascii=False)
-        return ToolResult(success=True, output=wrap_untrusted(raw_output, f"web search: {query}"))
+        return ToolResult(success=True, output=wrap_untrusted(raw_output, f"image search: {query}"))

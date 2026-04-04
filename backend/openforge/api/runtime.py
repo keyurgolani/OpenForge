@@ -37,6 +37,7 @@ class DelegationResponse(BaseModel):
     response: str
     timeline: list
     conversation_id: Optional[str] = None
+    output_definitions: list = []
 
 
 class TransferRequest(BaseModel):

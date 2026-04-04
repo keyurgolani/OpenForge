@@ -37,6 +37,10 @@ celery_app.conf.beat_schedule = {
         "task": "mission.poll",
         "schedule": 60.0,
     },
+    "poll-reminders": {
+        "task": "scheduler.poll_reminders",
+        "schedule": 15.0,
+    },
 }
 
 # Auto-discover tasks

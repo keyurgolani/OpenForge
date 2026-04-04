@@ -124,6 +124,8 @@ class ToolLoopContext:
     root_conversation_id: str | None = None
     root_workspace_id: str | None = None
     call_id_path: list[str] = field(default_factory=list)
+    # Per-execution tool result cache: key → (timestamp, result_dict)
+    _tool_cache: dict[str, tuple[float, dict]] = field(default_factory=dict)
 
 
 @dataclass
@@ -428,19 +430,53 @@ async def execute_tool_loop(
                 except (ValueError, TypeError):
                     pass
 
-            tool_result = await tool_dispatcher.execute(
-                tool_id=tool_id,
-                params=arguments,
-                workspace_id=_ws_id,
-                execution_id=ctx.execution_id,
-                conversation_id=str(ctx.conversation_id or ""),
-                agent_id=str(ctx.agent_spec.agent_id) if ctx.agent_spec else "",
-                timeout=_tool_timeout,
-                deployment_id=ctx.deployment_id or "",
-                deployment_workspace_id=ctx.deployment_workspace_id or "",
-            )
+            # Tool result cache: check for recent identical call
+            _cache_key = f"{tool_id}:{json.dumps(arguments, sort_keys=True, default=str)}"
+            _cache_ttl = 300  # seconds
+            _cached_entry = ctx._tool_cache.get(_cache_key)
+            if _cached_entry and (time.time() - _cached_entry[0]) < _cache_ttl:
+                tool_result = _cached_entry[1]
+                logger.debug("Tool cache hit: %s", tool_id)
+            else:
+                tool_result = await tool_dispatcher.execute(
+                    tool_id=tool_id,
+                    params=arguments,
+                    workspace_id=_ws_id,
+                    execution_id=ctx.execution_id,
+                    conversation_id=str(ctx.conversation_id or ""),
+                    agent_id=str(ctx.agent_spec.agent_id) if ctx.agent_spec else "",
+                    timeout=_tool_timeout,
+                    deployment_id=ctx.deployment_id or "",
+                    deployment_workspace_id=ctx.deployment_workspace_id or "",
+                )
+                # Store in cache
+                ctx._tool_cache[_cache_key] = (time.time(), tool_result)
+
             finished_at = datetime.now(timezone.utc)
             duration_ms = max(1, int((finished_at - tool_started_at).total_seconds() * 1000))
+
+            # Tool usage analytics — log to Redis for operational metrics
+            try:
+                from openforge.common.config import get_settings as _get_settings
+                import redis.asyncio as _aioredis
+                _settings = _get_settings()
+                _r = _aioredis.from_url(_settings.redis_url, decode_responses=True)
+                _agent_slug = ctx.agent_spec.agent_slug if ctx.agent_spec else ""
+                _analytics_entry = json.dumps({
+                    "tool_id": tool_id,
+                    "agent_slug": _agent_slug,
+                    "execution_id": ctx.execution_id,
+                    "duration_ms": duration_ms,
+                    "success": tool_result.get("success", False),
+                    "input_size": len(json.dumps(arguments, default=str)),
+                    "output_size": len(str(tool_result.get("output", ""))),
+                    "timestamp": finished_at.isoformat(),
+                })
+                await _r.lpush("openforge:tool_analytics", _analytics_entry)
+                await _r.ltrim("openforge:tool_analytics", 0, 9999)  # Keep last 10K entries
+                await _r.aclose()
+            except Exception:
+                pass  # Analytics is best-effort
 
             output_for_timeline = tool_result.get("output")
             if tool_result.get("success"):
@@ -452,6 +488,12 @@ async def execute_tool_loop(
                     result_content = str(output_for_timeline)
             else:
                 result_content = f"Tool error: {tool_result.get('error', 'Unknown error')}"
+                # Append recovery hints if available
+                recovery_hints = tool_result.get("recovery_hints")
+                if recovery_hints and isinstance(recovery_hints, list):
+                    result_content += "\n\nRecovery suggestions:\n" + "\n".join(
+                        f"- {hint}" for hint in recovery_hints
+                    )
             result_content = _truncate_text(result_content, _MAX_LLM_TOOL_RESULT_CHARS)
             if hitl_note:
                 result_content += f"\n\n[User guidance]: {hitl_note}"

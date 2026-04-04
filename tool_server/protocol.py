@@ -12,6 +12,7 @@ class ToolResult:
     error: Optional[str] = None
     truncated: bool = False
     original_length: Optional[int] = None
+    recovery_hints: Optional[list[str]] = None
 
     def to_dict(self) -> dict:
         d: dict[str, Any] = {"success": self.success}
@@ -22,6 +23,8 @@ class ToolResult:
         if self.truncated:
             d["truncated"] = True
             d["original_length"] = self.original_length
+        if self.recovery_hints:
+            d["recovery_hints"] = self.recovery_hints
         return d
 
 

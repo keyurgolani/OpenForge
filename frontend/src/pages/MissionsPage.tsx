@@ -49,6 +49,7 @@ interface Constraint {
 }
 
 interface MissionFormData {
+  name: string
   goal: string
   agent_id: string
   directives: string[]
@@ -62,6 +63,7 @@ interface MissionFormData {
 }
 
 const EMPTY_FORM: MissionFormData = {
+  name: '',
   goal: '',
   agent_id: '',
   directives: [],
@@ -99,12 +101,13 @@ function CreateMissionDialog({
 
   const handleSubmit = () => {
     const payload: Record<string, unknown> = {
+      name: form.name,
       goal: form.goal,
-      agent_id: form.agent_id || undefined,
+      autonomous_agent_id: form.agent_id || undefined,
       directives: form.directives.filter(Boolean),
       constraints: form.constraints
         .filter(c => c.text.trim())
-        .map(c => ({ text: c.text, severity: c.severity })),
+        .map(c => ({ description: c.text, severity: c.severity })),
       rubric: form.rubric
         .filter(r => r.name.trim())
         .map(r => ({
@@ -114,13 +117,15 @@ function CreateMissionDialog({
           ratchet: r.ratchet,
           weight: r.weight,
         })),
-      termination_conditions: form.termination_conditions.filter(Boolean),
+      termination_conditions: form.termination_conditions
+        .filter(Boolean)
+        .map(t => ({ condition: t, check: 'auto' })),
     }
-    if (form.cadence_seconds !== '') payload.cadence_seconds = Number(form.cadence_seconds)
+    if (form.cadence_seconds !== '') payload.cadence = { interval_seconds: Number(form.cadence_seconds) }
     const budget: Record<string, number> = {}
-    if (form.budget_cost_limit !== '') budget.cost_limit = Number(form.budget_cost_limit)
-    if (form.budget_token_limit !== '') budget.token_limit = Number(form.budget_token_limit)
-    if (form.budget_cycle_limit !== '') budget.cycle_limit = Number(form.budget_cycle_limit)
+    if (form.budget_cost_limit !== '') budget.max_cost = Number(form.budget_cost_limit)
+    if (form.budget_token_limit !== '') budget.max_tokens = Number(form.budget_token_limit)
+    if (form.budget_cycle_limit !== '') budget.max_cycles = Number(form.budget_cycle_limit)
     if (Object.keys(budget).length > 0) payload.budget = budget
     onCreate(payload)
   }
@@ -138,6 +143,17 @@ function CreateMissionDialog({
         </div>
 
         <div className="space-y-5">
+          {/* Name */}
+          <div>
+            <label className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70 font-medium">Mission Name</label>
+            <input
+              className="mt-1 w-full rounded-lg border border-border/25 bg-background/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-accent/50"
+              placeholder="e.g. AI Industry Pulse Monitor"
+              value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+            />
+          </div>
+
           {/* Goal */}
           <div>
             <label className="text-xs uppercase tracking-[0.12em] text-muted-foreground/70 font-medium">Goal</label>

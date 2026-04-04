@@ -864,11 +864,13 @@ class ChatHandler:
         )
         message = latest_result.scalar_one_or_none()
         _agent_slug = target_spec.agent_slug if target_spec else None
+        _output_defs = target_spec.output_definitions if target_spec and hasattr(target_spec, "output_definitions") else []
         return {
             "response": message.content if message else "",
             "timeline": message.timeline if message and message.timeline else [],
             "conversation_id": str(conversation.id),
             "agent_name": _agent_slug,
+            "output_definitions": _output_defs or [],
         }
 
     async def run(

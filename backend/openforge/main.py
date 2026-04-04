@@ -425,6 +425,10 @@ app.include_router(ws_router)
 from openforge.domains import register_domain_routers
 register_domain_routers(app)
 
+# Register admin API
+from openforge.api.admin import router as admin_router
+app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
+
 # Serve static frontend files (production)
 static_dir = Path(__file__).parent.parent.parent / "static"
 if static_dir.exists():

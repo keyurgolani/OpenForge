@@ -29,6 +29,10 @@ class CreatePlanTool(BaseTool):
                         "properties": {
                             "id": {"type": "string"},
                             "description": {"type": "string"},
+                            "agent_slug": {
+                                "type": "string",
+                                "description": "Optional agent slug to assign this step to a specialist agent",
+                            },
                         },
                     },
                     "description": "List of plan steps",
