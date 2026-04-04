@@ -52,7 +52,7 @@ export default function AutomationsPage() {
           <table className="min-w-full divide-y divide-border/60">
             <thead className="bg-background/35">
               <tr className="text-left text-[11px] uppercase tracking-[0.12em] text-muted-foreground/75">
-                <th className="px-4 py-3 font-medium">Automation</th>
+                <th className="px-4 py-3 font-medium min-w-[200px]">Automation</th>
                 <th className="px-4 py-3 font-medium">Graph</th>
                 <th className="px-4 py-3 font-medium">Updated</th>
                 <th className="px-4 py-3 font-medium">Actions</th>
@@ -61,19 +61,19 @@ export default function AutomationsPage() {
             <tbody className="divide-y divide-border/40">
               {automations.map(automation => (
                 <tr key={automation.id} className="text-sm text-foreground">
-                  <td className="px-4 py-3">
-                    <div className="min-w-0">
-                      <Link className="font-medium transition hover:text-accent" to={automationsRoute(automation.id)}>
-                        {automation.name}
-                      </Link>
-                      <p className="mt-0.5 text-xs text-muted-foreground/80">{automation.slug}</p>
-                    </div>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <Link className="font-medium transition hover:text-accent" to={automationsRoute(automation.id)}>
+                      {automation.name}
+                    </Link>
+                    <p className="mt-0.5 text-xs text-muted-foreground/80">{automation.slug}</p>
                   </td>
                   <td className="px-4 py-3">
                     {automation.graph_preview ? (
                       <MiniGraphPreview
                         nodes={automation.graph_preview.nodes}
                         edges={automation.graph_preview.edges}
+                        width={260}
+                        height={72}
                       />
                     ) : (
                       <span className="text-xs text-muted-foreground">No graph</span>
