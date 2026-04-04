@@ -6,7 +6,6 @@ description: Analyzes fundamental characteristics of companies, assets, or entit
 icon: trending-up
 tags: [analysis, fundamental, finance, pipeline]
 mode: pipeline
-strategy: analyst
 model:
   temperature: 0.2
   allow_override: true

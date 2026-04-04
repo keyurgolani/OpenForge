@@ -10,7 +10,6 @@ tags:
   - visualization
   - template
 mode: interactive
-strategy: analyst
 model:
   allow_override: true
   temperature: 0.2

@@ -127,6 +127,8 @@ def build_postamble(
     skills_data: list[dict[str, Any]],
     *,
     tools_enabled: bool = True,
+    deployment_workspace: dict[str, Any] | None = None,
+    mission_workspace: dict[str, Any] | None = None,
 ) -> str:
     """Build postamble with operational context. Same for all agent modes."""
     parts: list[str] = ["# OpenForge Application Context"]
@@ -156,12 +158,52 @@ def build_postamble(
             if ws.get("knowledge_count"):
                 line += f", {ws['knowledge_count']} knowledge items"
             line += ")"
-            if ws.get("ownership_type") == "deployment":
-                line += " *[Deployment workspace — shared knowledge that persists across runs]*"
             if ws.get("description"):
                 line += f": {ws['description']}"
             ws_lines.append(line)
         parts.append("\n".join(ws_lines))
+
+    # Deployment shared knowledge section
+    if deployment_workspace:
+        dw_lines = [
+            "\n## Deployment Shared Knowledge",
+            "You are running inside a **deployment**. This deployment has a dedicated "
+            "shared knowledge workspace that persists across runs.",
+            "",
+            f"- **{deployment_workspace['name']}** (id: `{deployment_workspace['id']}`"
+            f", {deployment_workspace.get('knowledge_count', 0)} knowledge items)",
+            "",
+            "Use this workspace to:",
+            "- **Persist findings** that should be available to future runs of this deployment",
+            "- **Read prior findings** from previous runs for continuity",
+            "- **Accumulate data** over time rather than starting from scratch each run",
+            "",
+            "When saving to this workspace, use descriptive titles with dates "
+            "so future runs can search effectively.",
+            "",
+            "This workspace is separate from your user workspaces listed above.",
+        ]
+        parts.append("\n".join(dw_lines))
+
+    # Mission workspace section
+    if mission_workspace:
+        mw_lines = [
+            "\n## Mission Workspace",
+            "You are running inside a **mission** — a goal-directed autonomous cycle. "
+            "This mission has a dedicated workspace for cross-cycle persistence.",
+            "",
+            f"- **{mission_workspace['name']}** (id: `{mission_workspace['id']}`"
+            f", {mission_workspace.get('knowledge_count', 0)} knowledge items)",
+            "",
+            "Use this workspace to:",
+            "- **Save journal entries** (type: `journal`) to record learnings, plan changes, "
+            "milestones, strategy shifts, hypotheses, and warnings",
+            "- **Read prior cycle outputs** for continuity across cycles",
+            "- **Persist intermediate results** that inform future cycles",
+            "",
+            "This workspace is separate from user workspaces.",
+        ]
+        parts.append("\n".join(mw_lines))
 
     # Agents section
     has_agent_invoke = any(
@@ -195,3 +237,161 @@ def build_postamble(
         parts.append("\n".join(sk_lines))
 
     return "\n".join(parts).strip()
+
+
+def build_mission_context(
+    mission_name: str,
+    goal: str,
+    directives: list[str],
+    constraints: list[dict],
+    rubric: list[dict],
+    cycle_number: int,
+    current_plan: dict | None,
+    previous_evaluation: dict | None,
+    budget_remaining: dict | None,
+) -> str:
+    """Build the mission-specific instruction block for a cycle execution.
+
+    Generates a comprehensive context that tells the agent about its mission
+    goal, standing directives, constraints, evaluation criteria, previous
+    results, and the required structured output format.
+    """
+    lines: list[str] = [
+        "# Mission Context",
+        f"You are executing a cycle for mission **{mission_name}**.",
+        f"This is **cycle #{cycle_number}**.",
+    ]
+
+    # Goal
+    lines.append("")
+    lines.append("## Goal")
+    lines.append(goal)
+
+    # Standing directives
+    if directives:
+        lines.append("")
+        lines.append("## Standing Directives")
+        for i, directive in enumerate(directives, 1):
+            lines.append(f"{i}. {directive}")
+
+    # Constraints
+    if constraints:
+        lines.append("")
+        lines.append("## Constraints")
+        for c in constraints:
+            severity = c.get("severity", "medium")
+            marker = {"critical": "[CRITICAL]", "high": "[HIGH]", "medium": "[MEDIUM]", "low": "[LOW]"}.get(
+                severity, f"[{severity.upper()}]"
+            )
+            desc = c.get("description", c.get("name", ""))
+            lines.append(f"- {marker} {desc}")
+
+    # Evaluation criteria
+    if rubric:
+        lines.append("")
+        lines.append("## Evaluation Criteria")
+        lines.append("You will self-evaluate against these criteria at the end of each cycle:")
+        for criterion in rubric:
+            name = criterion.get("name", "")
+            description = criterion.get("description", "")
+            target = criterion.get("target")
+            ratchet = criterion.get("ratchet", "relaxed")
+            line = f"- **{name}**"
+            if description:
+                line += f": {description}"
+            extras = []
+            if target is not None:
+                extras.append(f"target: {target}")
+            extras.append(f"ratchet: {ratchet}")
+            line += f" ({', '.join(extras)})"
+            lines.append(line)
+
+    # Previous cycle results
+    if previous_evaluation:
+        lines.append("")
+        lines.append("## Previous Cycle Scores")
+        lines.append("These are your evaluation scores from the previous cycle. "
+                      "Aim to maintain or improve them:")
+        for criterion_name, score in previous_evaluation.items():
+            lines.append(f"- **{criterion_name}**: {score}")
+
+    # Current working plan
+    if current_plan:
+        lines.append("")
+        lines.append("## Current Working Plan")
+        lines.append("This is your current plan from the previous cycle. "
+                      "You may refine or replace it:")
+        lines.append(f"```json\n{_format_json(current_plan)}\n```")
+
+    # Budget remaining
+    if budget_remaining:
+        lines.append("")
+        lines.append("## Budget Remaining")
+        for resource, remaining in budget_remaining.items():
+            lines.append(f"- **{resource}**: {remaining}")
+
+    # Workflow instructions
+    lines.append("")
+    lines.append("## Cycle Workflow")
+    lines.append("Execute the following phases as a single continuous workflow:")
+    lines.append("")
+    lines.append("1. **Perceive** — Gather information. Use tools to read workspace knowledge, "
+                 "search for relevant data, and understand the current state of your mission.")
+    lines.append("2. **Plan** — Based on your observations, create or refine your plan. "
+                 "Identify specific actions to take this cycle.")
+    lines.append("3. **Act** — Execute your plan. Use tools to create knowledge, "
+                 "invoke agents, call APIs, or perform other actions.")
+    lines.append("4. **Evaluate** — Self-assess your progress against the rubric criteria. "
+                 "Score each criterion honestly.")
+    lines.append("5. **Reflect** — Consider what worked, what didn't, and what to change. "
+                 "Update your plan for the next cycle.")
+
+    # Required output format
+    lines.append("")
+    lines.append("## Required Output")
+    lines.append("After completing all phases, you MUST produce a structured output block. "
+                 "Wrap it in a fenced code block with the `mission_output` language tag:")
+    lines.append("")
+    lines.append("```mission_output")
+    lines.append("{")
+    lines.append('  "phase_summaries": {')
+    lines.append('    "perceive": "Summary of observations...",')
+    lines.append('    "plan": "Summary of plan decisions...",')
+    lines.append('    "act": "Summary of actions taken...",')
+    lines.append('    "evaluate": "Summary of evaluation...",')
+    lines.append('    "reflect": "Summary of reflections..."')
+    lines.append("  },")
+    lines.append('  "actions_taken": [')
+    lines.append('    {"action": "description", "result": "outcome"},')
+    lines.append('    ...')
+    lines.append("  ],")
+    lines.append('  "evaluation_scores": {')
+
+    if rubric:
+        for i, criterion in enumerate(rubric):
+            comma = "," if i < len(rubric) - 1 else ""
+            lines.append(f'    "{criterion.get("name", "")}": <0.0-1.0>{comma}')
+    else:
+        lines.append('    "criterion_name": "<0.0-1.0>"')
+
+    lines.append("  },")
+    lines.append('  "updated_plan": {')
+    lines.append('    "objectives": ["..."],')
+    lines.append('    "next_actions": ["..."],')
+    lines.append('    "hypotheses": ["..."]')
+    lines.append("  },")
+    lines.append('  "next_cycle_reason": "Why another cycle is needed (or \'complete\' if done)",')
+    lines.append('  "next_cycle_delay_seconds": 300')
+    lines.append("}")
+    lines.append("```")
+
+    return "\n".join(lines).strip()
+
+
+def _format_json(data: dict | list) -> str:
+    """Format a dict/list as indented JSON for display in prompts."""
+    try:
+        import json
+        return json.dumps(data, indent=2, default=str)
+    except (TypeError, ValueError):
+        return str(data)

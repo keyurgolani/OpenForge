@@ -10,7 +10,6 @@ tags:
   - writing
   - template
 mode: interactive
-strategy: builder
 model:
   allow_override: true
   temperature: 0.6

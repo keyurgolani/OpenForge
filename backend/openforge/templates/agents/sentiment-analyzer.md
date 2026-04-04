@@ -6,7 +6,6 @@ description: Analyzes text content for sentiment, producing overall scores, per-
 icon: heart
 tags: [analysis, sentiment, pipeline]
 mode: pipeline
-strategy: analyst
 model:
   temperature: 0.2
   allow_override: true

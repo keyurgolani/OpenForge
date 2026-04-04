@@ -6,7 +6,6 @@ description: Evaluates risks from situation data, producing a risk matrix with s
 icon: alert-triangle
 tags: [analysis, risk, pipeline]
 mode: pipeline
-strategy: analyst
 model:
   temperature: 0.3
   allow_override: true

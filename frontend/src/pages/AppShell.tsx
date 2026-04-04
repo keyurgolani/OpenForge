@@ -9,7 +9,7 @@ import { useUIStore } from '@/stores/uiStore'
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
 import { getShortcutDisplay } from '@/lib/keyboard'
 import { onQuickKnowledgeOpen, type QuickKnowledgeType } from '@/lib/quick-knowledge'
-import { agentsRoute, sinksRoute, automationsRoute, chatRoute, dashboardRoute, deploymentsRoute, knowledgeRoute, runsRoute, searchRoute } from '@/lib/routes'
+import { agentsRoute, sinksRoute, automationsRoute, chatRoute, dashboardRoute, deploymentsRoute, knowledgeRoute, missionsRoute, runsRoute, searchRoute } from '@/lib/routes'
 import CommandPalette from '@/components/shared/CommandPalette'
 import CreateDispatcher from '@/components/knowledge/create/CreateDispatcher'
 import KnowledgeTypeGrid from '@/components/knowledge/KnowledgeTypeGrid'
@@ -293,6 +293,12 @@ export default function AppShell() {
         description: 'Define what happens with agent output values in automations.',
       }
     }
+    if (location.pathname.includes('/missions')) {
+      return {
+        title: 'Missions',
+        description: 'Ongoing agent objectives with autonomous cycles.',
+      }
+    }
     if (location.pathname.includes('/deployments')) {
       return {
         title: 'Deployments',
@@ -327,6 +333,7 @@ export default function AppShell() {
     agents: agentsRoute(),
     automations: automationsRoute(),
     deployments: deploymentsRoute(),
+    missions: missionsRoute(),
     runs: runsRoute(),
     sinks: sinksRoute(),
     settings: '/settings',
@@ -342,6 +349,7 @@ export default function AppShell() {
   const isAgentsPage = location.pathname.includes('/agents')
   const isAutomationsPage = location.pathname.includes('/automations')
   const isSinksPage = location.pathname.includes('/sinks')
+  const isMissionsPage = location.pathname.includes('/missions')
   const isDeploymentsPage = location.pathname.includes('/deployments')
   const isPrimarySurface = (
     isDashboard
@@ -354,6 +362,7 @@ export default function AppShell() {
     || isAgentsPage
     || isAutomationsPage
     || isSinksPage
+    || isMissionsPage
     || isDeploymentsPage
   )
 

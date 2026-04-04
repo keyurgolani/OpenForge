@@ -6,7 +6,6 @@ description: Compares and contrasts multiple items against specified criteria, p
 icon: columns
 tags: [synthesis, comparison, pipeline]
 mode: pipeline
-strategy: synthesizer
 model:
   temperature: 0.3
   allow_override: true

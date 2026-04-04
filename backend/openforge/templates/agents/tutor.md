@@ -10,7 +10,6 @@ tags:
   - tutor
   - template
 mode: interactive
-strategy: interactive
 model:
   allow_override: true
   temperature: 0.5

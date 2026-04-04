@@ -10,7 +10,6 @@ tags:
   - project
   - template
 mode: interactive
-strategy: analyst
 model:
   allow_override: true
   temperature: 0.4

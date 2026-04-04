@@ -52,6 +52,8 @@ export const ROUTES = {
   DEPLOYMENT_RUN_DETAIL: '/deployments/:deploymentId/runs/:runId',
   RUNS: '/runs',
   RUN_DETAIL: '/runs/:runId',
+  MISSIONS: '/missions',
+  MISSION_DETAIL: '/missions/:missionId',
   SINKS: '/sinks',
   SINK_CREATE: '/sinks/new',
   SINK_DETAIL: '/sinks/:sinkId',
@@ -149,6 +151,13 @@ export function runsRoute(runId?: string): string {
     return routeWithParams(ROUTES.RUN_DETAIL, { runId });
   }
   return ROUTES.RUNS;
+}
+
+export function missionsRoute(missionId?: string): string {
+  if (missionId) {
+    return routeWithParams(ROUTES.MISSION_DETAIL, { missionId });
+  }
+  return ROUTES.MISSIONS;
 }
 
 export function sinksRoute(sinkId?: string): string {

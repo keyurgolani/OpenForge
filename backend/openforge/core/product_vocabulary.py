@@ -15,6 +15,7 @@ class DomainNoun(StrEnum):
     SINK = "sink"
     KNOWLEDGE = "knowledge"
     DEPLOYMENT = "deployment"
+    MISSION = "mission"
 
 
 DOMAIN_LABELS: dict[DomainNoun, str] = {
@@ -25,6 +26,7 @@ DOMAIN_LABELS: dict[DomainNoun, str] = {
     DomainNoun.SINK: "Sink",
     DomainNoun.KNOWLEDGE: "Knowledge",
     DomainNoun.DEPLOYMENT: "Deployment",
+    DomainNoun.MISSION: "Mission",
 }
 
 DOMAIN_LABELS_PLURAL: dict[DomainNoun, str] = {
@@ -35,6 +37,7 @@ DOMAIN_LABELS_PLURAL: dict[DomainNoun, str] = {
     DomainNoun.SINK: "Sinks",
     DomainNoun.KNOWLEDGE: "Knowledge",
     DomainNoun.DEPLOYMENT: "Deployments",
+    DomainNoun.MISSION: "Missions",
 }
 
 DOMAIN_DESCRIPTIONS: dict[DomainNoun, str] = {
@@ -45,6 +48,7 @@ DOMAIN_DESCRIPTIONS: dict[DomainNoun, str] = {
     DomainNoun.SINK: "Sinks define what happens with agent output values in automations.",
     DomainNoun.KNOWLEDGE: "Knowledge is user-provided context and source material.",
     DomainNoun.DEPLOYMENT: "Deployments are live instances of automations with baked-in inputs.",
+    DomainNoun.MISSION: "Missions are goal-directed autonomous agents that run continuously toward an objective.",
 }
 
 ROUTE_SEGMENTS: dict[DomainNoun, str] = {

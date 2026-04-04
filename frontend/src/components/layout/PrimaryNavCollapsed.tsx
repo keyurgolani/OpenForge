@@ -12,6 +12,7 @@ import {
   Bot,
   Download,
   Settings,
+  Target,
   Zap,
   Rocket,
   Search,
@@ -32,6 +33,7 @@ interface PrimaryNavCollapsedProps {
     agents: string;
     automations: string;
     deployments: string;
+    missions: string;
     runs: string;
     sinks: string;
     settings: string;
@@ -132,6 +134,12 @@ export function PrimaryNavCollapsed({
               title="Deployments"
               isActive={isActive('/deployments')}
               icon={<Rocket className="w-4 h-4" />}
+            />
+            <NavIcon
+              to={routes.missions}
+              title="Missions"
+              isActive={isActive('/missions')}
+              icon={<Target className="w-4 h-4" />}
             />
             <NavIcon
               to={routes.sinks}

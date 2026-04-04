@@ -6,7 +6,6 @@ description: Scans multiple news sources for recent coverage on given topics and
 icon: newspaper
 tags: [collection, news, pipeline]
 mode: pipeline
-strategy: collector
 model:
   temperature: 0.1
   allow_override: true

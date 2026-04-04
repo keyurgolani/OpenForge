@@ -303,3 +303,63 @@ def poll_deployments():
         loop.run_until_complete(_run())
     finally:
         loop.close()
+
+
+@celery_app.task(name="mission.poll")
+def poll_missions_task():
+    """Celery Beat task: poll for due missions and fire cycles."""
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+    from openforge.config import get_settings
+    from openforge.runtime.mission_scheduler import poll_missions
+
+    settings = get_settings()
+    engine = create_async_engine(settings.database_url, echo=False, pool_size=2)
+    Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    loop = asyncio.new_event_loop()
+    try:
+        async def _run():
+            try:
+                async with Session() as db:
+                    count = await poll_missions(db)
+                    if count:
+                        logger.info("Fired %d mission cycle(s)", count)
+            finally:
+                await engine.dispose()
+
+        loop.run_until_complete(_run())
+    finally:
+        loop.close()
+
+
+@celery_app.task(name="mission.execute", bind=True, max_retries=0)
+def execute_mission_cycle(self, mission_id: str, cycle_id: str, run_id: str):
+    """Celery task that executes a mission cycle in an asyncio event loop."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(
+            _run_mission_cycle(mission_id, cycle_id, run_id)
+        )
+    except Exception as exc:
+        logger.error(
+            "Mission cycle task mission=%s cycle=%s failed: %s",
+            mission_id, cycle_id, exc,
+        )
+        loop.run_until_complete(_mark_run_failed(run_id, str(exc)))
+        raise
+    finally:
+        loop.close()
+
+
+async def _run_mission_cycle(
+    mission_id: str, cycle_id: str, run_id: str,
+) -> None:
+    """Async wrapper that calls the mission cycle executor."""
+    from openforge.runtime.mission_executor import execute_cycle
+
+    await execute_cycle(
+        mission_id=UUID(mission_id),
+        cycle_id=UUID(cycle_id),
+        run_id=UUID(run_id),
+    )

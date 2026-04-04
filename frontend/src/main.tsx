@@ -24,6 +24,8 @@ const AutomationsPage = lazy(() => import('./pages/AutomationsPage'))
 const AutomationDetailPage = lazy(() => import('./pages/AutomationDetailPage'))
 const DeploymentsPage = lazy(() => import('./pages/DeploymentsPage'))
 const DeploymentDetailPage = lazy(() => import('./pages/DeploymentDetailPage'))
+const MissionsPage = lazy(() => import('./pages/MissionsPage'))
+const MissionDetailPage = lazy(() => import('./pages/MissionDetailPage'))
 const RunsPage = lazy(() => import('./pages/RunsPage'))
 const RunDetailPage = lazy(() => import('./pages/RunDetailPage'))
 const SinksPage = lazy(() => import('./pages/SinksPage'))
@@ -202,6 +204,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                 <Route path="/deployments" element={<ErrorBoundary><DeploymentsPage /></ErrorBoundary>} />
                                 <Route path="/deployments/:deploymentId" element={<ErrorBoundary><DeploymentDetailPage /></ErrorBoundary>} />
                                 <Route path="/deployments/:deploymentId/runs/:runId" element={<ErrorBoundary><RunDetailPage /></ErrorBoundary>} />
+                                <Route path="/missions" element={<ErrorBoundary><MissionsPage /></ErrorBoundary>} />
+                                <Route path="/missions/:missionId" element={<ErrorBoundary><MissionDetailPage /></ErrorBoundary>} />
                                 <Route path="/runs" element={<Navigate to="/deployments" replace />} />
                                 <Route path="/runs/:runId" element={<ErrorBoundary><RunDetailPage /></ErrorBoundary>} />
                                 <Route path="/sinks" element={<ErrorBoundary><SinksPage /></ErrorBoundary>} />

@@ -6,7 +6,6 @@ description: Assesses geopolitical situations with source-graded intelligence, p
 icon: globe
 tags: [analysis, geopolitical, intelligence, pipeline]
 mode: pipeline
-strategy: analyst
 model:
   temperature: 0.3
   allow_override: true

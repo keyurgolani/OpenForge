@@ -659,7 +659,8 @@ class KnowledgeProcessingService:
             )
 
         # Schedule intelligence generation for newly created knowledge with initial content.
-        if has_initial_content and auto_intelligence_enabled:
+        # Journal items are already structured — skip AI intelligence generation.
+        if has_initial_content and auto_intelligence_enabled and data.type != "journal":
             background_tasks.add_task(
                 self.run_knowledge_intelligence_job,
                 knowledge_id=knowledge_record.id,

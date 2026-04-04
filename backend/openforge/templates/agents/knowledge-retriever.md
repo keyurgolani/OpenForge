@@ -6,7 +6,6 @@ description: Searches workspace knowledge bases for relevant items matching a qu
 icon: book-open
 tags: [collection, knowledge, pipeline]
 mode: pipeline
-strategy: collector
 model:
   temperature: 0.1
   allow_override: true

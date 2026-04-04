@@ -8,6 +8,7 @@ class KnowledgeCreate(BaseModel):
     type: Literal[
         "note", "standard", "fleeting", "bookmark", "gist",
         "image", "audio", "pdf", "document", "sheet", "slides",
+        "journal",
     ] = "note"
 
     @model_validator(mode="before")

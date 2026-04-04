@@ -6,7 +6,6 @@ description: Merges multiple text inputs into a unified, coherent narrative, ide
 icon: git-merge
 tags: [synthesis, consolidation, pipeline]
 mode: pipeline
-strategy: synthesizer
 model:
   temperature: 0.4
   allow_override: true

@@ -6,7 +6,6 @@ description: Analyzes a knowledge corpus to identify gaps, missing coverage area
 icon: search
 tags: [analysis, knowledge, pipeline]
 mode: pipeline
-strategy: analyst
 model:
   temperature: 0.3
   allow_override: true

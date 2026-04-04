@@ -6,7 +6,6 @@ description: Performs quantitative and technical analysis using Python calculati
 icon: bar-chart
 tags: [analysis, quantitative, pipeline]
 mode: pipeline
-strategy: analyst
 model:
   temperature: 0.2
   allow_override: true

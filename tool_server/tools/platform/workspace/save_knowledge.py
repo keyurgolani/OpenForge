@@ -37,9 +37,9 @@ class SaveKnowledgeTool(BaseTool):
                 "content": {"type": "string", "description": "Content to save"},
                 "type": {
                     "type": "string",
-                    "enum": ["note", "fleeting", "gist"],
+                    "enum": ["note", "fleeting", "gist", "journal"],
                     "default": "note",
-                    "description": "Knowledge type: note (notes/documents), fleeting (quick temporary thought), gist (code snippet)",
+                    "description": "Knowledge type: note (notes/documents), fleeting (quick temporary thought), gist (code snippet), journal (structured mission journal entry)",
                 },
             },
             "required": ["workspace_id", "title", "content"],

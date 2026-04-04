@@ -6,7 +6,6 @@ description: Condenses long-form content into concise summaries at the requested
 icon: minimize-2
 tags: [synthesis, summary, pipeline]
 mode: pipeline
-strategy: synthesizer
 model:
   temperature: 0.3
   allow_override: true

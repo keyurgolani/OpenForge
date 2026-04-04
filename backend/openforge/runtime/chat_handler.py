@@ -1107,6 +1107,7 @@ class ChatHandler:
                         _func.count(_Knowledge.id).label("knowledge_count"),
                     )
                     .outerjoin(_Knowledge, _Knowledge.workspace_id == _Workspace.id)
+                    .where(_Workspace.ownership_type == "user")
                     .group_by(_Workspace.id)
                     .order_by(_Workspace.sort_order)
                 )

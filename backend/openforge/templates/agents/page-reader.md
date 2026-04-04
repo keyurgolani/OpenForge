@@ -6,7 +6,6 @@ description: Fetches and extracts clean text content from a list of URLs, return
 icon: file-text
 tags: [collection, extraction, pipeline]
 mode: pipeline
-strategy: collector
 model:
   temperature: 0.1
   allow_override: true

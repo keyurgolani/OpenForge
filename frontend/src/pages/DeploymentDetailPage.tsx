@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -32,6 +32,8 @@ import {
   usePromoteDeploymentWorkspace,
 } from '@/features/deployments'
 import { useRunsQuery } from '@/features/runs'
+import { useQuery } from '@tanstack/react-query'
+import { getWorkspace } from '@/lib/api'
 import { deploymentsRoute, deploymentRunRoute, automationsRoute } from '@/lib/routes'
 import { formatDateTime, formatRelativeTime } from '@/lib/formatters'
 
@@ -59,6 +61,12 @@ export default function DeploymentDetailPage() {
   const teardownDeployment = useTeardownDeployment()
   const runNow = useRunDeploymentNow()
   const promoteWorkspace = usePromoteDeploymentWorkspace()
+  const ownedWsId = deployment?.owned_workspace_id
+  const { data: ownedWorkspace } = useQuery({
+    queryKey: ['workspace', ownedWsId],
+    queryFn: () => getWorkspace(ownedWsId!),
+    enabled: !!ownedWsId,
+  })
 
   const [teardownOpen, setTeardownOpen] = useState(false)
   const [promoteOpen, setPromoteOpen] = useState(false)
@@ -223,7 +231,12 @@ export default function DeploymentDetailPage() {
                 )}
               </div>
             </div>
-            <div className="rounded-xl border border-dashed border-border/25 bg-card/20 p-4 text-sm text-muted-foreground/80">
+            <div className="rounded-xl border border-dashed border-border/25 bg-card/20 p-4 text-sm text-muted-foreground/80 space-y-2">
+              {ownedWorkspace?.knowledge_count != null && (
+                <p className="text-foreground/70 font-medium">
+                  {ownedWorkspace.knowledge_count} knowledge item{ownedWorkspace.knowledge_count === 1 ? '' : 's'}
+                </p>
+              )}
               <p>
                 Agents in this deployment share a persistent knowledge workspace that accumulates data across runs.
                 Knowledge is read-only in the UI.

@@ -6,7 +6,6 @@ description: Produces concise briefings in various formats — executive briefs,
 icon: clipboard
 tags: [output, writing, pipeline]
 mode: pipeline
-strategy: writer
 model:
   temperature: 0.4
   allow_override: true

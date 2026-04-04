@@ -6,7 +6,6 @@ description: Compiles items into structured digests with highlights, rankings, a
 icon: list
 tags: [output, digest, pipeline]
 mode: pipeline
-strategy: writer
 model:
   temperature: 0.4
   allow_override: true

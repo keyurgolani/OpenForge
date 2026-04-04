@@ -88,8 +88,11 @@ class WorkspaceService:
 
         return _to_response(workspace)
 
-    async def list_workspaces(self, db: AsyncSession) -> list[WorkspaceResponse]:
-        result = await db.execute(select(Workspace).order_by(Workspace.sort_order))
+    async def list_workspaces(self, db: AsyncSession, *, ownership_type: str | None = None) -> list[WorkspaceResponse]:
+        stmt = select(Workspace)
+        if ownership_type is not None:
+            stmt = stmt.where(Workspace.ownership_type == ownership_type)
+        result = await db.execute(stmt.order_by(Workspace.sort_order))
         workspaces = result.scalars().all()
 
         responses = []

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { useWorkspaces } from '@/hooks/useWorkspace'
 
@@ -10,7 +10,11 @@ interface WorkspaceDropdownProps {
 export function WorkspaceDropdown({ onSelect, trigger }: WorkspaceDropdownProps) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
-  const { data: workspaces, isLoading, isError, refetch } = useWorkspaces()
+  const { data: allWorkspaces, isLoading, isError, refetch } = useWorkspaces()
+  const workspaces = useMemo(
+    () => (allWorkspaces ?? []).filter((ws: { ownership_type?: string }) => ws.ownership_type === 'user' || !ws.ownership_type),
+    [allWorkspaces],
+  )
 
   useEffect(() => {
     if (!open) return

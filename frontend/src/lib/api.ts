@@ -516,6 +516,30 @@ export const getGlobalConversationStreamState = (cid: string): Promise<any> =>
 export const exportGlobalConversation = (cid: string, format = 'json'): Promise<Blob> =>
     api.get(`/chat/conversations/${cid}/export`, { params: { format }, responseType: 'blob' }).then(r => r.data)
 
+// ── Missions ──
+export const listMissions = (params?: { status?: string }): Promise<any> =>
+    api.get('/missions', { params }).then(r => r.data)
+export const getMission = (id: string): Promise<any> =>
+    api.get(`/missions/${id}`).then(r => r.data)
+export const createMission = (data: object): Promise<any> =>
+    api.post('/missions', data).then(r => r.data)
+export const updateMission = (id: string, data: object): Promise<any> =>
+    api.patch(`/missions/${id}`, data).then(r => r.data)
+export const deleteMission = (id: string): Promise<any> =>
+    api.delete(`/missions/${id}`).then(r => r.data)
+export const activateMission = (id: string): Promise<any> =>
+    api.post(`/missions/${id}/activate`).then(r => r.data)
+export const pauseMission = (id: string): Promise<any> =>
+    api.post(`/missions/${id}/pause`).then(r => r.data)
+export const terminateMission = (id: string): Promise<any> =>
+    api.post(`/missions/${id}/terminate`).then(r => r.data)
+export const listMissionCycles = (id: string, params?: { status?: string; limit?: number }): Promise<any> =>
+    api.get(`/missions/${id}/cycles`, { params }).then(r => r.data)
+export const getMissionCycle = (missionId: string, cycleId: string): Promise<any> =>
+    api.get(`/missions/${missionId}/cycles/${cycleId}`).then(r => r.data)
+export const promoteMissionWorkspace = (id: string): Promise<any> =>
+    api.post(`/missions/${id}/workspace/promote`).then(r => r.data)
+
 // --- Template Engine ---
 export const getTemplateReference = async () =>
     (await api.get('/template-engine/reference')).data

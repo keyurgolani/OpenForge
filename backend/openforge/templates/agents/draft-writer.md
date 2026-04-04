@@ -6,7 +6,6 @@ description: Produces communication drafts for various channels (email, Slack, m
 icon: edit-3
 tags: [output, communications, pipeline]
 mode: pipeline
-strategy: writer
 model:
   temperature: 0.5
   allow_override: true

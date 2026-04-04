@@ -6,7 +6,6 @@ description: Searches the web for information on a given query and returns struc
 icon: search
 tags: [collection, search, pipeline]
 mode: pipeline
-strategy: collector
 model:
   temperature: 0.1
   allow_override: true

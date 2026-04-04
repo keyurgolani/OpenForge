@@ -6,7 +6,6 @@ description: Evaluates source reliability, grades materials by credibility, and 
 icon: shield
 tags: [analysis, evaluation, pipeline]
 mode: pipeline
-strategy: analyst
 model:
   temperature: 0.2
   allow_override: true

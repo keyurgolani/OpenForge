@@ -99,7 +99,9 @@ export default function WorkspaceHome() {
     const [searchParams, setSearchParams] = useSearchParams()
     const qc = useQueryClient()
     const currentWorkspace = useWorkspace(workspaceId) as { ownership_type?: string; is_readonly_ui?: boolean; name?: string } | undefined
+    const isReadOnly = currentWorkspace?.is_readonly_ui === true
     const isDeploymentWorkspace = currentWorkspace?.ownership_type === 'deployment'
+    const isMissionWorkspace = currentWorkspace?.ownership_type === 'mission'
 
     // Track knowledge IDs currently undergoing re-extraction
     const [extractingIds, setExtractingIds] = useState<Set<string>>(new Set())
@@ -267,6 +269,7 @@ export default function WorkspaceHome() {
     // Archive (Cmd+Shift+A) and Delete (Cmd+Backspace) keyboard shortcuts
     useEffect(() => {
         const handler = (e: KeyboardEvent) => {
+            if (isReadOnly) return
             const target = e.target as HTMLElement
             const tag = target.tagName.toLowerCase()
             if (tag === 'input' || tag === 'textarea' || tag === 'select' || target.isContentEditable) return
@@ -352,12 +355,13 @@ export default function WorkspaceHome() {
     return (
         <div className="w-full min-w-0 p-6 lg:p-7" onClick={closeAllMenus}>
             <div data-openforge-knowledge-sheet-anchor="1" className="min-w-0 space-y-5">
-                {isDeploymentWorkspace && (
+                {isReadOnly && (
                     <div className="flex items-center gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-300/90">
                         <Lock className="w-4 h-4 flex-shrink-0" />
                         <span>
-                            This workspace is managed by a deployment. Knowledge is read-only.
-                            Agents within the deployment can add and modify items during runs.
+                            {isMissionWorkspace
+                                ? 'This workspace is managed by a mission. Knowledge is read-only. Agents accumulate data during autonomous cycles.'
+                                : 'This workspace is managed by a deployment. Knowledge is read-only. Agents within the deployment can add and modify items during runs.'}
                         </span>
                     </div>
                 )}
@@ -446,7 +450,7 @@ export default function WorkspaceHome() {
                             {showArchived ? 'Archived View' : 'Archived'}
                         </button>
 
-                        {knowledgeItems.length > 0 && (
+                        {knowledgeItems.length > 0 && !isReadOnly && (
                             <button
                                 className="inline-flex h-10 items-center gap-1.5 px-3 rounded-lg border border-border/70 text-muted-foreground hover:text-foreground hover:border-border text-sm transition-colors"
                                 onClick={hasSelection ? clearSelection : selectAll}
@@ -495,16 +499,24 @@ export default function WorkspaceHome() {
                             <div className="text-center py-20">
                                 <Inbox className="w-14 h-14 mx-auto mb-4 text-muted-foreground/70" />
                                 <h3 className="text-lg font-semibold mb-2">No {typeMeta?.label?.toLowerCase() ?? 'items'} found</h3>
-                                <p className="text-muted-foreground text-sm">Create one to get started.</p>
-                                <div className="w-full max-w-2xl mt-6">
-                                    <KnowledgeTypeGrid onSelect={(type) => handleCreate(type)} />
-                                </div>
+                                <p className="text-muted-foreground text-sm">{isReadOnly ? 'No items of this type yet.' : 'Create one to get started.'}</p>
+                                {!isReadOnly && (
+                                    <div className="w-full max-w-2xl mt-6">
+                                        <KnowledgeTypeGrid onSelect={(type) => handleCreate(type)} />
+                                    </div>
+                                )}
                             </div>
                         ) : showArchived ? (
                             <div className="text-center py-20">
                                 <Archive className="w-14 h-14 mx-auto mb-4 text-muted-foreground/70" />
                                 <h3 className="text-lg font-semibold mb-2">No archived knowledge</h3>
                                 <p className="text-muted-foreground text-sm">Items you archive will appear here.</p>
+                            </div>
+                        ) : isReadOnly ? (
+                            <div className="text-center py-20">
+                                <Inbox className="w-14 h-14 mx-auto mb-4 text-muted-foreground/70" />
+                                <h3 className="text-lg font-semibold mb-2">No knowledge yet</h3>
+                                <p className="text-muted-foreground text-sm">Knowledge will appear here as agents produce outputs during runs.</p>
                             </div>
                         ) : (
                             <div className="flex flex-col items-center gap-6 py-16">
@@ -534,15 +546,15 @@ export default function WorkspaceHome() {
                                             index={index}
                                             minWidthPx={knowledgeCardMinWidth}
                                             maxHeightPx={KNOWLEDGE_CARD_MAX_HEIGHT_PX}
-                                            isSelected={selected.has(knowledgeRecord.id)}
-                                            anySelected={hasSelection}
-                                            onSelect={toggleSelect}
+                                            isSelected={!isReadOnly && selected.has(knowledgeRecord.id)}
+                                            anySelected={!isReadOnly && hasSelection}
+                                            onSelect={isReadOnly ? undefined : toggleSelect}
                                             onClick={() => setActiveKnowledgeId(knowledgeRecord.id)}
-                                            onPin={() => handlePin(knowledgeRecord.id)}
-                                            onArchive={() => handleArchive(knowledgeRecord.id)}
-                                            onExtractBookmarkContent={() => handleExtractBookmarkContent(knowledgeRecord.id)}
-                                            onReprocess={() => handleReprocess(knowledgeRecord.id)}
-                                            onDelete={() => handleDelete(knowledgeRecord.id)}
+                                            onPin={isReadOnly ? undefined : () => handlePin(knowledgeRecord.id)}
+                                            onArchive={isReadOnly ? undefined : () => handleArchive(knowledgeRecord.id)}
+                                            onExtractBookmarkContent={isReadOnly ? undefined : () => handleExtractBookmarkContent(knowledgeRecord.id)}
+                                            onReprocess={isReadOnly ? undefined : () => handleReprocess(knowledgeRecord.id)}
+                                            onDelete={isReadOnly ? undefined : () => handleDelete(knowledgeRecord.id)}
                                             isExtracting={extractingIds.has(knowledgeRecord.id)}
                                             isGeneratingIntelligence={intelligenceIds.has(knowledgeRecord.id)}
                                             workspaceId={workspaceId}
@@ -555,7 +567,7 @@ export default function WorkspaceHome() {
                 </div>
 
                 {/* Bulk action floating toolbar — portaled to body for true viewport centering */}
-                {hasSelection && createPortal(
+                {hasSelection && !isReadOnly && createPortal(
                     <div
                         className="fixed bottom-6 inset-x-0 z-50 flex justify-center pointer-events-none animate-slide-up"
                     >
@@ -718,13 +730,13 @@ function KnowledgeCard({
     maxHeightPx: number
     isSelected: boolean
     anySelected: boolean
-    onSelect: (id: string, e: React.MouseEvent) => void
+    onSelect?: (id: string, e: React.MouseEvent) => void
     onClick: () => void
-    onPin: () => void
-    onArchive: () => void
-    onExtractBookmarkContent: () => void
-    onReprocess: () => void
-    onDelete: () => void
+    onPin?: () => void
+    onArchive?: () => void
+    onExtractBookmarkContent?: () => void
+    onReprocess?: () => void
+    onDelete?: () => void
     isExtracting?: boolean
     isGeneratingIntelligence?: boolean
     workspaceId: string
@@ -813,37 +825,45 @@ function KnowledgeCard({
                                 className={floatingBtnClass}
                             />
                         )}
-                        <button
-                            className={floatingBtnClass}
-                            onClick={e => runAction(e, onPin)}
-                            title={knowledgeRecord.is_pinned ? 'Unpin' : 'Pin'}
-                            aria-label={knowledgeRecord.is_pinned ? 'Unpin knowledge' : 'Pin knowledge'}
-                        >
-                            {knowledgeRecord.is_pinned ? <PinOff className="w-3 h-3" /> : <Pin className="w-3 h-3" />}
-                        </button>
-                        <button
-                            className={floatingBtnClass}
-                            onClick={e => runAction(e, onArchive)}
-                            title={knowledgeRecord.is_archived ? 'Restore' : 'Archive'}
-                            aria-label={knowledgeRecord.is_archived ? 'Restore knowledge' : 'Archive knowledge'}
-                        >
-                            {knowledgeRecord.is_archived ? <ArchiveX className="w-3 h-3" /> : <Archive className="w-3 h-3" />}
-                        </button>
-                        <button
-                            className={`${floatingBtnClass} hover:bg-red-500/70`}
-                            onClick={e => runAction(e, onDelete)}
-                            title="Delete"
-                            aria-label="Delete knowledge"
-                        >
-                            <Trash2 className="w-3 h-3" />
-                        </button>
-                        <button
-                            className={`${floatingBtnClass} ${isSelected ? 'bg-accent text-accent-foreground hover:bg-accent/80' : ''}`}
-                            onClick={e => onSelect(knowledgeRecord.id, e)}
-                            aria-label={isSelected ? 'Deselect knowledge' : 'Select knowledge'}
-                        >
-                            {isSelected ? <CheckSquare className="w-3 h-3" /> : <Square className="w-3 h-3" />}
-                        </button>
+                        {onPin && (
+                            <button
+                                className={floatingBtnClass}
+                                onClick={e => runAction(e, onPin)}
+                                title={knowledgeRecord.is_pinned ? 'Unpin' : 'Pin'}
+                                aria-label={knowledgeRecord.is_pinned ? 'Unpin knowledge' : 'Pin knowledge'}
+                            >
+                                {knowledgeRecord.is_pinned ? <PinOff className="w-3 h-3" /> : <Pin className="w-3 h-3" />}
+                            </button>
+                        )}
+                        {onArchive && (
+                            <button
+                                className={floatingBtnClass}
+                                onClick={e => runAction(e, onArchive)}
+                                title={knowledgeRecord.is_archived ? 'Restore' : 'Archive'}
+                                aria-label={knowledgeRecord.is_archived ? 'Restore knowledge' : 'Archive knowledge'}
+                            >
+                                {knowledgeRecord.is_archived ? <ArchiveX className="w-3 h-3" /> : <Archive className="w-3 h-3" />}
+                            </button>
+                        )}
+                        {onDelete && (
+                            <button
+                                className={`${floatingBtnClass} hover:bg-red-500/70`}
+                                onClick={e => runAction(e, onDelete)}
+                                title="Delete"
+                                aria-label="Delete knowledge"
+                            >
+                                <Trash2 className="w-3 h-3" />
+                            </button>
+                        )}
+                        {onSelect && (
+                            <button
+                                className={`${floatingBtnClass} ${isSelected ? 'bg-accent text-accent-foreground hover:bg-accent/80' : ''}`}
+                                onClick={e => onSelect(knowledgeRecord.id, e)}
+                                aria-label={isSelected ? 'Deselect knowledge' : 'Select knowledge'}
+                            >
+                                {isSelected ? <CheckSquare className="w-3 h-3" /> : <Square className="w-3 h-3" />}
+                            </button>
+                        )}
                     </div>
 
                     {/* Card body — delegated to type-specific component */}
@@ -876,15 +896,19 @@ function KnowledgeCard({
                 </div>
             </ContextMenuTrigger>
             <ContextMenuContent className="w-48">
-                <ContextMenuItem onClick={onPin} className="gap-2">
-                    {knowledgeRecord.is_pinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
-                    <span>{knowledgeRecord.is_pinned ? 'Unpin Knowledge' : 'Pin Knowledge'}</span>
-                </ContextMenuItem>
-                <ContextMenuItem onClick={onArchive} className="gap-2">
-                    {knowledgeRecord.is_archived ? <ArchiveX className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
-                    <span>{knowledgeRecord.is_archived ? 'Unarchive' : 'Archive'}</span>
-                    <ContextMenuShortcut>{getShortcutDisplay('archiveKnowledge')}</ContextMenuShortcut>
-                </ContextMenuItem>
+                {onPin && (
+                    <ContextMenuItem onClick={onPin} className="gap-2">
+                        {knowledgeRecord.is_pinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
+                        <span>{knowledgeRecord.is_pinned ? 'Unpin Knowledge' : 'Pin Knowledge'}</span>
+                    </ContextMenuItem>
+                )}
+                {onArchive && (
+                    <ContextMenuItem onClick={onArchive} className="gap-2">
+                        {knowledgeRecord.is_archived ? <ArchiveX className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
+                        <span>{knowledgeRecord.is_archived ? 'Unarchive' : 'Archive'}</span>
+                        <ContextMenuShortcut>{getShortcutDisplay('archiveKnowledge')}</ContextMenuShortcut>
+                    </ContextMenuItem>
+                )}
                 {knowledgeRecord.type === 'bookmark' && knowledgeRecord.url && (
                     <ContextMenuItem onClick={() => window.open(knowledgeRecord.url!, '_blank')} className="gap-2">
                         <ExternalLink className="w-4 h-4" />
@@ -903,12 +927,16 @@ function KnowledgeCard({
                         <span>Copy Code</span>
                     </ContextMenuItem>
                 )}
-                <ContextMenuSeparator />
-                <ContextMenuItem onClick={onDelete} className="gap-2 text-red-500 focus:text-red-400 focus:bg-red-500/10">
-                    <Trash2 className="w-4 h-4" />
-                    <span>Delete Knowledge</span>
-                    <ContextMenuShortcut>{getShortcutDisplay('deleteKnowledge')}</ContextMenuShortcut>
-                </ContextMenuItem>
+                {onDelete && (
+                    <>
+                        <ContextMenuSeparator />
+                        <ContextMenuItem onClick={onDelete} className="gap-2 text-red-500 focus:text-red-400 focus:bg-red-500/10">
+                            <Trash2 className="w-4 h-4" />
+                            <span>Delete Knowledge</span>
+                            <ContextMenuShortcut>{getShortcutDisplay('deleteKnowledge')}</ContextMenuShortcut>
+                        </ContextMenuItem>
+                    </>
+                )}
             </ContextMenuContent>
         </ContextMenu>
     )

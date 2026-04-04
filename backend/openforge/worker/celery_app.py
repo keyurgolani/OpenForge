@@ -33,6 +33,10 @@ celery_app.conf.beat_schedule = {
         "task": "deployment.poll",
         "schedule": 30.0,
     },
+    "poll-missions": {
+        "task": "mission.poll",
+        "schedule": 60.0,
+    },
 }
 
 # Auto-discover tasks

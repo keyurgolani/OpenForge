@@ -6,7 +6,6 @@ description: Produces structured, professional reports from provided content, wi
 icon: file-text
 tags: [output, writing, pipeline]
 mode: pipeline
-strategy: writer
 model:
   temperature: 0.5
   allow_override: true

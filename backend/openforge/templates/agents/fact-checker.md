@@ -6,7 +6,6 @@ description: Verifies claims against available sources, producing verification r
 icon: check-circle
 tags: [analysis, verification, pipeline]
 mode: pipeline
-strategy: analyst
 model:
   temperature: 0.1
   allow_override: true

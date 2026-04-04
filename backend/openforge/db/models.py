@@ -529,6 +529,9 @@ class RunModel(Base):
     deployment_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("deployments.id", ondelete="SET NULL"), nullable=True, index=True,
     )
+    mission_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("missions.id", ondelete="SET NULL"), nullable=True, index=True,
+    )
     workspace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(50), default="pending")
     state_snapshot: Mapped[dict] = mapped_column(JSONB, default=dict)
@@ -1198,3 +1201,79 @@ class SkillTemplateModel(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+
+
+class MissionModel(Base):
+    """A goal-directed autonomous agent that runs continuously toward an objective."""
+    __tablename__ = "missions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    icon: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    tags: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    goal: Mapped[str] = mapped_column(Text, nullable=False)
+    directives: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    constraints: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    rubric: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    termination_conditions: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    autonomous_agent_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("agents.id", ondelete="RESTRICT"), nullable=False,
+    )
+    agent_access: Mapped[dict] = mapped_column(JSONB, nullable=False, default=lambda: {"mode": "all"})
+    tool_overrides: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    phase_sinks: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    workspace_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="SET NULL"), nullable=True,
+    )
+    cadence: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    budget: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
+    current_plan: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    cycle_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tokens_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cost_estimate: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    last_cycle_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_cycle_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+    activated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_missions_status_next_cycle", "status", "next_cycle_at"),
+    )
+
+
+class MissionCycleModel(Base):
+    """A single OODA cycle within a mission."""
+    __tablename__ = "mission_cycles"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    mission_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("missions.id", ondelete="CASCADE"), nullable=False,
+    )
+    cycle_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    phase: Mapped[str] = mapped_column(String(20), nullable=False, default="perceive")
+    phase_summaries: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    actions_log: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    evaluation_scores: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    ratchet_passed: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    next_cycle_requested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_cycle_reason: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    primary_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("runs.id", ondelete="SET NULL"), nullable=True,
+    )
+    tokens_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cost_estimate: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    duration_seconds: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="running")
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("mission_id", "cycle_number", name="uq_mission_cycles_mission_number"),
+        Index("ix_mission_cycles_mission_status", "mission_id", "status"),
+    )

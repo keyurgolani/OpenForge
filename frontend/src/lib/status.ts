@@ -103,6 +103,7 @@ export function getStatusLabel(status: string): string {
     failed_sync: 'Failed Sync',
     timeout: 'Timeout',
     torn_down: 'Torn Down',
+    terminated: 'Terminated',
   };
   return labels[status] || status;
 }
@@ -141,6 +142,7 @@ export function getStatusColor(status: ExecutionStatus | KnowledgeStatus | Trigg
     failed_sync: 'error',
     timeout: 'error',
     torn_down: 'default',
+    terminated: 'error',
   };
   return colorMap[status] || 'default';
 }

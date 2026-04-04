@@ -29,7 +29,7 @@ class ListWorkspacesTool(BaseTool):
         }
 
     async def execute(self, params: dict, context: ToolContext) -> ToolResult:
-        url = f"{context.main_app_url}/api/v1/workspaces"
+        url = f"{context.main_app_url}/api/v1/workspaces?ownership_type=user"
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 resp = await client.get(url)

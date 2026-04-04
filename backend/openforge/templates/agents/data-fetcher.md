@@ -6,7 +6,6 @@ description: Fetches and structures data from APIs, web sources, or local comput
 icon: database
 tags: [collection, data, pipeline]
 mode: pipeline
-strategy: collector
 model:
   temperature: 0.1
   allow_override: true

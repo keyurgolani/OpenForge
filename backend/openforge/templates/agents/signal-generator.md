@@ -6,7 +6,6 @@ description: Synthesizes multi-dimensional analysis data into directional tradin
 icon: zap
 tags: [output, signals, finance, pipeline]
 mode: pipeline
-strategy: writer
 model:
   temperature: 0.2
   allow_override: true

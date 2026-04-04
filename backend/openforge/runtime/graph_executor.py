@@ -75,27 +75,6 @@ def _extract_structured_output(text: str) -> dict[str, Any] | None:
     return None
 
 
-def _build_deployment_workspace_preamble(ws_info: dict[str, Any]) -> str:
-    """Build preamble section about the deployment-owned workspace."""
-    lines = [
-        "# Deployment Shared Knowledge",
-        "",
-        f"This deployment has a shared knowledge workspace: "
-        f"**{ws_info['name']}** (id: `{ws_info['id']}`).",
-        "",
-        "Use this workspace to:",
-        "- **Persist findings** that should be available to future runs of this deployment",
-        "- **Read prior findings** from previous runs for continuity",
-        "- **Accumulate data** over time rather than starting from scratch each run",
-        "",
-        "When saving to this workspace, use descriptive titles with dates "
-        "so future runs can search effectively.",
-        "",
-        f"This workspace currently contains {ws_info.get('knowledge_count', 0)} items.",
-    ]
-    return "\n".join(lines)
-
-
 class GraphExecutor:
     """Execute a multi-node automation DAG."""
 
@@ -315,6 +294,7 @@ class GraphExecutor:
             ws_stmt = (
                 _select(_Workspace, _func.count(_Knowledge.id).label("kc"))
                 .outerjoin(_Knowledge, _Knowledge.workspace_id == _Workspace.id)
+                .where(_Workspace.ownership_type == "user")
                 .group_by(_Workspace.id)
                 .order_by(_Workspace.sort_order)
             )
@@ -322,7 +302,6 @@ class GraphExecutor:
                 workspaces_data.append({
                     "id": str(ws.id), "name": ws.name,
                     "description": ws.description or "", "knowledge_count": kc,
-                    "ownership_type": ws.ownership_type,
                 })
         except Exception:
             pass
@@ -338,13 +317,28 @@ class GraphExecutor:
         except Exception:
             pass
 
-        # Resolve deployment workspace info for preamble
+        # Resolve deployment workspace separately
         deployment_workspace_info: dict | None = None
         if self._deployment and self._deployment.owned_workspace_id:
-            for ws in workspaces_data:
-                if ws["id"] == str(self._deployment.owned_workspace_id):
-                    deployment_workspace_info = ws
-                    break
+            try:
+                from openforge.db.models import Workspace as _Workspace, Knowledge as _Knowledge
+                from sqlalchemy import func as _func, select as _select
+
+                dw_stmt = (
+                    _select(_Workspace, _func.count(_Knowledge.id).label("kc"))
+                    .outerjoin(_Knowledge, _Knowledge.workspace_id == _Workspace.id)
+                    .where(_Workspace.id == self._deployment.owned_workspace_id)
+                    .group_by(_Workspace.id)
+                )
+                dw_row = (await self.db.execute(dw_stmt)).first()
+                if dw_row:
+                    dw, dw_kc = dw_row
+                    deployment_workspace_info = {
+                        "id": str(dw.id), "name": dw.name,
+                        "description": dw.description or "", "knowledge_count": dw_kc,
+                    }
+            except Exception:
+                pass
 
         automation_postamble = build_postamble(
             workspace_id=parent_run.workspace_id,
@@ -353,17 +347,11 @@ class GraphExecutor:
             tools_data=tools_data,
             skills_data=[],
             tools_enabled=snapshot.get("tools_enabled", True),
+            deployment_workspace=deployment_workspace_info,
         )
 
-        # Inject deployment workspace guidance into the preamble
-        deployment_preamble = ""
-        if deployment_workspace_info:
-            deployment_preamble = _build_deployment_workspace_preamble(deployment_workspace_info)
-
-        # Assemble: preamble + deployment workspace guidance + rendered user prompt + postamble
+        # Assemble: preamble + rendered user prompt + postamble
         prompt_parts = [automation_preamble]
-        if deployment_preamble:
-            prompt_parts.append(deployment_preamble)
         prompt_parts.append(rendered_prompt)
         if automation_postamble:
             prompt_parts.append(automation_postamble)

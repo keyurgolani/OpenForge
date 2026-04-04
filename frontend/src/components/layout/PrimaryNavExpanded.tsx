@@ -21,6 +21,7 @@ import {
   ChevronDown,
   ChevronRight,
   Pencil,
+  Target,
   Trash2,
   Zap,
   Rocket,
@@ -81,6 +82,7 @@ interface PrimaryNavExpandedProps {
     agents: string;
     automations: string;
     deployments: string;
+    missions: string;
     runs: string;
     sinks: string;
     settings: string;
@@ -295,6 +297,13 @@ export function PrimaryNavExpanded({
                 icon={<Rocket className="w-4 h-4" />}
                 label="Deployments"
                 isActive={isActive('/deployments')}
+              />
+
+              <NavItem
+                to={routes.missions}
+                icon={<Target className="w-4 h-4" />}
+                label="Missions"
+                isActive={isActive('/missions')}
               />
 
               <NavItem

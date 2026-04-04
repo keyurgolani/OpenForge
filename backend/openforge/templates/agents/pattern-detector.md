@@ -6,7 +6,6 @@ description: Identifies trends, anomalies, cycles, and correlations in data seri
 icon: activity
 tags: [analysis, patterns, pipeline]
 mode: pipeline
-strategy: analyst
 model:
   temperature: 0.2
   allow_override: true

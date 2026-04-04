@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import text, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,8 +26,11 @@ router = APIRouter()
 
 
 @router.get("", response_model=list[WorkspaceResponse])
-async def list_workspaces(db: AsyncSession = Depends(get_db)):
-    return await workspace_service.list_workspaces(db)
+async def list_workspaces(
+    ownership_type: str | None = Query(None, description="Filter by ownership type (user, deployment, mission)"),
+    db: AsyncSession = Depends(get_db),
+):
+    return await workspace_service.list_workspaces(db, ownership_type=ownership_type)
 
 
 @router.post("", response_model=WorkspaceResponse, status_code=201)
