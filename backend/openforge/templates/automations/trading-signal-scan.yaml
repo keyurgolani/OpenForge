@@ -1,0 +1,78 @@
+name: Trading Signal Scan
+slug: trading-signal-scan
+description: >
+  Multi-dimensional signal pipeline: parallel data, news, and web collection,
+  then parallel technical, sentiment, fundamental, and geopolitical analysis,
+  into signal generation and risk assessment.
+tags: [trading, signals, finance, template]
+
+nodes:
+  - agent_slug: data-fetcher
+    node_key: data_fetch
+    static_inputs:
+      format: json
+  - agent_slug: news-scanner
+    node_key: news_scan
+    static_inputs:
+      period: last_24h
+  - agent_slug: web-searcher
+    node_key: web_search
+    static_inputs:
+      num_results: 10
+  - agent_slug: technical-analyst
+    node_key: technical
+  - agent_slug: sentiment-analyzer
+    node_key: sentiment
+  - agent_slug: fundamental-analyst
+    node_key: fundamental
+  - agent_slug: geopolitical-analyst
+    node_key: geopolitical
+    static_inputs:
+      impact_lens: financial_markets
+  - agent_slug: signal-generator
+    node_key: signals
+  - agent_slug: risk-assessor
+    node_key: risk
+  - agent_slug: brief-writer
+    node_key: output
+    static_inputs:
+      format: executive_brief
+
+wiring:
+  - from: data_fetch.dataset
+    to: technical.data_points
+  - from: news_scan.news_items
+    to: sentiment.content
+  - from: web_search.results
+    to: fundamental.subject
+  - from: web_search.results
+    to: geopolitical.region_or_topic
+  - from: technical.technical_analysis
+    to: signals.technical_data
+  - from: sentiment.sentiment_summary
+    to: signals.sentiment_data
+  - from: fundamental.fundamental_analysis
+    to: signals.fundamental_data
+  - from: signals.signal_direction
+    to: risk.situation_data
+  - from: risk.risk_matrix
+    to: output.content
+  - from: signals.key_levels
+    to: output.content
+
+deployment_inputs:
+  - data_fetch.data_request
+  - news_scan.topics
+  - web_search.query
+
+sinks:
+  - type: knowledge_create
+    node_key: save_scan
+    wired_from: output.brief
+    config:
+      knowledge_type: note
+      title_template: "Signal Scan - {{date}}"
+
+suggested_trigger:
+  type: cron
+  expression: "0 6 * * 1-5"

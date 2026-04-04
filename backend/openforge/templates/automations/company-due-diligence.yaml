@@ -1,0 +1,75 @@
+name: Company Due Diligence
+slug: company-due-diligence
+description: >
+  Due diligence pipeline: parallel web, news, and data collection, page reading
+  and source evaluation, parallel fundamental, sentiment, and risk analysis,
+  synthesis, and comprehensive report.
+tags: [due-diligence, research, business, template]
+
+nodes:
+  - agent_slug: web-searcher
+    node_key: web_search
+    static_inputs:
+      num_results: 20
+  - agent_slug: news-scanner
+    node_key: news_scan
+    static_inputs:
+      period: last_month
+      max_items: 20
+  - agent_slug: data-fetcher
+    node_key: data_fetch
+    static_inputs:
+      format: json
+  - agent_slug: page-reader
+    node_key: reader
+  - agent_slug: source-evaluator
+    node_key: evaluator
+  - agent_slug: fundamental-analyst
+    node_key: fundamental
+  - agent_slug: sentiment-analyzer
+    node_key: sentiment
+  - agent_slug: risk-assessor
+    node_key: risk
+  - agent_slug: synthesizer
+    node_key: synthesis
+  - agent_slug: report-writer
+    node_key: output
+    static_inputs:
+      report_type: executive
+
+wiring:
+  - from: web_search.results
+    to: reader.urls
+  - from: news_scan.news_items
+    to: evaluator.raw_sources
+  - from: data_fetch.dataset
+    to: fundamental.subject
+  - from: reader.extracted_content
+    to: sentiment.content
+  - from: evaluator.graded_sources
+    to: risk.situation_data
+  - from: fundamental.fundamental_analysis
+    to: synthesis.inputs
+  - from: sentiment.sentiment_summary
+    to: synthesis.inputs
+  - from: risk.risk_matrix
+    to: synthesis.inputs
+  - from: synthesis.synthesis
+    to: output.content
+
+deployment_inputs:
+  - web_search.query
+  - news_scan.topics
+  - data_fetch.data_request
+  - output.audience
+
+sinks:
+  - type: knowledge_create
+    node_key: save_report
+    wired_from: output.report
+    config:
+      knowledge_type: document
+      title_template: "Due Diligence Report - {{date}}"
+
+suggested_trigger:
+  type: manual

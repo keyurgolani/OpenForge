@@ -1,0 +1,67 @@
+name: Brand Monitor
+slug: brand-monitor
+description: >
+  Brand monitoring pipeline: parallel news and web scanning, source evaluation,
+  parallel sentiment and pattern analysis, historical comparison via knowledge, and digest.
+tags: [brand, monitoring, sentiment, template]
+
+nodes:
+  - agent_slug: news-scanner
+    node_key: news_scan
+    static_inputs:
+      period: last_24h
+  - agent_slug: web-searcher
+    node_key: web_search
+  - agent_slug: source-evaluator
+    node_key: evaluator
+  - agent_slug: sentiment-analyzer
+    node_key: sentiment
+  - agent_slug: pattern-detector
+    node_key: patterns
+    static_inputs:
+      detection_type: trends
+  - agent_slug: knowledge-retriever
+    node_key: history
+  - agent_slug: comparator
+    node_key: comparison
+  - agent_slug: digest-compiler
+    node_key: output
+    static_inputs:
+      digest_type: activity
+
+wiring:
+  - from: news_scan.news_items
+    to: evaluator.raw_sources
+  - from: web_search.results
+    to: evaluator.raw_sources
+  - from: evaluator.graded_sources
+    to: sentiment.content
+  - from: evaluator.graded_sources
+    to: patterns.data_series
+  - from: sentiment.sentiment_summary
+    to: comparison.items
+  - from: patterns.patterns
+    to: comparison.items
+  - from: history.knowledge_items
+    to: comparison.criteria
+  - from: comparison.comparison_matrix
+    to: output.items
+  - from: comparison.ranking
+    to: output.items
+
+deployment_inputs:
+  - news_scan.topics
+  - web_search.query
+  - history.query
+
+sinks:
+  - type: knowledge_create
+    node_key: save_digest
+    wired_from: output.digest
+    config:
+      knowledge_type: note
+      title_template: "Brand Monitor - {{date}}"
+
+suggested_trigger:
+  type: cron
+  expression: "0 8 * * *"

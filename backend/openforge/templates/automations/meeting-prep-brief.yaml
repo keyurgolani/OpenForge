@@ -1,0 +1,56 @@
+name: Meeting Prep Brief
+slug: meeting-prep-brief
+description: >
+  Meeting preparation pipeline: parallel research from web, news, and knowledge,
+  page reading, summarization, and brief with talking points.
+tags: [meeting, preparation, brief, template]
+
+nodes:
+  - agent_slug: web-searcher
+    node_key: web_search
+    static_inputs:
+      num_results: 10
+  - agent_slug: news-scanner
+    node_key: news_scan
+    static_inputs:
+      period: last_week
+      max_items: 10
+  - agent_slug: knowledge-retriever
+    node_key: knowledge
+  - agent_slug: page-reader
+    node_key: reader
+  - agent_slug: summarizer
+    node_key: summary
+    static_inputs:
+      target_length: medium
+  - agent_slug: brief-writer
+    node_key: output
+
+wiring:
+  - from: web_search.results
+    to: reader.urls
+  - from: news_scan.news_items
+    to: reader.urls
+  - from: reader.extracted_content
+    to: summary.content
+  - from: knowledge.knowledge_items
+    to: summary.content
+  - from: summary.summary
+    to: output.content
+
+deployment_inputs:
+  - web_search.query
+  - news_scan.topics
+  - knowledge.query
+  - output.format
+
+sinks:
+  - type: knowledge_create
+    node_key: save_brief
+    wired_from: output.brief
+    config:
+      knowledge_type: note
+      title_template: "Meeting Prep - {{date}}"
+
+suggested_trigger:
+  type: manual

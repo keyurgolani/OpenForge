@@ -1,0 +1,66 @@
+name: Regulatory Compliance Scan
+slug: regulatory-compliance-scan
+description: >
+  Compliance monitoring pipeline: parallel news and web scanning, page reading,
+  fact checking, parallel geopolitical and risk analysis, synthesis, and report.
+tags: [regulatory, compliance, monitoring, template]
+
+nodes:
+  - agent_slug: news-scanner
+    node_key: news_scan
+    static_inputs:
+      period: last_week
+  - agent_slug: web-searcher
+    node_key: web_search
+  - agent_slug: page-reader
+    node_key: reader
+  - agent_slug: fact-checker
+    node_key: checker
+  - agent_slug: geopolitical-analyst
+    node_key: geopolitical
+    static_inputs:
+      impact_lens: general
+  - agent_slug: risk-assessor
+    node_key: risk
+  - agent_slug: synthesizer
+    node_key: synthesis
+  - agent_slug: report-writer
+    node_key: output
+    static_inputs:
+      report_type: analysis
+
+wiring:
+  - from: news_scan.news_items
+    to: reader.urls
+  - from: web_search.results
+    to: reader.urls
+  - from: reader.extracted_content
+    to: checker.claims
+  - from: checker.verification_results
+    to: geopolitical.region_or_topic
+  - from: checker.verification_results
+    to: risk.situation_data
+  - from: geopolitical.situation_assessment
+    to: synthesis.inputs
+  - from: risk.risk_matrix
+    to: synthesis.inputs
+  - from: synthesis.synthesis
+    to: output.content
+
+deployment_inputs:
+  - news_scan.topics
+  - web_search.query
+  - risk.risk_domain
+  - output.audience
+
+sinks:
+  - type: knowledge_create
+    node_key: save_report
+    wired_from: output.report
+    config:
+      knowledge_type: document
+      title_template: "Compliance Scan - {{date}}"
+
+suggested_trigger:
+  type: cron
+  expression: "0 7 * * 1"

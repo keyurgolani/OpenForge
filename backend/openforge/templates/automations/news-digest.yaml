@@ -1,0 +1,55 @@
+name: News Digest
+slug: news-digest-pipeline
+description: >
+  News digest pipeline: scan news, extract full articles, parallel fact-checking
+  and source evaluation, summarize, and compile into digest format.
+tags: [news, digest, daily, template]
+
+nodes:
+  - agent_slug: news-scanner
+    node_key: scanner
+  - agent_slug: page-reader
+    node_key: reader
+  - agent_slug: fact-checker
+    node_key: checker
+  - agent_slug: source-evaluator
+    node_key: evaluator
+  - agent_slug: summarizer
+    node_key: summary
+    static_inputs:
+      target_length: medium
+  - agent_slug: digest-compiler
+    node_key: output
+    static_inputs:
+      digest_type: news
+
+wiring:
+  - from: scanner.news_items
+    to: reader.urls
+  - from: reader.extracted_content
+    to: checker.claims
+  - from: reader.extracted_content
+    to: evaluator.raw_sources
+  - from: checker.verification_results
+    to: summary.content
+  - from: evaluator.graded_sources
+    to: summary.content
+  - from: summary.summary
+    to: output.items
+
+deployment_inputs:
+  - scanner.topics
+  - scanner.period
+  - scanner.max_items
+
+sinks:
+  - type: knowledge_create
+    node_key: save_digest
+    wired_from: output.digest
+    config:
+      knowledge_type: note
+      title_template: "News Digest - {{date}}"
+
+suggested_trigger:
+  type: cron
+  expression: "0 7 * * *"

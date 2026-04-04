@@ -108,7 +108,7 @@ const AutomationGraphEditor = forwardRef<AutomationGraphEditorHandle, Automation
 export default AutomationGraphEditor
 
 function AutomationGraphEditorInner({ automationId, graph, readOnly = false, forwardedRef }: AutomationGraphEditorProps & { forwardedRef?: React.Ref<AutomationGraphEditorHandle> }) {
-  const { data: agentsData } = useAgentsQuery()
+  const { data: agentsData } = useAgentsQuery({ mode: 'pipeline' })
   const { data: sinksData } = useSinksQuery()
   const saveGraph = useSaveAutomationGraph()
   const agents = agentsData?.agents ?? []

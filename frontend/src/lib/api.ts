@@ -432,7 +432,7 @@ export const updateSink = (id: string, data: SinkUpdate): Promise<Sink> =>
 export const deleteSink = (id: string): Promise<void> => api.delete(`/sinks/${id}`)
 
 // ── Agents ──
-export const listAgents = (params?: { skip?: number; limit?: number }): Promise<AgentDefinitionListResponse> =>
+export const listAgents = (params?: { skip?: number; limit?: number; mode?: string }): Promise<AgentDefinitionListResponse> =>
     api.get('/agents', { params }).then(r => r.data)
 export const getAgent = (id: string): Promise<AgentDefinition> => api.get(`/agents/${id}`).then(r => r.data)
 export const createAgent = (data: AgentDefinitionCreate): Promise<AgentDefinition> => api.post('/agents', data).then(r => r.data)

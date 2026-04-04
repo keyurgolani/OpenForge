@@ -1,0 +1,56 @@
+name: Customer Feedback Analysis
+slug: customer-feedback-analysis
+description: >
+  Feedback analysis pipeline: retrieve feedback from knowledge, parallel sentiment
+  analysis, pattern detection, and gap analysis, synthesize, and produce brief.
+tags: [feedback, analysis, operations, template]
+
+nodes:
+  - agent_slug: knowledge-retriever
+    node_key: feedback
+  - agent_slug: sentiment-analyzer
+    node_key: sentiment
+  - agent_slug: pattern-detector
+    node_key: patterns
+    static_inputs:
+      detection_type: all
+  - agent_slug: gap-analyzer
+    node_key: gaps
+  - agent_slug: synthesizer
+    node_key: synthesis
+  - agent_slug: brief-writer
+    node_key: output
+    static_inputs:
+      format: action_items
+
+wiring:
+  - from: feedback.knowledge_items
+    to: sentiment.content
+  - from: feedback.knowledge_items
+    to: patterns.data_series
+  - from: feedback.knowledge_items
+    to: gaps.corpus_summary
+  - from: sentiment.sentiment_summary
+    to: synthesis.inputs
+  - from: patterns.patterns
+    to: synthesis.inputs
+  - from: gaps.identified_gaps
+    to: synthesis.inputs
+  - from: synthesis.synthesis
+    to: output.content
+
+deployment_inputs:
+  - feedback.query
+  - feedback.scope
+
+sinks:
+  - type: knowledge_create
+    node_key: save_analysis
+    wired_from: output.brief
+    config:
+      knowledge_type: note
+      title_template: "Feedback Analysis - {{date}}"
+
+suggested_trigger:
+  type: interval
+  every: "168h"

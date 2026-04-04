@@ -1,0 +1,56 @@
+name: Deep Research Pipeline
+slug: deep-research-pipeline
+description: >
+  End-to-end research pipeline: web search, page extraction, source evaluation,
+  fact checking, synthesis, and report writing.
+tags: [research, content, pipeline, template]
+
+nodes:
+  - agent_slug: web-searcher
+    node_key: search
+    static_inputs:
+      num_results: 15
+  - agent_slug: page-reader
+    node_key: reader
+  - agent_slug: source-evaluator
+    node_key: evaluator
+  - agent_slug: fact-checker
+    node_key: checker
+  - agent_slug: synthesizer
+    node_key: synthesis
+  - agent_slug: report-writer
+    node_key: output
+    static_inputs:
+      report_type: research
+
+wiring:
+  - from: search.results
+    to: reader.urls
+  - from: reader.extracted_content
+    to: evaluator.raw_sources
+  - from: evaluator.graded_sources
+    to: checker.sources
+  - from: reader.extracted_content
+    to: checker.claims
+  - from: checker.verification_results
+    to: synthesis.inputs
+  - from: evaluator.graded_sources
+    to: synthesis.inputs
+  - from: synthesis.synthesis
+    to: output.content
+
+deployment_inputs:
+  - search.query
+  - search.recency
+  - output.audience
+
+sinks:
+  - type: knowledge_create
+    node_key: save_report
+    wired_from: output.report
+    config:
+      knowledge_type: document
+      title_template: "Research Report - {{date}}"
+
+suggested_trigger:
+  type: manual

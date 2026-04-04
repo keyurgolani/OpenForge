@@ -193,8 +193,8 @@ export default function AgentChatPage() {
     })
 
     const { data: agentsData } = useQuery({
-        queryKey: ['agents'],
-        queryFn: () => listAgents(),
+        queryKey: ['agents', { mode: 'interactive' }],
+        queryFn: () => listAgents({ mode: 'interactive' }),
         staleTime: 60_000,
     })
     const availableAgents = useMemo(() => {

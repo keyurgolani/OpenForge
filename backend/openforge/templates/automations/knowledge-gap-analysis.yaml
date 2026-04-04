@@ -1,0 +1,48 @@
+name: Knowledge Gap Analysis
+slug: knowledge-gap-analysis
+description: >
+  Knowledge maintenance pipeline: retrieves existing corpus, identifies gaps,
+  researches to fill them, and summarizes new findings for storage.
+tags: [knowledge, curation, research, template]
+
+nodes:
+  - agent_slug: knowledge-retriever
+    node_key: retrieval
+  - agent_slug: gap-analyzer
+    node_key: gaps
+  - agent_slug: web-searcher
+    node_key: filler_search
+    static_inputs:
+      num_results: 10
+  - agent_slug: page-reader
+    node_key: filler_read
+  - agent_slug: summarizer
+    node_key: output
+    static_inputs:
+      target_length: medium
+
+wiring:
+  - from: retrieval.knowledge_items
+    to: gaps.corpus_summary
+  - from: gaps.fill_recommendations
+    to: filler_search.query
+  - from: filler_search.results
+    to: filler_read.urls
+  - from: filler_read.extracted_content
+    to: output.content
+
+deployment_inputs:
+  - retrieval.query
+  - retrieval.scope
+
+sinks:
+  - type: knowledge_create
+    node_key: save_research
+    wired_from: output.summary
+    config:
+      knowledge_type: note
+      title_template: "Knowledge Gap Fill - {{date}}"
+
+suggested_trigger:
+  type: interval
+  every: "168h"

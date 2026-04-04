@@ -1,0 +1,64 @@
+name: Competitive Intel Monitor
+slug: competitive-intel-monitor
+description: >
+  Competitive intelligence pipeline: parallel news, web, and knowledge collection,
+  source evaluation, comparison with prior intel, pattern detection, and report.
+tags: [competitive, intelligence, monitoring, template]
+
+nodes:
+  - agent_slug: news-scanner
+    node_key: news_scan
+    static_inputs:
+      period: last_week
+      max_items: 20
+  - agent_slug: web-searcher
+    node_key: web_search
+    static_inputs:
+      num_results: 15
+  - agent_slug: knowledge-retriever
+    node_key: prior_intel
+  - agent_slug: source-evaluator
+    node_key: evaluator
+  - agent_slug: comparator
+    node_key: comparison
+  - agent_slug: pattern-detector
+    node_key: patterns
+    static_inputs:
+      detection_type: all
+  - agent_slug: report-writer
+    node_key: output
+    static_inputs:
+      report_type: analysis
+
+wiring:
+  - from: news_scan.news_items
+    to: evaluator.raw_sources
+  - from: web_search.results
+    to: evaluator.raw_sources
+  - from: evaluator.graded_sources
+    to: comparison.items
+  - from: prior_intel.knowledge_items
+    to: comparison.criteria
+  - from: comparison.comparison_matrix
+    to: patterns.data_series
+  - from: patterns.patterns
+    to: output.content
+  - from: comparison.recommendation
+    to: output.content
+
+deployment_inputs:
+  - news_scan.topics
+  - web_search.query
+  - prior_intel.query
+
+sinks:
+  - type: knowledge_create
+    node_key: save_intel
+    wired_from: output.report
+    config:
+      knowledge_type: document
+      title_template: "Competitive Intel - Week of {{date}}"
+
+suggested_trigger:
+  type: cron
+  expression: "0 8 * * 1"

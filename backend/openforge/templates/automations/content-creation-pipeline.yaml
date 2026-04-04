@@ -1,0 +1,53 @@
+name: Content Creation Pipeline
+slug: content-creation-pipeline
+description: >
+  Content creation pipeline: research topic, read sources, evaluate quality,
+  synthesize into brief, write full article, then fact-check against sources.
+tags: [content, writing, pipeline, template]
+
+nodes:
+  - agent_slug: web-searcher
+    node_key: research
+    static_inputs:
+      num_results: 15
+  - agent_slug: page-reader
+    node_key: reader
+  - agent_slug: source-evaluator
+    node_key: evaluator
+  - agent_slug: synthesizer
+    node_key: synthesis
+  - agent_slug: report-writer
+    node_key: writer
+  - agent_slug: fact-checker
+    node_key: checker
+
+wiring:
+  - from: research.results
+    to: reader.urls
+  - from: reader.extracted_content
+    to: evaluator.raw_sources
+  - from: evaluator.graded_sources
+    to: synthesis.inputs
+  - from: synthesis.synthesis
+    to: writer.content
+  - from: writer.report
+    to: checker.claims
+  - from: evaluator.graded_sources
+    to: checker.sources
+
+deployment_inputs:
+  - research.query
+  - research.recency
+  - writer.report_type
+  - writer.audience
+
+sinks:
+  - type: knowledge_create
+    node_key: save_content
+    wired_from: writer.report
+    config:
+      knowledge_type: document
+      title_template: "{{date}} - Content"
+
+suggested_trigger:
+  type: manual

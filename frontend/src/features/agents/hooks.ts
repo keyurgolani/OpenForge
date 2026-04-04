@@ -21,6 +21,7 @@ import type {
 interface AgentsQueryOptions {
   skip?: number
   limit?: number
+  mode?: 'interactive' | 'pipeline'
 }
 
 export function useAgentsQuery(options: AgentsQueryOptions = {}) {

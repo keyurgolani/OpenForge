@@ -1,0 +1,69 @@
+name: Market Morning Brief
+slug: market-morning-brief
+description: >
+  Fan-out financial intelligence pipeline: parallel collection from news, web, and market data,
+  then parallel sentiment, technical, and geopolitical analysis, synthesized into a morning brief.
+tags: [finance, daily, intelligence, template]
+
+nodes:
+  - agent_slug: news-scanner
+    node_key: news_scan
+    static_inputs:
+      period: last_24h
+      max_items: 15
+  - agent_slug: web-searcher
+    node_key: web_search
+    static_inputs:
+      num_results: 10
+      recency: past_week
+  - agent_slug: data-fetcher
+    node_key: data_fetch
+    static_inputs:
+      format: json
+  - agent_slug: sentiment-analyzer
+    node_key: sentiment
+  - agent_slug: technical-analyst
+    node_key: technical
+  - agent_slug: geopolitical-analyst
+    node_key: geopolitical
+    static_inputs:
+      impact_lens: financial_markets
+  - agent_slug: synthesizer
+    node_key: synthesis
+  - agent_slug: brief-writer
+    node_key: output
+    static_inputs:
+      format: executive_brief
+
+wiring:
+  - from: news_scan.news_items
+    to: sentiment.content
+  - from: web_search.results
+    to: geopolitical.region_or_topic
+  - from: data_fetch.dataset
+    to: technical.data_points
+  - from: sentiment.sentiment_summary
+    to: synthesis.inputs
+  - from: technical.technical_analysis
+    to: synthesis.inputs
+  - from: geopolitical.situation_assessment
+    to: synthesis.inputs
+  - from: synthesis.synthesis
+    to: output.content
+
+deployment_inputs:
+  - news_scan.topics
+  - web_search.query
+  - data_fetch.data_request
+
+sinks:
+  - type: knowledge_create
+    node_key: save_brief
+    wired_from: output.brief
+    config:
+      knowledge_type: note
+      title_template: "Market Morning Brief - {{date}}"
+
+suggested_trigger:
+  type: cron
+  expression: "0 7 * * 1-5"

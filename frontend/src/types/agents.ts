@@ -47,6 +47,7 @@ export interface AgentDefinition {
   description: string | null;
   icon: string | null;
   tags: string[];
+  mode: 'interactive' | 'pipeline';
   system_prompt: string;
   llm_config: LlmConfig;
   tools_config: ToolConfig[];
@@ -66,6 +67,7 @@ export interface AgentDefinitionCreate {
   description?: string;
   icon?: string;
   tags?: string[];
+  mode?: 'interactive' | 'pipeline';
   system_prompt?: string;
   llm_config?: Partial<LlmConfig>;
   tools_config?: ToolConfig[];

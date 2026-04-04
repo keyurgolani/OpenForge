@@ -1,0 +1,65 @@
+name: Risk Assessment Report
+slug: risk-assessment-report
+description: >
+  Multi-source risk analysis: parallel collection, parallel geopolitical/sentiment/pattern
+  analysis, consolidated risk assessment, and formatted report.
+tags: [risk, assessment, analysis, template]
+
+nodes:
+  - agent_slug: news-scanner
+    node_key: news_scan
+    static_inputs:
+      period: last_week
+  - agent_slug: web-searcher
+    node_key: web_search
+  - agent_slug: knowledge-retriever
+    node_key: knowledge
+  - agent_slug: geopolitical-analyst
+    node_key: geopolitical
+  - agent_slug: sentiment-analyzer
+    node_key: sentiment
+  - agent_slug: pattern-detector
+    node_key: patterns
+    static_inputs:
+      detection_type: all
+  - agent_slug: risk-assessor
+    node_key: risk
+  - agent_slug: report-writer
+    node_key: output
+    static_inputs:
+      report_type: analysis
+
+wiring:
+  - from: news_scan.news_items
+    to: sentiment.content
+  - from: web_search.results
+    to: geopolitical.region_or_topic
+  - from: knowledge.knowledge_items
+    to: patterns.data_series
+  - from: geopolitical.risk_factors
+    to: risk.situation_data
+  - from: sentiment.sentiment_summary
+    to: risk.situation_data
+  - from: patterns.trend_signals
+    to: risk.situation_data
+  - from: risk.risk_matrix
+    to: output.content
+  - from: risk.scenarios
+    to: output.content
+
+deployment_inputs:
+  - news_scan.topics
+  - web_search.query
+  - knowledge.query
+  - risk.risk_domain
+
+sinks:
+  - type: knowledge_create
+    node_key: save_report
+    wired_from: output.report
+    config:
+      knowledge_type: document
+      title_template: "Risk Assessment - {{date}}"
+
+suggested_trigger:
+  type: manual
