@@ -32,9 +32,38 @@ from openforge.domains.agents.compiled_spec import (
     AgentRuntimeConfig,
     build_runtime_config_from_snapshot,
 )
-from openforge.runtime.prompt_context import build_mission_context, build_postamble
+from openforge.runtime.prompt_context import build_mission_context, build_preamble, build_postamble
 
 logger = logging.getLogger("openforge.runtime.mission_executor")
+
+
+# ---------------------------------------------------------------------------
+# Mission event broadcasting helpers
+# ---------------------------------------------------------------------------
+
+async def _publish_mission_event(mission_id: str, event_type: str, data: dict) -> None:
+    """Publish a mission event to Redis for WebSocket relay."""
+    try:
+        from openforge.db.redis_client import get_redis
+        redis = await get_redis()
+        payload = json.dumps({"type": event_type, "data": data}, default=str)
+        await redis.publish(f"mission:{mission_id}", payload)
+    except Exception as exc:
+        logger.warning("Mission event publish failed for %s: %s", mission_id, exc)
+
+
+async def _update_mission_snapshot(mission_id: str, snapshot: dict) -> None:
+    """Store the current mission timeline state in Redis for snapshot recovery."""
+    try:
+        from openforge.db.redis_client import get_redis
+        redis = await get_redis()
+        await redis.set(
+            f"mission_timeline:{mission_id}",
+            json.dumps(snapshot, default=str),
+            ex=3600,  # 1 hour TTL
+        )
+    except Exception as exc:
+        logger.warning("Mission snapshot update failed for %s: %s", mission_id, exc)
 
 
 def _sanitize_pg_json(value: Any) -> Any:
@@ -59,29 +88,60 @@ _MISSION_OUTPUT_RE = re.compile(
     re.DOTALL,
 )
 
+OODA_KEYS = {"perceive", "plan", "act", "evaluate", "reflect"}
+
 
 def _parse_mission_output(text: str) -> dict[str, Any] | None:
     """Extract the structured mission output JSON from agent response text.
 
     Looks for a fenced block wrapped in ```mission_output ... ```.
+    Uses the LAST match to avoid accidentally grabbing quoted/referenced blocks.
     Falls back to trying to parse the entire response as JSON.
     """
-    match = _MISSION_OUTPUT_RE.search(text)
-    if match:
+    # Find ALL matches and use the last one (most likely the actual output)
+    matches = list(_MISSION_OUTPUT_RE.finditer(text))
+    for match in reversed(matches):
         try:
-            return json.loads(match.group(1).strip())
+            parsed = json.loads(match.group(1).strip())
+            if isinstance(parsed, dict):
+                return _normalize_mission_json(parsed)
         except json.JSONDecodeError:
-            logger.warning("Found mission_output block but JSON parse failed")
+            logger.warning("Found mission_output block but JSON parse failed, trying previous match")
+            continue
 
     # Fallback: try full-text JSON parse
     try:
         parsed = json.loads(text.strip())
         if isinstance(parsed, dict):
-            return parsed
+            return _normalize_mission_json(parsed)
     except (json.JSONDecodeError, ValueError):
         pass
 
     return None
+
+
+def _normalize_mission_json(parsed: dict[str, Any]) -> dict[str, Any]:
+    """Normalize mission output JSON structure.
+
+    If OODA phase keys exist at the top level instead of nested under
+    'phase_summaries', wrap them into the expected structure.
+    """
+    if "phase_summaries" in parsed and isinstance(parsed["phase_summaries"], dict):
+        # Already in expected format, validate it has at least one OODA key
+        if parsed["phase_summaries"].keys() & OODA_KEYS:
+            return parsed
+
+    # Check if OODA keys are at the top level
+    top_level_phases = {k: parsed[k] for k in OODA_KEYS if k in parsed}
+    if top_level_phases:
+        # Wrap them into phase_summaries
+        if "phase_summaries" not in parsed:
+            parsed["phase_summaries"] = {}
+        parsed["phase_summaries"].update(top_level_phases)
+        return parsed
+
+    # Return as-is even without OODA keys (might have other useful data)
+    return parsed
 
 
 # ---------------------------------------------------------------------------
@@ -423,16 +483,23 @@ async def execute_cycle(
                 mission_workspace=mission_workspace_info,
             )
 
-            # 6. Assemble full system prompt
+            # 6. Build preamble with autonomous mode
+            preamble = build_preamble(
+                agent_name=spec.name or spec.agent_slug or mission.name,
+                agent_description=f"Autonomous agent executing mission: {mission.name}",
+                agent_mode="autonomous",
+            )
+
+            # 7. Assemble full system prompt
             base_prompt = spec.system_prompt or ""
             full_system_prompt = "\n\n".join(
-                part for part in [base_prompt, mission_context, postamble] if part
+                part for part in [preamble, base_prompt, mission_context, postamble] if part
             )
 
             # Override spec's system prompt with the assembled one
             spec = spec.model_copy(update={"system_prompt": full_system_prompt})
 
-            # 7. Apply tool overrides from mission config
+            # 8. Apply tool overrides from mission config
             if mission.tool_overrides:
                 allowed = mission.tool_overrides.get("allowed_tools")
                 if allowed is not None:
@@ -440,7 +507,7 @@ async def execute_cycle(
                 if mission.tool_overrides.get("tools_enabled") is False:
                     spec = spec.model_copy(update={"tools_enabled": False})
 
-            # 8. Call execute_agent
+            # 9. Call execute_agent
             workspace_id = mission.workspace_id or (
                 UUID(workspaces_data[0]["id"]) if workspaces_data else UUID(int=0)
             )
@@ -454,6 +521,62 @@ async def execute_cycle(
                 ),
             }
 
+            # Broadcast cycle_started event
+            await _publish_mission_event(str(mission_id), "cycle_started", {
+                "cycle_id": str(cycle.id),
+                "cycle_number": cycle.cycle_number,
+                "mission_id": str(mission_id),
+                "started_at": cycle.started_at.isoformat() if cycle.started_at else None,
+            })
+            await _update_mission_snapshot(str(mission_id), {
+                "mission_id": str(mission_id),
+                "active_cycle": {
+                    "cycle_id": str(cycle.id),
+                    "cycle_number": cycle.cycle_number,
+                    "status": "running",
+                    "phase": cycle.phase,
+                },
+            })
+
+            # Build tool callbacks to relay agent loop events as cycle_agent_event
+            from openforge.runtime.tool_loop import ToolLoopCallbacks
+
+            _mission_id_str = str(mission_id)
+            _cycle_id_str = str(cycle.id)
+
+            async def _pub_agent_event(event_type: str, event_data: dict):
+                """Publish an agent loop event wrapped as cycle_agent_event."""
+                await _publish_mission_event(_mission_id_str, "cycle_agent_event", {
+                    "cycle_id": _cycle_id_str,
+                    "event": {"type": event_type, **event_data},
+                })
+
+            async def _cb_thinking(chunk):
+                await _pub_agent_event("agent_thinking", {"text": chunk})
+
+            async def _cb_token(token):
+                pass  # Don't stream tokens for mission cycles
+
+            async def _cb_tool_start(call_id, tool_name, arguments):
+                await _pub_agent_event("agent_tool_call_start", {
+                    "call_id": call_id, "tool_name": tool_name, "arguments": arguments,
+                })
+
+            async def _cb_tool_result(call_id, tool_name, success, error=None, output=None, duration_ms=None, nested_timeline=None, delegated_conversation_id=None):
+                await _pub_agent_event("agent_tool_call_result", {
+                    "call_id": call_id, "tool_name": tool_name, "success": success,
+                    "output": str(output)[:500] if output else None,
+                    "error": str(error)[:500] if error else None,
+                    "duration_ms": duration_ms,
+                })
+
+            _cycle_callbacks = ToolLoopCallbacks(
+                on_thinking=_cb_thinking,
+                on_token=_cb_token,
+                on_tool_start=_cb_tool_start,
+                on_tool_result=_cb_tool_result,
+            )
+
             output = await execute_agent(
                 spec,
                 input_payload,
@@ -463,6 +586,7 @@ async def execute_cycle(
                 event_publisher=EventPublisher(db),
                 tool_dispatcher=tool_dispatcher,
                 llm_gateway=LLMGateway(),
+                tool_callbacks=_cycle_callbacks,
             )
 
             # 9. Parse structured output
@@ -573,6 +697,35 @@ async def execute_cycle(
                 mission_id, cycle.cycle_number, elapsed, ratchet_passed,
             )
 
+            # Broadcast cycle_completed event
+            await _publish_mission_event(str(mission_id), "cycle_completed", {
+                "cycle_id": str(cycle.id),
+                "cycle_number": cycle.cycle_number,
+                "mission_id": str(mission_id),
+                "status": "completed",
+                "phase_summaries": phase_summaries,
+                "evaluation_scores": evaluation_scores,
+                "ratchet_passed": ratchet_passed,
+                "actions_log": actions_log,
+                "next_cycle_reason": next_cycle_reason,
+                "duration_seconds": round(elapsed, 2),
+            })
+            await _update_mission_snapshot(str(mission_id), {
+                "mission_id": str(mission_id),
+                "active_cycle": {
+                    "cycle_id": str(cycle.id),
+                    "cycle_number": cycle.cycle_number,
+                    "status": "completed",
+                    "phase": "completed",
+                    "phase_summaries": phase_summaries,
+                    "evaluation_scores": evaluation_scores,
+                    "ratchet_passed": ratchet_passed,
+                    "actions_log": actions_log,
+                    "next_cycle_reason": next_cycle_reason,
+                    "duration_seconds": round(elapsed, 2),
+                },
+            })
+
         except Exception as exc:
             logger.exception(
                 "Mission %s cycle %s failed: %s", mission_id, cycle_id, exc,
@@ -588,6 +741,23 @@ async def execute_cycle(
                         time.monotonic() - started_at, 2
                     )
                     await db.commit()
+
+                    # Broadcast cycle_failed event
+                    await _publish_mission_event(str(mission_id), "cycle_failed", {
+                        "cycle_id": str(cycle.id),
+                        "cycle_number": cycle.cycle_number,
+                        "mission_id": str(mission_id),
+                        "error": str(exc),
+                    })
+                    await _update_mission_snapshot(str(mission_id), {
+                        "mission_id": str(mission_id),
+                        "active_cycle": {
+                            "cycle_id": str(cycle.id),
+                            "cycle_number": cycle.cycle_number,
+                            "status": "failed",
+                            "phase": "failed",
+                        },
+                    })
             except Exception:
                 logger.warning(
                     "Failed to mark cycle %s as failed", cycle_id,

@@ -68,7 +68,7 @@ export default function LiveNodeTimeline({ runId }: LiveNodeTimelineProps) {
     if (wsRef.current?.readyState === WebSocket.OPEN) return
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/run/${runId}/terminal`)
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/run/${runId}/live`)
 
     ws.onopen = () => setConnected(true)
 
@@ -157,7 +157,7 @@ export default function LiveNodeTimeline({ runId }: LiveNodeTimelineProps) {
     if (!node?.child_run_id || node.status !== 'running') return
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/run/${node.child_run_id}/terminal`)
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/run/${node.child_run_id}/live`)
 
     ws.onmessage = (event) => {
       try {

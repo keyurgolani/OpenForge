@@ -14,7 +14,7 @@ type AgentEventMap = {
   intermediate_response: [data: { content: string }]
   follow_up_request: [data: { missing_inputs: unknown[] }]
   nested_event: [data: { call_id?: string; call_id_path?: string[]; scope_path?: number[]; event: { type: string; data: unknown } }]
-  snapshot: [data: { content: string; thinking: string; timeline: unknown[] }]
+  snapshot: [data: { content: string; thinking: string; timeline: unknown[]; status?: string }]
   conversation_updated: [data: { id: string; title?: string }]
   execution_started: [data: { execution_id: string }]
   execution_completed: [data: { execution_id: string }]

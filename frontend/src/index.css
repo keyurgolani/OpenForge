@@ -1040,6 +1040,51 @@
     --toggle-bg-open: hsl(var(--card));
   }
 
+  /* node_execution  — teal (deployment pipeline nodes) */
+  .chat-workflow-step--node_execution {
+    --toggle-border: hsla(168, 60%, 50%, 0.35);
+    --toggle-border-hover: hsla(168, 60%, 50%, 0.55);
+    --toggle-bg: hsla(168, 60%, 50%, 0.12);
+    --toggle-bg-open: hsla(168, 60%, 50%, 0.16);
+    --card-border: hsla(168, 60%, 50%, 0.18);
+    --card-border-top: hsla(168, 60%, 50%, 0.10);
+    --card-bg: hsla(168, 60%, 50%, 0.06);
+  }
+  .chat-workflow-step--node_execution .chat-timeline-dot {
+    border-color: hsla(168, 60%, 50%, 0.45);
+    background: hsl(var(--background));
+  }
+
+  /* sink_execution  — pink (deployment sinks) */
+  .chat-workflow-step--sink_execution {
+    --toggle-border: hsla(330, 80%, 60%, 0.35);
+    --toggle-border-hover: hsla(330, 80%, 60%, 0.55);
+    --toggle-bg: hsla(330, 80%, 60%, 0.12);
+    --toggle-bg-open: hsla(330, 80%, 60%, 0.16);
+    --card-border: hsla(330, 80%, 60%, 0.18);
+    --card-border-top: hsla(330, 80%, 60%, 0.10);
+    --card-bg: hsla(330, 80%, 60%, 0.06);
+  }
+  .chat-workflow-step--sink_execution .chat-timeline-dot {
+    border-color: hsla(330, 80%, 60%, 0.45);
+    background: hsl(var(--background));
+  }
+
+  /* cycle  — amber/gold (mission OODA cycles) */
+  .chat-workflow-step--cycle {
+    --toggle-border: hsla(43, 96%, 56%, 0.35);
+    --toggle-border-hover: hsla(43, 96%, 56%, 0.55);
+    --toggle-bg: hsla(43, 96%, 56%, 0.12);
+    --toggle-bg-open: hsla(43, 96%, 56%, 0.16);
+    --card-border: hsla(43, 96%, 56%, 0.18);
+    --card-border-top: hsla(43, 96%, 56%, 0.10);
+    --card-bg: hsla(43, 96%, 56%, 0.06);
+  }
+  .chat-workflow-step--cycle .chat-timeline-dot {
+    border-color: hsla(43, 96%, 56%, 0.45);
+    background: hsl(var(--background));
+  }
+
   .chat-source-card {
     border-radius: 0.9rem;
     border: 1px solid hsla(var(--border) / 0.3);

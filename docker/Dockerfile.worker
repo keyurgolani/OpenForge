@@ -36,4 +36,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD celery -A openforge.worker.celery_app inspect ping -d celery@$HOSTNAME || exit 1
 
 # Use threads pool for asyncio compatibility with concurrent task support
-CMD ["celery", "-A", "openforge.worker.celery_app", "worker", "--loglevel=info", "--pool=threads", "--concurrency=8"]
+# -B embeds the Beat scheduler in the worker process for periodic tasks
+CMD ["celery", "-A", "openforge.worker.celery_app", "worker", "--loglevel=info", "--pool=threads", "--concurrency=8", "-B"]

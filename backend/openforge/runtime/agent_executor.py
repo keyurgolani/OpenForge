@@ -24,6 +24,7 @@ from openforge.runtime.events import (
 )
 from openforge.runtime.lifecycle import transition_run
 from openforge.runtime.tool_loop import (
+    ToolLoopCallbacks,
     ToolLoopContext,
     ToolLoopResult,
     execute_tool_loop,
@@ -129,6 +130,7 @@ async def execute_agent(
     llm_gateway: LLMGateway | None = None,
     deployment_id: str | None = None,
     deployment_workspace_id: str | None = None,
+    tool_callbacks: ToolLoopCallbacks | None = None,
 ) -> dict[str, Any]:
     """Execute an agent run.
 
@@ -225,7 +227,7 @@ async def execute_agent(
         result: ToolLoopResult = await execute_tool_loop(
             ctx=loop_ctx,
             messages=messages,
-            callbacks=None,
+            callbacks=tool_callbacks,
             llm_kwargs=llm_kwargs,
             max_iterations=20,
             llm_gateway=llm_gateway,

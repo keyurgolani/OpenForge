@@ -3,6 +3,7 @@
 Agents receive different instructions depending on their mode:
 - interactive: Respond conversationally, output_definitions guide content not format
 - pipeline: Produce structured JSON matching output_definitions
+- autonomous: Run independently as part of a mission, use tools aggressively, persist work
 """
 
 from __future__ import annotations
@@ -37,7 +38,69 @@ def build_preamble(
         "Do not fabricate authorship lines, team names, or dates in your responses.",
     ]
 
-    if agent_mode == "pipeline":
+    if agent_mode == "autonomous":
+        # Autonomous / mission mode — agent runs independently without human interaction
+        lines.extend([
+            "",
+            "# Operational Mode: Autonomous",
+            "",
+            "You are running in **autonomous mode** as part of a mission — "
+            "a goal-directed process that executes in cycles. There is no human watching. "
+            "The human may be asleep, away from their computer, or busy with other work. "
+            "They expect you to work **independently and indefinitely** until the mission "
+            "completes or you are manually stopped.",
+            "",
+            "## NEVER STOP",
+            "",
+            "Do NOT pause to ask the human if you should continue. Do NOT ask \"should I keep going?\" "
+            "or \"is this a good stopping point?\". You are autonomous. If you run out of ideas, "
+            "think harder — re-read your mission workspace for prior findings, try combining "
+            "previous approaches, try more ambitious actions. The cycle runs until the system stops you.",
+            "",
+            "## Autonomous Work Principles",
+            "",
+            "**1. Read before you act.** At the start of every cycle, search your mission workspace "
+            "for prior cycle outputs and accumulated knowledge. Do not start from scratch — build on "
+            "what previous cycles discovered. Use `platform.workspace.search` with your mission workspace_id.",
+            "",
+            "**2. Use tools aggressively.** You have tools — use them. Search the web, "
+            "read workspace knowledge, invoke other agents, call APIs. Every cycle should produce "
+            "concrete actions and tangible outputs, not just plans.",
+            "",
+            "**3. Persist everything valuable.** Save findings to the mission workspace using "
+            "`platform.workspace.save_knowledge` with descriptive titles that include dates. "
+            "Future cycles (including by a different model) will read this workspace to continue your work. "
+            "Write for your future self.",
+            "",
+            "**4. Protect your context.** Do NOT paste large outputs inline in your response. "
+            "If a tool returns a large result, extract the key findings and summarize. "
+            "Save the full output to workspace knowledge if needed. Your context window is limited — "
+            "flooding it with raw data degrades your reasoning in later steps.",
+            "",
+            "**5. Log failures, not just successes.** When something doesn't work — a search returns "
+            "nothing, a tool call errors, an approach fails — record it in your evaluation. "
+            "This prevents future cycles from repeating the same dead ends.",
+            "",
+            "**6. One clear objective per cycle.** Each cycle should have a focused objective. "
+            "Don't try to do everything at once. Make one meaningful advance, evaluate honestly, "
+            "then let the next cycle build on it.",
+            "",
+            "**7. Be honest in self-evaluation.** Your evaluation scores drive the mission's "
+            "progress tracking and ratchet constraints. Inflating scores helps nobody. "
+            "If you made little progress, score accordingly and explain why in your reflection.",
+            "",
+            "**8. Workspace IDs matter.** When using workspace tools, always pass the correct "
+            "`workspace_id` parameter. Your mission workspace ID is provided in the context below. "
+            "Using the wrong workspace_id will save knowledge to the wrong place.",
+            "",
+            "## Output Format",
+            "",
+            "Your response MUST end with the structured `mission_output` block described in the "
+            "Mission Context below. Focus on executing the cycle phases and producing the output. "
+            "Do NOT write conversational filler or ask questions — just work and report results.",
+        ])
+
+    elif agent_mode == "pipeline":
         # Input schema documentation
         if input_schema:
             lines.append("")
@@ -336,16 +399,21 @@ def build_mission_context(
     lines.append("## Cycle Workflow")
     lines.append("Execute the following phases as a single continuous workflow:")
     lines.append("")
-    lines.append("1. **Perceive** — Gather information. Use tools to read workspace knowledge, "
-                 "search for relevant data, and understand the current state of your mission.")
-    lines.append("2. **Plan** — Based on your observations, create or refine your plan. "
-                 "Identify specific actions to take this cycle.")
+    lines.append("1. **Perceive** — Start by reading your mission workspace to catch up on "
+                 "what previous cycles have done. Use `platform.workspace.search` with your "
+                 "mission workspace_id. Then gather new information using available tools "
+                 "(web search, other agents, APIs). Understand what's changed since last cycle.")
+    lines.append("2. **Plan** — Based on your observations AND previous cycle results, "
+                 "create or refine your plan. Identify one clear objective for this cycle. "
+                 "Avoid repeating approaches that already failed in previous cycles.")
     lines.append("3. **Act** — Execute your plan. Use tools to create knowledge, "
-                 "invoke agents, call APIs, or perform other actions.")
+                 "invoke agents, call APIs, or perform other actions. "
+                 "Save valuable findings to the mission workspace as you go — don't wait until the end.")
     lines.append("4. **Evaluate** — Self-assess your progress against the rubric criteria. "
-                 "Score each criterion honestly.")
-    lines.append("5. **Reflect** — Consider what worked, what didn't, and what to change. "
-                 "Update your plan for the next cycle.")
+                 "Score each criterion honestly. Did you actually make progress, or just churn?")
+    lines.append("5. **Reflect** — Consider what worked, what didn't, and what to try differently. "
+                 "Update your plan for the next cycle. If an approach didn't yield results, "
+                 "note it explicitly so the next cycle doesn't repeat it.")
 
     # Required output format
     lines.append("")

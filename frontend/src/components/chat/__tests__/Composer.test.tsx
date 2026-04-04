@@ -15,7 +15,7 @@ describe('Composer', () => {
   })
 
   it('shows stop button when streaming', () => {
-    render(<Composer onSend={() => {}} onCancel={() => {}} phase="responding" isStreaming />)
+    render(<Composer onSend={() => {}} onCancel={() => {}} phase="running" isStreaming />)
     expect(screen.getByLabelText('Stop generation')).toBeInTheDocument()
   })
 

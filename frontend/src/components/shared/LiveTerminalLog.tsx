@@ -1,8 +1,8 @@
 /**
  * LiveTerminalLog - Real-time log viewer via WebSocket
  *
- * Connects to ws://.../ws/run/{runId}/terminal and renders
- * strategy execution events as append-only log entries.
+ * Connects to ws://.../ws/run/{runId}/live and renders
+ * execution events as append-only log entries.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react'
@@ -31,7 +31,7 @@ export default function LiveTerminalLog({ runId }: LiveTerminalLogProps) {
     if (wsRef.current?.readyState === WebSocket.OPEN) return
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/run/${runId}/terminal`)
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/run/${runId}/live`)
 
     ws.onopen = () => setConnected(true)
 

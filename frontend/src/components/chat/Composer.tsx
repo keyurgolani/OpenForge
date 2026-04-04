@@ -3,7 +3,7 @@ import { Send, Square, Paperclip } from 'lucide-react'
 import { AttachmentChip } from './AttachmentChip'
 import { ContentModal } from './ContentModal'
 import { ComposerModelPicker, type ModelPickerOption } from './ComposerModelPicker'
-import type { AgentPhase } from '@/hooks/chat/useAgentPhase'
+import type { ExecutionPhase } from '@/types/timeline'
 
 interface ComposerAttachment {
   id: string
@@ -21,8 +21,10 @@ interface ComposerProps {
   onCancel?: () => void
   onAttach?: (files: File[]) => void
   onRemoveAttachment?: (id: string) => void
-  phase: AgentPhase
+  phase: ExecutionPhase
   isStreaming: boolean
+  /** When true, the agent is waiting for HITL approval -- composer stays enabled during active phase. */
+  hasActiveHITL?: boolean
   attachments?: ComposerAttachment[]
   disabled?: boolean
   modelOptions?: ModelPickerOption[]
@@ -31,14 +33,14 @@ interface ComposerProps {
   defaultModelLabel?: string
 }
 
-export function Composer({ onSend, onCancel, onAttach, onRemoveAttachment, phase, isStreaming, attachments = [], disabled, modelOptions, selectedModelKey, onModelSelect, defaultModelLabel }: ComposerProps) {
+export function Composer({ onSend, onCancel, onAttach, onRemoveAttachment, phase, isStreaming, hasActiveHITL, attachments = [], disabled, modelOptions, selectedModelKey, onModelSelect, defaultModelLabel }: ComposerProps) {
   const [value, setValue] = useState('')
   const [modalAttachment, setModalAttachment] = useState<ComposerAttachment | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const isActive = phase !== 'idle' && phase !== 'complete' && phase !== 'error'
   const hasPending = attachments.some(a => a.status === 'uploading')
-  const composerDisabled = disabled || (isActive && phase !== 'awaiting_approval')
+  const composerDisabled = disabled || (isActive && !hasActiveHITL)
 
   // Auto-focus textarea when it becomes enabled
   useEffect(() => {

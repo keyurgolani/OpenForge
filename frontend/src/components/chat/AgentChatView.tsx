@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useMemo, useState } from 'react'
 import { AlertCircle } from 'lucide-react'
 import { useAgentStream } from '@/hooks/chat/useAgentStream'
-import { useAgentPhase } from '@/hooks/chat/useAgentPhase'
+import { useChatTimelineAdapter } from '@/hooks/timeline/useChatTimelineAdapter'
 import { useStreamRenderer } from '@/hooks/chat/useStreamRenderer'
-import { useThoughtQueue } from '@/hooks/chat/useThoughtQueue'
 import { useScrollIntent } from '@/hooks/chat/useScrollIntent'
 import { MessageThread } from './MessageThread'
 import { UserMessageCard } from './UserMessageCard'
@@ -13,13 +12,24 @@ import type { ModelPickerOption } from './ComposerModelPicker'
 import { ScrollToBottomFAB } from './ScrollToBottomFAB'
 import { HITLNotificationBanner } from './HITLNotificationBanner'
 import { formatDateTime } from '@/lib/formatters'
-import type { TimelineItem, ToolCallTimelineItem, ModelInfo } from '@/hooks/chat/useAgentPhase'
+import type { TimelineItem, ToolCallTimelineItem, SubAgentTimelineItem } from '@/types/timeline'
 
 /**
  * Parse raw timeline from the API (which may contain model_selection, thinking,
  * and tool_call entries) into structured data the UI components expect.
  * Returns a unified TimelineItem array with thinking entries inline.
  */
+
+interface ModelInfo {
+  providerName: string
+  providerDisplayName: string
+  model: string
+  isOverride: boolean
+  systemPrompt?: string
+}
+
+const AGENT_INVOKE_TOOLS = new Set(['platform.agent.invoke', 'agent.invoke'])
+
 function parseMessageTimeline(rawTimeline: unknown[]): {
   items: TimelineItem[]
   thoughts: string[]
@@ -42,23 +52,45 @@ function parseMessageTimeline(rawTimeline: unknown[]): {
         isOverride: (item.is_override as boolean) ?? false,
       }
     } else if (item.type === 'tool_call') {
-      items.push({
-        type: 'tool_call',
-        call_id: (item.call_id as string) ?? '',
-        tool_name: (item.tool_name as string) ?? '',
-        arguments: (item.arguments as Record<string, unknown>) ?? {},
-        status: item.success === true ? 'complete'
-          : item.success === false ? 'error'
-          : item.hitl ? 'awaiting_approval'
-          : (item.output !== undefined || item.error) ? 'complete'
-          : 'complete',
-        hitl: (item.hitl as ToolCallTimelineItem['hitl']) ?? null,
-        success: (item.success as boolean | null) ?? null,
-        output: item.output,
-        error: (item.error as string | null) ?? null,
-        duration_ms: (item.duration_ms as number | null) ?? null,
-        nested_timeline: (item.nested_timeline as TimelineItem[] | null) ?? null,
-      })
+      const isSubagent = AGENT_INVOKE_TOOLS.has(item.tool_name as string)
+      const status = item.success === true ? 'complete' as const
+        : item.success === false ? 'error' as const
+        : item.hitl ? 'awaiting_approval' as const
+        : (item.output !== undefined || item.error) ? 'complete' as const
+        : 'complete' as const
+
+      if (isSubagent) {
+        const args = (item.arguments as Record<string, unknown>) ?? {}
+        items.push({
+          type: 'subagent',
+          id: `msg-subagent-${items.length}`,
+          call_id: (item.call_id as string) ?? '',
+          tool_name: (item.tool_name as string) ?? '',
+          arguments: args,
+          agent_name: (args.agent_slug ?? args.agent_id ?? 'Agent') as string,
+          status,
+          success: (item.success as boolean | null) ?? null,
+          output: item.output,
+          error: (item.error as string | null) ?? null,
+          duration_ms: (item.duration_ms as number | null) ?? null,
+          children: (item.nested_timeline as TimelineItem[]) ?? [],
+        } satisfies SubAgentTimelineItem)
+      } else {
+        items.push({
+          type: 'tool_call',
+          id: `msg-tool-${items.length}`,
+          call_id: (item.call_id as string) ?? '',
+          tool_name: (item.tool_name as string) ?? '',
+          arguments: (item.arguments as Record<string, unknown>) ?? {},
+          status,
+          hitl: (item.hitl as ToolCallTimelineItem['hitl']) ?? null,
+          success: (item.success as boolean | null) ?? null,
+          output: item.output,
+          error: (item.error as string | null) ?? null,
+          duration_ms: (item.duration_ms as number | null) ?? null,
+          nested_timeline: (item.nested_timeline as TimelineItem[] | null) ?? null,
+        } satisfies ToolCallTimelineItem)
+      }
     } else if (item.type === 'thinking') {
       const content = (item.content as string) ?? ''
       if (content) thoughts.push(content)
@@ -124,10 +156,9 @@ interface AgentChatViewProps {
 }
 
 /** Renders a completed assistant message with properly parsed timeline data. */
-function ParsedAgentResponse({ msg, onApproveHITL, onDenyHITL, agentName, timestamp }: {
+function ParsedAgentResponse({ msg, onHITLAction, agentName, timestamp }: {
   msg: Message
-  onApproveHITL: (hitlId: string) => void
-  onDenyHITL: (hitlId: string) => void
+  onHITLAction?: (hitlId: string, action: 'approve' | 'deny', note?: string) => void
   agentName?: string
   timestamp?: string
 }) {
@@ -167,8 +198,7 @@ function ParsedAgentResponse({ msg, onApproveHITL, onDenyHITL, agentName, timest
       timeline={resolvedItems}
       displayText={msg.content}
       isStreaming={false}
-      onApproveHITL={onApproveHITL}
-      onDenyHITL={onDenyHITL}
+      onHITLAction={onHITLAction}
       agentName={agentName}
       modelInfo={msgModelInfo}
       timestamp={timestamp}
@@ -194,10 +224,9 @@ export function AgentChatView({
     if (onReady) onReady(handleMessage)
   }, [onReady, handleMessage])
 
-  // Layer 2: Coordination
-  const { phase, timeline, thinkingDuration, modelInfo, reset: resetPhase, handleThoughtsDrained } = useAgentPhase(emitter)
+  // Layer 2: Coordination — unified timeline adapter replaces useAgentPhase + useThoughtQueue
+  const { phase, timeline, thinkingDuration, modelInfo, currentThought, allThoughts, reset: resetPhase, handleThoughtsDrained } = useChatTimelineAdapter(emitter)
   const { displayText, isStreaming, reset: resetRenderer } = useStreamRenderer(emitter)
-  const { currentThought, allThoughts } = useThoughtQueue(emitter, handleThoughtsDrained)
   const { intent, scrollToBottom, nudgeScroll, containerRef, contentRef } = useScrollIntent()
   const composerObsRef = useRef<ResizeObserver | null>(null)
   const composerElRef = useRef<HTMLDivElement | null>(null)
@@ -225,7 +254,7 @@ export function AgentChatView({
 
   // Keep scrolled to bottom as streaming tokens arrive and timeline grows
   useEffect(() => {
-    if (isStreaming || phase === 'thinking' || phase === 'tool_calling') nudgeScroll()
+    if (isStreaming || phase === 'running') nudgeScroll()
   }, [displayText, timeline.length, currentThought, isStreaming, phase, nudgeScroll])
 
   // Force scroll to bottom when new messages appear (user sends follow-up)
@@ -248,6 +277,22 @@ export function AgentChatView({
     }
   }, [messages.length, phase, resetPhase, resetRenderer])
 
+  // Stale-stream fallback: if phase is 'running' but no timeline updates arrive
+  // for 8 seconds (e.g. after page refresh when agent already completed),
+  // force-reset so the UI doesn't stay stuck in "Responding..." indefinitely.
+  const lastTimelineUpdateRef = useRef(Date.now())
+  useEffect(() => { lastTimelineUpdateRef.current = Date.now() }, [timeline.length])
+  useEffect(() => {
+    if (phase !== 'running') return
+    const timer = setInterval(() => {
+      if (Date.now() - lastTimelineUpdateRef.current > 8000) {
+        resetPhase()
+        resetRenderer()
+      }
+    }, 3000)
+    return () => clearInterval(timer)
+  }, [phase, resetPhase, resetRenderer])
+
   // Forward conversation_updated events to parent
   useEffect(() => {
     if (!onConversationUpdated) return
@@ -264,11 +309,21 @@ export function AgentChatView({
     return () => { emitter.off('done', handler as any) }
   }, [emitter, onStreamComplete])
 
-  // Active HITL item for notification banner
-  const activeHitl = timeline.find((item) => item.type === 'tool_call' && item.status === 'awaiting_approval')
+  // Active HITL item for notification banner and Composer enablement
+  const activeHitl = timeline.find((item) => item.type === 'hitl' && item.status === 'awaiting_approval')
+  const hasActiveHITL = !!activeHitl
   const isAgentActive = phase !== 'idle' && phase !== 'complete' && phase !== 'error'
   // Show response block if the parent says it's streaming OR the agent phase is active
   const showActiveResponse = isAgentActive || (parentIsStreaming && phase === 'idle')
+
+  // Unified HITL action handler that delegates to the legacy onApproveHITL / onDenyHITL callbacks
+  const handleHITLAction = useCallback((hitlId: string, action: 'approve' | 'deny', note?: string) => {
+    if (action === 'approve') {
+      onApproveHITL?.(hitlId)
+    } else {
+      onDenyHITL?.(hitlId, note)
+    }
+  }, [onApproveHITL, onDenyHITL])
 
   // Filter out trivially empty assistant messages (e.g., just ".", whitespace, or punctuation)
   const visibleMessages = useMemo(() => messages.filter((msg) => {
@@ -301,8 +356,7 @@ export function AgentChatView({
             <ParsedAgentResponse
               key={msg.id}
               msg={msg}
-              onApproveHITL={onApproveHITL ?? (() => {})}
-              onDenyHITL={onDenyHITL ?? (() => {})}
+              onHITLAction={handleHITLAction}
               agentName={agent.name}
               timestamp={formatDateTime(msg.created_at)}
             />
@@ -312,15 +366,14 @@ export function AgentChatView({
         {/* Active agent response (streaming) */}
         {showActiveResponse && (
           <AgentResponseBlock
-            phase={phase === 'idle' && parentIsStreaming ? 'thinking' : phase}
+            phase={phase === 'idle' && parentIsStreaming ? 'running' : phase}
             currentThought={currentThought}
             allThoughts={allThoughts}
             thinkingDuration={thinkingDuration}
             timeline={timeline}
             displayText={displayText}
             isStreaming={isStreaming || (parentIsStreaming && phase === 'idle')}
-            onApproveHITL={onApproveHITL ?? (() => {})}
-            onDenyHITL={onDenyHITL ?? (() => {})}
+            onHITLAction={handleHITLAction}
             agentName={agent.name}
             modelInfo={modelInfo}
           />
@@ -346,7 +399,7 @@ export function AgentChatView({
         onClick={() => scrollToBottom()}
       />
 
-      {activeHitl && activeHitl.type === 'tool_call' && intent === 'free' && (
+      {activeHitl && activeHitl.type === 'hitl' && intent === 'free' && (
         <HITLNotificationBanner
           toolName={activeHitl.tool_name}
           onView={() => scrollToBottom()}
@@ -361,6 +414,7 @@ export function AgentChatView({
         onRemoveAttachment={onRemoveAttachment}
         phase={phase}
         isStreaming={isStreaming}
+        hasActiveHITL={hasActiveHITL}
         attachments={attachments}
         disabled={composerDisabled}
         modelOptions={modelOptions}

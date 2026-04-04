@@ -396,6 +396,49 @@ class GraphExecutor:
         # 4. Execute via agent_executor
         try:
             from openforge.runtime.agent_executor import execute_agent
+            from openforge.runtime.tool_loop import ToolLoopCallbacks
+            import json as _json
+
+            # Create callbacks to publish agent loop events for live timeline
+            _child_run_id_str = str(child_run.id)
+
+            async def _get_redis():
+                from openforge.db.redis_client import get_redis
+                return await get_redis()
+
+            async def _pub(event_type: str, payload: dict):
+                try:
+                    redis = await _get_redis()
+                    event = {"event_type": event_type, "payload": payload}
+                    await redis.publish(f"runtime:{_child_run_id_str}", _json.dumps(event, default=str))
+                except Exception:
+                    pass
+
+            async def _cb_thinking(chunk):
+                await _pub("agent_thinking", {"text": chunk})
+
+            async def _cb_token(token):
+                pass  # Don't need to stream tokens for deployment runs
+
+            async def _cb_tool_start(call_id, tool_name, arguments):
+                await _pub("agent_tool_call_start", {
+                    "call_id": call_id, "tool_name": tool_name, "arguments": arguments,
+                })
+
+            async def _cb_tool_result(call_id, tool_name, success, error=None, output=None, duration_ms=None, nested_timeline=None, delegated_conversation_id=None):
+                await _pub("agent_tool_call_result", {
+                    "call_id": call_id, "tool_name": tool_name, "success": success,
+                    "output": str(output)[:500] if output else None,
+                    "error": str(error)[:500] if error else None,
+                    "duration_ms": duration_ms,
+                })
+
+            _agent_callbacks = ToolLoopCallbacks(
+                on_thinking=_cb_thinking,
+                on_token=_cb_token,
+                on_tool_start=_cb_tool_start,
+                on_tool_result=_cb_tool_result,
+            )
 
             spec = build_runtime_config_from_snapshot(
                 snapshot=snapshot,
@@ -421,6 +464,7 @@ class GraphExecutor:
                 llm_gateway=self.llm_gateway,
                 deployment_id=str(self._deployment.id) if self._deployment else None,
                 deployment_workspace_id=str(self._deployment.owned_workspace_id) if self._deployment and self._deployment.owned_workspace_id else None,
+                tool_callbacks=_agent_callbacks,
             )
 
             # 5. Parse output

@@ -49,6 +49,8 @@ class WorkspaceConnectionManager:
         self.conversation_connections: Dict[str, list[WebSocket]] = {}
         # settings connections (no workspace scope)
         self.settings_connections: list[WebSocket] = []
+        # mission_id -> [WebSocket] (per-mission live connections)
+        self.mission_connections: Dict[str, list[WebSocket]] = {}
 
     async def connect(self, websocket: WebSocket, workspace_id: str, channel: str):
         """Connect a WebSocket to a workspace on a specific channel."""
@@ -192,6 +194,47 @@ class WorkspaceConnectionManager:
                 self.settings_connections.remove(conn)
             except ValueError:
                 pass
+
+    async def connect_mission(self, websocket: WebSocket, mission_id: str):
+        """Connect a WebSocket for live mission cycle streaming."""
+        await websocket.accept()
+        if mission_id not in self.mission_connections:
+            self.mission_connections[mission_id] = []
+        self.mission_connections[mission_id].append(websocket)
+        logger.info(
+            f"Mission WebSocket connected for {mission_id}. "
+            f"Total: {len(self.mission_connections[mission_id])}"
+        )
+
+    def disconnect_mission(self, websocket: WebSocket, mission_id: str):
+        """Disconnect a WebSocket from a mission."""
+        conns = self.mission_connections.get(mission_id, [])
+        try:
+            conns.remove(websocket)
+        except ValueError:
+            pass
+        if not conns:
+            self.mission_connections.pop(mission_id, None)
+        logger.info(f"Mission WebSocket disconnected for {mission_id}")
+
+    async def send_to_mission(self, mission_id: str, message: dict):
+        """Send a message to all connections for a specific mission."""
+        conns = self.mission_connections.get(mission_id)
+        if not conns:
+            return
+        dead: list[WebSocket] = []
+        for conn in conns:
+            try:
+                await conn.send_json(message)
+            except Exception:
+                dead.append(conn)
+        for conn in dead:
+            try:
+                conns.remove(conn)
+            except ValueError:
+                pass
+        if not conns:
+            self.mission_connections.pop(mission_id, None)
 
     async def send_to_connection(self, websocket: WebSocket, message: dict):
         """Send a message to a SPECIFIC connection."""
@@ -657,7 +700,7 @@ async def _relay_agent_events(
     conversation_id: str | None = None,
 ) -> None:
     """Subscribe to Redis channel ``agent:{execution_id}`` and relay events
-    to the WebSocket client.  Mirrors the run_terminal relay pattern."""
+    to the WebSocket client.  Mirrors the run_live relay pattern."""
     import asyncio
     try:
         import redis.asyncio as aioredis
@@ -710,14 +753,14 @@ async def _relay_agent_events(
         logger.warning("Agent event relay failed for execution %s: %s", execution_id, exc)
 
 
-# ── Run terminal WebSocket ────────────────────────────────────────────────────
+# ── Run live WebSocket ────────────────────────────────────────────────────────
 
-@ws_router.websocket("/ws/run/{run_id}/terminal")
-async def run_terminal(websocket: WebSocket, run_id: str):
-    """WebSocket endpoint that relays strategy execution events for a run.
+@ws_router.websocket("/ws/run/{run_id}/live")
+async def run_live(websocket: WebSocket, run_id: str):
+    """WebSocket endpoint that relays execution events for a run.
 
     Subscribes to the Redis channel ``runtime:{run_id}`` and forwards
-    strategy events (thought, action, observation, step started/completed)
+    execution events (thinking, tool calls, node started/completed)
     to the connected client.
     """
     await websocket.accept()
@@ -775,3 +818,94 @@ async def run_terminal(websocket: WebSocket, run_id: str):
             await websocket.close()
         except Exception:
             pass
+
+
+# ── Mission live WebSocket ───────────────────────────────────────────────────
+
+@ws_router.websocket("/ws/mission/{mission_id}/live")
+async def mission_live_websocket(websocket: WebSocket, mission_id: str):
+    """WebSocket endpoint for live mission cycle execution events.
+
+    Subscribes to Redis channel ``mission:{mission_id}`` and relays
+    cycle events (cycle_started, cycle_completed, cycle_failed) to
+    connected clients.
+    """
+    if not await _ws_auth_check(websocket):
+        return
+    await ws_manager.connect_mission(websocket, mission_id)
+    import asyncio
+
+    try:
+        import redis.asyncio as aioredis
+        from openforge.common.config import get_settings
+
+        settings = get_settings()
+        redis = aioredis.from_url(settings.redis_url, decode_responses=True)
+        pubsub = redis.pubsub()
+        channel = f"mission:{mission_id}"
+        await pubsub.subscribe(channel)
+
+        async def _relay():
+            try:
+                async for message in pubsub.listen():
+                    if message["type"] == "message":
+                        try:
+                            data = json.loads(message["data"])
+                            await ws_manager.send_to_mission(mission_id, data)
+                        except Exception:
+                            pass
+            except asyncio.CancelledError:
+                pass
+
+        relay_task = asyncio.create_task(_relay())
+
+        try:
+            while True:
+                data = await websocket.receive_json()
+                msg_type = data.get("type")
+
+                if msg_type == "stream_resume":
+                    # Send snapshot from Redis if available
+                    try:
+                        snapshot_key = f"mission_timeline:{mission_id}"
+                        snapshot_data = await redis.get(snapshot_key)
+                        if snapshot_data:
+                            await ws_manager.send_to_connection(websocket, {
+                                "type": "mission_snapshot",
+                                "data": json.loads(snapshot_data),
+                            })
+                    except Exception as exc:
+                        logger.warning("Mission snapshot send failed for %s: %s", mission_id, exc)
+
+                elif msg_type == "ping":
+                    await ws_manager.send_to_connection(websocket, {"type": "pong"})
+
+                else:
+                    await ws_manager.send_to_connection(websocket, {
+                        "type": "error",
+                        "detail": f"Unknown message type for mission channel: {msg_type}"
+                    })
+
+        except WebSocketDisconnect:
+            pass
+        finally:
+            relay_task.cancel()
+            try:
+                await relay_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            try:
+                await pubsub.unsubscribe(channel)
+                await pubsub.aclose()
+                await redis.aclose()
+            except Exception:
+                pass
+
+    except Exception as exc:
+        logger.warning("Mission WebSocket failed for %s: %s", mission_id, exc)
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+    finally:
+        ws_manager.disconnect_mission(websocket, mission_id)

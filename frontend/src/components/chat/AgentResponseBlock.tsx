@@ -1,19 +1,26 @@
 import { Bot, Cpu } from 'lucide-react'
-import { TimelineStep } from './TimelineStep'
+import { ExecutionTimeline } from '@/components/shared/execution-timeline'
 import { StreamedResponse } from './StreamedResponse'
 import { CopyButton } from '@/components/shared/CopyButton'
-import type { AgentPhase, TimelineItem, ModelInfo } from '@/hooks/chat/useAgentPhase'
+import type { TimelineItem, ExecutionPhase } from '@/types/timeline'
+
+interface ModelInfo {
+  providerName: string
+  providerDisplayName: string
+  model: string
+  isOverride: boolean
+  systemPrompt?: string
+}
 
 interface AgentResponseBlockProps {
-  phase: AgentPhase
+  phase: ExecutionPhase
   currentThought: string | null
   allThoughts: string[]
   thinkingDuration: number | null
   timeline: TimelineItem[]
   displayText: string
   isStreaming: boolean
-  onApproveHITL: (hitlId: string) => void
-  onDenyHITL: (hitlId: string) => void
+  onHITLAction?: (hitlId: string, action: 'approve' | 'deny', note?: string) => void
   agentName?: string
   modelInfo?: ModelInfo | null
   timestamp?: string
@@ -22,15 +29,10 @@ interface AgentResponseBlockProps {
 export function AgentResponseBlock({
   phase, currentThought, allThoughts, thinkingDuration,
   timeline, displayText, isStreaming,
-  onApproveHITL, onDenyHITL,
+  onHITLAction,
   agentName, modelInfo, timestamp,
 }: AgentResponseBlockProps) {
   const isActive = phase !== 'idle' && phase !== 'complete' && phase !== 'error'
-
-  const lastRunningThinkingIdx = timeline.reduce(
-    (acc, item, i) => (item.type === 'thinking' && item.status === 'running' ? i : acc),
-    -1,
-  )
 
   return (
     <div className="group/agent animate-fade-in">
@@ -62,19 +64,15 @@ export function AgentResponseBlock({
           </div>
         </div>
 
-        {/* Remaining timeline steps rendered inline in the same stack */}
-        {timeline.map((item, i) => (
-          <TimelineStep
-            key={item.type === 'thinking' ? item.id : item.type === 'intermediate_response' ? item.id : item.call_id}
-            item={item}
-            isLast={i === timeline.length - 1}
-            depth={0}
-            onApproveHITL={onApproveHITL}
-            onDenyHITL={onDenyHITL}
-            currentThought={i === lastRunningThinkingIdx ? currentThought : undefined}
-            allThoughts={i === lastRunningThinkingIdx ? allThoughts : undefined}
-          />
-        ))}
+        {/* Timeline steps rendered inline in the same stack */}
+        <ExecutionTimeline
+          items={timeline}
+          phase={phase}
+          inline
+          currentThought={currentThought}
+          allThoughts={allThoughts}
+          onHITLAction={onHITLAction}
+        />
       </div>
 
       {/* Response bubble below the stack, aligned with timeline content */}
