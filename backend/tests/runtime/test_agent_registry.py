@@ -53,6 +53,7 @@ class TestAgentRegistry:
         mock_agent.memory_config = {"history_limit": 10}
         mock_agent.parameters = []
         mock_agent.output_definitions = [{"key": "output", "type": "text"}]
+        mock_agent.mode = "interactive"
 
         mock_db = MagicMock()
         mock_db.get = AsyncMock(return_value=mock_agent)
@@ -79,6 +80,7 @@ class TestAgentRegistry:
         agent_with_version.description = "Has active version"
         agent_with_version.icon = None
         agent_with_version.active_version_id = uuid.uuid4()
+        agent_with_version.mode = "interactive"
 
         class _Scalars:
             def __init__(self, rows):
@@ -101,7 +103,7 @@ class TestAgentRegistry:
 
         assert len(agents) == 1
         assert agents[0]["slug"] == "active"
-        assert "mode" not in agents[0]
+        assert agents[0]["mode"] == "interactive"
 
     @pytest.mark.asyncio
     async def test_cache_hit(self):

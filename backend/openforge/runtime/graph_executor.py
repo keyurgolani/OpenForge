@@ -265,7 +265,7 @@ class GraphExecutor:
             rendered_prompt = render_result.output
 
         # Build automation preamble/postamble so the LLM knows the expected output format
-        from openforge.runtime.prompt_context import ExecutionContext, build_preamble, build_postamble
+        from openforge.runtime.prompt_context import build_preamble, build_postamble
 
         snapshot_input_schema = snapshot.get("parameters", [])
         snapshot_output_defs = snapshot.get("output_definitions", [])
@@ -273,7 +273,7 @@ class GraphExecutor:
         automation_preamble = build_preamble(
             agent_name=snapshot.get("name", "Agent"),
             agent_description=snapshot.get("description", ""),
-            context=ExecutionContext.AUTOMATION,
+            agent_mode=snapshot.get("mode", "pipeline"),
             input_schema=snapshot_input_schema,
             output_definitions=snapshot_output_defs,
         )

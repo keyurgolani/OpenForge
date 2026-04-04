@@ -55,6 +55,9 @@ class AgentRuntimeConfig(BaseModel):
     input_schema: list[dict] = Field(default_factory=list)
     is_parameterized: bool = False
 
+    # Agent mode
+    mode: str = "interactive"
+
     # Output definitions
     output_definitions: list[dict] = Field(default_factory=lambda: [{"key": "output", "type": "text"}])
 
@@ -75,6 +78,7 @@ def build_runtime_config(
     memory_config: dict | None = None,
     parameters: list[dict] | None = None,
     output_definitions: list[dict] | None = None,
+    mode: str = "interactive",
 ) -> AgentRuntimeConfig:
     """Build AgentRuntimeConfig from structured agent definition fields."""
     llm = llm_config or {}
@@ -127,6 +131,7 @@ def build_runtime_config(
         input_schema=params,
         is_parameterized=len(params) > 0,
         output_definitions=outputs,
+        mode=mode,
     )
 
 
@@ -150,4 +155,5 @@ def build_runtime_config_from_snapshot(
         memory_config=snapshot.get("memory_config"),
         parameters=snapshot.get("parameters"),
         output_definitions=snapshot.get("output_definitions"),
+        mode=snapshot.get("mode", "interactive"),
     )

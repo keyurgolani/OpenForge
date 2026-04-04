@@ -1,26 +1,19 @@
 """Tests for context-aware preamble/postamble construction."""
 
 from openforge.runtime.prompt_context import (
-    ExecutionContext,
     build_preamble,
     build_postamble,
 )
 
 
-class TestExecutionContext:
-    def test_enum_values(self):
-        assert ExecutionContext.CHAT == "chat"
-        assert ExecutionContext.AUTOMATION == "automation"
-
-
-class TestBuildPreambleChat:
-    """Chat preamble: conversational, no JSON format instructions."""
+class TestBuildPreambleInteractive:
+    """Interactive mode preamble: conversational, no JSON format instructions."""
 
     def test_includes_agent_name(self):
         preamble = build_preamble(
             agent_name="Research Agent",
             agent_description="Researches topics deeply",
-            context=ExecutionContext.CHAT,
+            agent_mode="interactive",
         )
         assert "Research Agent" in preamble
 
@@ -28,7 +21,7 @@ class TestBuildPreambleChat:
         preamble = build_preamble(
             agent_name="Test",
             agent_description="",
-            context=ExecutionContext.CHAT,
+            agent_mode="interactive",
         )
         assert "conversation" in preamble.lower() or "conversational" in preamble.lower()
         assert "Do NOT wrap your response in JSON" in preamble
@@ -37,7 +30,7 @@ class TestBuildPreambleChat:
         preamble = build_preamble(
             agent_name="Test",
             agent_description="",
-            context=ExecutionContext.CHAT,
+            agent_mode="interactive",
             output_definitions=[
                 {"key": "result", "type": "string", "label": "Research result"},
             ],
@@ -49,7 +42,7 @@ class TestBuildPreambleChat:
         preamble = build_preamble(
             agent_name="Test",
             agent_description="",
-            context=ExecutionContext.CHAT,
+            agent_mode="interactive",
             output_definitions=[
                 {"key": "summary", "type": "string", "label": "Brief summary"},
                 {"key": "findings", "type": "string", "label": "Detailed findings"},
@@ -63,7 +56,7 @@ class TestBuildPreambleChat:
         preamble = build_preamble(
             agent_name="Test",
             agent_description="",
-            context=ExecutionContext.CHAT,
+            agent_mode="interactive",
             input_values={"topic": "climate change", "depth": "detailed"},
         )
         assert "climate change" in preamble
@@ -73,7 +66,7 @@ class TestBuildPreambleChat:
         preamble = build_preamble(
             agent_name="Test",
             agent_description="",
-            context=ExecutionContext.CHAT,
+            agent_mode="interactive",
         )
         assert "Response Content" not in preamble
 
@@ -81,20 +74,28 @@ class TestBuildPreambleChat:
         preamble = build_preamble(
             agent_name="Test",
             agent_description="",
-            context=ExecutionContext.CHAT,
+            agent_mode="interactive",
         )
         import re
         assert re.search(r"\d{4}-\d{2}-\d{2}", preamble)
 
+    def test_defaults_to_interactive(self):
+        preamble = build_preamble(
+            agent_name="Test",
+            agent_description="",
+        )
+        assert "conversation" in preamble.lower() or "conversational" in preamble.lower()
+        assert "```output" not in preamble
 
-class TestBuildPreambleAutomation:
-    """Automation preamble: structured JSON output instructions."""
+
+class TestBuildPreamblePipeline:
+    """Pipeline mode preamble: structured JSON output instructions."""
 
     def test_includes_json_format_instructions(self):
         preamble = build_preamble(
             agent_name="Test",
             agent_description="",
-            context=ExecutionContext.AUTOMATION,
+            agent_mode="pipeline",
             output_definitions=[
                 {"key": "result", "type": "string", "label": "Result"},
             ],
@@ -106,7 +107,7 @@ class TestBuildPreambleAutomation:
         preamble = build_preamble(
             agent_name="Test",
             agent_description="",
-            context=ExecutionContext.AUTOMATION,
+            agent_mode="pipeline",
             input_schema=[
                 {"name": "query", "type": "text", "required": True, "description": "Search query"},
             ],
@@ -118,13 +119,24 @@ class TestBuildPreambleAutomation:
         preamble = build_preamble(
             agent_name="Test",
             agent_description="",
-            context=ExecutionContext.AUTOMATION,
+            agent_mode="pipeline",
         )
         assert "```output" not in preamble
 
+    def test_no_conversational_instructions(self):
+        preamble = build_preamble(
+            agent_name="Test",
+            agent_description="",
+            agent_mode="pipeline",
+            output_definitions=[
+                {"key": "result", "type": "string", "label": "Result"},
+            ],
+        )
+        assert "Do NOT wrap your response in JSON" not in preamble
+
 
 class TestBuildPostamble:
-    """Postamble is the same for both contexts."""
+    """Postamble is the same for all agent modes."""
 
     def test_includes_workspace_info(self):
         postamble = build_postamble(

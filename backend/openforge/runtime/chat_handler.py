@@ -1200,12 +1200,12 @@ class ChatHandler:
             else:
                 system_prompt = getattr(agent, 'system_prompt', None) or "You are a helpful AI assistant."
 
-            from openforge.runtime.prompt_context import ExecutionContext, build_preamble, build_postamble
+            from openforge.runtime.prompt_context import build_preamble, build_postamble
 
             preamble = build_preamble(
                 agent_name=all_template_vars.get("system.agent_name", "Assistant"),
                 agent_description=all_template_vars.get("system.agent_description", ""),
-                context=ExecutionContext.CHAT,
+                agent_mode=getattr(agent, 'mode', 'interactive') if hasattr(agent, 'mode') else (agent._spec.mode if hasattr(agent, '_spec') and hasattr(agent._spec, 'mode') else 'interactive'),
                 input_values=input_values if input_values else None,
                 output_definitions=output_defs or None,
             )

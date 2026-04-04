@@ -32,9 +32,14 @@ class AgentService(CrudDomainService):
         self,
         skip: int = 0,
         limit: int = 100,
+        mode: str | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         query = select(AgentDefinitionModel).order_by(AgentDefinitionModel.updated_at.desc())
         count_query = select(func.count()).select_from(AgentDefinitionModel)
+
+        if mode:
+            query = query.where(AgentDefinitionModel.mode == mode)
+            count_query = count_query.where(AgentDefinitionModel.mode == mode)
 
         total = await self.db.scalar(count_query) or 0
         rows = (await self.db.execute(query.offset(skip).limit(limit))).scalars().all()
@@ -143,6 +148,7 @@ class AgentService(CrudDomainService):
             "memory_config": agent.memory_config or {},
             "parameters": agent.parameters or [],
             "output_definitions": agent.output_definitions or [],
+            "mode": getattr(agent, 'mode', 'interactive'),
         }
 
         version = AgentDefinitionVersionModel(

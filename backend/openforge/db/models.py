@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from sqlalchemy import (
     String, Text, Boolean, Integer, Float, DateTime, ForeignKey,
-    Index, CheckConstraint, LargeBinary, UniqueConstraint
+    Index, CheckConstraint, LargeBinary, UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import mapped_column, Mapped, relationship
@@ -934,6 +934,7 @@ class AgentDefinitionModel(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     icon: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     tags: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    mode: Mapped[str] = mapped_column("agent_mode", String(50), nullable=False, default="interactive")
     system_prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
     llm_config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     tools_config: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)

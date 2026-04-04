@@ -51,6 +51,7 @@ class AgentDefinitionCreate(BaseModel):
     description: Optional[str] = Field(default=None, max_length=2000)
     icon: Optional[str] = Field(default=None, max_length=100)
     tags: list[str] = Field(default_factory=list)
+    mode: str = Field(default="interactive", pattern="^(interactive|pipeline)$")
     system_prompt: str = ""
     llm_config: LlmConfigSchema = Field(default_factory=LlmConfigSchema)
     tools_config: list[ToolConfigSchema] = Field(default_factory=list)
@@ -65,6 +66,7 @@ class AgentDefinitionUpdate(BaseModel):
     description: Optional[str] = Field(default=None, max_length=2000)
     icon: Optional[str] = Field(default=None, max_length=100)
     tags: Optional[list[str]] = None
+    mode: Optional[str] = Field(default=None, pattern="^(interactive|pipeline)$")
     system_prompt: Optional[str] = None
     llm_config: Optional[LlmConfigSchema] = None
     tools_config: Optional[list[ToolConfigSchema]] = None
@@ -80,6 +82,7 @@ class AgentDefinitionResponse(BaseModel):
     description: Optional[str]
     icon: Optional[str]
     tags: list[str] = Field(default_factory=list)
+    mode: str = "interactive"
     system_prompt: str
     llm_config: dict[str, Any] = Field(default_factory=dict)
     tools_config: list[dict[str, Any]] = Field(default_factory=list)
@@ -113,10 +116,3 @@ class AgentDefinitionVersionResponse(BaseModel):
 class AgentDefinitionVersionListResponse(BaseModel):
     versions: list[AgentDefinitionVersionResponse]
     total: int
-
-
-# Backward compat aliases
-AgentCreate = AgentDefinitionCreate
-AgentUpdate = AgentDefinitionUpdate
-AgentResponse = AgentDefinitionResponse
-AgentListResponse = AgentDefinitionListResponse

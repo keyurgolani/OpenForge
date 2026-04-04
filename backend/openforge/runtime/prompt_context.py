@@ -1,36 +1,30 @@
 """Context-aware preamble/postamble construction for agent system prompts.
 
-Agents receive different instructions depending on execution context:
-- CHAT: Respond conversationally, output_definitions guide content not format
-- AUTOMATION: Produce structured JSON matching output_definitions
+Agents receive different instructions depending on their mode:
+- interactive: Respond conversationally, output_definitions guide content not format
+- pipeline: Produce structured JSON matching output_definitions
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from enum import Enum
 from typing import Any
 from uuid import UUID
-
-
-class ExecutionContext(str, Enum):
-    CHAT = "chat"
-    AUTOMATION = "automation"
 
 
 def build_preamble(
     agent_name: str,
     agent_description: str,
-    context: ExecutionContext,
+    agent_mode: str = "interactive",
     *,
     input_schema: list[dict[str, Any]] | None = None,
     output_definitions: list[dict[str, Any]] | None = None,
     input_values: dict[str, Any] | None = None,
 ) -> str:
-    """Build context-appropriate preamble for an agent.
+    """Build mode-appropriate preamble for an agent.
 
-    Chat context: conversational instructions, output_definitions as content guidance.
-    Automation context: structured JSON output instructions.
+    interactive mode: conversational instructions, output_definitions as content guidance.
+    pipeline mode: structured JSON output instructions.
     """
     now = datetime.now(timezone.utc)
     date_str = now.strftime("%Y-%m-%d")
@@ -43,43 +37,8 @@ def build_preamble(
         "Do not fabricate authorship lines, team names, or dates in your responses.",
     ]
 
-    if context == ExecutionContext.CHAT:
-        lines.extend([
-            "",
-            "# Response Guidelines",
-            "",
-            "You are in a **live conversation** with a user. Respond naturally and conversationally.",
-            "",
-            "- Write clear, well-structured responses using markdown formatting",
-            "- Do NOT wrap your response in JSON, code blocks, or any structured output format",
-            "- Do NOT produce fenced output blocks or {\"key\": \"value\"} wrappers — just respond directly",
-        ])
-
-        # Show input values (already extracted) for context
-        if input_values:
-            lines.append("")
-            lines.append("# Context")
-            lines.append("")
-            lines.append("The following input values have been provided for this conversation:")
-            for name, value in input_values.items():
-                lines.append(f"- **{name}**: {value}")
-
-        # Output definitions as content guidance
-        if output_definitions:
-            lines.append("")
-            lines.append("# Response Content")
-            lines.append("")
-            lines.append("Your response should address the following aspects:")
-            for od in output_definitions:
-                key = od.get("key") or od.get("name", "")
-                label = od.get("label") or key
-                od_type = od.get("type", "")
-                lines.append(f"- **{label}** ({od_type})")
-            lines.append("")
-            lines.append("Cover each of these areas naturally within your response. Do not use JSON or structured formatting.")
-
-    elif context == ExecutionContext.AUTOMATION:
-        # Input schema documentation (for automation, show the schema not the values)
+    if agent_mode == "pipeline":
+        # Input schema documentation
         if input_schema:
             lines.append("")
             lines.append("## Input Variables")
@@ -109,6 +68,41 @@ def build_preamble(
                 comma = "," if i < len(output_definitions) - 1 else ""
                 lines.append(f'  "{out.get("key", "")}": <{out.get("type", "")} value>{comma}')
             lines.append("}\n```")
+    else:
+        # Interactive / chat mode
+        lines.extend([
+            "",
+            "# Response Guidelines",
+            "",
+            "You are in a **live conversation** with a user. Respond naturally and conversationally.",
+            "",
+            "- Write clear, well-structured responses using markdown formatting",
+            "- Do NOT wrap your response in JSON, code blocks, or any structured output format",
+            '- Do NOT produce fenced output blocks or {"key": "value"} wrappers — just respond directly',
+        ])
+
+        # Show input values (already extracted) for context
+        if input_values:
+            lines.append("")
+            lines.append("# Context")
+            lines.append("")
+            lines.append("The following input values have been provided for this conversation:")
+            for name, value in input_values.items():
+                lines.append(f"- **{name}**: {value}")
+
+        # Output definitions as content guidance
+        if output_definitions:
+            lines.append("")
+            lines.append("# Response Content")
+            lines.append("")
+            lines.append("Your response should address the following aspects:")
+            for od in output_definitions:
+                key = od.get("key") or od.get("name", "")
+                label = od.get("label") or key
+                od_type = od.get("type", "")
+                lines.append(f"- **{label}** ({od_type})")
+            lines.append("")
+            lines.append("Cover each of these areas naturally within your response. Do not use JSON or structured formatting.")
 
     return "\n".join(lines).strip()
 
@@ -122,7 +116,7 @@ def build_postamble(
     *,
     tools_enabled: bool = True,
 ) -> str:
-    """Build postamble with operational context. Same for both execution contexts."""
+    """Build postamble with operational context. Same for all agent modes."""
     parts: list[str] = ["# OpenForge Application Context"]
 
     # Workspace section

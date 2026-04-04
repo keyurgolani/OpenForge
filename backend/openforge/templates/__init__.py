@@ -89,6 +89,7 @@ def _parse_template_md(content: str) -> dict[str, Any]:
         "description": fm.get("description") or "",
         "icon": fm.get("icon"),
         "tags": fm.get("tags") or [],
+        "mode": fm.get("mode", "interactive"),
         "system_prompt": system_prompt,
         "llm_config": llm_config,
         "tools_config": tools_config,
@@ -96,23 +97,6 @@ def _parse_template_md(content: str) -> dict[str, Any]:
         "parameters": parameters,
         "output_definitions": output_definitions,
     }
-
-
-# ── Slugs that previously shipped as built-in templates but have been removed.
-# On startup we delete these from the DB so the UI doesn't show stale entries.
-_RETIRED_AGENT_SLUGS = [
-    "chat-assistant",
-    "code-reviewer",
-    "team-coordinator",
-    "change-watcher",
-    "research-worker",
-]
-
-_RETIRED_AUTOMATION_SLUGS = [
-    "daily-digest",
-    "weekly-report",
-    "knowledge-watcher",
-]
 
 
 async def seed_agent_templates(db: AsyncSession) -> None:
@@ -123,12 +107,16 @@ async def seed_agent_templates(db: AsyncSession) -> None:
 
     service = AgentService(db)
 
-    # Remove retired templates
-    for slug in _RETIRED_AGENT_SLUGS:
+    # One-time cleanup: delete old monolithic pipeline agents replaced by swarm primitives
+    _old_pipeline_slugs = [
+        "deep-researcher", "researcher", "content-builder", "news-digest",
+        "geopolitical-monitor", "market-intelligence", "trading-signals",
+    ]
+    for slug in _old_pipeline_slugs:
         existing = await service.get_agent_by_slug(slug)
         if existing is not None:
             await service.delete_agent(existing["id"])
-            logger.info("Removed retired agent template: %s", slug)
+            logger.info("Cleaned up old pipeline agent: %s", slug)
 
     for md_file in sorted(agents_dir.glob("*.md")):
         try:
@@ -165,15 +153,6 @@ async def seed_automation_templates(db: AsyncSession) -> None:
 
     agent_service = AgentService(db)
     automation_service = AutomationService(db)
-
-    # Remove retired automation templates
-    for slug in _RETIRED_AUTOMATION_SLUGS:
-        existing = await db.scalar(
-            select(AutomationModel).where(AutomationModel.slug == slug).limit(1)
-        )
-        if existing is not None:
-            await automation_service.delete_automation(existing.id)
-            logger.info("Removed retired automation template: %s", slug)
 
     for yaml_file in sorted(automations_dir.glob("*.yaml")):
         try:
@@ -391,6 +370,15 @@ _CURATED_SINKS = [
             "knowledge_type": "note",
             "title_template": "{{automation_name}} - {{date}}",
         },
+    },
+    {
+        "name": "Update Knowledge",
+        "slug": "knowledge-update",
+        "description": "Updates an existing knowledge item with new or appended content.",
+        "sink_type": "knowledge_update",
+        "icon": "edit",
+        "tags": ["knowledge", "storage", "update"],
+        "config": {},
     },
     {
         "name": "Send Notification",

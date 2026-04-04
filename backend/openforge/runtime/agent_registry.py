@@ -71,6 +71,7 @@ class AgentRegistry:
                 memory_config=agent.memory_config,
                 parameters=agent.parameters,
                 output_definitions=agent.output_definitions,
+                mode=getattr(agent, 'mode', 'interactive'),
             )
         except Exception as exc:
             logger.warning("Failed to build AgentRuntimeConfig for agent %s: %s", agent.id, exc)
@@ -112,6 +113,7 @@ class AgentRegistry:
                 "description": agent.description,
                 "icon": agent.icon,
                 "tags": agent.tags or [],
+                "mode": getattr(agent, 'mode', 'interactive'),
             }
             for agent in agents
         ]

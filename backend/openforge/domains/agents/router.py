@@ -27,9 +27,10 @@ def get_agent_service(db=Depends(get_db)) -> AgentService:
 async def list_agents(
     skip: int = 0,
     limit: int = 100,
+    mode: str | None = None,
     service: AgentService = Depends(get_agent_service),
 ):
-    agents, total = await service.list_agents(skip=skip, limit=limit)
+    agents, total = await service.list_agents(skip=skip, limit=limit, mode=mode)
     return {"agents": agents, "total": total}
 
 
