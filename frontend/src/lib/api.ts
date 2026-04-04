@@ -300,7 +300,7 @@ export const listApprovalRequests = (params?: { status?: string; limit?: number;
     api.get('/policies/approvals', { params }).then(r => r.data)
 
 export const resolveApproval = (hitlId: string, approved: boolean, resolutionNote?: string): Promise<any> =>
-    api.post(`/approvals/${hitlId}/resolve`, { approved, resolution_note: resolutionNote }).then(r => r.data)
+    api.post(`/policies/approvals/${hitlId}/resolve`, { approved, resolution_note: resolutionNote }).then(r => r.data)
 
 function toLegacyHitl(approval: any) {
     return {

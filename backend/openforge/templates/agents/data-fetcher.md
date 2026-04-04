@@ -15,7 +15,6 @@ memory:
 tools:
   - http.request
   - shell.execute_python
-  - platform.agent.invoke
 parameters:
   - name: data_request
     type: text

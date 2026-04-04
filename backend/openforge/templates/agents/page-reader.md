@@ -15,7 +15,6 @@ memory:
 tools:
   - http.fetch_single
   - http.fetch_multiple
-  - platform.agent.invoke
 parameters:
   - name: urls
     type: text

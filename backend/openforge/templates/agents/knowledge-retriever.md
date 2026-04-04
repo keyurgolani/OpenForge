@@ -16,7 +16,6 @@ tools:
   - platform.workspace.search
   - platform.workspace.list_knowledge
   - platform.workspace.list_workspaces
-  - platform.agent.invoke
 parameters:
   - name: query
     type: text

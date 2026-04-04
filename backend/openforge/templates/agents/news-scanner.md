@@ -15,7 +15,6 @@ memory:
 tools:
   - http.search_news
   - http.request
-  - platform.agent.invoke
 parameters:
   - name: topics
     type: text

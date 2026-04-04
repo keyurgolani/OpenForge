@@ -14,7 +14,6 @@ memory:
   history_limit: 5
 tools:
   - shell.execute_python
-  - platform.agent.invoke
 parameters:
   - name: situation_data
     type: text

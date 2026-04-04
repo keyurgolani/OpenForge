@@ -346,6 +346,9 @@ class ChatHandler:
         )
         exec_record = result.scalar_one_or_none()
         if exec_record is not None and exec_record.started_at < stale_cutoff:
+            # Don't kill executions waiting for human approval — HITL can take arbitrary time
+            if exec_record.status == "paused_hitl":
+                return exec_record
             logger.warning(
                 "Marking stale execution %s as failed (started %s)",
                 exec_record.id, exec_record.started_at,

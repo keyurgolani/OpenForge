@@ -16,7 +16,6 @@ tools:
   - http.search_news
   - http.request
   - http.fetch_single
-  - platform.agent.invoke
 parameters:
   - name: claims
     type: text

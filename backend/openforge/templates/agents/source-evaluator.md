@@ -15,7 +15,6 @@ memory:
 tools:
   - http.request
   - http.search_news
-  - platform.agent.invoke
 parameters:
   - name: raw_sources
     type: text

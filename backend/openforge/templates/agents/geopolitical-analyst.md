@@ -16,7 +16,6 @@ tools:
   - http.search_news
   - http.request
   - http.fetch_single
-  - platform.agent.invoke
 parameters:
   - name: region_or_topic
     type: text

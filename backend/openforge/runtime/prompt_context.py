@@ -51,6 +51,18 @@ def build_preamble(
                     line += f" — {p['description']}"
                 lines.append(line)
 
+        # Show actual input values so the agent knows what to work on
+        if input_values:
+            lines.append("")
+            lines.append("## Input Values")
+            lines.append("These are the actual values provided for this execution. Use them to fulfill your task:")
+            for name, value in input_values.items():
+                val_str = str(value) if not isinstance(value, str) else value
+                # Truncate very long values to keep preamble readable
+                if len(val_str) > 2000:
+                    val_str = val_str[:2000] + "… (truncated)"
+                lines.append(f"- **{name}**: {val_str}")
+
         # Structured output format instructions
         if output_definitions:
             lines.append("")

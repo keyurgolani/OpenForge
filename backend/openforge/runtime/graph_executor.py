@@ -276,6 +276,7 @@ class GraphExecutor:
             agent_mode=snapshot.get("mode", "pipeline"),
             input_schema=snapshot_input_schema,
             output_definitions=snapshot_output_defs,
+            input_values=resolved_inputs,
         )
 
         # Gather context data for postamble

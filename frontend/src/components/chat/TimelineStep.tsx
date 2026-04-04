@@ -105,7 +105,7 @@ export function TimelineStep({ item, isLast, depth, onApproveHITL, onDenyHITL, c
           onApprove={() => onApproveHITL(item.hitl!.hitl_id)}
           onDeny={() => onDenyHITL(item.hitl!.hitl_id)}
         />
-      ) : item.type === 'tool_call' && depth < 3 && (
+      ) : item.type === 'tool_call' && depth < 10 && (
         (item.nested_timeline && item.nested_timeline.length > 0) || AGENT_INVOKE_TOOLS.has(item.tool_name)
       ) ? (
         <SubAgentNode

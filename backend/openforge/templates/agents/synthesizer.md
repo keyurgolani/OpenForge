@@ -13,7 +13,6 @@ model:
 memory:
   history_limit: 5
 tools:
-  - platform.agent.invoke
 parameters:
   - name: inputs
     type: text

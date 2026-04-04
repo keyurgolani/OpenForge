@@ -16,7 +16,6 @@ tools:
   - http.request
   - shell.execute_python
   - http.search_news
-  - platform.agent.invoke
 parameters:
   - name: subject
     type: text
