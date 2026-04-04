@@ -90,7 +90,10 @@ export default function AppShell() {
     refetchInterval: 30_000,
   })
 
-  const workspaces = workspaceData as WorkspaceInfo[]
+  const workspaces = useMemo(
+    () => (workspaceData as WorkspaceInfo[]).filter(ws => ws.ownership_type === 'user' || !ws.ownership_type),
+    [workspaceData],
+  )
   const conversations = conversationData as SidebarConversation[]
   const knowledgeItems = useMemo(
     () => ((knowledgeData?.knowledge ?? []) as KnowledgeItem[]),
@@ -101,7 +104,8 @@ export default function AppShell() {
     [knowledgeItems],
   )
   const runs = runsData?.runs ?? []
-  const currentWorkspace = workspaces.find(workspace => workspace.id === workspaceId)
+  const allWorkspaceData = workspaceData as WorkspaceInfo[]
+  const currentWorkspace = allWorkspaceData.find(workspace => workspace.id === workspaceId)
 
   useEffect(() => {
     if (isAgnosticPage || !workspacesFetched || currentWorkspace) return
@@ -447,7 +451,7 @@ export default function AppShell() {
 
           {headerActions}
 
-          {!isAgnosticPage && (
+          {!isAgnosticPage && !currentWorkspace?.is_readonly_ui && (
             <div className="group relative inline-flex h-8 rounded-md shadow-sm">
               <button
                 className="flex items-center gap-1.5 rounded-l-md border-r border-accent-foreground/20 bg-accent px-3.5 py-1.5 text-xs font-semibold text-accent-foreground transition-colors hover:bg-accent/90"

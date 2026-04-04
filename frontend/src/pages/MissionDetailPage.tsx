@@ -31,11 +31,11 @@ import {
   usePromoteMissionWorkspace,
 } from '@/features/missions'
 import { useQuery } from '@tanstack/react-query'
-import { getWorkspace } from '@/lib/api'
+import { getWorkspace, listAgents } from '@/lib/api'
 import { missionsRoute } from '@/lib/routes'
 import { formatDateTime, formatRelativeTime, formatDuration } from '@/lib/formatters'
 
-type SiderailSection = 'workspace' | 'budget' | 'rubric' | null
+type SiderailSection = 'workspace' | 'budget' | 'rubric' | 'termination' | null
 
 export default function MissionDetailPage() {
   const { missionId } = useParams<{ missionId: string }>()
@@ -55,6 +55,18 @@ export default function MissionDetailPage() {
     enabled: !!ownedWsId,
   })
 
+  const { data: agentsData } = useQuery({
+    queryKey: ['agents'],
+    queryFn: () => listAgents({ limit: 200 }),
+  })
+  const agentName = useMemo((): string | null => {
+    if (!mission?.autonomous_agent_id) return null
+    const agents = agentsData?.agents ?? []
+    if (!Array.isArray(agents)) return null
+    const agent = agents.find((a: any) => a.id === mission.autonomous_agent_id)
+    return agent?.name ?? agent?.slug ?? null
+  }, [mission?.autonomous_agent_id, agentsData])
+
   const [terminateOpen, setTerminateOpen] = useState(false)
   const [promoteOpen, setPromoteOpen] = useState(false)
   const [siderailSection, setSiderailSection] = useState<SiderailSection>('workspace')
@@ -67,15 +79,26 @@ export default function MissionDetailPage() {
   const toggleSection = (key: SiderailSection) =>
     setSiderailSection(prev => (prev === key ? null : key))
 
+  // These must be above early returns to avoid breaking React hooks ordering
+  const cycles = cyclesData?.cycles ?? []
+  const budget = mission?.budget ?? {}
+  const rubric = mission?.rubric ?? []
+
+  const latestScores: Record<string, number> = useMemo(() => {
+    const completed = cycles.filter((c: any) => c.status === 'completed' && c.evaluation_scores)
+    if (completed.length === 0) return {}
+    const scores = completed[0].evaluation_scores ?? {}
+    const safe: Record<string, number> = {}
+    for (const [k, v] of Object.entries(scores)) {
+      safe[k] = typeof v === 'number' ? v : Number(v) || 0
+    }
+    return safe
+  }, [cycles])
+
   if (isLoading) return <LoadingState label="Loading mission..." />
   if (error || !mission) return <ErrorState message="Mission not found" />
 
-  const cycles = cyclesData?.cycles ?? []
   const isEditable = mission.status === 'draft' || mission.status === 'paused'
-  const budget = mission.budget ?? {}
-  const budgetUsage = mission.budget_usage ?? {}
-  const rubric = mission.rubric ?? []
-  const latestScores = mission.latest_scores ?? {}
 
   const startInlineEdit = (field: string, currentValue: string) => {
     if (!isEditable) return
@@ -95,7 +118,7 @@ export default function MissionDetailPage() {
   }
 
   return (
-    <div className="flex h-full gap-4 p-6 overflow-hidden">
+    <div className="flex h-full gap-4 p-6 overflow-hidden" data-debug-mission={mission.id}>
       {/* Main content: left brief + center timeline */}
       <div className="flex flex-1 gap-4 min-w-0 overflow-hidden">
         {/* Left panel: Brief */}
@@ -212,12 +235,20 @@ export default function MissionDetailPage() {
               </div>
               {mission.constraints?.length > 0 ? (
                 <ul className="space-y-1.5">
-                  {mission.constraints.map((c: any, i: number) => (
-                    <li key={i} className="text-xs text-muted-foreground/80 flex items-start gap-2">
-                      <SeverityBadge severity={c.severity} />
-                      <span>{c.text}</span>
-                    </li>
-                  ))}
+                  {mission.constraints.map((c: any, i: number) => {
+                    const severity = typeof c === 'object' && c !== null ? String(c.severity ?? 'medium') : 'medium'
+                    const label = typeof c === 'string'
+                      ? c
+                      : typeof c === 'object' && c !== null
+                        ? String(c.description ?? c.text ?? c.rule ?? JSON.stringify(c))
+                        : String(c)
+                    return (
+                      <li key={i} className="text-xs text-muted-foreground/80 flex items-start gap-2">
+                        <SeverityBadge severity={severity} />
+                        <span>{label}</span>
+                      </li>
+                    )
+                  })}
                 </ul>
               ) : (
                 <p className="text-xs text-muted-foreground/50">No constraints defined.</p>
@@ -225,20 +256,45 @@ export default function MissionDetailPage() {
             </div>
           )}
 
-          {/* Metadata: agent, cadence */}
+          {/* Metadata */}
           <div className="rounded-2xl border border-border/25 bg-card/30 p-4 space-y-2">
             <div className="flex justify-between text-xs">
               <span className="text-muted-foreground/70">Agent</span>
               <span className="text-foreground font-medium truncate ml-2">
-                {mission.agent_name ?? mission.agent_id?.slice(0, 8) ?? '--'}
+                {agentName ?? mission.autonomous_agent_id?.slice(0, 8) ?? '--'}
               </span>
             </div>
             <div className="flex justify-between text-xs">
               <span className="text-muted-foreground/70">Cadence</span>
               <span className="text-foreground font-medium">
-                {mission.cadence_seconds ? `Every ${formatDuration(mission.cadence_seconds * 1000)}` : '--'}
+                {mission.cadence?.interval_seconds
+                  ? `Every ${formatDuration(mission.cadence.interval_seconds * 1000)}`
+                  : '--'}
               </span>
             </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground/70">Cycles</span>
+              <span className="text-foreground font-medium">
+                {mission.cycle_count ?? 0}
+                {budget.max_cycles != null && <span className="text-muted-foreground/50"> / {budget.max_cycles}</span>}
+              </span>
+            </div>
+            {mission.last_cycle_at && (
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground/70">Last cycle</span>
+                <span className="text-foreground font-medium">
+                  {formatRelativeTime(mission.last_cycle_at)}
+                </span>
+              </div>
+            )}
+            {mission.next_cycle_at && mission.status === 'active' && (
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground/70">Next cycle</span>
+                <span className="text-foreground font-medium">
+                  {formatRelativeTime(mission.next_cycle_at)}
+                </span>
+              </div>
+            )}
             <div className="flex justify-between text-xs">
               <span className="text-muted-foreground/70">Created</span>
               <span className="text-foreground font-medium">
@@ -353,7 +409,7 @@ export default function MissionDetailPage() {
               {/* Budget */}
               <AccordionSection
                 title="Budget"
-                summary={budget.cost_limit ? `$${budgetUsage.total_cost?.toFixed(2) ?? '0'} / $${budget.cost_limit}` : 'No limits'}
+                summary={budget.max_cost != null ? `$${(mission.cost_estimate ?? 0).toFixed(2)} / $${budget.max_cost}` : 'No limits'}
                 icon={Settings}
                 expanded={siderailSection === 'budget'}
                 onToggle={() => toggleSection('budget')}
@@ -361,20 +417,20 @@ export default function MissionDetailPage() {
                 <div className="space-y-3 text-xs text-muted-foreground">
                   <BudgetRow
                     label="Cost"
-                    current={budgetUsage.total_cost}
-                    limit={budget.cost_limit}
+                    current={mission.cost_estimate ?? 0}
+                    limit={budget.max_cost}
                     format={(v: number) => `$${v.toFixed(2)}`}
                   />
                   <BudgetRow
                     label="Tokens"
-                    current={budgetUsage.total_tokens}
-                    limit={budget.token_limit}
+                    current={mission.tokens_used ?? 0}
+                    limit={budget.max_tokens}
                     format={(v: number) => v.toLocaleString()}
                   />
                   <BudgetRow
                     label="Cycles"
-                    current={budgetUsage.cycles_completed ?? mission.cycle_count ?? 0}
-                    limit={budget.cycle_limit}
+                    current={mission.cycle_count ?? 0}
+                    limit={budget.max_cycles}
                     format={(v: number) => String(v)}
                   />
                 </div>
@@ -402,7 +458,7 @@ export default function MissionDetailPage() {
                           </div>
                           <div className="text-right flex-shrink-0">
                             <span className="text-foreground font-medium">
-                              {score != null ? score : '--'}
+                              {score != null ? String(score) : '--'}
                             </span>
                             {criterion.target != null && (
                               <span className="text-muted-foreground/50"> / {criterion.target}</span>
@@ -421,15 +477,23 @@ export default function MissionDetailPage() {
                   title="Termination"
                   summary={`${mission.termination_conditions.length} condition${mission.termination_conditions.length !== 1 ? 's' : ''}`}
                   icon={XCircle}
-                  expanded={false}
+                  expanded={siderailSection === 'termination'}
+                  onToggle={() => toggleSection('termination')}
                 >
                   <div className="space-y-1.5 text-xs text-muted-foreground">
-                    {mission.termination_conditions.map((condition: string, i: number) => (
-                      <div key={i} className="flex gap-2">
-                        <span className="text-muted-foreground/50 flex-shrink-0">{i + 1}.</span>
-                        <span>{condition}</span>
-                      </div>
-                    ))}
+                    {mission.termination_conditions.map((tc: any, i: number) => {
+                      const text = typeof tc === 'string'
+                        ? tc
+                        : typeof tc === 'object' && tc !== null
+                          ? String(tc.condition ?? tc.description ?? JSON.stringify(tc))
+                          : String(tc)
+                      return (
+                        <div key={i} className="flex gap-2">
+                          <span className="text-muted-foreground/50 flex-shrink-0">{i + 1}.</span>
+                          <span>{text}</span>
+                        </div>
+                      )
+                    })}
                   </div>
                 </AccordionSection>
               )}
@@ -530,6 +594,8 @@ function BudgetRow({
   )
 }
 
+const OODA_PHASES = ['perceive', 'plan', 'act', 'evaluate', 'reflect'] as const
+
 function CycleCard({
   cycle,
   isExpanded,
@@ -539,12 +605,42 @@ function CycleCard({
   isExpanded: boolean
   onToggle: () => void
 }) {
+  const [activePhase, setActivePhase] = useState<string>('act')
+
   const duration = useMemo(() => {
     if (!cycle.started_at) return null
     const start = new Date(cycle.started_at).getTime()
     const end = cycle.completed_at ? new Date(cycle.completed_at).getTime() : Date.now()
     return formatDuration(end - start)
   }, [cycle.started_at, cycle.completed_at])
+
+  // Determine if we have structured phases vs raw_output fallback
+  const phases = cycle.phase_summaries ?? {}
+  const hasStructuredPhases = Object.keys(phases).length > 0 && !phases.raw_output
+  const rawOutput: string | null = phases.raw_output
+    ? (typeof phases.raw_output === 'string' ? phases.raw_output : JSON.stringify(phases.raw_output, null, 2))
+    : null
+
+  // Build a one-line summary
+  const summary = useMemo(() => {
+    if (hasStructuredPhases) {
+      const perceive = typeof phases.perceive === 'string' ? phases.perceive : ''
+      const act = typeof phases.act === 'string' ? phases.act : ''
+      const combined = [perceive, act].filter(Boolean).join(' — ')
+      return combined.length > 160 ? combined.slice(0, 157) + '...' : combined
+    }
+    if (rawOutput) {
+      return rawOutput.length > 200 ? rawOutput.slice(0, 197) + '...' : rawOutput
+    }
+    return null
+  }, [hasStructuredPhases, rawOutput, phases])
+
+  const activePhaseText = useMemo(() => {
+    if (!hasStructuredPhases) return null
+    const val = phases[activePhase]
+    if (!val) return null
+    return typeof val === 'string' ? val : JSON.stringify(val, null, 2)
+  }, [hasStructuredPhases, phases, activePhase])
 
   return (
     <div className="rounded-xl border border-border/25 bg-background/35 transition">
@@ -559,14 +655,14 @@ function CycleCard({
           </span>
           {cycle.phase && (
             <span className="text-xs text-muted-foreground/70 border border-border/25 bg-background/50 rounded-md px-1.5 py-0.5">
-              {cycle.phase}
+              {typeof cycle.phase === 'string' ? cycle.phase : String(cycle.phase)}
             </span>
           )}
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
-          {cycle.actions_count != null && (
+          {cycle.actions_log?.length > 0 && (
             <span className="text-[10px] text-muted-foreground/60">
-              {cycle.actions_count} action{cycle.actions_count === 1 ? '' : 's'}
+              {cycle.actions_log.length} action{cycle.actions_log.length === 1 ? '' : 's'}
             </span>
           )}
           {duration && (
@@ -584,33 +680,113 @@ function CycleCard({
       </button>
 
       {isExpanded && (
-        <div className="border-t border-border/25 px-3 py-3 space-y-3">
-          {/* Phase summaries */}
-          {cycle.phase_summaries && Object.keys(cycle.phase_summaries).length > 0 && (
-            <div className="space-y-2">
-              <h4 className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/70 font-medium">Phase Summaries</h4>
-              {Object.entries(cycle.phase_summaries).map(([phase, summary]: [string, any]) => (
-                <PhaseSummary key={phase} phase={phase} summary={summary} />
-              ))}
+        <div className="border-t border-border/25 px-3 py-3 space-y-2.5">
+          {/* 1. Summary row */}
+          {summary && (
+            <p className="text-xs text-muted-foreground/90 leading-relaxed line-clamp-2">{summary}</p>
+          )}
+
+          {/* 2. Score bars */}
+          {cycle.evaluation_scores && Object.keys(cycle.evaluation_scores).length > 0 && (
+            <div className="space-y-1.5">
+              {Object.entries(cycle.evaluation_scores).map(([key, value]: [string, any]) => {
+                if (typeof value !== 'number') return null
+                const pct = Math.min(100, Math.max(0, value * 100))
+                const barColor = value >= 0.7
+                  ? 'bg-emerald-500'
+                  : value >= 0.4
+                    ? 'bg-amber-500'
+                    : 'bg-red-500'
+                return (
+                  <div key={key} className="flex items-center gap-2">
+                    <span className="text-[10px] text-muted-foreground/70 truncate w-24 flex-shrink-0">{key}</span>
+                    <div className="flex-1 h-1.5 rounded-full bg-muted/30 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${barColor}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] text-foreground font-medium w-7 text-right flex-shrink-0">{value}</span>
+                  </div>
+                )
+              })}
+              {cycle.ratchet_passed != null && (
+                <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] ${
+                  cycle.ratchet_passed
+                    ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-400'
+                    : 'border-red-500/25 bg-red-500/10 text-red-400'
+                }`}>
+                  Ratchet: {cycle.ratchet_passed ? 'Passed' : 'Failed'}
+                </span>
+              )}
             </div>
           )}
 
-          {/* Evaluation */}
-          {cycle.evaluation && (
-            <div>
-              <h4 className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/70 font-medium mb-1">Evaluation</h4>
-              <div className="grid gap-1.5 grid-cols-2">
-                {Object.entries(cycle.evaluation.scores ?? cycle.evaluation ?? {}).map(([key, value]: [string, any]) => {
-                  if (typeof value !== 'number') return null
+          {/* 3. OODA phase pills (structured only) */}
+          {hasStructuredPhases && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-1">
+                {OODA_PHASES.map((phase) => {
+                  const hasContent = !!phases[phase]
+                  const isActive = activePhase === phase
                   return (
-                    <div key={key} className="flex justify-between text-xs">
-                      <span className="text-muted-foreground/70 truncate">{key}</span>
-                      <span className="text-foreground font-medium">{value}</span>
-                    </div>
+                    <button
+                      key={phase}
+                      onClick={() => setActivePhase(phase)}
+                      disabled={!hasContent}
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize transition-colors ${
+                        isActive
+                          ? 'bg-accent/20 text-accent border border-accent/40'
+                          : hasContent
+                            ? 'bg-muted/30 text-muted-foreground/80 border border-border/25 hover:text-foreground hover:border-border/50'
+                            : 'bg-muted/10 text-muted-foreground/30 border border-border/15 cursor-default'
+                      }`}
+                    >
+                      {phase}
+                    </button>
                   )
                 })}
               </div>
+              {activePhaseText && (
+                <div className="rounded-lg border border-border/25 bg-card/20 px-2.5 py-2 text-xs text-muted-foreground/80 leading-relaxed whitespace-pre-wrap max-h-[140px] overflow-y-auto">
+                  {activePhaseText}
+                </div>
+              )}
             </div>
+          )}
+
+          {/* 6. Raw output fallback (no structured phases) */}
+          {!hasStructuredPhases && rawOutput && (
+            <div className="rounded-lg border-l-2 border-border/25 bg-muted/10 px-3 py-2 text-xs text-muted-foreground/70 leading-relaxed whitespace-pre-wrap max-h-[200px] overflow-y-auto">
+              {rawOutput}
+            </div>
+          )}
+
+          {/* 4. Key Actions */}
+          {cycle.actions_log?.length > 0 && (
+            <div>
+              <h4 className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/70 font-medium mb-1">Actions</h4>
+              <ol className="space-y-0.5">
+                {cycle.actions_log.map((action: any, i: number) => {
+                  const label = typeof action === 'string'
+                    ? action
+                    : typeof action === 'object' && action !== null
+                      ? String(action.action ?? action.description ?? JSON.stringify(action))
+                      : String(action)
+                  return (
+                    <li key={i} className="text-[11px] text-muted-foreground/80 flex gap-1.5 leading-snug">
+                      <span className="text-accent/50 flex-shrink-0">{i + 1}.</span>
+                      <span className="truncate">{label}</span>
+                    </li>
+                  )
+                })}
+              </ol>
+            </div>
+          )}
+
+          {/* 5. Next cycle reason */}
+          {cycle.next_cycle_reason && (
+            <p className="text-[11px] text-muted-foreground/60 italic">{cycle.next_cycle_reason}</p>
           )}
 
           {/* Error */}
@@ -621,33 +797,9 @@ function CycleCard({
           )}
 
           {/* Empty state */}
-          {!cycle.phase_summaries && !cycle.evaluation && !cycle.error_message && (
+          {!hasStructuredPhases && !rawOutput && !cycle.evaluation_scores && !cycle.error_message && !cycle.actions_log?.length && (
             <p className="text-xs text-muted-foreground/50">No detailed data available for this cycle.</p>
           )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function PhaseSummary({ phase, summary }: { phase: string; summary: any }) {
-  const [open, setOpen] = useState(false)
-  const text = typeof summary === 'string' ? summary : JSON.stringify(summary, null, 2)
-
-  return (
-    <div className="rounded-lg border border-border/25 bg-card/20">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between px-2.5 py-1.5 text-left"
-      >
-        <span className="text-xs font-medium text-foreground/80 capitalize">{phase.replace(/_/g, ' ')}</span>
-        <ChevronRight
-          className={`w-3 h-3 text-muted-foreground transition-transform ${open ? 'rotate-90' : ''}`}
-        />
-      </button>
-      {open && (
-        <div className="border-t border-border/25 px-2.5 py-2 text-xs text-muted-foreground/80 whitespace-pre-wrap">
-          {text}
         </div>
       )}
     </div>

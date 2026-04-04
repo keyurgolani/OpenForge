@@ -196,10 +196,11 @@ def build_postamble(
             f", {mission_workspace.get('knowledge_count', 0)} knowledge items)",
             "",
             "Use this workspace to:",
-            "- **Save journal entries** (type: `journal`) to record learnings, plan changes, "
+            "- **Save journal entries** using the `platform.workspace.save_knowledge` tool with "
+            "`type: \"journal\"` and this workspace_id to record learnings, plan changes, "
             "milestones, strategy shifts, hypotheses, and warnings",
-            "- **Read prior cycle outputs** for continuity across cycles",
-            "- **Persist intermediate results** that inform future cycles",
+            "- **Read prior cycle outputs** using `platform.workspace.search` with this workspace_id",
+            "- **Persist intermediate results** that inform future cycles using `platform.workspace.save_knowledge`",
             "",
             "This workspace is separate from user workspaces.",
         ]
@@ -349,8 +350,16 @@ def build_mission_context(
     # Required output format
     lines.append("")
     lines.append("## Required Output")
-    lines.append("After completing all phases, you MUST produce a structured output block. "
-                 "Wrap it in a fenced code block with the `mission_output` language tag:")
+    lines.append("")
+    lines.append("**CRITICAL: Do NOT try to call a tool named `mission_output`. "
+                 "This is a text format, not a tool. Do NOT call a tool named `journal` either. "
+                 "Simply write the fenced block below as plain text in your response.**")
+    lines.append("")
+    lines.append("You MUST include this block. Without it, your cycle results cannot be tracked.")
+    lines.append("")
+    lines.append("After completing all phases, produce a structured output block. "
+                 "Wrap it in a fenced code block with the `mission_output` language tag. "
+                 "This block MUST be the LAST thing in your response — nothing should follow it.")
     lines.append("")
     lines.append("```mission_output")
     lines.append("{")
@@ -384,6 +393,9 @@ def build_mission_context(
     lines.append('  "next_cycle_delay_seconds": 300')
     lines.append("}")
     lines.append("```")
+    lines.append("")
+    lines.append("Remember: the ```mission_output``` block above is plain text you write in your "
+                 "response. It is NOT a tool call. End your response with this block.")
 
     return "\n".join(lines).strip()
 

@@ -220,8 +220,9 @@ async def execute_cycle(
     6. Update cycle and mission state
     7. Check termination conditions
     """
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession as _AsyncSession
+    from openforge.config import get_settings
     from openforge.core.llm_gateway import LLMGateway
-    from openforge.db.postgres import AsyncSessionLocal
     from openforge.integrations.tools.dispatcher import tool_dispatcher
     from openforge.runtime.agent_executor import execute_agent
     from openforge.runtime.agent_registry import agent_registry
@@ -229,7 +230,10 @@ async def execute_cycle(
 
     started_at = time.monotonic()
 
-    async with AsyncSessionLocal() as db:
+    settings = get_settings()
+    _engine = create_async_engine(settings.database_url, echo=False, pool_size=5, max_overflow=10)
+    _Session = async_sessionmaker(_engine, class_=_AsyncSession, expire_on_commit=False)
+    async with _Session() as db:
         try:
             # 1. Load mission, cycle, and run
             mission = await db.get(MissionModel, mission_id)
@@ -589,3 +593,4 @@ async def execute_cycle(
                     "Failed to mark cycle %s as failed", cycle_id,
                 )
             raise
+    await _engine.dispose()

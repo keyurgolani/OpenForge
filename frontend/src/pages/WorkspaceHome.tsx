@@ -16,7 +16,7 @@ import {
     Trash2, PinOff, ArchiveX, Loader2, Sparkles,
     Inbox, CheckSquare, Square, ExternalLink, Copy, SortAsc,
     ChevronDown, Tag, RefreshCw, Download, Lock,
-    Image as ImageIcon, Music, FileType2, Table, Presentation,
+    Image as ImageIcon, Music, FileType2, Table, Presentation, BookOpen,
 } from 'lucide-react'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem,
@@ -54,6 +54,7 @@ const TYPE_OPTS = [
     { id: 'fleeting', label: 'Fleeting', icon: Zap },
     { id: 'bookmark', label: 'Bookmarks', icon: Bookmark },
     { id: 'gist', label: 'Gists', icon: Code2 },
+    { id: 'journal', label: 'Journals', icon: BookOpen },
     { id: 'image', label: 'Images', icon: ImageIcon },
     { id: 'audio', label: 'Audio', icon: Music },
     { id: 'pdf', label: 'PDFs', icon: FileType2 },

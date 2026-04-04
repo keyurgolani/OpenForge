@@ -1,4 +1,4 @@
-export type QuickKnowledgeType = 'note' | 'fleeting' | 'bookmark' | 'gist' | 'image' | 'audio' | 'pdf' | 'document' | 'sheet' | 'slides'
+export type QuickKnowledgeType = 'note' | 'fleeting' | 'bookmark' | 'gist' | 'journal' | 'image' | 'audio' | 'pdf' | 'document' | 'sheet' | 'slides'
 
 const QUICK_KNOWLEDGE_EVENT = 'openforge:quick-knowledge:open'
 
@@ -28,6 +28,7 @@ export const KNOWLEDGE_TYPE_LABELS: Record<QuickKnowledgeType, string> = {
     fleeting: 'Fleeting Note',
     bookmark: 'Bookmark',
     gist: 'Code Gist',
+    journal: 'Journal',
     image: 'Image',
     audio: 'Audio',
     pdf: 'PDF Document',
