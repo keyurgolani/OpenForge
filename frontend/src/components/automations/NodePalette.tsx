@@ -1,4 +1,4 @@
-import { Bot, GripVertical } from 'lucide-react'
+import { Bot, Diamond, GripVertical } from 'lucide-react'
 import type { ParameterConfig } from '@/types/agents'
 import { SINK_TYPE_INFO } from '@/types/sinks'
 
@@ -26,11 +26,17 @@ export const SINK_TYPES: SinkTypeDefinition[] = SINK_TYPE_INFO.map(info => ({
 interface NodePaletteProps {
   agents: Agent[]
   onAddNode: (agent: Agent) => void
+  onAddConstant: () => void
 }
 
-export default function NodePalette({ agents, onAddNode }: NodePaletteProps) {
+export default function NodePalette({ agents, onAddNode, onAddConstant }: NodePaletteProps) {
   const handleAgentDragStart = (e: React.DragEvent, agent: Agent) => {
     e.dataTransfer.setData('application/openforge-agent', JSON.stringify(agent))
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleConstantDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData('application/openforge-constant', 'true')
     e.dataTransfer.effectAllowed = 'move'
   }
 
@@ -61,6 +67,25 @@ export default function NodePalette({ agents, onAddNode }: NodePaletteProps) {
             </button>
           ))
         )}
+      </div>
+      <div className="px-2.5 py-2 border-b border-border/25 border-t border-border/25">
+        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+          Values
+        </p>
+      </div>
+      <div className="p-1.5">
+        <button
+          draggable
+          onDragStart={handleConstantDragStart}
+          onClick={onAddConstant}
+          className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-md text-left hover:bg-violet-500/15 transition group cursor-grab active:cursor-grabbing"
+        >
+          <GripVertical className="w-3 h-3 text-muted-foreground/50 group-hover:text-muted-foreground flex-shrink-0" />
+          <Diamond className="w-3 h-3 text-violet-400 flex-shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] text-foreground truncate leading-tight">Constant</p>
+          </div>
+        </button>
       </div>
     </div>
   )

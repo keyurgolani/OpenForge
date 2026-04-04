@@ -19,6 +19,7 @@ import { Save } from 'lucide-react'
 
 import AgentNode from './AgentNode'
 import SinkNode from './SinkNode'
+import ConstantNode from './ConstantNode'
 import NodePalette, { type SinkTypeDefinition, SINK_TYPES } from './NodePalette'
 import SinkPalette, { type SinkPaletteItem } from './SinkPalette'
 import NodeConfigPanel from './NodeConfigPanel'
@@ -28,6 +29,7 @@ import { useAgentsQuery } from '@/features/agents'
 import { useSinksQuery } from '@/features/sinks'
 import { getActiveInputHandles, type SinkType } from '@/types/sinks'
 import { useSaveAutomationGraph } from '@/features/automations'
+import { useWorkspaces } from '@/hooks/useWorkspace'
 
 interface AutomationGraphEditorProps {
   automationId: string
@@ -45,7 +47,7 @@ function nextNodeId() {
   return `node_${Date.now()}_${++nodeIdCounter}`
 }
 
-const nodeTypes = { agentNode: AgentNode, sinkNode: SinkNode }
+const nodeTypes = { agentNode: AgentNode, sinkNode: SinkNode, constantNode: ConstantNode }
 
 /** Extract input handles from an agent's input_schema.
  *  Agents without explicit inputs get a default "User Request" text input. */
@@ -111,6 +113,14 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
   const saveGraph = useSaveAutomationGraph()
   const agents = agentsData?.agents ?? []
   const dbSinks = sinksData?.sinks ?? []
+  const { data: workspacesData } = useWorkspaces()
+  const workspaces = useMemo(() =>
+    ((workspacesData as Array<{ id: string; title?: string; name?: string }>) ?? []).map(ws => ({
+      id: ws.id,
+      name: ws.title || ws.name || ws.id,
+    })),
+    [workspacesData],
+  )
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const { screenToFlowPosition, fitView: rfFitView } = useReactFlow()
 
@@ -119,6 +129,21 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
     if (!graph?.nodes) return []
     return graph.nodes.map(n => {
       const nodeType = (n as Record<string, unknown>).node_type as string | undefined
+      if (nodeType === 'constant') {
+        const nodeConfig = (n as Record<string, unknown>).config as Record<string, unknown> ?? {}
+        return {
+          id: n.id,
+          type: 'constantNode',
+          position: n.position,
+          data: {
+            value: nodeConfig.value ?? '',
+            fieldType: nodeConfig.field_type ?? 'text',
+            options: nodeConfig.options as string[] | undefined,
+            workspaces,
+            nodeKey: n.node_key,
+          },
+        }
+      }
       if (nodeType === 'sink') {
         const sinkType = (n as Record<string, unknown>).sink_type as string
         const sinkId = (n as Record<string, unknown>).sink_id as string | undefined
@@ -155,7 +180,7 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
         },
       }
     })
-  }, [graph?.nodes, agents, dbSinks])
+  }, [graph?.nodes, agents, dbSinks, workspaces])
 
   const initialEdges: RFEdge[] = useMemo(() => {
     if (!graph?.edges) return []
@@ -170,23 +195,10 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
     }))
   }, [graph?.edges])
 
-  // Build initial static inputs map from graph data keyed by node id -> input_key -> value
-  const initialStaticInputs = useMemo(() => {
-    const map: Record<string, Record<string, unknown>> = {}
-    if (graph?.static_inputs) {
-      for (const si of graph.static_inputs) {
-        if (!map[si.node_id]) map[si.node_id] = {}
-        map[si.node_id][si.input_key] = si.static_value
-      }
-    }
-    return map
-  }, [graph?.static_inputs])
-
   const [nodes, setNodes, onNodesChangeBase] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const [isDirty, setIsDirty] = useState(false)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
-  const [staticInputsMap, setStaticInputsMap] = useState<Record<string, Record<string, unknown>>>(initialStaticInputs)
   const [contextMenu, setContextMenu] = useState<{ nodeId: string; x: number; y: number } | null>(null)
 
   // Expose pending graph state to parent for save-on-create flows
@@ -200,6 +212,18 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
       })
       const graphNodes = nodes.map(n => {
         const data = n.data as Record<string, unknown>
+        if (n.type === 'constantNode') {
+          return {
+            node_key: data.nodeKey as string || n.id,
+            node_type: 'constant',
+            position: n.position,
+            config: {
+              value: data.value,
+              field_type: data.fieldType ?? 'text',
+              options: data.options,
+            },
+          }
+        }
         if (n.type === 'sinkNode') {
           return { node_key: data.nodeKey as string || n.id, node_type: 'sink', sink_type: data.sinkType as string, sink_id: data.sinkId as string | undefined, position: n.position, config: {} }
         }
@@ -213,35 +237,18 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
           target_node_key: nodeIdToKey[e.target] ?? e.target,
           target_input_key: e.targetHandle ?? '',
         }))
-      const agentNodeIds = new Set(nodes.filter(n => n.type === 'agentNode').map(n => n.id))
       const staticInputs: Array<{ node_key: string; input_key: string; static_value: unknown }> = []
-      for (const [nodeId, inputs] of Object.entries(staticInputsMap)) {
-        if (!agentNodeIds.has(nodeId)) continue
-        const nodeKey = nodeIdToKey[nodeId] ?? nodeId
-        for (const [inputKey, value] of Object.entries(inputs)) {
-          if (value !== '' && value != null) {
-            staticInputs.push({ node_key: nodeKey, input_key: inputKey, static_value: value })
-          }
-        }
-      }
       return { nodes: graphNodes, edges: graphEdges, static_inputs: staticInputs }
     },
-  }), [nodes, edges, staticInputsMap])
+  }), [nodes, edges])
 
-  // Wrap onNodesChange to clean up static inputs when nodes are deleted
+  // Wrap onNodesChange to clear selection when nodes are deleted
   const onNodesChange = useCallback(
     (changes: Parameters<typeof onNodesChangeBase>[0]) => {
       const removedIds = changes
         .filter((c): c is { type: 'remove'; id: string } => c.type === 'remove')
         .map(c => c.id)
       if (removedIds.length > 0) {
-        setStaticInputsMap(prev => {
-          const next = { ...prev }
-          for (const id of removedIds) {
-            delete next[id]
-          }
-          return next
-        })
         setSelectedNodeId(prev => removedIds.includes(prev ?? '') ? null : prev)
         setIsDirty(true)
       }
@@ -259,7 +266,6 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
     if (!isDirty) {
       setNodes(initialNodes)
       setEdges(initialEdges)
-      setStaticInputsMap(initialStaticInputs)
       if (initialNodes.length > 0) {
         setTimeout(() => rfFitView({ maxZoom: 1, padding: 0.3 }), 100)
       }
@@ -271,8 +277,54 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
     (params: Connection) => {
       setEdges(eds => addEdge({ ...params, animated: true, style: { stroke: '#60a5fa' } }, eds))
       setIsDirty(true)
+
+      // If source is a constant node, adapt its field type to the target input's type
+      if (params.source) {
+        const sourceNode = nodes.find(n => n.id === params.source)
+        if (sourceNode?.type === 'constantNode' && params.target && params.targetHandle) {
+          const targetNode = nodes.find(n => n.id === params.target)
+          if (targetNode?.type === 'agentNode') {
+            const targetAgentId = (targetNode.data as Record<string, unknown>).agentId as string
+            const targetAgent = agents.find(a => a.id === targetAgentId)
+            if (targetAgent?.input_schema) {
+              const targetParam = targetAgent.input_schema.find(p => p.name === params.targetHandle)
+              if (targetParam) {
+                let fieldType: string = 'text'
+                let options: string[] | undefined
+                if (params.targetHandle === 'workspace_id') {
+                  fieldType = 'workspace'
+                } else if (targetParam.type === 'enum' && targetParam.options?.length) {
+                  fieldType = 'select'
+                  options = targetParam.options
+                } else if (targetParam.type === 'number') {
+                  fieldType = 'number'
+                } else if (targetParam.type === 'boolean') {
+                  fieldType = 'boolean'
+                }
+                setNodes(nds =>
+                  nds.map(n =>
+                    n.id === params.source
+                      ? { ...n, data: { ...n.data, fieldType, options, workspaces } }
+                      : n,
+                  ),
+                )
+              }
+            }
+          }
+          // For sink target inputs, check workspace_id special case
+          if (targetNode?.type === 'sinkNode' && params.targetHandle === 'workspace_id') {
+            setNodes(nds =>
+              nds.map(n =>
+                n.id === params.source
+                  ? { ...n, data: { ...n.data, fieldType: 'workspace', workspaces } }
+                  : n,
+              ),
+            )
+          }
+        }
+      }
     },
-    [setEdges],
+    [setEdges, nodes, agents, workspaces, setNodes],
   )
 
   const handleAddNode = useCallback(
@@ -338,6 +390,26 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
     [setNodes],
   )
 
+  const handleAddConstantNode = useCallback(
+    () => {
+      const nodeKey = `const_${nextNodeId()}`
+      const newNode: RFNode = {
+        id: nodeKey,
+        type: 'constantNode',
+        position: { x: 100 + Math.random() * 150, y: 100 + Math.random() * 200 },
+        data: {
+          value: '',
+          fieldType: 'text',
+          workspaces,
+          nodeKey,
+        },
+      }
+      setNodes(nds => [...nds, newNode])
+      setIsDirty(true)
+    },
+    [setNodes, workspaces],
+  )
+
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
@@ -400,8 +472,27 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
           setIsDirty(true)
         } catch { /* ignore invalid data */ }
       }
+
+      // Try constant node
+      const constantData = event.dataTransfer.getData('application/openforge-constant')
+      if (constantData) {
+        const nodeKey = `const_${nextNodeId()}`
+        const newNode: RFNode = {
+          id: nodeKey,
+          type: 'constantNode',
+          position,
+          data: {
+            value: '',
+            fieldType: 'text',
+            workspaces,
+            nodeKey,
+          },
+        }
+        setNodes(nds => [...nds, newNode])
+        setIsDirty(true)
+      }
     },
-    [screenToFlowPosition, setNodes],
+    [screenToFlowPosition, setNodes, workspaces],
   )
 
   const onNodeClick = useCallback((_event: React.MouseEvent, node: RFNode) => {
@@ -421,11 +512,6 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
   const handleDeleteNode = useCallback((nodeId: string) => {
     setNodes(nds => nds.filter(n => n.id !== nodeId))
     setEdges(eds => eds.filter(e => e.source !== nodeId && e.target !== nodeId))
-    setStaticInputsMap(prev => {
-      const next = { ...prev }
-      delete next[nodeId]
-      return next
-    })
     if (selectedNodeId === nodeId) setSelectedNodeId(null)
     setContextMenu(null)
     setIsDirty(true)
@@ -434,20 +520,6 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
   const handleCloseConfigPanel = useCallback(() => {
     setSelectedNodeId(null)
   }, [])
-
-  const handleStaticInputChange = useCallback(
-    (nodeId: string, inputKey: string, value: unknown) => {
-      setStaticInputsMap(prev => ({
-        ...prev,
-        [nodeId]: {
-          ...(prev[nodeId] ?? {}),
-          [inputKey]: value,
-        },
-      }))
-      setIsDirty(true)
-    },
-    [],
-  )
 
   // Derive wired inputs for the selected node from edges
   const selectedNode = nodes.find(n => n.id === selectedNodeId) ?? null
@@ -480,9 +552,21 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
       nodeIdToKey[n.id] = (n.data as Record<string, unknown>).nodeKey as string || n.id
     })
 
-    // Serialize all nodes (agent and sink)
+    // Serialize all nodes (agent, sink, and constant)
     const graphNodes = nodes.map(n => {
       const data = n.data as Record<string, unknown>
+      if (n.type === 'constantNode') {
+        return {
+          node_key: data.nodeKey as string || n.id,
+          node_type: 'constant',
+          position: n.position,
+          config: {
+            value: data.value,
+            field_type: data.fieldType ?? 'text',
+            options: data.options,
+          },
+        }
+      }
       if (n.type === 'sinkNode') {
         return {
           node_key: data.nodeKey as string || n.id,
@@ -512,29 +596,18 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
         target_input_key: e.targetHandle ?? '',
       }))
 
-    // Build static_inputs from the map (agent nodes only)
-    const agentNodeIds = new Set(nodes.filter(n => n.type === 'agentNode').map(n => n.id))
     const staticInputs: Array<{ node_key: string; input_key: string; static_value: unknown }> = []
-    for (const [nodeId, inputs] of Object.entries(staticInputsMap)) {
-      if (!agentNodeIds.has(nodeId)) continue
-      const nodeKey = nodeIdToKey[nodeId] ?? nodeId
-      for (const [inputKey, value] of Object.entries(inputs)) {
-        if (value !== '' && value != null) {
-          staticInputs.push({ node_key: nodeKey, input_key: inputKey, static_value: value })
-        }
-      }
-    }
 
     await saveGraph.mutateAsync({
       id: automationId,
       graph: { nodes: graphNodes, edges: graphEdges, static_inputs: staticInputs },
     })
     setIsDirty(false)
-  }, [automationId, nodes, edges, saveGraph, staticInputsMap])
+  }, [automationId, nodes, edges, saveGraph])
 
   return (
     <div className="flex h-full rounded-xl border border-border/25 overflow-hidden">
-      {!readOnly && <NodePalette agents={agents} onAddNode={handleAddNode} />}
+      {!readOnly && <NodePalette agents={agents} onAddNode={handleAddNode} onAddConstant={handleAddConstantNode} />}
       <div className="flex-1 relative" ref={reactFlowWrapper}>
         {!readOnly && isDirty && (
           <div className="absolute top-3 right-3 z-10">
@@ -557,6 +630,29 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
             if (meaningful) setIsDirty(true)
           }}
           onEdgesChange={readOnly ? undefined : (changes) => {
+            // Revert constant nodes to text when their edge is removed
+            const removedEdges = changes.filter((c): c is { type: 'remove'; id: string } => c.type === 'remove')
+            if (removedEdges.length > 0) {
+              const removedEdgeIds = new Set(removedEdges.map(c => c.id))
+              const affectedConstantIds = new Set<string>()
+              for (const edge of edges) {
+                if (removedEdgeIds.has(edge.id)) {
+                  const sourceNode = nodes.find(n => n.id === edge.source)
+                  if (sourceNode?.type === 'constantNode') {
+                    affectedConstantIds.add(edge.source)
+                  }
+                }
+              }
+              if (affectedConstantIds.size > 0) {
+                setNodes(nds =>
+                  nds.map(n =>
+                    affectedConstantIds.has(n.id)
+                      ? { ...n, data: { ...n.data, fieldType: 'text', options: undefined } }
+                      : n,
+                  ),
+                )
+              }
+            }
             onEdgesChange(changes)
             const meaningful = changes.some(c => c.type === 'remove' || c.type === 'add')
             if (meaningful) setIsDirty(true)
@@ -637,10 +733,6 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
               : [{ key: 'output', type: 'text', label: 'output' }]
           }
           wiredInputs={wiredInputs}
-          staticInputs={staticInputsMap[selectedNode.id] ?? {}}
-          onStaticInputChange={(inputKey, value) =>
-            handleStaticInputChange(selectedNode.id, inputKey, value)
-          }
           onClose={handleCloseConfigPanel}
         />
       )}

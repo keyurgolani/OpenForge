@@ -165,6 +165,17 @@ class AutomationService(CrudDomainService):
                 config=n.config or {},
             ))
 
+        # Build constant node blueprints
+        for n in nodes:
+            if (n.node_type or "agent") != "constant":
+                continue
+            node_blueprints.append(AutomationNodeBlueprint(
+                node_key=n.node_key,
+                node_type="constant",
+                position={"x": n.position_x, "y": n.position_y},
+                config=n.config or {},
+            ))
+
         # Build edge blueprints — include all edges between known nodes
         known_node_keys = {nb.node_key for nb in node_blueprints}
         known_node_ids = {n.id for n in nodes if n.node_key in known_node_keys}

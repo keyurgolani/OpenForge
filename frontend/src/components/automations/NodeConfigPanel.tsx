@@ -8,8 +8,6 @@ interface NodeConfigPanelProps {
   inputSchema: Array<{ name: string; type: string; label?: string; description?: string }>
   outputDefinitions: Array<{ key: string; type: string; label?: string }>
   wiredInputs: Record<string, { sourceNodeKey: string; sourceOutputKey: string }>
-  staticInputs: Record<string, unknown>
-  onStaticInputChange: (inputKey: string, value: unknown) => void
   onClose: () => void
 }
 
@@ -19,8 +17,6 @@ export default function NodeConfigPanel({
   inputSchema,
   outputDefinitions,
   wiredInputs,
-  staticInputs,
-  onStaticInputChange,
   onClose,
 }: NodeConfigPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null)
@@ -92,13 +88,9 @@ export default function NodeConfigPanel({
                           Wired from <span className="font-mono">{wire.sourceNodeKey}.{wire.sourceOutputKey}</span>
                         </div>
                       ) : (
-                        <input
-                          type="text"
-                          value={String(staticInputs[param.name] ?? '')}
-                          onChange={(e) => onStaticInputChange(param.name, e.target.value)}
-                          placeholder={`Enter ${param.label || param.name}`}
-                          className="w-full rounded-md border border-border/25 bg-background/50 px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-accent/40"
-                        />
+                        <div className="px-2 py-1.5 rounded-md bg-muted/10 border border-border/25 text-muted-foreground text-[11px] italic">
+                          Not connected — drag a Constant node to provide a value
+                        </div>
                       )}
                     </div>
                   )

@@ -11,6 +11,11 @@ def validate_dag(nodes: list[dict], edges: list[dict]) -> list[str]:
 
     Returns topological order of node_keys. Raises ValueError on cycle.
     """
+    # Filter out constant nodes — they are resolved at compile time
+    constant_keys = {n["node_key"] for n in nodes if n.get("node_type") == "constant"}
+    nodes = [n for n in nodes if n["node_key"] not in constant_keys]
+    edges = [e for e in edges if e["source_node_key"] not in constant_keys]
+
     node_keys = {n["node_key"] for n in nodes}
     in_degree: dict[str, int] = {k: 0 for k in node_keys}
     adj: dict[str, list[str]] = defaultdict(list)
@@ -43,6 +48,11 @@ def compute_execution_order(nodes: list[dict], edges: list[dict]) -> list[list[s
 
     Nodes at the same level have no dependencies between them.
     """
+    # Filter out constant nodes
+    constant_keys = {n["node_key"] for n in nodes if n.get("node_type") == "constant"}
+    nodes = [n for n in nodes if n["node_key"] not in constant_keys]
+    edges = [e for e in edges if e["source_node_key"] not in constant_keys]
+
     topo_order = validate_dag(nodes, edges)
     node_keys = {n["node_key"] for n in nodes}
 

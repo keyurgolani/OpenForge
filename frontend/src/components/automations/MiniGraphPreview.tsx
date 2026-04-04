@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 
 interface GraphNode {
   id: string
+  node_type?: string
 }
 
 interface GraphEdge {
@@ -85,13 +86,15 @@ export default function MiniGraphPreview({ nodes, edges, width = 120, height = 5
     const innerW = width - padX * 2
     const innerH = height - padY * 2
 
-    const positions = new Map<string, { cx: number; cy: number }>()
+    const nodeTypeMap = new Map<string, string | undefined>(nodes.map(n => [n.id, n.node_type]))
+    const positions = new Map<string, { cx: number; cy: number; node_type?: string }>()
     for (let li = 0; li < levelCount; li++) {
       const count = levels[li].length
       const x = levelCount === 1 ? width / 2 : padX + (li / (levelCount - 1)) * innerW
       for (let ni = 0; ni < count; ni++) {
         const y = count === 1 ? height / 2 : padY + (ni / (count - 1)) * innerH
-        positions.set(levels[li][ni], { cx: x, cy: y })
+        const id = levels[li][ni]
+        positions.set(id, { cx: x, cy: y, node_type: nodeTypeMap.get(id) })
       }
     }
 
@@ -104,7 +107,12 @@ export default function MiniGraphPreview({ nodes, edges, width = 120, height = 5
 
   // Use hsl() wrapper since Tailwind CSS vars store raw HSL values
   const edgeColor = 'hsl(var(--muted-foreground))'
-  const nodeColor = 'hsl(var(--accent))'
+
+  function nodeColor(node_type?: string): string {
+    if (node_type === 'constant') return '#8b5cf6'
+    if (node_type === 'sink') return '#a78bfa'
+    return '#f59e0b'
+  }
 
   return (
     <svg width={width} height={height}>
@@ -120,21 +128,8 @@ export default function MiniGraphPreview({ nodes, edges, width = 120, height = 5
         // Cubic bezier with horizontal control points for a natural curve
         const cpOffset = Math.abs(x2 - x1) * 0.4
         const d = `M ${x1} ${y1} C ${x1 + cpOffset} ${y1}, ${x2 - cpOffset} ${y2}, ${x2} ${y2}`
-        // Arrowhead direction from last control point to end
-        const dx = x2 - (x2 - cpOffset)
-        const dy = y2 - y2
-        const len = Math.sqrt(dx * dx + dy * dy) || 1
-        const ux = dx / len
-        const uy = dy / len
-        const arrowSize = 4
         return (
-          <g key={i}>
-            <path d={d} style={{ stroke: edgeColor, strokeWidth: 1.5, fill: 'none' }} />
-            <polygon
-              points={`${x2},${y2} ${x2 - ux * arrowSize + uy * arrowSize},${y2 - uy * arrowSize - ux * arrowSize} ${x2 - ux * arrowSize - uy * arrowSize},${y2 - uy * arrowSize + ux * arrowSize}`}
-              style={{ fill: edgeColor }}
-            />
-          </g>
+          <path key={i} d={d} style={{ stroke: edgeColor, strokeWidth: 1.5, fill: 'none' }} />
         )
       })}
       {/* Nodes */}
@@ -146,7 +141,7 @@ export default function MiniGraphPreview({ nodes, edges, width = 120, height = 5
           width={nodeW}
           height={nodeH}
           rx={3}
-          style={{ fill: nodeColor }}
+          style={{ fill: nodeColor(pos.node_type) }}
         />
       ))}
     </svg>

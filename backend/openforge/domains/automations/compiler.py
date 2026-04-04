@@ -111,6 +111,16 @@ class AutomationBlueprintCompiler:
         edge_dicts = [e.model_dump() for e in blueprint.edges]
         static_input_dicts = [s.model_dump() for s in blueprint.static_inputs]
 
+        # Build constant value lookup for compile-time resolution
+        constant_values: dict[str, object] = {}
+        for node_bp in blueprint.nodes:
+            if node_bp.node_type == "constant":
+                constant_values[node_bp.node_key] = (node_bp.config or {}).get("value", "")
+
+        # Filter constant nodes from DAG processing
+        node_dicts = [n for n in node_dicts if n.get("node_type", "agent") != "constant"]
+        edge_dicts = [e for e in edge_dicts if e["source_node_key"] not in constant_values]
+
         # Validate DAG
         validate_dag(node_dicts, edge_dicts)
         execution_levels = compute_execution_order(node_dicts, edge_dicts)
@@ -120,7 +130,7 @@ class AutomationBlueprintCompiler:
         compiled_nodes: list[CompiledNodeSpec] = []
 
         for node_bp in blueprint.nodes:
-            if node_bp.node_type == "sink":
+            if node_bp.node_type in ("sink", "constant"):
                 continue
 
             agent = await self.db.scalar(
@@ -144,11 +154,20 @@ class AutomationBlueprintCompiler:
                 "output_definitions": output_defs,
             }
 
-            # Build wired inputs for this node (supports fan-in: multiple
-            # sources can wire to the same target input key).
+            # Build static inputs for this node (before wired_inputs so constants can resolve into it)
+            static_vals: dict[str, object] = {}
+            for si in blueprint.static_inputs:
+                if si.node_key == node_bp.node_key:
+                    static_vals[si.input_key] = si.value
+
+            # Build wired inputs, resolving constants into static_vals
             wired_inputs: dict[str, list | dict] = {}
             for edge in blueprint.edges:
                 if edge.target_node_key == node_bp.node_key:
+                    # If source is a constant node, resolve to static input
+                    if edge.source_node_key in constant_values:
+                        static_vals[edge.target_input_key] = constant_values[edge.source_node_key]
+                        continue
                     source_info = {
                         "source_node_key": edge.source_node_key,
                         "source_output_key": edge.source_output_key,
@@ -161,12 +180,6 @@ class AutomationBlueprintCompiler:
                             existing.append(source_info)
                     else:
                         wired_inputs[edge.target_input_key] = source_info
-
-            # Build static inputs for this node
-            static_vals: dict[str, object] = {}
-            for si in blueprint.static_inputs:
-                if si.node_key == node_bp.node_key:
-                    static_vals[si.input_key] = si.value
 
             # Determine unfilled inputs
             unfilled = []
@@ -202,10 +215,20 @@ class AutomationBlueprintCompiler:
 
             input_schema = SINK_TYPE_INPUTS.get(node_bp.sink_type, [])
 
-            # Build wired inputs for this sink node
+            # Build static inputs for this sink node (before wired_inputs so constants can resolve into it)
+            static_vals: dict[str, object] = {}
+            for si in blueprint.static_inputs:
+                if si.node_key == node_bp.node_key:
+                    static_vals[si.input_key] = si.value
+
+            # Build wired inputs, resolving constants into static_vals
             wired_inputs: dict[str, list | dict] = {}
             for edge in blueprint.edges:
                 if edge.target_node_key == node_bp.node_key:
+                    # If source is a constant node, resolve to static input
+                    if edge.source_node_key in constant_values:
+                        static_vals[edge.target_input_key] = constant_values[edge.source_node_key]
+                        continue
                     source_info = {
                         "source_node_key": edge.source_node_key,
                         "source_output_key": edge.source_output_key,
@@ -218,12 +241,6 @@ class AutomationBlueprintCompiler:
                             existing.append(source_info)
                     else:
                         wired_inputs[edge.target_input_key] = source_info
-
-            # Build static inputs for this sink node
-            static_vals: dict[str, object] = {}
-            for si in blueprint.static_inputs:
-                if si.node_key == node_bp.node_key:
-                    static_vals[si.input_key] = si.value
 
             # Merge hardcoded defaults from sink config (input_defaults.X keys)
             for cfg_key, cfg_val in sink_config.items():
