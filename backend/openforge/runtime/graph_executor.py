@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from openforge.db.models import AgentDefinitionVersionModel, RunModel, RunStepModel
 from openforge.domains.agents.compiled_spec import AgentRuntimeConfig, build_runtime_config_from_snapshot
 from openforge.domains.automations.compiled_spec import CompiledAutomationSpec, CompiledNodeSpec, CompiledSinkNodeSpec
+from openforge.runtime.events import RuntimeEvent, NODE_STARTED, NODE_COMPLETED, NODE_FAILED
 from openforge.runtime.sink_handlers import execute_sink
 from openforge.runtime.template_engine import render
 
@@ -110,24 +111,66 @@ class GraphExecutor:
 
         for level_idx, level in enumerate(automation_spec.execution_levels):
             for node_key in level:
-                if node_key in agent_lookup:
-                    result = await self._execute_node(
-                        parent_run=run,
-                        node_spec=agent_lookup[node_key],
-                        output_store=output_store,
-                        deployment_inputs=deployment_inputs,
-                    )
-                elif node_key in sink_lookup:
-                    result = await self._execute_sink_node(
-                        parent_run=run,
-                        sink_spec=sink_lookup[node_key],
-                        output_store=output_store,
-                        deployment_inputs=deployment_inputs,
-                    )
-                else:
-                    logger.warning("Node %s not found in agent or sink specs, skipping", node_key)
-                    continue
-                output_store[node_key] = result
+                node_type = "agent" if node_key in agent_lookup else "sink" if node_key in sink_lookup else "unknown"
+
+                # Publish node_started on parent run channel
+                if self.event_publisher:
+                    try:
+                        await self.event_publisher.publish(RuntimeEvent(
+                            run_id=run.id,
+                            event_type=NODE_STARTED,
+                            node_key=node_key,
+                            payload={"node_key": node_key, "node_type": node_type},
+                        ))
+                    except Exception:
+                        pass
+
+                try:
+                    if node_key in agent_lookup:
+                        result = await self._execute_node(
+                            parent_run=run,
+                            node_spec=agent_lookup[node_key],
+                            output_store=output_store,
+                            deployment_inputs=deployment_inputs,
+                        )
+                    elif node_key in sink_lookup:
+                        result = await self._execute_sink_node(
+                            parent_run=run,
+                            sink_spec=sink_lookup[node_key],
+                            output_store=output_store,
+                            deployment_inputs=deployment_inputs,
+                        )
+                    else:
+                        logger.warning("Node %s not found in agent or sink specs, skipping", node_key)
+                        continue
+                    output_store[node_key] = result
+
+                    # Publish node_completed
+                    if self.event_publisher:
+                        try:
+                            output_preview = str(result)[:500] if result else ""
+                            await self.event_publisher.publish(RuntimeEvent(
+                                run_id=run.id,
+                                event_type=NODE_COMPLETED,
+                                node_key=node_key,
+                                payload={"node_key": node_key, "node_type": node_type, "output_preview": output_preview},
+                            ))
+                        except Exception:
+                            pass
+
+                except Exception as exc:
+                    # Publish node_failed
+                    if self.event_publisher:
+                        try:
+                            await self.event_publisher.publish(RuntimeEvent(
+                                run_id=run.id,
+                                event_type=NODE_FAILED,
+                                node_key=node_key,
+                                payload={"node_key": node_key, "node_type": node_type, "error": str(exc)[:500]},
+                            ))
+                        except Exception:
+                            pass
+                    raise
 
         # Return the last level's last node output
         if automation_spec.execution_levels:
@@ -306,6 +349,18 @@ class GraphExecutor:
         self.db.add(child_run)
         await self.db.flush()
 
+        # Publish child run ID so frontend can connect for sub-step streaming
+        if self.event_publisher:
+            try:
+                await self.event_publisher.publish(RuntimeEvent(
+                    run_id=parent_run.id,
+                    event_type="node_child_run",
+                    node_key=node_spec.node_key,
+                    payload={"node_key": node_spec.node_key, "child_run_id": str(child_run.id)},
+                ))
+            except Exception:
+                pass
+
         # 4. Execute via agent_executor
         try:
             from openforge.runtime.agent_executor import execute_agent
@@ -416,6 +471,18 @@ class GraphExecutor:
         )
         self.db.add(child_run)
         await self.db.flush()
+
+        # Publish child run ID so frontend can connect for sub-step streaming
+        if self.event_publisher:
+            try:
+                await self.event_publisher.publish(RuntimeEvent(
+                    run_id=parent_run.id,
+                    event_type="node_child_run",
+                    node_key=sink_spec.node_key,
+                    payload={"node_key": sink_spec.node_key, "child_run_id": str(child_run.id)},
+                ))
+            except Exception:
+                pass
 
         # 3. Execute sink handler
         try:

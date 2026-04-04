@@ -15,7 +15,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import AccordionSection from '@/components/agents/sections/AccordionSection'
 import ErrorState from '@/components/shared/ErrorState'
-import LiveTerminalLog from '@/components/shared/LiveTerminalLog'
+import LiveNodeTimeline from '@/components/shared/LiveNodeTimeline'
 import LoadingState from '@/components/shared/LoadingState'
 import Siderail from '@/components/shared/Siderail'
 import StatusBadge from '@/components/shared/StatusBadge'
@@ -179,8 +179,8 @@ export default function RunDetailPage() {
         {isLive && (
           <div className="rounded-2xl border border-border/25 bg-card/30 p-5">
             <h2 className="text-sm font-semibold text-foreground mb-3">Live Execution</h2>
-            <div className="h-[400px]">
-              <LiveTerminalLog runId={runId} />
+            <div className="h-[500px]">
+              <LiveNodeTimeline runId={runId} />
             </div>
           </div>
         )}
