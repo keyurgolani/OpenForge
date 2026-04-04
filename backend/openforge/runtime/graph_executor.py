@@ -18,7 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from openforge.db.models import AgentDefinitionVersionModel, RunModel, RunStepModel
 from openforge.domains.agents.compiled_spec import AgentRuntimeConfig, build_runtime_config_from_snapshot
-from openforge.domains.automations.compiled_spec import CompiledAutomationSpec, CompiledNodeSpec
+from openforge.domains.automations.compiled_spec import CompiledAutomationSpec, CompiledNodeSpec, CompiledSinkNodeSpec
+from openforge.runtime.sink_handlers import execute_sink
 from openforge.runtime.template_engine import render
 
 logger = logging.getLogger("openforge.runtime.graph_executor")
@@ -86,7 +87,8 @@ class GraphExecutor:
         Returns the output of the last node at the final execution level.
         """
         output_store: dict[str, dict[str, Any]] = {}  # node_key -> {output_key: value}
-        node_lookup = {ns.node_key: ns for ns in automation_spec.nodes}
+        agent_lookup = {ns.node_key: ns for ns in automation_spec.nodes}
+        sink_lookup = {sns.node_key: sns for sns in automation_spec.sink_nodes}
 
         # Transition parent run to running
         run.status = "running"
@@ -94,19 +96,24 @@ class GraphExecutor:
         await self.db.flush()
 
         for level_idx, level in enumerate(automation_spec.execution_levels):
-            # Execute nodes at each level sequentially (shared DB session
-            # is not safe for concurrent coroutines).
             for node_key in level:
-                node_spec = node_lookup.get(node_key)
-                if not node_spec:
-                    logger.warning("Node %s not found in spec, skipping", node_key)
+                if node_key in agent_lookup:
+                    result = await self._execute_node(
+                        parent_run=run,
+                        node_spec=agent_lookup[node_key],
+                        output_store=output_store,
+                        deployment_inputs=deployment_inputs,
+                    )
+                elif node_key in sink_lookup:
+                    result = await self._execute_sink_node(
+                        parent_run=run,
+                        sink_spec=sink_lookup[node_key],
+                        output_store=output_store,
+                        deployment_inputs=deployment_inputs,
+                    )
+                else:
+                    logger.warning("Node %s not found in agent or sink specs, skipping", node_key)
                     continue
-                result = await self._execute_node(
-                    parent_run=run,
-                    node_spec=node_spec,
-                    output_store=output_store,
-                    deployment_inputs=deployment_inputs,
-                )
                 output_store[node_key] = result
 
         # Return the last level's last node output
@@ -116,6 +123,51 @@ class GraphExecutor:
                 return output_store.get(last_level[-1], {})
 
         return {}
+
+    def _resolve_inputs(
+        self,
+        node_key: str,
+        wired_inputs: dict[str, Any],
+        static_inputs: dict[str, Any],
+        output_store: dict[str, dict[str, Any]],
+        deployment_inputs: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Resolve all inputs for a node (shared by agent and sink execution)."""
+        resolved: dict[str, Any] = {}
+
+        # Static inputs first
+        for key, value in static_inputs.items():
+            resolved[key] = value
+
+        # Wired inputs (from upstream node outputs)
+        for input_key, wire_info in wired_inputs.items():
+            if isinstance(wire_info, list):
+                parts = []
+                for src in wire_info:
+                    src_key = src.get("source_node_key", "")
+                    src_output = src.get("source_output_key", "output")
+                    if src_key in output_store:
+                        val = output_store[src_key].get(src_output, "")
+                        if val:
+                            parts.append(str(val))
+                resolved[input_key] = "\n\n---\n\n".join(parts) if parts else ""
+            else:
+                src_key = wire_info.get("source_node_key", "")
+                src_output = wire_info.get("source_output_key", "output")
+                if src_key in output_store:
+                    resolved[input_key] = output_store[src_key].get(src_output, "")
+
+        # Deployment inputs
+        node_prefix = f"{node_key}."
+        for full_key, value in deployment_inputs.items():
+            if full_key.startswith(node_prefix):
+                input_key = full_key[len(node_prefix):]
+                if input_key not in resolved:
+                    resolved[input_key] = value
+            elif "." not in full_key and full_key not in resolved:
+                resolved.setdefault(full_key, value)
+
+        return resolved
 
     async def _execute_node(
         self,
@@ -134,42 +186,13 @@ class GraphExecutor:
         6. Return outputs dict
         """
         # 1. Resolve inputs
-        resolved_inputs: dict[str, Any] = {}
-
-        # Static inputs first
-        for key, value in node_spec.static_inputs.items():
-            resolved_inputs[key] = value
-
-        # Wired inputs (from upstream node outputs).
-        # Supports fan-in: wire_info can be a single dict or a list of dicts
-        # when multiple upstream nodes wire to the same input key.
-        for input_key, wire_info in node_spec.wired_inputs.items():
-            if isinstance(wire_info, list):
-                # Fan-in: concatenate outputs from multiple sources
-                parts = []
-                for src in wire_info:
-                    src_key = src.get("source_node_key", "")
-                    src_output = src.get("source_output_key", "output")
-                    if src_key in output_store:
-                        val = output_store[src_key].get(src_output, "")
-                        if val:
-                            parts.append(str(val))
-                resolved_inputs[input_key] = "\n\n---\n\n".join(parts) if parts else ""
-            else:
-                src_key = wire_info.get("source_node_key", "")
-                src_output = wire_info.get("source_output_key", "output")
-                if src_key in output_store:
-                    resolved_inputs[input_key] = output_store[src_key].get(src_output, "")
-
-        # Deployment inputs for this node.
-        node_prefix = f"{node_spec.node_key}."
-        for full_key, value in deployment_inputs.items():
-            if full_key.startswith(node_prefix):
-                input_key = full_key[len(node_prefix):]
-                if input_key not in resolved_inputs:
-                    resolved_inputs[input_key] = value
-            elif "." not in full_key and full_key not in resolved_inputs:
-                resolved_inputs.setdefault(full_key, value)
+        resolved_inputs = self._resolve_inputs(
+            node_spec.node_key,
+            node_spec.wired_inputs,
+            node_spec.static_inputs,
+            output_store,
+            deployment_inputs,
+        )
 
         # 2. Load agent spec and render template
         agent_spec_row = await self.db.get(AgentDefinitionVersionModel, node_spec.agent_spec_id)
@@ -325,6 +348,85 @@ class GraphExecutor:
 
         except Exception as exc:
             # Update child run to failed if not already done by agent_executor
+            try:
+                child_run_fresh = await self.db.get(RunModel, child_run.id)
+                if child_run_fresh and child_run_fresh.status not in ("failed", "completed"):
+                    child_run_fresh.status = "failed"
+                    child_run_fresh.error_message = str(exc)[:2000]
+                    child_run_fresh.completed_at = datetime.now(timezone.utc)
+                    await self.db.flush()
+            except Exception:
+                pass
+            raise
+
+    async def _execute_sink_node(
+        self,
+        parent_run: RunModel,
+        sink_spec: CompiledSinkNodeSpec,
+        output_store: dict[str, dict[str, Any]],
+        deployment_inputs: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Execute a single sink node in the DAG.
+
+        1. Resolve inputs (wired, static, deployment)
+        2. Create child RunModel with run_type='sink'
+        3. Invoke sink handler
+        4. Update child run with result
+        5. Return output dict
+        """
+        import uuid as _uuid
+
+        # 1. Resolve inputs
+        resolved_inputs = self._resolve_inputs(
+            sink_spec.node_key,
+            sink_spec.wired_inputs,
+            sink_spec.static_inputs,
+            output_store,
+            deployment_inputs,
+        )
+
+        # 2. Create child run
+        child_run = RunModel(
+            id=_uuid.uuid4(),
+            run_type="sink",
+            parent_run_id=parent_run.id,
+            root_run_id=parent_run.root_run_id or parent_run.id,
+            workspace_id=parent_run.workspace_id,
+            status="pending",
+            input_payload={"input_values": resolved_inputs},
+            composite_metadata={
+                "sink_type": sink_spec.sink_type,
+                "sink_id": str(sink_spec.sink_id) if sink_spec.sink_id else None,
+                "node_key": sink_spec.node_key,
+                "parent_run_id": str(parent_run.id),
+            },
+        )
+        self.db.add(child_run)
+        await self.db.flush()
+
+        # 3. Execute sink handler
+        try:
+            child_run.status = "running"
+            child_run.started_at = datetime.now(timezone.utc)
+            await self.db.flush()
+
+            result = await execute_sink(
+                sink_type=sink_spec.sink_type,
+                inputs=resolved_inputs,
+                db=self.db,
+                workspace_id=parent_run.workspace_id,
+                run_id=child_run.id,
+            )
+
+            # 4. Update child run
+            child_run.status = "completed"
+            child_run.output_payload = result
+            child_run.completed_at = datetime.now(timezone.utc)
+            await self.db.flush()
+
+            return result
+
+        except Exception as exc:
             try:
                 child_run_fresh = await self.db.get(RunModel, child_run.id)
                 if child_run_fresh and child_run_fresh.status not in ("failed", "completed"):

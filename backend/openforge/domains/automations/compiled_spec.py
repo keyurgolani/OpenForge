@@ -24,6 +24,18 @@ class CompiledNodeSpec(BaseModel):
     unfilled_inputs: list[dict] = Field(default_factory=list)       # remaining required inputs
 
 
+class CompiledSinkNodeSpec(BaseModel):
+    """Resolved spec for a single sink node in a multi-node automation."""
+
+    node_key: str
+    sink_type: str                          # "article", "knowledge_create", etc.
+    sink_id: Optional[UUID] = None          # reference to SinkModel if user picked a saved sink
+    config: dict[str, Any] = Field(default_factory=dict)  # hardcoded defaults from SinkModel
+    input_schema: list[dict] = Field(default_factory=list)
+    wired_inputs: dict[str, Any] = Field(default_factory=dict)
+    static_inputs: dict[str, Any] = Field(default_factory=dict)
+
+
 class CompiledAutomationSpec(BaseModel):
     """Fully resolved, immutable automation configuration."""
 
@@ -43,6 +55,7 @@ class CompiledAutomationSpec(BaseModel):
     # Multi-node graph
     is_multi_node: bool = False
     nodes: list[CompiledNodeSpec] = Field(default_factory=list)
+    sink_nodes: list[CompiledSinkNodeSpec] = Field(default_factory=list)
     edges: list[dict] = Field(default_factory=list)
     execution_levels: list[list[str]] = Field(default_factory=list)
     deployment_input_schema: list[dict] = Field(default_factory=list)

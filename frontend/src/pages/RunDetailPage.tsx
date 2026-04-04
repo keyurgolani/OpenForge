@@ -75,7 +75,11 @@ export default function RunDetailPage() {
     }
   }
 
+  const childRuns = useMemo(() => lineage?.child_runs ?? [], [lineage])
+
   useEffect(() => {
+    // Only auto-manage selection for step-based timelines (non-automation runs)
+    if (childRuns.length > 0) return
     if (steps.length === 0) {
       setSelectedStepId('')
       return
@@ -83,14 +87,13 @@ export default function RunDetailPage() {
     if (!steps.some((step) => step.id === selectedStepId)) {
       setSelectedStepId(steps[steps.length - 1].id)
     }
-  }, [selectedStepId, steps])
+  }, [selectedStepId, steps, childRuns.length])
 
   if (isLoading) return <LoadingState label="Loading run detail..." />
   if (error || !run) return <ErrorState message="Run detail could not be loaded." />
 
   const selectedStep = steps.find((step) => step.id === selectedStepId) ?? null
   const durationMs = getDurationMs(run.started_at, run.completed_at)
-  const childRuns = lineage?.child_runs ?? []
   const latestEvents = [...events].slice(-6).reverse()
   const isLive = run.status === 'running' || run.status === 'pending' || run.status === 'queued'
   const agentSlug = typeof run.composite_metadata?.agent_slug === 'string' ? run.composite_metadata.agent_slug : null
@@ -143,7 +146,7 @@ export default function RunDetailPage() {
         <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
           {[
             { label: 'Status', value: <StatusBadge status={run.status} />, icon: <Waypoints className="h-4 w-4" /> },
-            { label: 'Run type', value: run.run_type, icon: <GitBranch className="h-4 w-4" /> },
+            { label: 'Run type', value: run.run_type === 'sink' ? `sink \u00b7 ${(run.composite_metadata?.sink_type || '').replace(/_/g, ' ')}` : run.run_type, icon: <GitBranch className="h-4 w-4" /> },
             { label: 'Duration', value: durationMs !== null ? formatDuration(durationMs) : 'Not started', icon: <Timer className="h-4 w-4" /> },
             { label: 'Started', value: run.started_at ? formatDateTime(run.started_at) : 'Not started', icon: <Clock className="h-4 w-4" /> },
           ].map((item) => (
@@ -198,10 +201,80 @@ export default function RunDetailPage() {
           </div>
         )}
 
-        {/* Step timeline */}
+        {/* Node / Step Timeline */}
         <div className="rounded-2xl border border-border/25 bg-card/30 p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-3">Step Timeline</h2>
-          {steps.length === 0 ? (
+          <h2 className="text-sm font-semibold text-foreground mb-3">
+            {childRuns.length > 0 ? 'Node Timeline' : 'Step Timeline'}
+          </h2>
+          {childRuns.length > 0 ? (
+            <div className="space-y-2">
+              {childRuns.map((child: Run, idx: number) => {
+                const nodeKey = child.composite_metadata?.node_key || 'Unknown node'
+                const isSink = child.run_type === 'sink'
+                const sinkType = isSink ? (child.composite_metadata?.sink_type || '').replace(/_/g, ' ') : null
+                const isSelected = selectedStepId === child.id
+                return (
+                  <button
+                    key={child.id}
+                    type="button"
+                    onClick={() => setSelectedStepId(child.id)}
+                    className={`w-full rounded-xl border px-4 py-3 text-left transition ${
+                      isSelected
+                        ? 'border-accent/40 bg-accent/15'
+                        : 'border-border/25 bg-background/35 hover:border-border/60'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={`h-2 w-2 rounded-full flex-shrink-0 ${isSink ? 'bg-purple-400' : 'bg-accent'}`} />
+                          <p className="text-sm font-medium text-foreground truncate">{nodeKey}</p>
+                        </div>
+                        <p className="mt-0.5 text-xs text-muted-foreground/80 ml-4">
+                          {isSink ? `sink \u00b7 ${sinkType}` : child.run_type}
+                          {child.started_at ? ` \u00b7 ${formatDateTime(child.started_at)}` : ''}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <StatusBadge status={child.status} />
+                      </div>
+                    </div>
+
+                    {isSelected && (
+                      <div className="mt-3 border-t border-border/25 pt-3 space-y-3">
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/75 mb-1">Input</p>
+                            <pre className="overflow-x-auto rounded-lg border border-border/25 bg-background/50 p-3 text-xs text-foreground/90 max-h-40">
+                              {formatJson(child.input_payload)}
+                            </pre>
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/75 mb-1">Output</p>
+                            <pre className="overflow-x-auto rounded-lg border border-border/25 bg-background/50 p-3 text-xs text-foreground/90 max-h-40">
+                              {formatJson(child.output_payload)}
+                            </pre>
+                          </div>
+                        </div>
+                        {child.error_message && (
+                          <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-100">
+                            <p className="font-medium">{child.error_code || 'Node failure'}</p>
+                            <p className="mt-1 text-red-100/85">{child.error_message}</p>
+                          </div>
+                        )}
+                        <Link
+                          to={deploymentId ? deploymentRunRoute(deploymentId, child.id) : runsRoute(child.id)}
+                          className="inline-flex items-center gap-1 text-xs text-accent hover:text-accent/80 transition"
+                        >
+                          View full run detail <ChevronRight className="h-3 w-3" />
+                        </Link>
+                      </div>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          ) : steps.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border/25 bg-card/20 p-6 text-sm text-muted-foreground/80 text-center">
               No steps recorded yet.
             </div>
@@ -224,7 +297,7 @@ export default function RunDetailPage() {
                         {step.node_key ?? step.node_id ?? 'Unknown step'}
                       </p>
                       <p className="mt-0.5 text-xs text-muted-foreground/80">
-                        Step {step.step_index} {step.started_at ? `· ${formatDateTime(step.started_at)}` : ''}
+                        Step {step.step_index} {step.started_at ? `\u00b7 ${formatDateTime(step.started_at)}` : ''}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
@@ -244,7 +317,6 @@ export default function RunDetailPage() {
                     </div>
                   </div>
 
-                  {/* Expanded step detail */}
                   {selectedStepId === step.id && (
                     <div className="mt-3 border-t border-border/25 pt-3 space-y-3">
                       <div className="grid gap-3 sm:grid-cols-2">
@@ -330,9 +402,12 @@ export default function RunDetailPage() {
                       <span className="font-medium text-foreground/80">Children:</span>
                       {childRuns.map((child: Run) => (
                         <div key={child.id} className="flex items-center justify-between gap-2 rounded-lg border border-border/20 bg-background/50 px-2 py-1.5">
-                          <Link className="text-accent hover:text-accent/80 transition truncate" to={deploymentId ? deploymentRunRoute(deploymentId, child.id) : runsRoute(child.id)}>
-                            {truncateText(child.id, 12)}
-                          </Link>
+                          <div className="flex items-center gap-1.5 truncate">
+                            {child.run_type === 'sink' && <span className="h-1.5 w-1.5 rounded-full bg-purple-400 flex-shrink-0" />}
+                            <Link className="text-accent hover:text-accent/80 transition truncate" to={deploymentId ? deploymentRunRoute(deploymentId, child.id) : runsRoute(child.id)}>
+                              {child.run_type === 'sink' ? (child.composite_metadata?.sink_type || '').replace(/_/g, ' ') || truncateText(child.id, 12) : truncateText(child.id, 12)}
+                            </Link>
+                          </div>
                           <StatusBadge status={child.status} />
                         </div>
                       ))}

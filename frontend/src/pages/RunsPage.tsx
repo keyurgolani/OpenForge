@@ -120,7 +120,14 @@ export default function RunsPage() {
                         <p className="mt-1 text-xs text-muted-foreground/80">Updated {formatRelativeTime(run.updated_at ?? run.started_at)}</p>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground/90">{run.run_type}</td>
+                    <td className="px-4 py-3 text-muted-foreground/90">
+                      {run.run_type === 'sink' ? (
+                        <span className="inline-flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-purple-400" />
+                          sink{run.composite_metadata?.sink_type ? ` \u00b7 ${run.composite_metadata.sink_type.replace(/_/g, ' ')}` : ''}
+                        </span>
+                      ) : run.run_type}
+                    </td>
                     <td className="px-4 py-3"><StatusBadge status={run.status} /></td>
                     <td className="px-4 py-3 text-muted-foreground/90">
                       {agentId ? (

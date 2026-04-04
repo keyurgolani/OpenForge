@@ -6,6 +6,7 @@ Automations are created via API with structured JSON, not .md files.
 from __future__ import annotations
 
 from typing import Any, Optional
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -33,7 +34,10 @@ class TriggerBlueprintConfig(BaseModel):
 
 class AutomationNodeBlueprint(BaseModel):
     node_key: str
-    agent_slug: str
+    node_type: str = "agent"
+    agent_slug: Optional[str] = None       # required for agent nodes
+    sink_type: Optional[str] = None        # required for sink nodes
+    sink_id: Optional[UUID] = None         # optional reference to SinkModel
     position: dict[str, float] = Field(default_factory=lambda: {"x": 0, "y": 0})
     config: dict = Field(default_factory=dict)
 

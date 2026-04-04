@@ -73,6 +73,7 @@ def resolve_unfilled_inputs(
     edges: list[dict],
     static_inputs: list[dict],
     agent_specs: dict[str, dict],
+    sink_specs: dict[str, dict] | None = None,
 ) -> list[dict]:
     """Determine which inputs need to be provided at deployment time.
 
@@ -90,13 +91,17 @@ def resolve_unfilled_inputs(
         static.add((si["node_key"], si["input_key"]))
 
     unfilled: list[dict] = []
+    all_specs = dict(agent_specs)
+    if sink_specs:
+        all_specs.update(sink_specs)
+
     for node in nodes:
         node_key = node["node_key"]
-        spec = agent_specs.get(node_key, {})
+        spec = all_specs.get(node_key, {})
         input_schema = spec.get("input_schema", [])
 
         for param in input_schema:
-            param_name = param.get("name", "")
+            param_name = param.get("name") or param.get("key", "")
             if (node_key, param_name) in wired:
                 continue
             if (node_key, param_name) in static:

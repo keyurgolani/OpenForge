@@ -16,11 +16,14 @@ from openforge.db.models import (
     AutomationModel,
     AgentDefinitionVersionModel,
     CompiledAutomationSpecModel,
+    SinkModel,
     TriggerDefinitionModel,
 )
 
+from openforge.runtime.sink_handlers import SINK_TYPE_INPUTS
+
 from .blueprint import AutomationBlueprint
-from .compiled_spec import CompiledAutomationSpec, CompiledNodeSpec
+from .compiled_spec import CompiledAutomationSpec, CompiledNodeSpec, CompiledSinkNodeSpec
 from .graph_validation import compute_execution_order, resolve_unfilled_inputs, validate_dag
 
 logger = logging.getLogger("openforge.automations.compiler")
@@ -59,10 +62,7 @@ class AutomationBlueprintCompiler:
                     "edges": [e.model_dump() for e in blueprint.edges] if blueprint.edges else [],
                     "static_inputs": [s.model_dump() for s in blueprint.static_inputs] if blueprint.static_inputs else [],
                 },
-                node_specs={
-                    ns.node_key: ns.model_dump(mode="json")
-                    for ns in spec.nodes
-                } if spec.nodes else {},
+                node_specs=self._build_node_specs_dict(spec),
                 compiler_version=COMPILER_VERSION,
                 is_valid=True,
                 validation_errors=[],
@@ -91,6 +91,15 @@ class AutomationBlueprintCompiler:
             logger.error("Failed to compile automation %s: %s", automation.slug, e)
             raise
 
+    @staticmethod
+    def _build_node_specs_dict(spec: CompiledAutomationSpec) -> dict:
+        result = {}
+        for ns in (spec.nodes or []):
+            result[ns.node_key] = ns.model_dump(mode="json")
+        for sns in (spec.sink_nodes or []):
+            result[sns.node_key] = sns.model_dump(mode="json")
+        return result
+
     async def _compile_multi_node(
         self,
         automation: AutomationModel,
@@ -111,6 +120,9 @@ class AutomationBlueprintCompiler:
         compiled_nodes: list[CompiledNodeSpec] = []
 
         for node_bp in blueprint.nodes:
+            if node_bp.node_type == "sink":
+                continue
+
             agent = await self.db.scalar(
                 select(AgentModel).where(AgentModel.slug == node_bp.agent_slug)
             )
@@ -175,9 +187,68 @@ class AutomationBlueprintCompiler:
                 unfilled_inputs=unfilled,
             ))
 
+        # Build compiled sink nodes
+        compiled_sink_nodes: list[CompiledSinkNodeSpec] = []
+
+        for node_bp in blueprint.nodes:
+            if node_bp.node_type != "sink" or not node_bp.sink_type:
+                continue
+
+            sink_config: dict = {}
+            if node_bp.sink_id:
+                sink_model = await self.db.get(SinkModel, node_bp.sink_id)
+                if sink_model:
+                    sink_config = sink_model.config or {}
+
+            input_schema = SINK_TYPE_INPUTS.get(node_bp.sink_type, [])
+
+            # Build wired inputs for this sink node
+            wired_inputs: dict[str, list | dict] = {}
+            for edge in blueprint.edges:
+                if edge.target_node_key == node_bp.node_key:
+                    source_info = {
+                        "source_node_key": edge.source_node_key,
+                        "source_output_key": edge.source_output_key,
+                    }
+                    if edge.target_input_key in wired_inputs:
+                        existing = wired_inputs[edge.target_input_key]
+                        if isinstance(existing, dict):
+                            wired_inputs[edge.target_input_key] = [existing, source_info]
+                        else:
+                            existing.append(source_info)
+                    else:
+                        wired_inputs[edge.target_input_key] = source_info
+
+            # Build static inputs for this sink node
+            static_vals: dict[str, object] = {}
+            for si in blueprint.static_inputs:
+                if si.node_key == node_bp.node_key:
+                    static_vals[si.input_key] = si.value
+
+            # Merge hardcoded defaults from sink config (input_defaults.X keys)
+            for cfg_key, cfg_val in sink_config.items():
+                if cfg_key.startswith("input_defaults.") and cfg_val:
+                    input_key = cfg_key[len("input_defaults."):]
+                    if input_key not in wired_inputs and input_key not in static_vals:
+                        static_vals[input_key] = cfg_val
+
+            compiled_sink_nodes.append(CompiledSinkNodeSpec(
+                node_key=node_bp.node_key,
+                sink_type=node_bp.sink_type,
+                sink_id=node_bp.sink_id,
+                config=sink_config,
+                input_schema=input_schema,
+                wired_inputs=wired_inputs,
+                static_inputs=static_vals,
+            ))
+
         # Resolve deployment input schema (unfilled inputs across all nodes)
+        sink_specs_dict: dict[str, dict] = {}
+        for sns in compiled_sink_nodes:
+            sink_specs_dict[sns.node_key] = {"input_schema": sns.input_schema}
+
         deployment_input_schema = resolve_unfilled_inputs(
-            node_dicts, edge_dicts, static_input_dicts, agent_specs
+            node_dicts, edge_dicts, static_input_dicts, agent_specs, sink_specs_dict
         )
 
         trigger = await self._upsert_trigger(automation, blueprint)
@@ -192,6 +263,7 @@ class AutomationBlueprintCompiler:
             event_type=blueprint.trigger.event_type,
             is_multi_node=True,
             nodes=compiled_nodes,
+            sink_nodes=compiled_sink_nodes,
             edges=edge_dicts,
             execution_levels=execution_levels,
             deployment_input_schema=deployment_input_schema,

@@ -279,6 +279,15 @@ async def _seed_automation_graph(
             })
 
     # Wire sinks to their source nodes
+    # Default primary input key per sink type (the main content input)
+    _sink_primary_input: dict[str, str] = {
+        "knowledge_create": "content",
+        "knowledge_update": "content",
+        "article": "content",
+        "rest_api": "body",
+        "notification": "message",
+        "log": "data",
+    }
     for sink_def in data.get("sinks", []):
         wired_from = sink_def.get("wired_from", "")
         if not wired_from:
@@ -286,11 +295,13 @@ async def _seed_automation_graph(
         from_parts = wired_from.split(".")
         if len(from_parts) >= 2:
             sink_node_key = sink_def.get("node_key", f"sink_{sink_def['type']}")
+            sink_type = sink_def.get("type", "")
+            target_key = sink_def.get("wired_to", _sink_primary_input.get(sink_type, "content"))
             graph_edges.append({
                 "source_node_key": from_parts[0],
                 "source_output_key": ".".join(from_parts[1:]),
                 "target_node_key": sink_node_key,
-                "target_input_key": "input",
+                "target_input_key": target_key,
             })
 
     # Build static inputs from node definitions

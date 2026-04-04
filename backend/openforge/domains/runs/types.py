@@ -21,6 +21,7 @@ class RunType(str, Enum):
     SUBWORKFLOW = "subworkflow"
     AUTOMATION = "automation"
     STRATEGY = "strategy"
+    SINK = "sink"
 
 
 class RunStep(BaseModel):

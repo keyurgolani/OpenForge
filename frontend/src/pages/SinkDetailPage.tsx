@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, ChevronRight, Copy, Download, Edit2, History, Save, Settings, Tag, Trash2, X } from 'lucide-react'
 
 import AccordionSection from '@/components/agents/sections/AccordionSection'
@@ -8,6 +8,7 @@ import ErrorState from '@/components/shared/ErrorState'
 import LoadingState from '@/components/shared/LoadingState'
 import MutationButton from '@/components/shared/MutationButton'
 import Siderail from '@/components/shared/Siderail'
+import { useRunsQuery } from '@/features/runs'
 import { useSinkQuery, useCreateSinkMutation, useUpdateSinkMutation, useDeleteSinkMutation } from '@/features/sinks'
 import { useWorkspaces } from '@/hooks/useWorkspace'
 import { useUIStore } from '@/stores/uiStore'
@@ -29,7 +30,7 @@ function formatDate(iso: string | undefined): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-type SiderailSection = 'tags' | 'timeline' | null
+type SiderailSection = 'tags' | 'timeline' | 'invocations' | null
 
 export default function SinkDetailPage() {
   const { sinkId } = useParams<{ sinkId: string }>()
@@ -43,6 +44,14 @@ export default function SinkDetailPage() {
   const setHeaderActions = useUIStore(s => s.setHeaderActions)
   const { data: workspacesData } = useWorkspaces()
   const workspaces = (workspacesData as Array<{ id: string; title?: string; name?: string }>) ?? []
+
+  const { data: invocationsData } = useRunsQuery({
+    runType: 'sink',
+    limit: 20,
+  })
+  const invocations = (invocationsData?.runs ?? []).filter(
+    (r: any) => sinkId && r.composite_metadata?.sink_id === sinkId
+  )
 
   const [isEditing, setIsEditing] = useState(isCreate)
   const [name, setName] = useState('')
@@ -390,6 +399,58 @@ export default function SinkDetailPage() {
                     {sink?.created_at && <div><span className="font-medium text-foreground/80">Created:</span> {formatDate(sink.created_at)}</div>}
                     {sink?.updated_at && <div><span className="font-medium text-foreground/80">Updated:</span> {formatDate(sink.updated_at)}</div>}
                   </div>
+                </AccordionSection>
+              )}
+
+              {/* Invocation History */}
+              {!isCreate && (
+                <AccordionSection
+                  title="Invocations"
+                  summary={invocations.length ? `${invocations.length} recent` : 'No invocations'}
+                  icon={History}
+                  expanded={siderailSection === 'invocations'}
+                  onToggle={() => toggleSection('invocations')}
+                >
+                  {invocations.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic">No invocations yet. Deploy an automation with this sink to see execution history.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {invocations.map((inv: any) => (
+                        <Link
+                          key={inv.id}
+                          to={`/runs/${inv.id}`}
+                          className="block rounded-lg border border-border/20 bg-background/50 px-3 py-2 transition hover:border-border/40"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium text-foreground truncate">
+                                {inv.composite_metadata?.node_key || 'sink'}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground/70">
+                                {inv.started_at ? formatDate(inv.started_at) : formatDate(inv.created_at)}
+                              </p>
+                            </div>
+                            <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                              inv.status === 'completed' ? 'bg-emerald-500/15 text-emerald-400' :
+                              inv.status === 'failed' ? 'bg-red-500/15 text-red-400' :
+                              inv.status === 'running' ? 'bg-blue-500/15 text-blue-400' :
+                              'bg-muted/30 text-muted-foreground'
+                            }`}>
+                              {inv.status}
+                            </span>
+                          </div>
+                          {inv.status === 'completed' && inv.output_payload && Object.keys(inv.output_payload).length > 0 && (
+                            <pre className="mt-1.5 text-[10px] text-muted-foreground/70 font-mono truncate max-w-full overflow-hidden">
+                              {JSON.stringify(inv.output_payload).slice(0, 120)}
+                            </pre>
+                          )}
+                          {inv.status === 'failed' && inv.error_message && (
+                            <p className="mt-1 text-[10px] text-red-400/70 truncate">{inv.error_message}</p>
+                          )}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
                 </AccordionSection>
               )}
             </div>

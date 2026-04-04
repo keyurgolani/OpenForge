@@ -15,6 +15,7 @@ from openforge.db.models import (
     AutomationNodeInputModel,
     AutomationNodeModel,
     CompiledAutomationSpecModel,
+    SinkModel,
 )
 from openforge.domains.common.crud import CrudDomainService
 
@@ -144,12 +145,33 @@ class AutomationService(CrudDomainService):
                 config=n.config or {},
             ))
 
-        # Build edge blueprints — only edges between agent nodes
-        agent_node_ids = {n.id for n in nodes if (n.node_type or "agent") == "agent" and n.agent_id is not None}
+        # Build sink node blueprints
+        sink_ids = {n.sink_id for n in nodes if n.sink_id is not None}
+        sinks_by_id = {}
+        for sid in sink_ids:
+            sink = await self.db.get(SinkModel, sid)
+            if sink:
+                sinks_by_id[sid] = sink
+
+        for n in nodes:
+            if (n.node_type or "agent") != "sink":
+                continue
+            node_blueprints.append(AutomationNodeBlueprint(
+                node_key=n.node_key,
+                node_type="sink",
+                sink_type=n.sink_type,
+                sink_id=n.sink_id,
+                position={"x": n.position_x, "y": n.position_y},
+                config=n.config or {},
+            ))
+
+        # Build edge blueprints — include all edges between known nodes
+        known_node_keys = {nb.node_key for nb in node_blueprints}
+        known_node_ids = {n.id for n in nodes if n.node_key in known_node_keys}
         node_id_to_key = {n.id: n.node_key for n in nodes}
         edge_blueprints = []
         for e in edges:
-            if e.source_node_id not in agent_node_ids or e.target_node_id not in agent_node_ids:
+            if e.source_node_id not in known_node_ids or e.target_node_id not in known_node_ids:
                 continue
             edge_blueprints.append(AutomationEdgeBlueprint(
                 source_node_key=node_id_to_key.get(e.source_node_id, ""),
