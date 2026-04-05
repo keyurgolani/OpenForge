@@ -124,7 +124,7 @@ export default function RunsPage() {
                       {run.run_type === 'sink' ? (
                         <span className="inline-flex items-center gap-1">
                           <span className="h-1.5 w-1.5 rounded-full bg-purple-400" />
-                          sink{run.composite_metadata?.sink_type ? ` \u00b7 ${run.composite_metadata.sink_type.replace(/_/g, ' ')}` : ''}
+                          sink{run.composite_metadata?.sink_type ? ` \u00b7 ${String(run.composite_metadata.sink_type).replace(/_/g, ' ')}` : ''}
                         </span>
                       ) : run.run_type}
                     </td>

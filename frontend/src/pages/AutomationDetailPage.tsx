@@ -20,8 +20,7 @@ import {
   useAutomationVersionQuery,
 } from '@/features/automations'
 import { useDeployAutomation } from '@/features/deployments'
-import { useWorkspaces } from '@/hooks/useWorkspace'
-import { automationsRoute } from '@/lib/routes'
+import { automationsRoute, deploymentsRoute } from '@/lib/routes'
 import type { AutomationCreate, AutomationUpdate } from '@/types/automations'
 import type { ParameterDefinition } from '@/types/deployments'
 
@@ -82,9 +81,6 @@ export default function AutomationDetailPage() {
   const { data: graphData } = useAutomationGraphQuery(isCreateMode ? undefined : automationId)
   const { data: deploySchemaData } = useDeploymentSchemaQuery(isCreateMode ? undefined : automationId)
   const { data: versionsData } = useAutomationVersionsQuery(isCreateMode ? undefined : automationId)
-  const { data: workspaces } = useWorkspaces()
-  const defaultWorkspaceId = (workspaces as { id: string }[] | undefined)?.[0]?.id
-
   const [isEditing, setIsEditing] = useState(isCreateMode)
   const [formState, setFormState] = useState<FormState>(defaultFormState)
   const [autoSlug, setAutoSlug] = useState(isCreateMode)
@@ -311,7 +307,7 @@ export default function AutomationDetailPage() {
                   >
                     <Pencil className="w-3.5 h-3.5" /> Edit
                   </button>
-                  {automation?.active_spec_id && defaultWorkspaceId && (
+                  {automation?.active_spec_id && (
                     <button
                       className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-xs font-medium text-white transition-colors hover:bg-emerald-600/90 disabled:opacity-50"
                       onClick={() => {
@@ -507,23 +503,23 @@ export default function AutomationDetailPage() {
                 className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold transition hover:bg-emerald-600/90"
                 disabled={deployAutomation.isPending}
                 onClick={() => {
-                  if (!defaultWorkspaceId || !automationId) return
+                  if (!automationId) return
                   deployAutomation.mutate({
                     automationId,
                     data: {
-                      workspace_id: defaultWorkspaceId,
                       input_values: deployInputValues,
                       ...(deployTriggerType === 'cron' && deploySchedule ? { schedule_expression: deploySchedule } : {}),
                       ...(deployTriggerType === 'interval' && deployInterval ? { interval_seconds: Number(deployInterval) } : {}),
                       ...(deployEnableWorkspace ? { enable_workspace: true } : {}),
                     },
                   }, {
-                    onSuccess: () => {
+                    onSuccess: (deployment) => {
                       setShowDeployDialog(false)
                       setDeployInputValues({})
                       setDeploySchedule('')
                       setDeployInterval('')
                       setDeployEnableWorkspace(false)
+                      navigate(deploymentsRoute(deployment.id))
                     },
                   })
                 }}

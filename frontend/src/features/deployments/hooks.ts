@@ -16,7 +16,6 @@ import type { Deployment, DeploymentListResponse, TemplateReferenceData } from '
 interface DeploymentsQueryOptions {
   status?: string
   automation_id?: string
-  workspace_id?: string
   skip?: number
   limit?: number
 }
@@ -39,7 +38,7 @@ export function useDeploymentQuery(id?: string) {
 export function useDeployAutomation() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ automationId, data }: { automationId: string; data: { workspace_id: string; input_values: Record<string, unknown>; schedule_expression?: string } }) =>
+    mutationFn: ({ automationId, data }: { automationId: string; data: { input_values: Record<string, unknown>; schedule_expression?: string; interval_seconds?: number; enable_workspace?: boolean } }) =>
       deployAutomation(automationId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['deployments'] })
@@ -87,6 +86,7 @@ export function useRunDeploymentNow() {
     onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: ['deployment', id] })
       queryClient.invalidateQueries({ queryKey: ['deployments'] })
+      queryClient.invalidateQueries({ queryKey: ['runs'] })
     },
   })
 }

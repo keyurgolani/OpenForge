@@ -128,9 +128,9 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
   const initialNodes: RFNode[] = useMemo(() => {
     if (!graph?.nodes) return []
     return graph.nodes.map(n => {
-      const nodeType = (n as Record<string, unknown>).node_type as string | undefined
+      const nodeType = (n as unknown as Record<string, unknown>).node_type as string | undefined
       if (nodeType === 'constant') {
-        const nodeConfig = (n as Record<string, unknown>).config as Record<string, unknown> ?? {}
+        const nodeConfig = (n as unknown as Record<string, unknown>).config as Record<string, unknown> ?? {}
         return {
           id: n.id,
           type: 'constantNode',
@@ -145,8 +145,8 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
         }
       }
       if (nodeType === 'sink') {
-        const sinkType = (n as Record<string, unknown>).sink_type as string
-        const sinkId = (n as Record<string, unknown>).sink_id as string | undefined
+        const sinkType = (n as unknown as Record<string, unknown>).sink_type as string
+        const sinkId = (n as unknown as Record<string, unknown>).sink_id as string | undefined
         const dbSink = sinkId ? dbSinks.find(s => s.id === sinkId) : undefined
         const sinkDef = SINK_TYPES.find(s => s.type === sinkType)
         const inputHandles = dbSink

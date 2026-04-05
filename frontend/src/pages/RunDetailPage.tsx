@@ -194,7 +194,7 @@ export default function RunDetailPage() {
         <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
           {[
             { label: 'Status', value: <StatusBadge status={run.status} />, icon: <Waypoints className="h-4 w-4" /> },
-            { label: 'Run type', value: run.run_type === 'sink' ? `sink \u00b7 ${(run.composite_metadata?.sink_type || '').replace(/_/g, ' ')}` : run.run_type, icon: <GitBranch className="h-4 w-4" /> },
+            { label: 'Run type', value: run.run_type === 'sink' ? `sink \u00b7 ${(String(run.composite_metadata?.sink_type || '')).replace(/_/g, ' ')}` : run.run_type, icon: <GitBranch className="h-4 w-4" /> },
             { label: 'Duration', value: durationMs !== null ? formatDuration(durationMs) : 'Not started', icon: <Timer className="h-4 w-4" /> },
             { label: 'Started', value: run.started_at ? formatDateTime(run.started_at) : 'Not started', icon: <Clock className="h-4 w-4" /> },
           ].map((item) => (
@@ -339,7 +339,7 @@ export default function RunDetailPage() {
                           <div className="flex items-center gap-1.5 truncate">
                             {child.run_type === 'sink' && <span className="h-1.5 w-1.5 rounded-full bg-purple-400 flex-shrink-0" />}
                             <Link className="text-accent hover:text-accent/80 transition truncate" to={deploymentId ? deploymentRunRoute(deploymentId, child.id) : runsRoute(child.id)}>
-                              {child.run_type === 'sink' ? (child.composite_metadata?.sink_type || '').replace(/_/g, ' ') || truncateText(child.id, 12) : truncateText(child.id, 12)}
+                              {child.run_type === 'sink' ? String(child.composite_metadata?.sink_type || '').replace(/_/g, ' ') || truncateText(child.id, 12) : truncateText(child.id, 12)}
                             </Link>
                           </div>
                           <StatusBadge status={child.status} />

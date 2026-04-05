@@ -97,7 +97,7 @@ export const SINK_TYPE_INFO: SinkTypeInfo[] = [
       { key: 'content', label: 'Content' },
       { key: 'title', label: 'Title' },
       { key: 'workspace_id', label: 'Workspace' },
-      { key: 'knowledge_type', label: 'Knowledge Type', fieldType: 'select', options: ['note', 'bookmark', 'gist', 'document'], placeholder: 'note' },
+      { key: 'knowledge_type', label: 'Knowledge Type', fieldType: 'select', options: ['note', 'fleeting', 'bookmark', 'gist', 'journal', 'image', 'audio', 'pdf', 'document', 'sheet', 'slides'], placeholder: 'note' },
     ],
   },
   {

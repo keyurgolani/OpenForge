@@ -903,14 +903,15 @@
     border-top: 1px solid hsla(168 60% 50% / 0.1);
     border-radius: 0 0.75rem 0.75rem 0.75rem;
     background: linear-gradient(160deg, hsla(168 60% 50% / 0.04), hsla(168 60% 50% / 0.02));
-    padding: 0.5rem 0.5rem 0.5rem 0.5rem;
+    padding: 0.5rem 0.5rem 0.5rem 0.75rem;
+    overflow: visible;
   }
   /* Sync dot positioning with actual padding inside nested agent cards */
   .chat-agent-invoke-detail .chat-workflow-stack {
-    --chat-workflow-pad-left: 1.5rem;
+    --chat-workflow-pad-left: 1.75rem;
     --chat-workflow-dot-size: 1.25rem;
     --chat-workflow-dot-radius: 0.625rem;
-    padding-left: 1.5rem !important;
+    padding-left: 1.75rem !important;
   }
 
   /* Instruction preview below collapsed toggle */

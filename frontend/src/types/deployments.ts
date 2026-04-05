@@ -8,7 +8,6 @@ export interface Deployment {
   id: string;
   automation_id: string;
   automation_name: string | null;
-  workspace_id: string;
   agent_spec_id: string | null;
   deployed_by: string | null;
   input_values: Record<string, unknown>;
@@ -29,7 +28,6 @@ export interface Deployment {
 }
 
 export interface DeploymentCreate {
-  workspace_id: string;
   input_values: Record<string, unknown>;
   schedule_expression?: string;
   interval_seconds?: number;
@@ -43,7 +41,7 @@ export interface DeploymentListResponse {
 
 export interface ParameterDefinition {
   name: string;
-  type: 'text' | 'textarea' | 'number' | 'boolean' | 'enum';
+  type: 'text' | 'textarea' | 'number' | 'boolean' | 'enum' | 'workspace' | 'knowledge_type';
   label: string;
   description?: string;
   required: boolean;

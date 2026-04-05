@@ -37,7 +37,7 @@ import { getWorkspace } from '@/lib/api'
 import { deploymentsRoute, deploymentRunRoute, automationsRoute } from '@/lib/routes'
 import { formatDateTime, formatRelativeTime } from '@/lib/formatters'
 
-type SiderailSection = 'trigger' | 'config' | 'metadata' | null
+type SiderailSection = 'trigger' | 'metadata' | null
 
 function parseInputLabel(name: string): string {
   const dotIdx = name.indexOf('.')
@@ -364,25 +364,6 @@ export default function DeploymentDetailPage() {
                 </div>
               </AccordionSection>
 
-              {/* Input Summary */}
-              {inputEntries.length > 0 && (
-                <AccordionSection
-                  title="Inputs"
-                  summary={`${inputEntries.length} parameter${inputEntries.length !== 1 ? 's' : ''}`}
-                  icon={Settings}
-                  expanded={siderailSection === 'config'}
-                  onToggle={() => toggleSection('config')}
-                >
-                  <div className="space-y-1.5 text-xs text-muted-foreground">
-                    {inputEntries.map(([name, value]) => (
-                      <div key={name} className="flex justify-between gap-2">
-                        <span className="font-medium text-foreground/80 truncate">{parseInputLabel(name)}</span>
-                        <span className="text-right truncate max-w-[120px]">{String(value)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </AccordionSection>
-              )}
             </div>
           </div>
         )}
