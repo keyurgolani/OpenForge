@@ -46,7 +46,6 @@ class TestChatHandler:
 
         conversation = SimpleNamespace(
             id=conversation_id,
-            workspace_id=None,
             agent_id=agent_id,
             is_archived=False,
         )
@@ -64,11 +63,10 @@ class TestChatHandler:
         monkeypatch.setattr(handler, "_subscribe_redis_cancel", AsyncMock(return_value=None))
         monkeypatch.setattr(chat_handler_module.agent_registry, "resolve", AsyncMock(return_value=None))
         monkeypatch.setattr(chat_handler_module.conversation_service, "add_message", AsyncMock())
-        monkeypatch.setattr(chat_handler_module.llm_service, "get_provider_for_workspace", AsyncMock())
+        monkeypatch.setattr(chat_handler_module.llm_service, "resolve_provider", AsyncMock())
         monkeypatch.setattr(chat_handler_module.tool_dispatcher, "list_tools", AsyncMock())
 
         await handler.run(
-            workspace_id=None,
             conversation_id=conversation_id,
             user_content="Tell me more.",
             db=db,
@@ -76,9 +74,9 @@ class TestChatHandler:
         )
 
         publish_mock.assert_awaited()
-        assert any(call.args[2] == "agent_error" for call in publish_mock.await_args_list)
+        assert any(call.args[1] == "agent_error" for call in publish_mock.await_args_list)
         chat_handler_module.conversation_service.add_message.assert_not_awaited()
-        chat_handler_module.llm_service.get_provider_for_workspace.assert_not_awaited()
+        chat_handler_module.llm_service.resolve_provider.assert_not_awaited()
         chat_handler_module.tool_dispatcher.list_tools.assert_not_awaited()
 
     @pytest.mark.asyncio
@@ -113,7 +111,6 @@ class TestChatHandler:
 
         conversation = SimpleNamespace(
             id=conversation_id,
-            workspace_id=None,
             agent_id=agent_id,
             is_archived=False,
         )
@@ -161,7 +158,7 @@ class TestChatHandler:
         monkeypatch.setattr(chat_handler_module.agent_registry, "list_available_agents", AsyncMock(return_value=[]))
         monkeypatch.setattr(chat_handler_module.conversation_service, "get_recent_messages", AsyncMock(return_value=history))
         monkeypatch.setattr(chat_handler_module.conversation_service, "add_message", AsyncMock(return_value=follow_up_message))
-        monkeypatch.setattr(chat_handler_module.llm_service, "get_provider_for_workspace", AsyncMock(return_value=("openai", "test-key", "gpt-4o-mini", None)))
+        monkeypatch.setattr(chat_handler_module.llm_service, "resolve_provider", AsyncMock(return_value=("openai", "test-key", "gpt-4o-mini", None)))
         extract_mock = AsyncMock(return_value={
             "extracted": {},
             "missing": ["topic", "audience"],
@@ -172,7 +169,6 @@ class TestChatHandler:
         monkeypatch.setattr(chat_handler_module.tool_dispatcher, "list_tools", AsyncMock())
 
         await handler.run(
-            workspace_id=None,
             conversation_id=conversation_id,
             user_content="Research something broad.",
             db=db,
@@ -186,8 +182,8 @@ class TestChatHandler:
         assert follow_up_call.kwargs["trigger_auto_title"] is False
         assert extract_mock.await_args.kwargs["conversation_history"] == history
         assert any(call.kwargs.get("status") == "paused" for call in update_execution_record_mock.await_args_list)
-        assert not any(call.args[2] == "execution_completed" for call in publish_mock.await_args_list)
-        assert any(call.args[2] == "agent_done" for call in publish_mock.await_args_list)
+        assert not any(call.args[1] == "execution_completed" for call in publish_mock.await_args_list)
+        assert any(call.args[1] == "agent_done" for call in publish_mock.await_args_list)
 
     @pytest.mark.asyncio
     async def test_run_renders_parameterized_system_prompt_before_generation(self, monkeypatch):
@@ -220,7 +216,6 @@ class TestChatHandler:
 
         conversation = SimpleNamespace(
             id=conversation_id,
-            workspace_id=None,
             agent_id=agent_id,
             is_archived=False,
         )
@@ -282,7 +277,7 @@ class TestChatHandler:
         monkeypatch.setattr(chat_handler_module.agent_registry, "list_available_agents", AsyncMock(return_value=[]))
         monkeypatch.setattr(chat_handler_module.conversation_service, "get_recent_messages", AsyncMock(return_value=[]))
         monkeypatch.setattr(chat_handler_module.conversation_service, "add_message", AsyncMock(return_value=assistant_message))
-        monkeypatch.setattr(chat_handler_module.llm_service, "get_provider_for_workspace", AsyncMock(return_value=("openai", "test-key", "gpt-4o-mini", None)))
+        monkeypatch.setattr(chat_handler_module.llm_service, "resolve_provider", AsyncMock(return_value=("openai", "test-key", "gpt-4o-mini", None)))
         monkeypatch.setattr(chat_handler_module, "extract_parameter_values", AsyncMock(return_value={
             "extracted": {"topic": "AI alignment"},
             "missing": [],
@@ -293,7 +288,6 @@ class TestChatHandler:
         monkeypatch.setattr(chat_handler_module.tool_dispatcher, "list_tools", AsyncMock())
 
         await handler.run(
-            workspace_id=None,
             conversation_id=conversation_id,
             user_content="Research AI alignment.",
             db=db,
@@ -337,7 +331,6 @@ class TestChatHandler:
 
         conversation = SimpleNamespace(
             id=conversation_id,
-            workspace_id=None,
             agent_id=agent_id,
             is_archived=False,
         )
@@ -411,7 +404,7 @@ class TestChatHandler:
         monkeypatch.setattr(chat_handler_module.agent_registry, "list_available_agents", AsyncMock(return_value=[]))
         monkeypatch.setattr(chat_handler_module.conversation_service, "get_recent_messages", AsyncMock(return_value=[]))
         monkeypatch.setattr(chat_handler_module.conversation_service, "add_message", AsyncMock(return_value=assistant_message))
-        monkeypatch.setattr(chat_handler_module.llm_service, "get_provider_for_workspace", AsyncMock(return_value=("openai", "test-key", "gpt-4o-mini", None)))
+        monkeypatch.setattr(chat_handler_module.llm_service, "resolve_provider", AsyncMock(return_value=("openai", "test-key", "gpt-4o-mini", None)))
         monkeypatch.setattr(chat_handler_module, "extract_parameter_values", AsyncMock(return_value={
             "extracted": {"topic": "AI alignment"},
             "missing": [],
@@ -424,7 +417,6 @@ class TestChatHandler:
         monkeypatch.setattr(chat_handler_module.llm_gateway, "count_tokens", MagicMock(return_value=2))
 
         await handler.run(
-            workspace_id=None,
             conversation_id=conversation_id,
             user_content="Research AI alignment.",
             db=db,

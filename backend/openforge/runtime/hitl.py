@@ -42,7 +42,6 @@ class HITLService:
         self,
         db: AsyncSession,
         *,
-        workspace_id: UUID,
         conversation_id: UUID,
         tool_id: str,
         tool_input: dict,
@@ -52,8 +51,8 @@ class HITLService:
     ) -> ApprovalRequestModel:
         req = ApprovalRequestModel(
             request_type="tool_invocation",
-            scope_type="workspace",
-            scope_id=str(workspace_id),
+            scope_type="conversation",
+            scope_id=str(conversation_id),
             source_run_id=None,
             requested_action=action_summary,
             tool_name=tool_id,
@@ -230,34 +229,34 @@ class HITLService:
         return req
 
     async def list_pending(
-        self, db: AsyncSession, workspace_id: Optional[UUID] = None
+        self, db: AsyncSession, conversation_id: Optional[UUID] = None
     ) -> list[ApprovalRequestModel]:
         q = select(ApprovalRequestModel).where(ApprovalRequestModel.status == "pending")
-        if workspace_id:
-            q = q.where(ApprovalRequestModel.scope_id == str(workspace_id))
+        if conversation_id:
+            q = q.where(ApprovalRequestModel.scope_id == str(conversation_id))
         q = q.order_by(ApprovalRequestModel.requested_at.desc())
         result = await db.execute(q)
         return list(result.scalars().all())
 
     async def count_pending(
-        self, db: AsyncSession, workspace_id: Optional[UUID] = None
+        self, db: AsyncSession, conversation_id: Optional[UUID] = None
     ) -> int:
         q = select(func.count()).select_from(ApprovalRequestModel).where(ApprovalRequestModel.status == "pending")
-        if workspace_id:
-            q = q.where(ApprovalRequestModel.scope_id == str(workspace_id))
+        if conversation_id:
+            q = q.where(ApprovalRequestModel.scope_id == str(conversation_id))
         result = await db.execute(q)
         return result.scalar() or 0
 
     async def list_history(
         self,
         db: AsyncSession,
-        workspace_id: Optional[UUID] = None,
+        conversation_id: Optional[UUID] = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[ApprovalRequestModel]:
         q = select(ApprovalRequestModel).where(ApprovalRequestModel.status != "pending")
-        if workspace_id:
-            q = q.where(ApprovalRequestModel.scope_id == str(workspace_id))
+        if conversation_id:
+            q = q.where(ApprovalRequestModel.scope_id == str(conversation_id))
         q = q.order_by(ApprovalRequestModel.requested_at.desc()).limit(limit).offset(offset)
         result = await db.execute(q)
         return list(result.scalars().all())

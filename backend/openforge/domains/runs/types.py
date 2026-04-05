@@ -92,7 +92,6 @@ class Run(BaseModel):
     parent_run_id: UUID | None = None
     root_run_id: UUID | None = None
     spawned_by_step_id: UUID | None = None
-    workspace_id: UUID
     status: ExecutionStatus = ExecutionStatus.PENDING
     state_snapshot: dict[str, Any] = Field(default_factory=dict)
     input_payload: dict[str, Any] = Field(default_factory=dict)

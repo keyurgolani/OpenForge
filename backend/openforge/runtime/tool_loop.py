@@ -103,7 +103,6 @@ def _prepare_timeline_output(output: Any) -> Any:
 
 @dataclass
 class ToolLoopContext:
-    workspace_id: UUID | None
     conversation_id: UUID | None
     execution_id: str
     agent_spec: AgentRuntimeConfig | None = None
@@ -114,7 +113,6 @@ class ToolLoopContext:
     cancel_event: asyncio.Event = field(default_factory=asyncio.Event)
     db: AsyncSession | None = None
     session_factory: Any = None  # async_sessionmaker — used for side-channel DB ops (HITL, policy)
-    default_workspace_id: str | None = None
     # Deployment context for deployment-owned workspace enforcement
     deployment_id: str | None = None
     deployment_workspace_id: str | None = None
@@ -122,7 +120,6 @@ class ToolLoopContext:
     # from arbitrarily deep subagent chains to reach the top-level WebSocket.
     root_execution_id: str | None = None
     root_conversation_id: str | None = None
-    root_workspace_id: str | None = None
     call_id_path: list[str] = field(default_factory=list)
     # Per-execution tool result cache: key → (timestamp, result_dict)
     _tool_cache: dict[str, tuple[float, dict]] = field(default_factory=dict)
@@ -356,7 +353,6 @@ async def execute_tool_loop(
                     async with _sf() as _hitl_db:
                         hitl_request = await ctx.hitl_service.create_request(
                             _hitl_db,
-                            workspace_id=ctx.workspace_id,
                             conversation_id=ctx.conversation_id,
                             tool_id=tool_id,
                             tool_input=arguments,
@@ -416,11 +412,10 @@ async def execute_tool_loop(
                 if ctx.root_execution_id:
                     arguments["_root_execution_id"] = ctx.root_execution_id
                     arguments["_root_conversation_id"] = ctx.root_conversation_id
-                    arguments["_root_workspace_id"] = ctx.root_workspace_id
                     arguments["_call_id_path"] = ctx.call_id_path + [call_id]
 
-            # Resolve workspace_id: explicit context > default > empty
-            _ws_id = str(ctx.workspace_id) if ctx.workspace_id else (ctx.default_workspace_id or "")
+            # Agent passes workspace_id explicitly in tool call arguments
+            _ws_id = ""
 
             # Extract optional _timeout from arguments (seconds); None = no limit
             _tool_timeout: float | None = None

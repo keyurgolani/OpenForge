@@ -96,11 +96,10 @@ def _new_app_with_router(router) -> FastAPI:
     return app
 
 
-def _conversation_payload(workspace_id: str, conv_id: str) -> dict:
+def _conversation_payload(conv_id: str) -> dict:
     now = datetime.now(timezone.utc).isoformat()
     return {
         "id": conv_id,
-        "workspace_id": workspace_id,
         "title": "Conversation",
         "title_locked": False,
         "is_pinned": False,
@@ -118,10 +117,10 @@ def test_conversations_router_end_to_end_with_service_mocks(monkeypatch):
     workspace_id = str(uuid4())
     conversation_id = str(uuid4())
 
-    list_mock = AsyncMock(return_value=[_conversation_payload(workspace_id, conversation_id)])
-    create_mock = AsyncMock(return_value=_conversation_payload(workspace_id, conversation_id))
+    list_mock = AsyncMock(return_value=[_conversation_payload(conversation_id)])
+    create_mock = AsyncMock(return_value=_conversation_payload(conversation_id))
     get_mock = AsyncMock(return_value={
-        **_conversation_payload(workspace_id, conversation_id),
+        **_conversation_payload(conversation_id),
         "messages": [
             {
                 "id": str(uuid4()),
@@ -139,7 +138,7 @@ def test_conversations_router_end_to_end_with_service_mocks(monkeypatch):
             }
         ],
     })
-    update_mock = AsyncMock(return_value=_conversation_payload(workspace_id, conversation_id))
+    update_mock = AsyncMock(return_value=_conversation_payload(conversation_id))
     delete_mock = AsyncMock(return_value=None)
     perm_delete_mock = AsyncMock(return_value=None)
 

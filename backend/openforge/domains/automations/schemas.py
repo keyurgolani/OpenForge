@@ -72,7 +72,6 @@ class AutomationCompileResponse(BaseModel):
 
 class AutomationRunRequest(BaseModel):
     input_payload: dict[str, Any] = Field(default_factory=dict)
-    workspace_id: UUID
 
 
 class AutomationRunResponse(BaseModel):

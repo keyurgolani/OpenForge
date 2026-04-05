@@ -48,7 +48,6 @@ interface Conversation {
 
 interface Run {
   id: string;
-  workspace_id: string;
   run_type: string;
   status: string;
   started_at?: string | null;

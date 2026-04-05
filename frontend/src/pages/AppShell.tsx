@@ -41,7 +41,6 @@ type KnowledgeItem = WorkspaceInsightSource & {
 
 type RunItem = {
   id: string
-  workspace_id: string
   run_type: string
   status: string
   started_at?: string | null
@@ -85,7 +84,7 @@ export default function AppShell() {
   })
   const { data: runsData } = useQuery<{ runs: RunItem[]; total: number }>({
     queryKey: ['runs', workspaceId, 'sidebar'],
-    queryFn: () => listRuns({ workspace_id: workspaceId, limit: 25 }),
+    queryFn: () => listRuns({ limit: 25 }),
     enabled: !!workspaceId,
     refetchInterval: 30_000,
   })

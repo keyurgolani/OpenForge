@@ -21,7 +21,6 @@ class TestHandoffEngine:
         result = await engine.transfer_to(
             db=mock_db,
             target_agent_slug="test-agent",
-            workspace_id=uuid.uuid4(),
             conversation_id=uuid.uuid4(),
             messages=[],
         )
@@ -44,7 +43,6 @@ class TestHandoffEngine:
             result = await engine.transfer_to(
                 db=mock_db,
                 target_agent_slug="test-agent",
-                workspace_id=uuid.uuid4(),
                 conversation_id=uuid.uuid4(),
                 messages=[],
             )
@@ -71,7 +69,6 @@ class TestHandoffEngine:
                     db=mock_db,
                     instruction="test task",
                     target_agent_slug="test-agent",
-                    workspace_id=uuid.uuid4(),
                 )
 
         assert result["response"] == "delegated response"

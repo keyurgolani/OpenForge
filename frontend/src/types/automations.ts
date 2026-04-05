@@ -52,7 +52,6 @@ export interface AutomationListResponse {
 
 export interface AutomationRunRequest {
   input_payload: Record<string, unknown>;
-  workspace_id: string;
 }
 
 export interface AutomationRunResponse {

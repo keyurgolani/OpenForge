@@ -117,9 +117,9 @@ def _serialize_message(m: Message) -> dict:
 
 
 async def _get_global_conversation(db: AsyncSession, conversation_id: UUID) -> Conversation:
-    """Fetch a global conversation or raise 404."""
+    """Fetch a conversation or raise 404."""
     conversation = await db.get(Conversation, conversation_id)
-    if not conversation or conversation.workspace_id is not None:
+    if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return conversation
 
@@ -153,7 +153,6 @@ async def create_global_conversation(
 
     title = data.title or ""
     conversation = Conversation(
-        workspace_id=None,
         agent_id=data.agent_id,
         title=title,
     )
@@ -174,24 +173,21 @@ async def list_global_conversations(
     category: str = Query("chats", pattern="^(chats|delegated|trash)$"),
     db: AsyncSession = Depends(get_db),
 ):
-    """List global conversations (those without a workspace_id)."""
-    base_filter = Conversation.workspace_id.is_(None)
-
+    """List all conversations."""
     if category == "trash":
         query = (
             select(Conversation)
-            .where(base_filter, Conversation.is_archived.is_(True))
+            .where(Conversation.is_archived.is_(True))
             .order_by(Conversation.updated_at.desc())
         )
         count_query = (
             select(func.count()).select_from(Conversation)
-            .where(base_filter, Conversation.is_archived.is_(True))
+            .where(Conversation.is_archived.is_(True))
         )
     elif category == "delegated":
         query = (
             select(Conversation)
             .where(
-                base_filter,
                 Conversation.is_archived.is_(False),
                 Conversation.is_subagent.is_(True),
             )
@@ -200,7 +196,6 @@ async def list_global_conversations(
         count_query = (
             select(func.count()).select_from(Conversation)
             .where(
-                base_filter,
                 Conversation.is_archived.is_(False),
                 Conversation.is_subagent.is_(True),
             )
@@ -209,7 +204,6 @@ async def list_global_conversations(
         query = (
             select(Conversation)
             .where(
-                base_filter,
                 Conversation.is_archived.is_(False),
                 Conversation.is_subagent.is_(False),
             )
@@ -218,7 +212,6 @@ async def list_global_conversations(
         count_query = (
             select(func.count()).select_from(Conversation)
             .where(
-                base_filter,
                 Conversation.is_archived.is_(False),
                 Conversation.is_subagent.is_(False),
             )
@@ -244,9 +237,8 @@ async def bulk_trash_global_conversations(
     category: str = Query("chats", pattern="^(chats|delegated)$"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Move all global conversations in a category to trash."""
+    """Move all conversations in a category to trash."""
     query = select(Conversation).where(
-        Conversation.workspace_id.is_(None),
         Conversation.is_archived.is_(False),
     )
     if category == "delegated":
@@ -269,10 +261,9 @@ async def bulk_trash_global_conversations(
 async def bulk_restore_global_conversations(
     db: AsyncSession = Depends(get_db),
 ):
-    """Restore all global conversations from trash."""
+    """Restore all conversations from trash."""
     result = await db.execute(
         select(Conversation).where(
-            Conversation.workspace_id.is_(None),
             Conversation.is_archived.is_(True),
         )
     )
@@ -290,10 +281,9 @@ async def bulk_restore_global_conversations(
 async def bulk_permanently_delete_global_conversations(
     db: AsyncSession = Depends(get_db),
 ):
-    """Permanently delete all global conversations in trash."""
+    """Permanently delete all conversations in trash."""
     result = await db.execute(
         select(Conversation).where(
-            Conversation.workspace_id.is_(None),
             Conversation.is_archived.is_(True),
         )
     )
@@ -401,7 +391,7 @@ async def get_global_conversation_stream_state(
     """Check the active stream state for a global conversation."""
     await _get_global_conversation(db, conversation_id)
     from openforge.runtime.chat_handler import chat_handler
-    return await chat_handler.get_stream_state(None, conversation_id)
+    return await chat_handler.get_stream_state(conversation_id)
 
 
 @router.put("/conversations/{conversation_id}")

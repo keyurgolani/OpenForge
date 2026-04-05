@@ -53,7 +53,7 @@ export default function MissionDetailPage() {
   const updateMission = useUpdateMission()
   const promoteWorkspace = usePromoteMissionWorkspace()
 
-  const ownedWsId = mission?.workspace_id
+  const ownedWsId = mission?.owned_workspace_id
   const { data: ownedWorkspace } = useQuery({
     queryKey: ['workspace', ownedWsId],
     queryFn: () => getWorkspace(ownedWsId!),
@@ -301,13 +301,13 @@ export default function MissionDetailPage() {
               {/* Workspace */}
               <AccordionSection
                 title="Workspace"
-                summary={ownedWorkspace ? `${ownedWorkspace.knowledge_count ?? 0} items` : (mission.workspace_id ? 'Linked' : 'None')}
+                summary={ownedWorkspace ? `${ownedWorkspace.knowledge_count ?? 0} items` : (mission.owned_workspace_id ? 'Linked' : 'None')}
                 icon={Database}
                 expanded={siderailSection === 'workspace'}
                 onToggle={() => toggleSection('workspace')}
               >
                 <div className="space-y-2 text-xs text-muted-foreground">
-                  {mission.workspace_id ? (
+                  {mission.owned_workspace_id ? (
                     <>
                       {ownedWorkspace?.knowledge_count != null && (
                         <p className="text-foreground/70 font-medium">
@@ -316,7 +316,7 @@ export default function MissionDetailPage() {
                       )}
                       <div className="flex items-center gap-2">
                         <Link
-                          to={`/w/${mission.workspace_id}/knowledge`}
+                          to={`/w/${mission.owned_workspace_id}/knowledge`}
                           className="inline-flex h-6 items-center gap-1 rounded-md border border-border/25 bg-background/40 px-2 text-[10px] font-medium text-muted-foreground transition-colors hover:text-foreground"
                         >
                           <BookOpen className="w-3 h-3" /> Browse Knowledge

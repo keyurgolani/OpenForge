@@ -30,7 +30,7 @@ class TestDomainModelPresence:
 
     def test_run_model_has_required_fields(self):
         from openforge.db.models import RunModel
-        required = {"id", "workspace_id", "status", "run_type", "created_at"}
+        required = {"id", "status", "run_type", "created_at"}
         actual = {c.name for c in RunModel.__table__.columns}
         assert required.issubset(actual), f"Missing fields: {required - actual}"
 

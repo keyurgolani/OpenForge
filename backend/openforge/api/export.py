@@ -47,7 +47,7 @@ async def _build_workspace_data(db: AsyncSession, ws: Workspace) -> dict:
         })
 
     # Conversations + messages
-    conv_rows = (await db.execute(select(Conversation).where(Conversation.workspace_id == ws.id))).scalars().all()
+    conv_rows = (await db.execute(select(Conversation))).scalars().all()
     conversations_data = []
     for conv in conv_rows:
         msg_rows = (await db.execute(

@@ -8,7 +8,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class DeploymentCreate(BaseModel):
-    workspace_id: UUID
     input_values: dict[str, Any] = Field(default_factory=dict)
     schedule_expression: Optional[str] = Field(
         default=None,
@@ -30,7 +29,6 @@ class DeploymentResponse(BaseModel):
     id: UUID
     automation_id: UUID
     automation_name: Optional[str] = None
-    workspace_id: UUID
     agent_spec_id: Optional[UUID] = None
     deployed_by: Optional[str] = None
     input_values: dict[str, Any] = Field(default_factory=dict)

@@ -34,7 +34,6 @@ class DeploymentService:
     async def deploy(
         self,
         automation_id: UUID,
-        workspace_id: UUID,
         input_values: dict[str, Any],
         deployed_by: str | None = None,
         schedule_expression: str | None = None,
@@ -121,7 +120,6 @@ class DeploymentService:
 
         deployment = DeploymentModel(
             automation_id=automation_id,
-            workspace_id=workspace_id,
             agent_spec_id=agent_spec_id,
             automation_spec_id=automation_spec_id,
             deployed_by=deployed_by,
@@ -140,9 +138,8 @@ class DeploymentService:
 
         # Provision deployment-owned workspace if requested
         if enable_workspace:
-            source_ws = await self.db.get(Workspace, workspace_id)
             owned_ws_id = await self._provision_deployment_workspace(
-                deployment, automation.name, source_ws,
+                deployment, automation.name,
             )
             deployment.owned_workspace_id = owned_ws_id
             await self.db.flush()
@@ -227,7 +224,6 @@ class DeploymentService:
         self,
         deployment: DeploymentModel,
         automation_name: str,
-        source_workspace: Workspace | None,
     ) -> UUID:
         """Create a deployment-owned workspace."""
         from openforge.config import get_settings
@@ -244,8 +240,8 @@ class DeploymentService:
             owner_deployment_id=deployment.id,
             is_readonly_ui=True,
             auto_teardown=True,
-            llm_provider_id=source_workspace.llm_provider_id if source_workspace else None,
-            llm_model=source_workspace.llm_model if source_workspace else None,
+            llm_provider_id=None,
+            llm_model=None,
         )
         self.db.add(workspace)
         await self.db.flush()
@@ -305,7 +301,6 @@ class DeploymentService:
         now = datetime.now(timezone.utc)
         run = RunModel(
             run_type="automation",
-            workspace_id=deployment.workspace_id,
             deployment_id=deployment.id,
             input_payload={
                 "input_values": deployment.input_values or {},
@@ -357,7 +352,6 @@ class DeploymentService:
         limit: int = 50,
         status: str | None = None,
         automation_id: UUID | None = None,
-        workspace_id: UUID | None = None,
     ) -> tuple[list[dict], int]:
         query = (
             select(
@@ -378,9 +372,6 @@ class DeploymentService:
         if automation_id:
             query = query.where(DeploymentModel.automation_id == automation_id)
             count_query = count_query.where(DeploymentModel.automation_id == automation_id)
-        if workspace_id:
-            query = query.where(DeploymentModel.workspace_id == workspace_id)
-            count_query = count_query.where(DeploymentModel.workspace_id == workspace_id)
 
         query = query.order_by(DeploymentModel.created_at.desc()).offset(skip).limit(limit)
         total = await self.db.scalar(count_query) or 0
@@ -428,7 +419,6 @@ class DeploymentService:
             "id": deployment.id,
             "automation_id": deployment.automation_id,
             "automation_name": automation_name,
-            "workspace_id": deployment.workspace_id,
             "agent_spec_id": deployment.agent_spec_id,
             "deployed_by": deployment.deployed_by,
             "input_values": deployment.input_values or {},

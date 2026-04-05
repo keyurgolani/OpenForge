@@ -104,7 +104,7 @@ class MissionService:
         now = datetime.now(timezone.utc)
 
         # Provision workspace if not already attached
-        if not mission.workspace_id:
+        if not mission.owned_workspace_id:
             workspace = Workspace(
                 name=f"Mission: {mission.name}",
                 ownership_type="mission",
@@ -113,7 +113,8 @@ class MissionService:
             )
             self.db.add(workspace)
             await self.db.flush()
-            mission.workspace_id = workspace.id
+            mission.owned_workspace_id = workspace.id
+            workspace.owner_mission_id = mission.id
 
         mission.status = "active"
         mission.next_cycle_at = now
@@ -144,16 +145,17 @@ class MissionService:
         mission.completed_at = now
 
         # Handle workspace cleanup
-        if mission.workspace_id:
-            workspace = await self.db.get(Workspace, mission.workspace_id)
+        if mission.owned_workspace_id:
+            workspace = await self.db.get(Workspace, mission.owned_workspace_id)
             if workspace:
                 if workspace.auto_teardown:
                     from openforge.services.workspace_service import workspace_service
                     await workspace_service.delete_workspace(self.db, workspace.id)
-                    mission.workspace_id = None
+                    mission.owned_workspace_id = None
                 else:
                     # Promote to regular user workspace
                     workspace.ownership_type = "user"
+                    workspace.owner_mission_id = None
                     workspace.is_readonly_ui = False
                     workspace.name = workspace.name.replace("Mission: ", "[Archived] ")
 
@@ -164,19 +166,20 @@ class MissionService:
     async def promote_workspace(self, mission_id: UUID) -> dict:
         """Convert a mission workspace into a regular user workspace."""
         mission = await self._get(mission_id)
-        if not mission.workspace_id:
+        if not mission.owned_workspace_id:
             raise ValueError("Mission has no workspace")
 
-        workspace = await self.db.get(Workspace, mission.workspace_id)
+        workspace = await self.db.get(Workspace, mission.owned_workspace_id)
         if not workspace:
             raise ValueError("Mission workspace not found")
 
         workspace.ownership_type = "user"
+        workspace.owner_mission_id = None
         workspace.is_readonly_ui = False
         workspace.auto_teardown = False
         workspace.name = workspace.name.replace("Mission: ", "")
 
-        mission.workspace_id = None
+        mission.owned_workspace_id = None
         await self.db.commit()
 
         return {

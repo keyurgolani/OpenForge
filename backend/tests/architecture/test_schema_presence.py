@@ -30,12 +30,11 @@ def test_agent_model_fields():
 
 
 def test_automation_model_fields():
-    assert hasattr(AutomationModel, "agent_id")
-    assert hasattr(AutomationModel, "budget_config")
+    assert hasattr(AutomationModel, "active_spec_id")
+    assert hasattr(AutomationModel, "status")
 
 
 def test_run_model_fields():
-    assert hasattr(RunModel, "workspace_id")
     assert hasattr(RunModel, "run_type")
     assert hasattr(RunModel, "status")
     assert hasattr(RunModel, "input_payload")

@@ -22,7 +22,6 @@ class HandoffEngine:
         db: AsyncSession,
         instruction: str,
         target_agent_slug: str,
-        workspace_id: UUID,
         parent_run_id: UUID | None = None,
     ) -> dict[str, Any]:
         """Delegate a task to another agent.
@@ -41,7 +40,6 @@ class HandoffEngine:
                 spec,
                 {"instruction": instruction, "message": instruction},
                 db=db,
-                workspace_id=workspace_id,
                 event_publisher=EventPublisher(db),
                 tool_dispatcher=tool_dispatcher,
                 llm_gateway=llm_gateway,
@@ -56,7 +54,6 @@ class HandoffEngine:
         from openforge.runtime.chat_handler import chat_handler
 
         return await chat_handler.execute_subagent(
-            workspace_id=workspace_id,
             instruction=instruction,
             db=db,
             agent_id=target_agent_slug,
@@ -67,7 +64,6 @@ class HandoffEngine:
         *,
         db: AsyncSession,
         target_agent_slug: str,
-        workspace_id: UUID,
         conversation_id: UUID,
         messages: list[dict[str, Any]],
     ) -> dict[str, Any]:

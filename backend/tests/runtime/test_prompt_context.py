@@ -140,7 +140,6 @@ class TestBuildPostamble:
 
     def test_includes_workspace_info(self):
         postamble = build_postamble(
-            workspace_id=None,
             workspaces_data=[{"id": "ws-1", "name": "Research", "description": "Research workspace", "knowledge_count": 5}],
             agents_data=[],
             tools_data=[],
@@ -152,18 +151,16 @@ class TestBuildPostamble:
 
     def test_single_workspace_auto_inject(self):
         postamble = build_postamble(
-            workspace_id=None,
             workspaces_data=[{"id": "ws-1", "name": "Only", "description": "", "knowledge_count": 0}],
             agents_data=[],
             tools_data=[],
             skills_data=[],
             tools_enabled=True,
         )
-        assert "Always use this workspace_id" in postamble
+        assert "Use this workspace_id" in postamble
 
     def test_multi_workspace_generic_message(self):
         postamble = build_postamble(
-            workspace_id=None,
             workspaces_data=[
                 {"id": "ws-1", "name": "A", "description": "", "knowledge_count": 0},
                 {"id": "ws-2", "name": "B", "description": "", "knowledge_count": 0},
@@ -173,11 +170,10 @@ class TestBuildPostamble:
             skills_data=[],
             tools_enabled=True,
         )
-        assert "MUST pass" in postamble
+        assert "workspace_id" in postamble
 
     def test_tooling_disabled_notice(self):
         postamble = build_postamble(
-            workspace_id=None,
             workspaces_data=[],
             agents_data=[],
             tools_data=[],

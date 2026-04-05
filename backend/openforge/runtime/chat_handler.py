@@ -184,7 +184,6 @@ class _AgentCompat:
 async def _persist_tool_call_log(
     *,
     session_factory=None,
-    workspace_id: UUID | None,
     conversation_id: UUID,
     call_id: str,
     tool_name: str,
@@ -212,7 +211,6 @@ async def _persist_tool_call_log(
         async with session_factory() as db:
             db.add(
                 ToolCallLog(
-                    workspace_id=workspace_id,
                     conversation_id=conversation_id,
                     call_id=call_id,
                     tool_name=tool_name,
@@ -257,7 +255,6 @@ class ChatHandler:
     async def _publish(
         self,
         execution_id: str,
-        workspace_id: UUID | None,
         event_type: str,
         *,
         conversation_id: UUID | None = None,
@@ -266,7 +263,6 @@ class ChatHandler:
         event = {
             "type": event_type,
             "execution_id": execution_id,
-            "workspace_id": str(workspace_id) if workspace_id else None,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             **data,
         }
@@ -283,10 +279,7 @@ class ChatHandler:
                 logger.warning("Redis publish failed, falling back to WebSocket: %s", exc)
 
         from openforge.api.websocket import ws_manager
-        # Publish to workspace connections (workspace-scoped chat)
-        if workspace_id is not None:
-            await ws_manager.send_to_workspace(str(workspace_id), event)
-        # Publish to per-conversation connections (global and workspace chat)
+        # Publish to per-conversation connections
         if conversation_id is not None:
             await ws_manager.send_to_conversation(str(conversation_id), event)
 
@@ -360,12 +353,12 @@ class ChatHandler:
             return None
         return exec_record
 
-    async def get_stream_state(self, workspace_id: UUID | None, conversation_id: UUID) -> dict[str, Any]:
+    async def get_stream_state(self, conversation_id: UUID) -> dict[str, Any]:
         from openforge.db.postgres import AsyncSessionLocal
         async with AsyncSessionLocal() as db:
             exec_record = await self._find_active_execution(db, conversation_id)
 
-        if exec_record is None or exec_record.workspace_id != workspace_id:
+        if exec_record is None:
             return {"active": False}
 
         payload: dict[str, Any] = {
@@ -396,12 +389,11 @@ class ChatHandler:
     async def send_stream_snapshot(
         self,
         websocket: WebSocket,
-        workspace_id: UUID | None,
         conversation_id: UUID | None = None,
     ) -> None:
         if conversation_id is None:
             return
-        state = await self.get_stream_state(workspace_id, conversation_id)
+        state = await self.get_stream_state(conversation_id)
         if not state.get("active"):
             return
 
@@ -464,7 +456,7 @@ class ChatHandler:
 
             # Publish agent_done so frontend exits streaming state
             await self._publish(
-                str(exec_record.id), exec_record.workspace_id, "agent_done",
+                str(exec_record.id), "agent_done",
                 conversation_id=conversation_id, message_id="", interrupted=True,
             )
             return True
@@ -515,7 +507,6 @@ class ChatHandler:
         self,
         db: AsyncSession,
         *,
-        workspace_id: UUID | None,
         conversation_id: UUID,
         user_message_id: UUID,
         attachment_ids: list[str] | None,
@@ -556,8 +547,8 @@ class ChatHandler:
             if extractor is not None:
                 try:
                     async with AsyncSessionLocal() as audit_db:
-                        target_link = f"/w/{workspace_id}/conversations/{conversation_id}" if workspace_id else f"/conversations/{conversation_id}"
-                        task_log = await start_task_log(audit_db, task_type="extract_attachment_content", workspace_id=workspace_id, target_link=target_link)
+                        target_link = f"/conversations/{conversation_id}"
+                        task_log = await start_task_log(audit_db, task_type="extract_attachment_content", workspace_id=None, target_link=target_link)
                         task_log_id = task_log.id
                         await audit_db.commit()
                 except Exception as exc:
@@ -618,7 +609,6 @@ class ChatHandler:
     async def _extract_urls_for_chat(
         self,
         *,
-        workspace_id: UUID | None,
         user_message_id: UUID,
         urls: list[str],
     ) -> tuple[str, list[dict[str, Any]]]:
@@ -636,7 +626,7 @@ class ChatHandler:
             task_log_id = None
             try:
                 async with AsyncSessionLocal() as audit_db:
-                    task_log = await start_task_log(audit_db, task_type="extract_url_content", workspace_id=workspace_id, target_link=url)
+                    task_log = await start_task_log(audit_db, task_type="extract_url_content", workspace_id=None, target_link=url)
                     task_log_id = task_log.id
                     await audit_db.commit()
 
@@ -688,7 +678,7 @@ class ChatHandler:
         header = "\n\nThe following URLs were shared by the user. Their content is already extracted below. Do not call fetch or browse tools to retrieve these same URLs again.\n"
         return header + "\n".join(context_blocks), url_attachments
 
-    async def _resolve_mentions(self, db: AsyncSession, workspace_id: UUID | None, mentions: list[dict[str, Any]] | None) -> str:
+    async def _resolve_mentions(self, db: AsyncSession, mentions: list[dict[str, Any]] | None) -> str:
         if not mentions:
             return ""
         parts: list[str] = []
@@ -776,19 +766,16 @@ class ChatHandler:
     async def execute_subagent(
         self,
         *,
-        workspace_id: UUID,
         instruction: str,
         db: AsyncSession,
         agent_id: str | None = None,
         parent_execution_id: str | None = None,
         parent_conversation_id: UUID | None = None,
-        parent_workspace_id: UUID | None = None,
         scope_path: list[int] | None = None,
         execution_chain_id: str | None = None,
         call_id: str | None = None,
         root_execution_id: str | None = None,
         root_conversation_id: UUID | None = None,
-        root_workspace_id: UUID | None = None,
         call_id_path: list[str] | None = None,
     ) -> dict[str, Any]:
         del execution_chain_id
@@ -797,13 +784,10 @@ class ChatHandler:
         target_spec = None
         if agent_id:
             target_spec = await agent_registry.resolve(db, slug=agent_id)
-        if target_spec is None:
-            target_spec = await agent_registry.resolve_for_workspace(db, workspace_id)
 
-        _subagent_id = str(target_spec.agent_id) if target_spec else "workspace_agent"
+        _subagent_id = str(target_spec.agent_id) if target_spec else "delegated_agent"
 
         conversation = Conversation(
-            workspace_id=workspace_id,
             title=f"[delegated] {instruction[:80]}",
             is_subagent=True,
             subagent_agent_id=_subagent_id,
@@ -816,15 +800,13 @@ class ChatHandler:
         # that arbitrarily deep subagent chains stream to the top-level WS.
         fwd_execution_id = root_execution_id or parent_execution_id
         fwd_conversation_id = root_conversation_id or parent_conversation_id
-        fwd_workspace_id = root_workspace_id or parent_workspace_id
         fwd_call_id_path = call_id_path if call_id_path else ([call_id] if call_id else [])
 
         event_forwarder: Callable[[str, dict[str, Any]], Any] | None = None
-        if fwd_execution_id and (fwd_conversation_id or fwd_workspace_id):
+        if fwd_execution_id and fwd_conversation_id:
             async def _forward(event_type: str, event_data: dict[str, Any]) -> None:
                 await self._publish(
                     fwd_execution_id,
-                    fwd_workspace_id,
                     "agent_nested_event",
                     conversation_id=fwd_conversation_id,
                     data={
@@ -839,11 +821,9 @@ class ChatHandler:
         # Pass root context so deeper subagent invocations also forward to root
         _root_exec = fwd_execution_id or parent_execution_id
         _root_conv = str(fwd_conversation_id) if fwd_conversation_id else (str(parent_conversation_id) if parent_conversation_id else None)
-        _root_ws = str(fwd_workspace_id) if fwd_workspace_id else (str(parent_workspace_id) if parent_workspace_id else None)
 
         execution_id = str(uuid.uuid4())
         await self.run(
-            workspace_id=workspace_id,
             conversation_id=conversation.id,
             user_content=instruction,
             db=db,
@@ -852,7 +832,6 @@ class ChatHandler:
             event_forwarder=event_forwarder,
             root_execution_id=_root_exec,
             root_conversation_id=_root_conv,
-            root_workspace_id=_root_ws,
             call_id_path=fwd_call_id_path,
         )
 
@@ -875,7 +854,6 @@ class ChatHandler:
 
     async def run(
         self,
-        workspace_id: UUID | None,
         conversation_id: UUID,
         user_content: str,
         db: AsyncSession,
@@ -888,14 +866,12 @@ class ChatHandler:
         event_forwarder: Callable[[str, dict[str, Any]], Any] | None = None,
         root_execution_id: str | None = None,
         root_conversation_id: str | None = None,
-        root_workspace_id: str | None = None,
         call_id_path: list[str] | None = None,
     ) -> None:
         """Main chat execution loop.
 
         Resolves agent via agent_registry → AgentRuntimeConfig → _AgentCompat wrapper.
         Context assembly, LLM resolution, tool loop, message save.
-        workspace_id is None for global (workspace-agnostic) conversations.
         """
         if execution_id is None:
             execution_id = str(uuid.uuid4())
@@ -910,31 +886,20 @@ class ChatHandler:
 
         # Resolve agent via agent_registry → AgentRuntimeConfig → _AgentCompat
         if agent is None:
-            if workspace_id is not None:
-                # Workspace-scoped chat: resolve workspace's default agent
+            # Resolve from conversation's agent_id
+            conversation_for_agent = await db.get(Conversation, conversation_id)
+            if conversation_for_agent and conversation_for_agent.agent_id:
                 try:
-                    compiled_spec = await agent_registry.resolve_for_workspace(db, workspace_id)
+                    compiled_spec = await agent_registry.resolve(db, agent_id=conversation_for_agent.agent_id)
                     if compiled_spec is not None:
                         agent = _AgentCompat(compiled_spec)
-                        logger.debug("Resolved agent via agent_registry for workspace %s: %s", workspace_id, compiled_spec.agent_slug)
+                        logger.debug("Resolved agent for chat: %s", compiled_spec.agent_slug)
                 except Exception as exc:
-                    logger.debug("agent_registry.resolve_for_workspace failed: %s", exc)
-            else:
-                # Global chat: resolve from conversation's agent_id
-                conversation_for_agent = await db.get(Conversation, conversation_id)
-                if conversation_for_agent and conversation_for_agent.agent_id:
-                    try:
-                        compiled_spec = await agent_registry.resolve(db, agent_id=conversation_for_agent.agent_id)
-                        if compiled_spec is not None:
-                            agent = _AgentCompat(compiled_spec)
-                            logger.debug("Resolved agent for global chat: %s", compiled_spec.agent_slug)
-                    except Exception as exc:
-                        logger.debug("agent_registry.resolve for global chat failed: %s", exc)
+                    logger.debug("agent_registry.resolve failed: %s", exc)
 
         if agent is None:
             await self._publish(
                 execution_id,
-                workspace_id,
                 "agent_error",
                 conversation_id=conversation_id,
                 detail="Agent could not be resolved",
@@ -946,15 +911,15 @@ class ChatHandler:
             return
 
         conversation = await db.get(Conversation, conversation_id)
-        if conversation is None or conversation.workspace_id != workspace_id:
-            await self._publish(execution_id, workspace_id, "agent_error", conversation_id=conversation_id, detail="Conversation not found")
+        if conversation is None:
+            await self._publish(execution_id, "agent_error", conversation_id=conversation_id, detail="Conversation not found")
             self._cancel_events.pop(str(conversation_id), None)
             self._cancel_content.pop(str(conversation_id), None)
             for channel_key, subscription in cancel_subscriptions:
                 await self._teardown_cancel_listener(subscription, channel_key)
             return
         if conversation.is_archived:
-            await self._publish(execution_id, workspace_id, "agent_error", conversation_id=conversation_id, detail="Conversation is archived. Restore it to continue chatting.")
+            await self._publish(execution_id, "agent_error", conversation_id=conversation_id, detail="Conversation is archived. Restore it to continue chatting.")
             self._cancel_events.pop(str(conversation_id), None)
             self._cancel_content.pop(str(conversation_id), None)
             for channel_key, subscription in cancel_subscriptions:
@@ -963,7 +928,7 @@ class ChatHandler:
 
         existing_execution = await db.get(AgentExecution, UUID(execution_id))
         if existing_execution is None:
-            db.add(AgentExecution(id=UUID(execution_id), workspace_id=workspace_id, conversation_id=conversation_id, agent_id=agent.id, status="running"))
+            db.add(AgentExecution(id=UUID(execution_id), conversation_id=conversation_id, agent_id=agent.id, status="running"))
             await db.commit()
         else:
             await self._update_execution_record(db, execution_id, status="running", agent_id=agent.id)
@@ -982,9 +947,8 @@ class ChatHandler:
 
         resolved_provider_id = provider_id or agent.provider_override_id
         resolved_model_id = model_id or agent.model_override
-        provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(
+        provider_name, api_key, model, base_url = await llm_service.resolve_provider(
             db,
-            workspace_id,
             provider_id=resolved_provider_id,
             model_override=resolved_model_id,
         )
@@ -1058,7 +1022,6 @@ class ChatHandler:
                     )
                     await self._publish(
                         execution_id,
-                        workspace_id,
                         "agent_done",
                         conversation_id=conversation_id,
                         message_id=str(follow_up_message.id),
@@ -1070,7 +1033,6 @@ class ChatHandler:
             if agent.attachment_support:
                 attachment_context, attachments_processed = await self._process_message_attachments(
                     db,
-                    workspace_id=workspace_id,
                     conversation_id=conversation_id,
                     user_message_id=user_message.id,
                     attachment_ids=attachment_ids,
@@ -1081,15 +1043,15 @@ class ChatHandler:
             if agent.auto_bookmark_urls:
                 urls = extract_http_urls(user_content)
                 if urls:
-                    url_context, url_attachments_processed = await self._extract_urls_for_chat(workspace_id=workspace_id, user_message_id=user_message.id, urls=urls)
+                    url_context, url_attachments_processed = await self._extract_urls_for_chat(user_message_id=user_message.id, urls=urls)
 
             mention_context = ""
             if agent.mention_support:
-                mention_context = await self._resolve_mentions(db, workspace_id, mentions)
+                mention_context = await self._resolve_mentions(db, mentions)
 
             all_attachments_processed = attachments_processed + url_attachments_processed
             if all_attachments_processed:
-                await self._publish(execution_id, workspace_id, "agent_attachments_processed", conversation_id=conversation_id, data=all_attachments_processed)
+                await self._publish(execution_id, "agent_attachments_processed", conversation_id=conversation_id, data=all_attachments_processed)
                 await self._update_stream_state(execution_id, attachments_processed=all_attachments_processed)
 
             # ── Build system variable context for template rendering ──
@@ -1217,7 +1179,6 @@ class ChatHandler:
             )
 
             postamble = build_postamble(
-                workspace_id=workspace_id,
                 workspaces_data=workspaces_data,
                 agents_data=agents_data,
                 tools_data=tools_data,
@@ -1242,7 +1203,7 @@ class ChatHandler:
 
             tools = await self._load_tools(db, agent)
             execution_started_payload = {"agent_id": agent.id, "agent_name": agent.name}
-            await self._publish(execution_id, workspace_id, "execution_started", conversation_id=conversation_id, **execution_started_payload)
+            await self._publish(execution_id, "execution_started", conversation_id=conversation_id, **execution_started_payload)
 
             provider_display_name = provider_name
             try:
@@ -1266,7 +1227,7 @@ class ChatHandler:
             rate_limiter = ToolCallRateLimiter(max_per_minute=agent.max_tool_calls_per_minute, max_per_execution=agent.max_tool_calls_per_execution)
             generation_started = time.perf_counter()
 
-            await self._publish(execution_id, workspace_id, "agent_model_selection", conversation_id=conversation_id, data=model_selection_entry)
+            await self._publish(execution_id, "agent_model_selection", conversation_id=conversation_id, data=model_selection_entry)
             await self._update_stream_state(execution_id, timeline=[model_selection_entry])
             if event_forwarder:
                 await event_forwarder("agent_model_selection", model_selection_entry)
@@ -1278,19 +1239,7 @@ class ChatHandler:
             loop_result = ToolLoopResult()
 
             # Build agent_spec for tool_loop (may be None for legacy agents)
-            _agent_spec = None
-            if workspace_id is not None:
-                try:
-                    _agent_spec = await agent_registry.resolve_for_workspace(db, workspace_id)
-                except Exception:
-                    pass
-            if _agent_spec is None and hasattr(agent, '_spec'):
-                _agent_spec = agent._spec
-
-            # Determine default workspace for global chat auto-injection
-            _default_ws_id: str | None = None
-            if workspace_id is None and workspaces_data and len(workspaces_data) == 1:
-                _default_ws_id = str(workspaces_data[0]["id"])
+            _agent_spec = getattr(agent, '_spec', None)
 
             # Build a session factory from the current db's engine so that
             # side-channel operations (policy eval, HITL) get their own
@@ -1299,7 +1248,6 @@ class ChatHandler:
             _side_session_factory = _asm(db.bind, expire_on_commit=False)
 
             loop_ctx = ToolLoopContext(
-                workspace_id=workspace_id,
                 conversation_id=conversation_id,
                 execution_id=execution_id,
                 agent_spec=_agent_spec,
@@ -1310,10 +1258,8 @@ class ChatHandler:
                 cancel_event=cancel_event,
                 db=db,
                 session_factory=_side_session_factory,
-                default_workspace_id=_default_ws_id,
                 root_execution_id=root_execution_id,
                 root_conversation_id=root_conversation_id,
-                root_workspace_id=root_workspace_id,
                 call_id_path=call_id_path or [],
             )
 
@@ -1323,37 +1269,37 @@ class ChatHandler:
                 return loop_result.full_response[total:] if total > 0 else loop_result.full_response
 
             async def _cb_thinking(chunk: str) -> None:
-                await self._publish(execution_id, workspace_id, "agent_thinking", conversation_id=conversation_id, data=chunk)
+                await self._publish(execution_id, "agent_thinking", conversation_id=conversation_id, data=chunk)
                 await self._update_stream_state(execution_id, content=_effective_content(), thinking=loop_result.full_thinking, tool_calls=loop_result.tool_calls, sources=context_sources, attachments_processed=all_attachments_processed, timeline=[model_selection_entry] + loop_result.timeline)
                 if event_forwarder:
                     await event_forwarder("agent_thinking", {"data": chunk})
 
             async def _cb_token(token: str) -> None:
-                await self._publish(execution_id, workspace_id, "agent_token", conversation_id=conversation_id, data=token)
+                await self._publish(execution_id, "agent_token", conversation_id=conversation_id, data=token)
                 await self._update_stream_state(execution_id, content=_effective_content(), thinking=loop_result.full_thinking, tool_calls=loop_result.tool_calls, sources=context_sources, attachments_processed=all_attachments_processed, timeline=[model_selection_entry] + loop_result.timeline)
 
             async def _cb_tool_start(call_id: str, tool_id: str, arguments: dict) -> None:
-                await self._publish(execution_id, workspace_id, "agent_tool_call_start", conversation_id=conversation_id, data={"call_id": call_id, "tool_name": tool_id, "arguments": arguments})
+                await self._publish(execution_id, "agent_tool_call_start", conversation_id=conversation_id, data={"call_id": call_id, "tool_name": tool_id, "arguments": arguments})
                 await self._update_stream_state(execution_id, content=_effective_content(), thinking=loop_result.full_thinking, tool_calls=loop_result.tool_calls, sources=context_sources, attachments_processed=all_attachments_processed, timeline=[model_selection_entry] + loop_result.timeline)
                 if event_forwarder:
                     await event_forwarder("agent_tool_call_start", {"call_id": call_id, "tool_name": tool_id, "arguments": arguments})
 
             async def _cb_tool_result(call_id: str, tool_id: str, success: bool, error: str | None, output: Any = None, duration_ms: int | None = None, nested_timeline: list | None = None, delegated_conversation_id: str | None = None) -> None:
-                await self._publish(execution_id, workspace_id, "agent_tool_call_result", conversation_id=conversation_id, data={"call_id": call_id, "tool_name": tool_id, "success": success, "error": error, "output": output, "duration_ms": duration_ms, "nested_timeline": nested_timeline, "delegated_conversation_id": delegated_conversation_id})
+                await self._publish(execution_id, "agent_tool_call_result", conversation_id=conversation_id, data={"call_id": call_id, "tool_name": tool_id, "success": success, "error": error, "output": output, "duration_ms": duration_ms, "nested_timeline": nested_timeline, "delegated_conversation_id": delegated_conversation_id})
                 await self._update_stream_state(execution_id, content=_effective_content(), thinking=loop_result.full_thinking, tool_calls=loop_result.tool_calls, sources=context_sources, attachments_processed=all_attachments_processed, timeline=[model_selection_entry] + loop_result.timeline)
                 if event_forwarder:
                     await event_forwarder("agent_tool_call_result", {"call_id": call_id, "tool_name": tool_id, "success": success, "error": error, "output": output, "duration_ms": duration_ms, "nested_timeline": nested_timeline, "delegated_conversation_id": delegated_conversation_id})
 
             async def _cb_hitl_request(call_id: str, hitl_id: str, action_summary: str, risk_level: str) -> None:
-                await self._publish(execution_id, workspace_id, "agent_tool_hitl", conversation_id=conversation_id, data={"call_id": call_id, "hitl_id": hitl_id, "action_summary": action_summary, "risk_level": risk_level, "agent_id": agent.id, "status": "pending"})
+                await self._publish(execution_id, "agent_tool_hitl", conversation_id=conversation_id, data={"call_id": call_id, "hitl_id": hitl_id, "action_summary": action_summary, "risk_level": risk_level, "agent_id": agent.id, "status": "pending"})
                 await self._update_execution_record(db, execution_id, status="paused_hitl")
 
             async def _cb_hitl_resolved(call_id: str, hitl_id: str, approved: bool, note: str) -> None:
-                await self._publish(execution_id, workspace_id, "agent_tool_hitl_resolved", conversation_id=conversation_id, data={"call_id": call_id, "hitl_id": hitl_id, "status": "approved" if approved else "denied", "resolution_note": note or None})
+                await self._publish(execution_id, "agent_tool_hitl_resolved", conversation_id=conversation_id, data={"call_id": call_id, "hitl_id": hitl_id, "approved": approved, "status": "approved" if approved else "denied", "resolution_note": note or None})
                 await self._update_execution_record(db, execution_id, status="running")
 
             async def _cb_intermediate_response(content: str) -> None:
-                await self._publish(execution_id, workspace_id, "agent_intermediate_response", conversation_id=conversation_id, data={"content": content})
+                await self._publish(execution_id, "agent_intermediate_response", conversation_id=conversation_id, data={"content": content})
 
             callbacks = ToolLoopCallbacks(
                 on_thinking=_cb_thinking,
@@ -1397,7 +1343,6 @@ class ChatHandler:
                     asyncio.create_task(
                         _persist_tool_call_log(
                             session_factory=_log_session_factory,
-                            workspace_id=workspace_id,
                             conversation_id=conversation_id,
                             call_id=entry.get("call_id", ""),
                             tool_name=entry.get("tool_name", ""),
@@ -1420,7 +1365,7 @@ class ChatHandler:
                             token = event.get("content", "")
                             if token:
                                 full_response += token
-                                await self._publish(execution_id, workspace_id, "agent_token", conversation_id=conversation_id, data=token)
+                                await self._publish(execution_id, "agent_token", conversation_id=conversation_id, data=token)
                                 _eff = full_response[intermediate_response_total:] if intermediate_response_total > 0 else full_response
                                 await self._update_stream_state(execution_id, content=_eff, thinking=full_thinking, tool_calls=all_tool_calls, sources=context_sources, attachments_processed=all_attachments_processed, timeline=timeline)
                 except Exception as exc:
@@ -1444,12 +1389,12 @@ class ChatHandler:
             status_value = "cancelled" if was_cancelled else "completed"
             await self._update_execution_record(db, execution_id, status=status_value, iteration_count=max(len([entry for entry in timeline if entry.get("type") == "thinking"]), 1), tool_calls_count=tool_calls_count, timeline=timeline, completed_at=datetime.now(timezone.utc))
             await self._update_stream_state(execution_id, content=final_response, thinking=full_thinking, tool_calls=all_tool_calls, sources=context_sources, attachments_processed=all_attachments_processed, timeline=timeline)
-            await self._publish(execution_id, workspace_id, "execution_completed", conversation_id=conversation_id, status=status_value)
-            await self._publish(execution_id, workspace_id, "agent_done", conversation_id=conversation_id, message_id="", interrupted=was_cancelled)
+            await self._publish(execution_id, "execution_completed", conversation_id=conversation_id, status=status_value)
+            await self._publish(execution_id, "agent_done", conversation_id=conversation_id, message_id="", interrupted=was_cancelled)
         except Exception as exc:
             logger.exception("Agent execution %s failed", execution_id)
             await self._update_execution_record(db, execution_id, status="failed", error_message=str(exc), completed_at=datetime.now(timezone.utc))
-            await self._publish(execution_id, workspace_id, "agent_error", conversation_id=conversation_id, detail=str(exc))
+            await self._publish(execution_id, "agent_error", conversation_id=conversation_id, detail=str(exc))
         finally:
             self._cancel_events.pop(str(conversation_id), None)
             self._cancel_content.pop(str(conversation_id), None)

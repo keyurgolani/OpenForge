@@ -341,7 +341,6 @@ class GraphExecutor:
                 pass
 
         automation_postamble = build_postamble(
-            workspace_id=parent_run.workspace_id,
             workspaces_data=workspaces_data,
             agents_data=[],
             tools_data=tools_data,
@@ -364,7 +363,6 @@ class GraphExecutor:
             run_type="automation",
             parent_run_id=parent_run.id,
             root_run_id=parent_run.root_run_id or parent_run.id,
-            workspace_id=parent_run.workspace_id,
             status="pending",
             input_payload={
                 "input_values": resolved_inputs,
@@ -457,7 +455,6 @@ class GraphExecutor:
                     "instruction": rendered_prompt,
                 },
                 db=self.db,
-                workspace_id=parent_run.workspace_id,
                 run_id=child_run.id,
                 event_publisher=self.event_publisher,
                 tool_dispatcher=self.tool_dispatcher,
@@ -537,7 +534,6 @@ class GraphExecutor:
             run_type="sink",
             parent_run_id=parent_run.id,
             root_run_id=parent_run.root_run_id or parent_run.id,
-            workspace_id=parent_run.workspace_id,
             status="pending",
             input_payload={"input_values": resolved_inputs},
             composite_metadata={
@@ -572,7 +568,11 @@ class GraphExecutor:
                 sink_type=sink_spec.sink_type,
                 inputs=resolved_inputs,
                 db=self.db,
-                workspace_id=parent_run.workspace_id,
+                fallback_workspace_id=(
+                    self._deployment.owned_workspace_id
+                    if self._deployment and self._deployment.owned_workspace_id
+                    else None
+                ),
                 run_id=child_run.id,
             )
 

@@ -206,50 +206,46 @@ def _format_timeline_entry_md(entry: dict, depth: int = 0) -> list[str]:
 
 @router.get("/{workspace_id}/conversations", response_model=list[ConversationResponse])
 async def list_conversations(
-    workspace_id: UUID,
     include_archived: bool = False,
     category: str = Query("chats", pattern="^(chats|delegated|trash)$"),
     db: AsyncSession = Depends(get_db),
 ):
     return await conversation_service.list_conversations(
-        db, workspace_id, include_archived=include_archived, category=category,
+        db, include_archived=include_archived, category=category,
     )
 
 
 @router.post("/{workspace_id}/conversations", response_model=ConversationResponse, status_code=201)
 async def create_conversation(
-    workspace_id: UUID, body: ConversationCreate, db: AsyncSession = Depends(get_db)
+    body: ConversationCreate, db: AsyncSession = Depends(get_db)
 ):
-    return await conversation_service.create_conversation(db, workspace_id, body)
+    return await conversation_service.create_conversation(db, body)
 
 
 # ── Bulk routes (must be above {conversation_id} routes) ──────────────────────
 
 @router.post("/{workspace_id}/conversations/bulk/trash")
 async def bulk_trash_conversations(
-    workspace_id: UUID,
     category: str = Query("chats", pattern="^(chats|delegated)$"),
     db: AsyncSession = Depends(get_db),
 ):
-    count = await conversation_service.trash_all_conversations(db, workspace_id, category)
+    count = await conversation_service.trash_all_conversations(db, category)
     return {"trashed": count}
 
 
 @router.post("/{workspace_id}/conversations/bulk/restore")
 async def bulk_restore_conversations(
-    workspace_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    count = await conversation_service.restore_all_conversations(db, workspace_id)
+    count = await conversation_service.restore_all_conversations(db)
     return {"restored": count}
 
 
 @router.delete("/{workspace_id}/conversations/bulk/permanent", status_code=200)
 async def bulk_permanently_delete_conversations(
-    workspace_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    count = await conversation_service.permanently_delete_all_conversations(db, workspace_id)
+    count = await conversation_service.permanently_delete_all_conversations(db)
     return {"deleted": count}
 
 
@@ -257,7 +253,6 @@ async def bulk_permanently_delete_conversations(
 
 @router.get("/{workspace_id}/conversations/{conversation_id}", response_model=ConversationWithMessages)
 async def get_conversation(
-    workspace_id: UUID,
     conversation_id: UUID,
     limit: int = 50,
     before_id: Optional[UUID] = None,
@@ -269,22 +264,19 @@ async def get_conversation(
         conversation_id,
         limit,
         before_id,
-        workspace_id=workspace_id,
         include_archived=include_archived,
     )
 
 
 @router.get("/{workspace_id}/conversations/{conversation_id}/stream-state")
 async def get_conversation_stream_state(
-    workspace_id: UUID,
     conversation_id: UUID,
 ):
-    return await chat_handler.get_stream_state(workspace_id, conversation_id)
+    return await chat_handler.get_stream_state(conversation_id)
 
 
 @router.put("/{workspace_id}/conversations/{conversation_id}", response_model=ConversationResponse)
 async def update_conversation(
-    workspace_id: UUID,
     conversation_id: UUID,
     body: ConversationUpdate,
     db: AsyncSession = Depends(get_db),
@@ -294,23 +286,21 @@ async def update_conversation(
 
 @router.delete("/{workspace_id}/conversations/{conversation_id}", status_code=204)
 async def delete_conversation(
-    workspace_id: UUID, conversation_id: UUID, db: AsyncSession = Depends(get_db)
+    conversation_id: UUID, db: AsyncSession = Depends(get_db)
 ):
-    await conversation_service.delete_conversation(db, workspace_id, conversation_id)
+    await conversation_service.delete_conversation(db, conversation_id)
 
 
 @router.delete("/{workspace_id}/conversations/{conversation_id}/permanent", status_code=204)
 async def permanently_delete_conversation(
-    workspace_id: UUID,
     conversation_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    await conversation_service.permanently_delete_conversation(db, workspace_id, conversation_id)
+    await conversation_service.permanently_delete_conversation(db, conversation_id)
 
 
 @router.get("/{workspace_id}/conversations/{conversation_id}/export")
 async def export_conversation(
-    workspace_id: UUID,
     conversation_id: UUID,
     format: str = Query("json", pattern="^(json|markdown|txt)$"),
     include_archived: bool = Query(False),
@@ -323,7 +313,6 @@ async def export_conversation(
         db,
         conversation_id,
         limit=10000,  # Get all messages
-        workspace_id=workspace_id,
         include_archived=include_archived,
     )
 
@@ -337,7 +326,6 @@ async def export_conversation(
         export_data = {
             "id": str(conv.id),
             "title": conv.title,
-            "workspace_id": str(conv.workspace_id),
             "created_at": conv.created_at.isoformat() if conv.created_at else None,
             "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
             "message_count": conv.message_count,

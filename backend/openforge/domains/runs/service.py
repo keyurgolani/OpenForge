@@ -25,7 +25,6 @@ class RunService:
             "parent_run_id": instance.parent_run_id,
             "root_run_id": getattr(instance, "root_run_id", None),
             "spawned_by_step_id": getattr(instance, "spawned_by_step_id", None),
-            "workspace_id": instance.workspace_id,
             "status": instance.status,
             "state_snapshot": instance.state_snapshot or {},
             "input_payload": instance.input_payload or {},
@@ -90,7 +89,6 @@ class RunService:
         self,
         skip: int = 0,
         limit: int = 100,
-        workspace_id: UUID | None = None,
         status: str | None = None,
         run_type: str | None = None,
         agent_id: UUID | None = None,
@@ -99,9 +97,6 @@ class RunService:
     ) -> tuple[list[dict[str, Any]], int]:
         query = select(RunModel).order_by(RunModel.created_at.desc())
         count_query = select(func.count()).select_from(RunModel)
-        if workspace_id is not None:
-            query = query.where(RunModel.workspace_id == workspace_id)
-            count_query = count_query.where(RunModel.workspace_id == workspace_id)
         if status is not None:
             query = query.where(RunModel.status == status)
             count_query = count_query.where(RunModel.status == status)
@@ -133,7 +128,6 @@ class RunService:
             parent_run_id=run_data.get("parent_run_id"),
             root_run_id=run_data.get("root_run_id"),
             spawned_by_step_id=run_data.get("spawned_by_step_id"),
-            workspace_id=run_data["workspace_id"],
             status=getattr(run_data.get("status"), "value", run_data.get("status", "pending")),
             input_payload=run_data.get("input_payload", {}),
             state_snapshot=run_data.get("state_snapshot", {}),
@@ -276,7 +270,6 @@ class RunService:
             deployment_id=getattr(original, "deployment_id", None),
             parent_run_id=run_id,
             root_run_id=getattr(original, "root_run_id", None) or run_id,
-            workspace_id=original.workspace_id,
             status="pending",
             input_payload=original.input_payload or {},
             state_snapshot=state_snapshot,

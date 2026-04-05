@@ -59,7 +59,7 @@ class MissionResponse(BaseModel):
     agent_access: dict[str, Any] = Field(default_factory=lambda: {"mode": "all"})
     tool_overrides: Optional[dict[str, Any]] = None
     phase_sinks: dict[str, Any] = Field(default_factory=dict)
-    workspace_id: Optional[UUID] = None
+    owned_workspace_id: Optional[UUID] = None
     cadence: Optional[dict[str, Any]] = None
     budget: Optional[dict[str, Any]] = None
     status: str

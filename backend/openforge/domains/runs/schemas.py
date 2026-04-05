@@ -17,7 +17,6 @@ class RunCreate(BaseModel):
     parent_run_id: UUID | None = None
     root_run_id: UUID | None = None
     spawned_by_step_id: UUID | None = None
-    workspace_id: UUID
     input_payload: dict[str, Any] = Field(default_factory=dict)
     delegation_mode: str | None = None
     merge_strategy: str | None = None
@@ -47,7 +46,6 @@ class RunUpdate(BaseModel):
 class RunStartRequest(BaseModel):
     automation_id: UUID | None = None
     deployment_id: UUID | None = None
-    workspace_id: UUID
     input_payload: dict[str, Any] = Field(default_factory=dict)
     parent_run_id: UUID | None = None
     spawned_by_step_id: UUID | None = None

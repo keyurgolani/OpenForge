@@ -232,7 +232,7 @@ async def _route_phase_sinks(
     phase_summaries: dict[str, str],
     phase_sinks: dict[str, list[dict]],
     db: AsyncSession,
-    workspace_id: UUID,
+    fallback_workspace_id: UUID | None,
     run_id: UUID,
 ) -> None:
     """Route phase outputs through configured sinks."""
@@ -254,7 +254,7 @@ async def _route_phase_sinks(
                 if "title" not in sink_inputs:
                     sink_inputs["title"] = f"Mission cycle - {phase_name}"
 
-                await execute_sink(sink_type, sink_inputs, db, workspace_id, run_id)
+                await execute_sink(sink_type, sink_inputs, db, fallback_workspace_id=fallback_workspace_id, run_id=run_id)
             except Exception as exc:
                 logger.warning(
                     "Sink %s for phase %s failed: %s", sink_type, phase_name, exc,
@@ -405,7 +405,7 @@ async def execute_cycle(
 
             # 3. Build mission workspace info
             mission_workspace_info: dict[str, Any] | None = None
-            if mission.workspace_id:
+            if mission.owned_workspace_id:
                 try:
                     mw_stmt = (
                         select(
@@ -413,7 +413,7 @@ async def execute_cycle(
                             sa_func.count(Knowledge.id).label("knowledge_count"),
                         )
                         .outerjoin(Knowledge, Knowledge.workspace_id == Workspace.id)
-                        .where(Workspace.id == mission.workspace_id)
+                        .where(Workspace.id == mission.owned_workspace_id)
                         .group_by(Workspace.id)
                     )
                     mw_result = (await db.execute(mw_stmt)).first()
@@ -474,7 +474,6 @@ async def execute_cycle(
 
             # 5. Build postamble
             postamble = build_postamble(
-                workspace_id=mission.workspace_id,
                 workspaces_data=workspaces_data,
                 agents_data=agents_data,
                 tools_data=tools_data,
@@ -508,10 +507,6 @@ async def execute_cycle(
                     spec = spec.model_copy(update={"tools_enabled": False})
 
             # 9. Call execute_agent
-            workspace_id = mission.workspace_id or (
-                UUID(workspaces_data[0]["id"]) if workspaces_data else UUID(int=0)
-            )
-
             input_payload = {
                 "instruction": (
                     f"Execute mission cycle #{cycle.cycle_number} for mission "
@@ -581,7 +576,6 @@ async def execute_cycle(
                 spec,
                 input_payload,
                 db=db,
-                workspace_id=workspace_id,
                 run_id=run_id,
                 event_publisher=EventPublisher(db),
                 tool_dispatcher=tool_dispatcher,
@@ -648,8 +642,8 @@ async def execute_cycle(
                     phase_summaries,
                     mission.phase_sinks,
                     db,
-                    workspace_id,
-                    run_id,
+                    fallback_workspace_id=mission.owned_workspace_id,
+                    run_id=run_id,
                 )
 
             # 13. Update mission state

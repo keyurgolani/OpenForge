@@ -50,14 +50,13 @@ def _stub_runtime_modules(monkeypatch, *, chat_impl, send_impl):
     monkeypatch.setitem(sys.modules, "openforge.core.llm_gateway", fake_llm_module)
 
     fake_ws_module = types.ModuleType("openforge.api.websocket")
-    fake_ws_module.ws_manager = SimpleNamespace(send_to_workspace=send_impl)
+    fake_ws_module.ws_manager = SimpleNamespace(send_to_conversation=send_impl)
     monkeypatch.setitem(sys.modules, "openforge.api.websocket", fake_ws_module)
 
 
 @pytest.mark.xfail(reason="Prompt catalogue removed; conversation_title prompt not available")
 @pytest.mark.asyncio
 async def test_refresh_conversation_title_falls_back_when_llm_errors(monkeypatch):
-    workspace_id = uuid4()
     conversation_id = uuid4()
 
     conversation = SimpleNamespace(
@@ -82,18 +81,17 @@ async def test_refresh_conversation_title_falls_back_when_llm_errors(monkeypatch
 
     sent_events = []
 
-    async def _fake_send_to_workspace(workspace: str, payload: dict):
-        sent_events.append((workspace, payload))
+    async def _fake_send(conversation_id_str: str, payload: dict):
+        sent_events.append((conversation_id_str, payload))
 
     _stub_runtime_modules(
         monkeypatch,
         chat_impl=_raise_llm_error,
-        send_impl=_fake_send_to_workspace,
+        send_impl=_fake_send,
     )
 
     title = await conversation_service.refresh_conversation_title(
         fake_db,
-        workspace_id=workspace_id,
         conversation_id=conversation_id,
         provider_name="ollama",
         api_key="",
@@ -106,7 +104,7 @@ async def test_refresh_conversation_title_falls_back_when_llm_errors(monkeypatch
     assert fake_db.commit_count == 1
     assert sent_events == [
         (
-            str(workspace_id),
+            str(conversation_id),
             {
                 "type": "conversation_updated",
                 "conversation_id": str(conversation_id),
@@ -119,7 +117,6 @@ async def test_refresh_conversation_title_falls_back_when_llm_errors(monkeypatch
 @pytest.mark.xfail(reason="Prompt catalogue removed; conversation_title prompt not available")
 @pytest.mark.asyncio
 async def test_refresh_conversation_title_ignores_low_signal_generated_title(monkeypatch):
-    workspace_id = uuid4()
     conversation_id = uuid4()
 
     conversation = SimpleNamespace(
@@ -148,18 +145,17 @@ async def test_refresh_conversation_title_ignores_low_signal_generated_title(mon
 
     sent_events = []
 
-    async def _fake_send_to_workspace(workspace: str, payload: dict):
-        sent_events.append((workspace, payload))
+    async def _fake_send(conversation_id_str: str, payload: dict):
+        sent_events.append((conversation_id_str, payload))
 
     _stub_runtime_modules(
         monkeypatch,
         chat_impl=_fake_chat,
-        send_impl=_fake_send_to_workspace,
+        send_impl=_fake_send,
     )
 
     title = await conversation_service.refresh_conversation_title(
         fake_db,
-        workspace_id=workspace_id,
         conversation_id=conversation_id,
         provider_name="ollama",
         api_key="",
@@ -172,7 +168,7 @@ async def test_refresh_conversation_title_ignores_low_signal_generated_title(mon
     assert fake_db.commit_count == 1
     assert sent_events == [
         (
-            str(workspace_id),
+            str(conversation_id),
             {
                 "type": "conversation_updated",
                 "conversation_id": str(conversation_id),
@@ -184,7 +180,6 @@ async def test_refresh_conversation_title_ignores_low_signal_generated_title(mon
 
 @pytest.mark.asyncio
 async def test_refresh_conversation_title_keeps_existing_title_when_model_returns_keep(monkeypatch):
-    workspace_id = uuid4()
     conversation_id = uuid4()
 
     conversation = SimpleNamespace(
@@ -212,18 +207,17 @@ async def test_refresh_conversation_title_keeps_existing_title_when_model_return
 
     sent_events = []
 
-    async def _fake_send_to_workspace(workspace: str, payload: dict):
-        sent_events.append((workspace, payload))
+    async def _fake_send(conversation_id_str: str, payload: dict):
+        sent_events.append((conversation_id_str, payload))
 
     _stub_runtime_modules(
         monkeypatch,
         chat_impl=_fake_chat,
-        send_impl=_fake_send_to_workspace,
+        send_impl=_fake_send,
     )
 
     title = await conversation_service.refresh_conversation_title(
         fake_db,
-        workspace_id=workspace_id,
         conversation_id=conversation_id,
         provider_name="ollama",
         api_key="",
@@ -240,7 +234,6 @@ async def test_refresh_conversation_title_keeps_existing_title_when_model_return
 @pytest.mark.xfail(reason="Prompt catalogue removed; conversation_title prompt not available")
 @pytest.mark.asyncio
 async def test_refresh_conversation_title_rewrites_request_style_generated_title(monkeypatch):
-    workspace_id = uuid4()
     conversation_id = uuid4()
 
     conversation = SimpleNamespace(
@@ -267,18 +260,17 @@ async def test_refresh_conversation_title_rewrites_request_style_generated_title
 
     sent_events = []
 
-    async def _fake_send_to_workspace(workspace: str, payload: dict):
-        sent_events.append((workspace, payload))
+    async def _fake_send(conversation_id_str: str, payload: dict):
+        sent_events.append((conversation_id_str, payload))
 
     _stub_runtime_modules(
         monkeypatch,
         chat_impl=_fake_chat,
-        send_impl=_fake_send_to_workspace,
+        send_impl=_fake_send,
     )
 
     title = await conversation_service.refresh_conversation_title(
         fake_db,
-        workspace_id=workspace_id,
         conversation_id=conversation_id,
         provider_name="ollama",
         api_key="",
@@ -291,7 +283,7 @@ async def test_refresh_conversation_title_rewrites_request_style_generated_title
     assert fake_db.commit_count == 1
     assert sent_events == [
         (
-            str(workspace_id),
+            str(conversation_id),
             {
                 "type": "conversation_updated",
                 "conversation_id": str(conversation_id),

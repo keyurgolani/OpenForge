@@ -110,7 +110,6 @@ def _conv_to_response(conv: Conversation, last_preview: str | None = None, last_
             pass
     return ConversationResponse(
         id=conv.id,
-        workspace_id=conv.workspace_id,
         title=conv.title,
         title_locked=conv.title_locked,
         is_pinned=conv.is_pinned,
@@ -161,8 +160,6 @@ class ConversationService:
     async def purge_expired_archived_conversations(
         self,
         db: AsyncSession,
-        *,
-        workspace_id: UUID | None = None,
     ) -> int:
         retention_days = await self._get_chat_trash_retention_days(db)
         cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
@@ -173,8 +170,6 @@ class ConversationService:
                 (Conversation.archived_at.is_(None) & (Conversation.updated_at <= cutoff)),
             ),
         )
-        if workspace_id is not None:
-            query = query.where(Conversation.workspace_id == workspace_id)
 
         result = await db.execute(query)
         stale = result.scalars().all()
@@ -188,10 +183,10 @@ class ConversationService:
         return len(stale)
 
     async def create_conversation(
-        self, db: AsyncSession, workspace_id: UUID, data: ConversationCreate
+        self, db: AsyncSession, data: ConversationCreate
     ) -> ConversationResponse:
-        await self.purge_expired_archived_conversations(db, workspace_id=workspace_id)
-        conv = Conversation(workspace_id=workspace_id, title=data.title, title_locked=False)
+        await self.purge_expired_archived_conversations(db)
+        conv = Conversation(title=data.title, title_locked=False)
         db.add(conv)
         await db.commit()
         await db.refresh(conv)
@@ -200,12 +195,11 @@ class ConversationService:
     async def list_conversations(
         self,
         db: AsyncSession,
-        workspace_id: UUID,
         include_archived: bool = False,
         category: str = "chats",
     ) -> list[ConversationResponse]:
-        await self.purge_expired_archived_conversations(db, workspace_id=workspace_id)
-        query = select(Conversation).where(Conversation.workspace_id == workspace_id)
+        await self.purge_expired_archived_conversations(db)
+        query = select(Conversation)
         if category == "delegated":
             query = query.where(
                 Conversation.is_subagent == True,  # noqa: E712
@@ -279,12 +273,9 @@ class ConversationService:
         limit: int = 50,
         before_id: UUID | None = None,
         *,
-        workspace_id: UUID | None = None,
         include_archived: bool = False,
     ) -> ConversationWithMessages:
         query = select(Conversation).where(Conversation.id == conversation_id)
-        if workspace_id is not None:
-            query = query.where(Conversation.workspace_id == workspace_id)
         result = await db.execute(query)
         conv = result.scalar_one_or_none()
         if not conv:
@@ -335,12 +326,11 @@ class ConversationService:
         await db.refresh(conv)
         return _conv_to_response(conv)
 
-    async def delete_conversation(self, db: AsyncSession, workspace_id: UUID, conversation_id: UUID):
-        await self.purge_expired_archived_conversations(db, workspace_id=workspace_id)
+    async def delete_conversation(self, db: AsyncSession, conversation_id: UUID):
+        await self.purge_expired_archived_conversations(db)
         result = await db.execute(
             select(Conversation).where(
                 Conversation.id == conversation_id,
-                Conversation.workspace_id == workspace_id,
             )
         )
         conv = result.scalar_one_or_none()
@@ -372,14 +362,12 @@ class ConversationService:
     async def permanently_delete_conversation(
         self,
         db: AsyncSession,
-        workspace_id: UUID,
         conversation_id: UUID,
     ):
-        await self.purge_expired_archived_conversations(db, workspace_id=workspace_id)
+        await self.purge_expired_archived_conversations(db)
         result = await db.execute(
             select(Conversation).where(
                 Conversation.id == conversation_id,
-                Conversation.workspace_id == workspace_id,
             )
         )
         conv = result.scalar_one_or_none()
@@ -420,12 +408,10 @@ class ConversationService:
     async def trash_all_conversations(
         self,
         db: AsyncSession,
-        workspace_id: UUID,
         category: str = "chats",
     ) -> int:
         """Move all conversations in a category to trash."""
         query = select(Conversation).where(
-            Conversation.workspace_id == workspace_id,
             Conversation.is_archived == False,  # noqa: E712
         )
         if category == "delegated":
@@ -451,12 +437,10 @@ class ConversationService:
     async def restore_all_conversations(
         self,
         db: AsyncSession,
-        workspace_id: UUID,
     ) -> int:
         """Restore all conversations from trash."""
         result = await db.execute(
             select(Conversation).where(
-                Conversation.workspace_id == workspace_id,
                 Conversation.is_archived == True,  # noqa: E712
             )
         )
@@ -472,12 +456,10 @@ class ConversationService:
     async def permanently_delete_all_conversations(
         self,
         db: AsyncSession,
-        workspace_id: UUID,
     ) -> int:
         """Permanently delete all conversations in trash."""
         result = await db.execute(
             select(Conversation).where(
-                Conversation.workspace_id == workspace_id,
                 Conversation.is_archived == True,  # noqa: E712
             )
         )
@@ -567,7 +549,6 @@ class ConversationService:
         )
         db.add(msg)
 
-        auto_title_workspace_id: UUID | None = None
         should_auto_title = False
         result = await db.execute(select(Conversation).where(Conversation.id == conversation_id))
         conv = result.scalar_one_or_none()
@@ -579,7 +560,6 @@ class ConversationService:
             # Auto-generate title after each assistant reply unless manually locked.
             if trigger_auto_title and role == "assistant" and not conv.title_locked:
                 should_auto_title = True
-                auto_title_workspace_id = conv.workspace_id
 
         await db.commit()
         await db.refresh(msg)
@@ -592,7 +572,7 @@ class ConversationService:
             import threading
             def _run_title():
                 import asyncio as _aio
-                _aio.run(self._auto_title(auto_title_workspace_id, conversation_id))
+                _aio.run(self._auto_title(conversation_id))
             threading.Thread(target=_run_title, daemon=True).start()
         return msg
 
@@ -617,7 +597,6 @@ class ConversationService:
     async def refresh_conversation_title(
         self,
         db: AsyncSession,
-        workspace_id: UUID | None,
         conversation_id: UUID,
         *,
         provider_name: str | None = None,
@@ -709,7 +688,7 @@ class ConversationService:
         try:
             if not selected_provider_name or not selected_model:
                 selected_provider_name, selected_api_key, selected_model, selected_base_url = await llm_service.get_provider_for_workspace(
-                    db, workspace_id
+                    db, None
                 )
 
             candidate_models = [
@@ -802,13 +781,10 @@ class ConversationService:
             "conversation_id": str(conversation_id),
             "fields": ["title"],
         }
-        if workspace_id is None:
-            await ws_manager.send_to_conversation(str(conversation_id), event)
-        else:
-            await ws_manager.send_to_workspace(str(workspace_id), event)
+        await ws_manager.send_to_conversation(str(conversation_id), event)
         return next_title
 
-    async def _auto_title(self, workspace_id: UUID | None, conversation_id: UUID):
+    async def _auto_title(self, conversation_id: UUID):
         import asyncio
         await asyncio.sleep(2)
         try:
@@ -820,7 +796,7 @@ class ConversationService:
             engine = create_async_engine(get_settings().database_url, pool_size=1, max_overflow=0)
             try:
                 async with _AsyncSession(engine, expire_on_commit=False) as db:
-                    await self.refresh_conversation_title(db, workspace_id, conversation_id)
+                    await self.refresh_conversation_title(db, conversation_id)
             finally:
                 await engine.dispose()
         except Exception as e:

@@ -12,7 +12,6 @@ export interface Run {
   parent_run_id?: string | null;
   root_run_id?: string | null;
   spawned_by_step_id?: string | null;
-  workspace_id: string;
   status: ExecutionStatus;
   state_snapshot: Record<string, unknown>;
   input_payload: Record<string, unknown>;
@@ -95,7 +94,6 @@ export interface RunCreate {
   parent_run_id?: string | null;
   root_run_id?: string | null;
   spawned_by_step_id?: string | null;
-  workspace_id: string;
   input_payload?: Record<string, unknown>;
   delegation_mode?: string | null;
   merge_strategy?: string | null;

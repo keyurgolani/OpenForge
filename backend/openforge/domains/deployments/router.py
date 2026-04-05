@@ -26,7 +26,6 @@ async def deploy_automation(
     try:
         return await service.deploy(
             automation_id=automation_id,
-            workspace_id=body.workspace_id,
             input_values=body.input_values,
             schedule_expression=body.schedule_expression,
             interval_seconds=body.interval_seconds,
@@ -43,7 +42,6 @@ listing_router = APIRouter()
 async def list_deployments(
     status: str | None = None,
     automation_id: UUID | None = None,
-    workspace_id: UUID | None = None,
     skip: int = 0,
     limit: int = 50,
     db: AsyncSession = Depends(get_db),
@@ -51,7 +49,7 @@ async def list_deployments(
     service = DeploymentService(db)
     deployments, total = await service.list_deployments(
         skip=skip, limit=limit, status=status,
-        automation_id=automation_id, workspace_id=workspace_id,
+        automation_id=automation_id,
     )
     return {"deployments": deployments, "total": total}
 

@@ -183,7 +183,6 @@ async def _run_strategy(run_id: str):
                 spec,
                 run.input_payload or {},
                 db=db,
-                workspace_id=run.workspace_id,
                 run_id=run.id,
                 event_publisher=EventPublisher(db),
                 tool_dispatcher=tool_dispatcher,
@@ -201,9 +200,6 @@ async def _run_agent(execution_id: str, **kwargs):
     from openforge.config import get_settings
     from openforge.runtime.chat_handler import chat_handler
 
-    ws_id_str = kwargs.get("workspace_id", "")
-    workspace_id = UUID(ws_id_str) if ws_id_str else None
-
     settings = get_settings()
     worker_engine = create_async_engine(
         settings.database_url, echo=False, pool_size=5, max_overflow=10,
@@ -215,7 +211,6 @@ async def _run_agent(execution_id: str, **kwargs):
         async with WorkerSession() as db:
             await chat_handler.run(
                 execution_id=execution_id,
-                workspace_id=workspace_id,
                 conversation_id=UUID(kwargs["conversation_id"]),
                 user_content=kwargs["user_message"],
                 db=db,
@@ -232,7 +227,6 @@ async def _mark_execution_failed(execution_id: str, error_message: str):
     """Mark an execution record as failed after a crash."""
     from datetime import datetime, timezone
 
-    event_workspace_id = ""
     event_conversation_id = ""
 
     try:
@@ -247,7 +241,6 @@ async def _mark_execution_failed(execution_id: str, error_message: str):
             async with TmpSession() as db:
                 exec_record = await db.get(AgentExecution, UUID(execution_id))
                 if exec_record and exec_record.status in ("queued", "running"):
-                    event_workspace_id = str(exec_record.workspace_id) if exec_record.workspace_id else ""
                     event_conversation_id = str(exec_record.conversation_id) if exec_record.conversation_id else ""
                     exec_record.status = "failed"
                     exec_record.error_message = error_message[:2000]
@@ -269,7 +262,6 @@ async def _mark_execution_failed(execution_id: str, error_message: str):
         await r.publish(f"agent:{execution_id}", json.dumps({
             "type": "agent_error",
             "execution_id": execution_id,
-            "workspace_id": event_workspace_id,
             "conversation_id": event_conversation_id,
             "detail": f"Agent execution failed: {error_message[:500]}",
         }))

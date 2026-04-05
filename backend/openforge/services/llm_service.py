@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from uuid import UUID
 from typing import Optional, Union
-from openforge.db.models import Config, LLMProvider, Workspace
+from openforge.db.models import Config, LLMProvider
 from openforge.schemas.llm import (
     LLMProviderCreate,
     LLMProviderUpdate,
@@ -154,7 +154,16 @@ class LLMService:
     async def get_provider_for_workspace(
         self,
         db: AsyncSession,
-        workspace_id: UUID | None,
+        workspace_id: UUID | None = None,
+        provider_id: Optional[Union[UUID, str]] = None,
+        model_override: Optional[str] = None,
+    ) -> tuple[str, str, str, str | None]:
+        """Deprecated: use resolve_provider(). Kept for backward compat."""
+        return await self.resolve_provider(db, provider_id=provider_id, model_override=model_override)
+
+    async def resolve_provider(
+        self,
+        db: AsyncSession,
         provider_id: Optional[Union[UUID, str]] = None,
         model_override: Optional[str] = None,
     ) -> tuple[str, str, str, str | None]:
@@ -170,16 +179,6 @@ class LLMService:
                     raise HTTPException(status_code=400, detail=f"Invalid provider_id: {provider_id}") from exc
             p_result = await db.execute(
                 select(LLMProvider).where(LLMProvider.id == parsed_provider_id)
-            )
-            provider = p_result.scalar_one_or_none()
-
-        # Check workspace override
-        ws_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
-        workspace = ws_result.scalar_one_or_none()
-
-        if not provider and workspace and workspace.llm_provider_id:
-            p_result = await db.execute(
-                select(LLMProvider).where(LLMProvider.id == workspace.llm_provider_id)
             )
             provider = p_result.scalar_one_or_none()
 
@@ -232,10 +231,9 @@ class LLMService:
         if provider.api_key_enc:
             api_key = _safe_decrypt(provider.api_key_enc, provider.provider_name)
 
-        # Priority: explicit override > workspace override > provider default > system_chat_models setting
+        # Priority: explicit override > provider default > system_chat_models setting
         model = (
             model_override
-            or (workspace.llm_model if workspace and workspace.llm_model else None)
             or provider.default_model
             or ((provider.enabled_models or [{}])[0].get("id") if provider.enabled_models else None)
             or ""
@@ -282,24 +280,20 @@ class LLMService:
     async def get_vision_provider_for_workspace(
         self,
         db: AsyncSession,
-        workspace_id: UUID,
+        workspace_id: UUID | None = None,
+    ) -> tuple[str, str, str, str | None]:
+        """Deprecated: use resolve_vision_provider(). Kept for backward compat."""
+        return await self.resolve_vision_provider(db)
+
+    async def resolve_vision_provider(
+        self,
+        db: AsyncSession,
     ) -> tuple[str, str, str, str | None]:
         """Returns (provider_name, decrypted_api_key, model, base_url) for vision tasks."""
         from openforge.services.config_service import config_service
 
-        ws_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
-        workspace = ws_result.scalar_one_or_none()
-
         provider = None
         model = None
-
-        # Try workspace vision provider first
-        if workspace and workspace.vision_provider_id:
-            p_result = await db.execute(
-                select(LLMProvider).where(LLMProvider.id == workspace.vision_provider_id)
-            )
-            provider = p_result.scalar_one_or_none()
-            model = workspace.vision_model
 
         # Fall back to system-level vision config (set via Settings > Vision tab)
         if not provider:

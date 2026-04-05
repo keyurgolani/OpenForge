@@ -111,6 +111,13 @@ class Workspace(Base):
         index=True,
         comment="If ownership_type='deployment', the deployment that owns this workspace",
     )
+    owner_mission_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("missions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="If ownership_type='mission', the mission that owns this workspace",
+    )
     is_readonly_ui: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False,
         comment="If true, UI prevents user edits (knowledge CRUD disabled in frontend)",
@@ -130,7 +137,6 @@ class Workspace(Base):
         back_populates="workspaces", foreign_keys="[Workspace.llm_provider_id]"
     )
     knowledge: Mapped[list["Knowledge"]] = relationship(back_populates="workspace", cascade="all, delete-orphan")
-    conversations: Mapped[list["Conversation"]] = relationship(back_populates="workspace", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("idx_workspaces_ownership", "ownership_type", "owner_deployment_id"),
@@ -206,9 +212,6 @@ class Conversation(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    workspace_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True
-    )
     agent_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True
     )
@@ -228,13 +231,8 @@ class Conversation(Base):
         DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc
     )
 
-    workspace: Mapped["Workspace"] = relationship(back_populates="conversations")
     messages: Mapped[list["Message"]] = relationship(back_populates="conversation", cascade="all, delete-orphan")
     agent: Mapped[Optional["AgentDefinitionModel"]] = relationship(foreign_keys=[agent_id], lazy="joined")
-
-    __table_args__ = (
-        Index("idx_conversations_workspace", "workspace_id", "updated_at"),
-    )
 
 
 class Message(Base):
@@ -387,9 +385,6 @@ class HITLRequest(Base):
     __tablename__ = "hitl_requests"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    workspace_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
-    )
     conversation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False
     )
@@ -404,7 +399,6 @@ class HITLRequest(Base):
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
-        Index("idx_hitl_requests_workspace_status", "workspace_id", "status"),
         Index("idx_hitl_requests_conversation", "conversation_id"),
         Index("idx_hitl_requests_status", "status", "created_at"),
     )
@@ -415,9 +409,6 @@ class AgentExecution(Base):
     __tablename__ = "agent_executions"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    workspace_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True
-    )
     conversation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False
     )
@@ -434,7 +425,6 @@ class AgentExecution(Base):
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
-        Index("idx_agent_exec_workspace", "workspace_id", "started_at"),
         Index(
             "idx_agent_exec_status",
             "status",
@@ -483,7 +473,6 @@ class TriggerDefinitionModel(Base):
     __tablename__ = "trigger_definitions"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    workspace_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     trigger_type: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -532,7 +521,6 @@ class RunModel(Base):
     mission_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("missions.id", ondelete="SET NULL"), nullable=True, index=True,
     )
-    workspace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(50), default="pending")
     state_snapshot: Mapped[dict] = mapped_column(JSONB, default=dict)
     input_payload: Mapped[dict] = mapped_column(JSONB, default=dict)
@@ -554,7 +542,6 @@ class RunModel(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
 
     __table_args__ = (
-        Index("idx_runs_workspace_status", "workspace_id", "status"),
         Index("idx_runs_root_status", "root_run_id", "status"),
     )
 
@@ -823,9 +810,6 @@ class ConversationSummaryModel(Base):
     __tablename__ = "conversation_summaries"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    workspace_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
-    )
     conversation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -1047,9 +1031,6 @@ class DeploymentModel(Base):
     automation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("automations.id", ondelete="CASCADE"), nullable=False, index=True,
     )
-    workspace_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True,
-    )
     agent_spec_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("compiled_agent_specs.id", ondelete="SET NULL"), nullable=True, index=True,
     )
@@ -1224,7 +1205,7 @@ class MissionModel(Base):
     agent_access: Mapped[dict] = mapped_column(JSONB, nullable=False, default=lambda: {"mode": "all"})
     tool_overrides: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     phase_sinks: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    workspace_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+    owned_workspace_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="SET NULL"), nullable=True,
     )
     cadence: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)

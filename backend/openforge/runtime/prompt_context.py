@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
-from uuid import UUID
 
 
 def build_preamble(
@@ -183,7 +182,6 @@ def build_preamble(
 
 
 def build_postamble(
-    workspace_id: UUID | None,
     workspaces_data: list[dict[str, Any]],
     agents_data: list[dict[str, Any]],
     tools_data: list[dict[str, Any]],
@@ -198,22 +196,16 @@ def build_postamble(
 
     # Workspace section
     if workspaces_data:
-        if workspace_id is None:
-            if len(workspaces_data) == 1:
-                ws = workspaces_data[0]
-                ws_context = (
-                    f"You are operating in workspace **{ws['name']}** (id: `{ws['id']}`). "
-                    "Always use this workspace_id for tool calls that require it."
-                )
-            else:
-                ws_context = (
-                    "You are running in a workspace-agnostic context. "
-                    "When using workspace tools, you MUST pass the `workspace_id` parameter."
-                )
+        if len(workspaces_data) == 1:
+            ws = workspaces_data[0]
+            ws_context = (
+                f"There is one workspace available: **{ws['name']}** (id: `{ws['id']}`). "
+                "Use this workspace_id for tool calls that require it."
+            )
         else:
             ws_context = (
-                f"You are operating in workspace `{workspace_id}`. "
-                "Workspace tools default to this workspace, but you can pass a different `workspace_id`."
+                "Multiple workspaces are available. "
+                "When using workspace tools, choose the appropriate workspace and pass its `workspace_id` parameter."
             )
         ws_lines = ["\n## Available Workspaces", ws_context]
         for ws in workspaces_data:

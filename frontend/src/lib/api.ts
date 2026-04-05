@@ -319,11 +319,9 @@ function toLegacyHitl(approval: any) {
     }
 }
 
-export const getHITLHistory = async (params?: { workspace_id?: string; limit?: number }): Promise<any> => {
+export const getHITLHistory = async (params?: { limit?: number }): Promise<any> => {
     const payload = await listApprovalRequests({ status: '', limit: params?.limit ?? 200 })
-    const approvals = (payload.approvals ?? []).filter((approval: any) => approval.status !== 'pending').map(toLegacyHitl)
-    if (!params?.workspace_id) return approvals
-    return approvals.filter((approval: any) => approval.workspace_id === params.workspace_id)
+    return (payload.approvals ?? []).filter((approval: any) => approval.status !== 'pending').map(toLegacyHitl)
 }
 
 // ── MCP Servers ───────────────────────────────────────────────────────────────
@@ -362,7 +360,6 @@ export const logoutAuth = (): Promise<void> =>
 export const listRuns = (params?: {
     skip?: number
     limit?: number
-    workspace_id?: string
     status?: string
     run_type?: string
     agent_id?: string
@@ -473,9 +470,9 @@ export const getAutomationVersion = async (id: string, versionId: string) =>
     (await api.get(`/automations/${id}/versions/${versionId}`)).data
 
 // --- Deployments ---
-export const deployAutomation = async (automationId: string, data: { workspace_id: string; input_values: Record<string, unknown>; schedule_expression?: string; interval_seconds?: number; enable_workspace?: boolean }) =>
+export const deployAutomation = async (automationId: string, data: { input_values: Record<string, unknown>; schedule_expression?: string; interval_seconds?: number; enable_workspace?: boolean }) =>
     (await api.post(`/automations/${automationId}/deploy`, data)).data
-export const listDeployments = async (params?: { status?: string; automation_id?: string; workspace_id?: string; skip?: number; limit?: number }) =>
+export const listDeployments = async (params?: { status?: string; automation_id?: string; skip?: number; limit?: number }) =>
     (await api.get('/deployments', { params })).data
 export const getDeployment = async (id: string) =>
     (await api.get(`/deployments/${id}`)).data

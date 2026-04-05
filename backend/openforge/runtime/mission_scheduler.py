@@ -78,9 +78,9 @@ async def poll_missions(db: AsyncSession) -> int:
                 mission.next_cycle_at = None
                 continue
 
-            # Resolve workspace for the run
-            workspace_id = mission.workspace_id
-            if workspace_id is None:
+            # Resolve owned workspace for the run
+            owned_workspace_id = mission.owned_workspace_id
+            if owned_workspace_id is None:
                 # Use first available user workspace
                 ws_stmt = (
                     select(Workspace.id)
@@ -90,7 +90,7 @@ async def poll_missions(db: AsyncSession) -> int:
                 )
                 ws_result = (await db.execute(ws_stmt)).scalar_one_or_none()
                 if ws_result:
-                    workspace_id = ws_result
+                    owned_workspace_id = ws_result
                 else:
                     logger.warning(
                         "Mission %s has no workspace and no user workspaces exist",
@@ -113,7 +113,6 @@ async def poll_missions(db: AsyncSession) -> int:
             # Create run record
             run = RunModel(
                 run_type="mission",
-                workspace_id=workspace_id,
                 mission_id=mission.id,
                 input_payload={
                     "mission_id": str(mission.id),

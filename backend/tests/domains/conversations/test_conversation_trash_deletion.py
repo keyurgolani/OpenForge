@@ -10,11 +10,15 @@ from openforge.services.conversation_service import conversation_service
 
 
 class _FakeResult:
-    def __init__(self, *, scalar=None):
+    def __init__(self, *, scalar=None, rows=None):
         self._scalar = scalar
+        self._rows = rows or []
 
     def scalar_one_or_none(self):
         return self._scalar
+
+    def all(self):
+        return self._rows
 
 
 class _FakeDB:
@@ -37,14 +41,15 @@ class _FakeDB:
 
 @pytest.mark.asyncio
 async def test_permanently_delete_conversation_deletes_archived_chat(monkeypatch):
-    workspace_id = uuid4()
     conversation_id = uuid4()
     conv = SimpleNamespace(
         id=conversation_id,
-        workspace_id=workspace_id,
         is_archived=True,
     )
-    db = _FakeDB([_FakeResult(scalar=conv)])
+    db = _FakeDB([
+        _FakeResult(scalar=conv),  # conversation lookup
+        _FakeResult(rows=[]),      # attachment file paths lookup
+    ])
 
     async def _fake_purge(*_args, **_kwargs):
         return 0
@@ -55,7 +60,7 @@ async def test_permanently_delete_conversation_deletes_archived_chat(monkeypatch
         _fake_purge,
     )
 
-    await conversation_service.permanently_delete_conversation(db, workspace_id, conversation_id)
+    await conversation_service.permanently_delete_conversation(db, conversation_id)
 
     assert db.deleted == [conv]
     assert db.commit_count == 1
@@ -63,11 +68,9 @@ async def test_permanently_delete_conversation_deletes_archived_chat(monkeypatch
 
 @pytest.mark.asyncio
 async def test_permanently_delete_conversation_rejects_active_chat(monkeypatch):
-    workspace_id = uuid4()
     conversation_id = uuid4()
     conv = SimpleNamespace(
         id=conversation_id,
-        workspace_id=workspace_id,
         is_archived=False,
     )
     db = _FakeDB([_FakeResult(scalar=conv)])
@@ -82,7 +85,7 @@ async def test_permanently_delete_conversation_rejects_active_chat(monkeypatch):
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        await conversation_service.permanently_delete_conversation(db, workspace_id, conversation_id)
+        await conversation_service.permanently_delete_conversation(db, conversation_id)
 
     assert exc_info.value.status_code == 400
     assert db.deleted == []

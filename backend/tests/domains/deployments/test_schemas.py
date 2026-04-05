@@ -6,12 +6,12 @@ from openforge.domains.deployments.schemas import DeploymentCreate, DeploymentRe
 
 
 def test_deployment_create_minimal():
-    d = DeploymentCreate(workspace_id=uuid4())
+    d = DeploymentCreate()
     assert d.input_values == {}
 
 
 def test_deployment_create_with_values():
-    d = DeploymentCreate(workspace_id=uuid4(), input_values={"topic": "AI"})
+    d = DeploymentCreate(input_values={"topic": "AI"})
     assert d.input_values == {"topic": "AI"}
 
 
@@ -19,7 +19,6 @@ def test_deployment_response_from_dict():
     data = {
         "id": uuid4(),
         "automation_id": uuid4(),
-        "workspace_id": uuid4(),
         "status": "active",
     }
     r = DeploymentResponse(**data)

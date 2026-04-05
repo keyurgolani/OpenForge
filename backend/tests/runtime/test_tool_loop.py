@@ -18,7 +18,6 @@ from openforge.runtime.tool_loop import (
 class TestToolLoopTypes:
     def test_context_defaults(self):
         ctx = ToolLoopContext(
-            workspace_id=uuid.uuid4(),
             conversation_id=None,
             execution_id="test-exec",
         )
@@ -49,7 +48,6 @@ class TestExecuteToolLoop:
         mock_tools.fn_name_to_tool_info = {}
 
         ctx = ToolLoopContext(
-            workspace_id=uuid.uuid4(),
             conversation_id=uuid.uuid4(),
             execution_id="test",
             tools=mock_tools,
@@ -85,7 +83,6 @@ class TestExecuteToolLoop:
         cancel_event.set()
 
         ctx = ToolLoopContext(
-            workspace_id=uuid.uuid4(),
             conversation_id=None,
             execution_id="test",
             cancel_event=cancel_event,
@@ -118,7 +115,6 @@ class TestExecuteToolLoop:
         mock_tools.fn_name_to_tool_info = {}
 
         ctx = ToolLoopContext(
-            workspace_id=uuid.uuid4(),
             conversation_id=None,
             execution_id="test",
             tools=mock_tools,
@@ -154,7 +150,6 @@ class TestExecuteToolLoop:
         mock_tools.fn_name_to_tool_info = {}
 
         ctx = ToolLoopContext(
-            workspace_id=uuid.uuid4(),
             conversation_id=uuid.uuid4(),
             execution_id="test",
             tools=mock_tools,
@@ -225,7 +220,6 @@ class TestExecuteToolLoop:
         mock_tools.fn_name_to_tool_info = {}
 
         ctx = ToolLoopContext(
-            workspace_id=uuid.uuid4(),
             conversation_id=uuid.uuid4(),
             execution_id="test",
             tools=mock_tools,
@@ -280,28 +274,24 @@ class TestExecuteToolLoop:
 
 
 @pytest.mark.asyncio
-async def test_auto_fills_workspace_id_when_default_set(monkeypatch):
-    """When default_workspace_id is set on context and tool call omits workspace_id,
-    the dispatcher should receive the default."""
+async def test_deployment_workspace_id_can_be_set(monkeypatch):
+    """ToolLoopContext supports deployment_workspace_id for deployment-owned workspace enforcement."""
     from openforge.runtime.tool_loop import ToolLoopContext
 
     ctx = ToolLoopContext(
-        workspace_id=None,
         conversation_id=uuid4(),
         execution_id="test-exec",
-        default_workspace_id="ws-123",
+        deployment_workspace_id="ws-123",
     )
-    # Verify the field exists and is set
-    assert ctx.default_workspace_id == "ws-123"
+    assert ctx.deployment_workspace_id == "ws-123"
 
 
 @pytest.mark.asyncio
-async def test_default_workspace_id_is_none_by_default():
+async def test_deployment_workspace_id_is_none_by_default():
     from openforge.runtime.tool_loop import ToolLoopContext
 
     ctx = ToolLoopContext(
-        workspace_id=None,
         conversation_id=uuid4(),
         execution_id="test-exec",
     )
-    assert ctx.default_workspace_id is None
+    assert ctx.deployment_workspace_id is None

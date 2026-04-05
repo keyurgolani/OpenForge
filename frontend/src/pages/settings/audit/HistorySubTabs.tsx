@@ -12,10 +12,9 @@ import { WorkspaceFilterSelect, StatusIcon } from '../components'
 // ── HITL History ─────────────────────────────────────────────────────────────
 
 export function HITLHistorySubTab() {
-    const [filterWorkspace, setFilterWorkspace] = useState('')
     const { data: historyData, isLoading } = useQuery({
-        queryKey: ['hitl-history', filterWorkspace],
-        queryFn: () => getHITLHistory({ workspace_id: filterWorkspace || undefined, limit: 200 }),
+        queryKey: ['hitl-history'],
+        queryFn: () => getHITLHistory({ limit: 200 }),
     })
     const history: HITLRequest[] = historyData ?? []
     const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -24,7 +23,6 @@ export function HITLHistorySubTab() {
         <div className="space-y-3">
             <div className="flex items-center justify-between gap-3">
                 <h3 className="font-semibold text-sm">Resolved Approval Requests</h3>
-                <WorkspaceFilterSelect value={filterWorkspace} onChange={setFilterWorkspace} />
             </div>
             {isLoading && (
                 <div className="flex items-center justify-center py-16">

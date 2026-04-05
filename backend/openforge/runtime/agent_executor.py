@@ -92,16 +92,14 @@ async def _load_tools(
 
 async def _resolve_llm(
     db: AsyncSession,
-    workspace_id: UUID | None,
     spec: AgentRuntimeConfig,
 ) -> dict[str, Any]:
     """Resolve LLM provider credentials and model into llm_kwargs dict."""
     from openforge.services.llm_service import llm_service
 
     provider_name, api_key, model, base_url = (
-        await llm_service.get_provider_for_workspace(
+        await llm_service.resolve_provider(
             db,
-            workspace_id,
             provider_id=spec.provider_name,
             model_override=spec.model_name,
         )
@@ -123,7 +121,6 @@ async def execute_agent(
     input_payload: dict[str, Any],
     *,
     db: AsyncSession,
-    workspace_id: UUID | None = None,
     run_id: UUID | None = None,
     event_publisher: EventPublisher | None = None,
     tool_dispatcher: ToolDispatcher | None = None,
@@ -157,7 +154,6 @@ async def execute_agent(
         run = RunModel(
             id=run_id,
             run_type="agent",
-            workspace_id=workspace_id or uuid.uuid4(),
             status="pending",
             input_payload=input_payload,
             composite_metadata={
@@ -189,12 +185,11 @@ async def execute_agent(
             logger.warning("Failed to load tools for run %s: %s", run_id, exc)
 
     # 4. Resolve LLM
-    llm_kwargs = await _resolve_llm(db, workspace_id, spec)
+    llm_kwargs = await _resolve_llm(db, spec)
 
     # 5. Build context and transition to running
     cancel_event = asyncio.Event()
     loop_ctx = ToolLoopContext(
-        workspace_id=workspace_id,
         conversation_id=None,
         execution_id=str(run_id),
         agent_spec=spec,

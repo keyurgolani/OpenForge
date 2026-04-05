@@ -50,7 +50,6 @@ class TestExecuteAgent:
                 spec,
                 {"message": "hello"},
                 db=mock_db,
-                workspace_id=uuid.uuid4(),
                 event_publisher=mock_publisher,
             )
 
@@ -99,7 +98,6 @@ class TestExecuteAgent:
                     spec,
                     {"message": "hello"},
                     db=mock_db,
-                    workspace_id=uuid.uuid4(),
                     event_publisher=mock_publisher,
                 )
 
@@ -151,7 +149,6 @@ class TestExecuteAgent:
                 spec,
                 {"message": "hello"},
                 db=mock_db,
-                workspace_id=uuid.uuid4(),
                 tool_dispatcher=mock_dispatcher,
             )
 
@@ -199,7 +196,6 @@ class TestExecuteAgent:
                 spec,
                 {"message": "do something"},
                 db=mock_db,
-                workspace_id=uuid.uuid4(),
             )
 
         # Check messages passed to tool loop
@@ -252,7 +248,6 @@ class TestExecuteAgent:
                 spec,
                 {"message": "hello"},
                 db=mock_db,
-                workspace_id=uuid.uuid4(),
                 run_id=existing_run_id,
             )
 
@@ -296,7 +291,6 @@ class TestExecuteAgent:
                 spec,
                 {"message": "hello"},
                 db=mock_db,
-                workspace_id=uuid.uuid4(),
                 # no event_publisher
             )
 

@@ -84,7 +84,6 @@ async def poll_and_fire(db: AsyncSession) -> int:
             # Create run
             run = RunModel(
                 run_type="automation",
-                workspace_id=deployment.workspace_id,
                 deployment_id=deployment.id,
                 input_payload={
                     "input_values": deployment.input_values or {},

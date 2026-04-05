@@ -34,7 +34,6 @@ def get_run_service(db=Depends(get_db)) -> RunService:
 async def list_runs(
     skip: int = 0,
     limit: int = 100,
-    workspace_id: UUID | None = None,
     status: str | None = None,
     run_type: str | None = None,
     agent_id: UUID | None = None,
@@ -43,8 +42,6 @@ async def list_runs(
     service: RunService = Depends(get_run_service),
 ):
     list_kwargs = {"skip": skip, "limit": limit}
-    if workspace_id is not None:
-        list_kwargs["workspace_id"] = workspace_id
     if status is not None:
         list_kwargs["status"] = status
     if run_type is not None:

@@ -38,7 +38,6 @@ class MessageResponse(BaseModel):
 
 class ConversationResponse(BaseModel):
     id: UUID
-    workspace_id: UUID
     title: Optional[str] = None
     title_locked: bool = False
     is_pinned: bool = False

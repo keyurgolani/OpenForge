@@ -274,7 +274,6 @@ async def run_automation(
     run = RunModel(
         id=run_id,
         run_type="automation",
-        workspace_id=req.workspace_id,
         status="pending",
         input_payload=req.input_payload,
         composite_metadata=composite_metadata,

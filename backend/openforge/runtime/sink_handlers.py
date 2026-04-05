@@ -32,13 +32,14 @@ SINK_TYPE_INPUTS: dict[str, list[dict[str, Any]]] = {
     "knowledge_create": [
         {"key": "content", "label": "Content", "type": "text", "required": True},
         {"key": "title", "label": "Title", "type": "text", "required": True},
-        {"key": "workspace_id", "label": "Workspace", "type": "text", "required": False},
-        {"key": "knowledge_type", "label": "Knowledge Type", "type": "text", "required": False, "default": "note"},
+        {"key": "workspace_id", "label": "Workspace", "type": "workspace", "required": False},
+        {"key": "knowledge_type", "label": "Knowledge Type", "type": "knowledge_type", "required": False, "default": "note",
+         "options": ["note", "fleeting", "bookmark", "gist", "journal", "image", "audio", "pdf", "document", "sheet", "slides"]},
     ],
     "knowledge_update": [
         {"key": "content", "label": "Content", "type": "text", "required": True},
         {"key": "knowledge_id", "label": "Knowledge ID", "type": "text", "required": True},
-        {"key": "workspace_id", "label": "Workspace", "type": "text", "required": False},
+        {"key": "workspace_id", "label": "Workspace", "type": "workspace", "required": False},
     ],
     "article": [
         {"key": "content", "label": "Content", "type": "text", "required": True},
@@ -70,7 +71,7 @@ class SinkHandler(ABC):
         self,
         inputs: dict[str, Any],
         db: AsyncSession,
-        workspace_id: UUID,
+        fallback_workspace_id: UUID | None,
         run_id: UUID,
     ) -> dict[str, Any]:
         """Execute the sink action.  Returns output dict."""
@@ -80,7 +81,7 @@ class SinkHandler(ABC):
 # ── Handler implementations ──────────────────────────────────────────
 
 class LogSinkHandler(SinkHandler):
-    async def execute(self, inputs, db, workspace_id, run_id):
+    async def execute(self, inputs, db, fallback_workspace_id, run_id):
         log_level = str(inputs.get("log_level", "info")).lower()
         data = inputs.get("data", "")
         getattr(logger, log_level if log_level in ("debug", "info", "warning", "error") else "info")(
@@ -90,15 +91,16 @@ class LogSinkHandler(SinkHandler):
 
 
 class KnowledgeCreateSinkHandler(SinkHandler):
-    async def execute(self, inputs, db, workspace_id, run_id):
+    async def execute(self, inputs, db, fallback_workspace_id, run_id):
         from openforge.db.models import Knowledge
 
         title = inputs.get("title", "Untitled")
         content = inputs.get("content", "")
         knowledge_type = inputs.get("knowledge_type", "note")
-        ws_id = inputs.get("workspace_id") or str(workspace_id)
-        if isinstance(ws_id, str):
-            ws_id = UUID(ws_id)
+        ws_id_raw = inputs.get("workspace_id") or (str(fallback_workspace_id) if fallback_workspace_id else None)
+        if not ws_id_raw:
+            raise ValueError("No workspace_id in sink inputs and no fallback workspace available")
+        ws_id = UUID(ws_id_raw) if isinstance(ws_id_raw, str) else ws_id_raw
 
         item = Knowledge(
             id=_uuid.uuid4(),
@@ -114,7 +116,7 @@ class KnowledgeCreateSinkHandler(SinkHandler):
 
 
 class KnowledgeUpdateSinkHandler(SinkHandler):
-    async def execute(self, inputs, db, workspace_id, run_id):
+    async def execute(self, inputs, db, fallback_workspace_id, run_id):
         from openforge.db.models import Knowledge
 
         knowledge_id_str = inputs.get("knowledge_id", "")
@@ -133,7 +135,7 @@ class KnowledgeUpdateSinkHandler(SinkHandler):
 
 
 class ArticleSinkHandler(SinkHandler):
-    async def execute(self, inputs, db, workspace_id, run_id):
+    async def execute(self, inputs, db, fallback_workspace_id, run_id):
         from openforge.db.models import ArtifactModel
 
         title = inputs.get("title", "Untitled")
@@ -141,10 +143,15 @@ class ArticleSinkHandler(SinkHandler):
         output_format = inputs.get("output_format", "markdown")
         file_path = inputs.get("file_path") or None
 
+        ws_id_raw = inputs.get("workspace_id") or (str(fallback_workspace_id) if fallback_workspace_id else None)
+        if not ws_id_raw:
+            raise ValueError("No workspace_id in sink inputs and no fallback workspace available")
+        ws_id = UUID(ws_id_raw) if isinstance(ws_id_raw, str) else ws_id_raw
+
         artifact = ArtifactModel(
             id=_uuid.uuid4(),
             artifact_type="article",
-            workspace_id=workspace_id,
+            workspace_id=ws_id,
             source_run_id=run_id,
             title=title,
             content={"body": content, "format": output_format},
@@ -171,7 +178,7 @@ class ArticleSinkHandler(SinkHandler):
 
 
 class RestApiSinkHandler(SinkHandler):
-    async def execute(self, inputs, db, workspace_id, run_id):
+    async def execute(self, inputs, db, fallback_workspace_id, run_id):
         url = inputs.get("url", "")
         if not url:
             return {"error": "url is required", "status_code": 0, "response_body": ""}
@@ -201,7 +208,7 @@ class RestApiSinkHandler(SinkHandler):
 
 
 class NotificationSinkHandler(SinkHandler):
-    async def execute(self, inputs, db, workspace_id, run_id):
+    async def execute(self, inputs, db, fallback_workspace_id, run_id):
         channel = inputs.get("channel", "")
         if not channel:
             return {"error": "channel (webhook URL) is required", "status_code": 0, "delivered": False}
@@ -240,11 +247,11 @@ async def execute_sink(
     sink_type: str,
     inputs: dict[str, Any],
     db: AsyncSession,
-    workspace_id: UUID,
+    fallback_workspace_id: UUID | None,
     run_id: UUID,
 ) -> dict[str, Any]:
     """Top-level entry point: dispatch to the correct handler."""
     handler = _HANDLERS.get(sink_type)
     if handler is None:
         raise ValueError(f"Unknown sink type: {sink_type}")
-    return await handler.execute(inputs, db, workspace_id, run_id)
+    return await handler.execute(inputs, db, fallback_workspace_id, run_id)
