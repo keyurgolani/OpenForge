@@ -5,7 +5,7 @@ import type { AgentEmitter } from '@/hooks/chat/useAgentStream'
 const THINKING_DRAIN_MS = 1200
 const FAST_DRAIN_MS = 600
 const MIN_DISPLAY_MS = 800
-const MAX_QUEUE = 5
+const MAX_QUEUE = 8
 
 export function useThoughtQueue(emitter: AgentEmitter, onDrainComplete?: () => void) {
   const [currentThought, setCurrentThought] = useState<string | null>(null)
@@ -31,7 +31,7 @@ export function useThoughtQueue(emitter: AgentEmitter, onDrainComplete?: () => v
 
       // Skip to last 3 if backed up
       if (queueRef.current.length > MAX_QUEUE) {
-        queueRef.current = queueRef.current.slice(-3)
+        queueRef.current = queueRef.current.slice(-5)
       }
 
       const next = queueRef.current.shift()!
@@ -88,26 +88,49 @@ export function useThoughtQueue(emitter: AgentEmitter, onDrainComplete?: () => v
       }
     }
 
-    const onSnapshot = (data: { content: string; thinking: string; timeline: unknown[] }) => {
-      // Extract the last thinking content from snapshot timeline or thinking field
-      let lastThinking = ''
+    const onSnapshot = (data: { content: string; thinking: string; timeline: unknown[]; status?: string }) => {
+      // Clear internal state before restoring from snapshot
+      if (drainTimerRef.current) {
+        clearTimeout(drainTimerRef.current)
+        drainTimerRef.current = null
+      }
+      queueRef.current = []
+      bufferRef.current = ''
+
+      // Collect all thinking content from the snapshot timeline
+      const allSentences: string[] = []
       if (Array.isArray(data.timeline)) {
-        const thinkingEntries = data.timeline.filter((e: any) => e.type === 'thinking')
-        if (thinkingEntries.length > 0) {
-          lastThinking = (thinkingEntries[thinkingEntries.length - 1] as any).content ?? ''
+        for (const e of data.timeline) {
+          const entry = e as Record<string, unknown>
+          if (entry.type === 'thinking' && typeof entry.content === 'string') {
+            const sentences = entry.content.split(/(?<=[.!?])\s+/).filter(Boolean)
+            allSentences.push(...sentences)
+          }
         }
       }
-      if (!lastThinking && data.thinking) {
-        lastThinking = data.thinking
+      // Fall back to the top-level thinking field if no timeline entries
+      if (allSentences.length === 0 && data.thinking) {
+        const sentences = data.thinking.split(/(?<=[.!?])\s+/).filter(Boolean)
+        allSentences.push(...sentences)
       }
-      if (lastThinking) {
-        // Extract last sentence as current thought
-        const sentences = lastThinking.split(/(?<=[.!?])\s+/).filter(Boolean)
-        const last = sentences.length > 0 ? sentences[sentences.length - 1] : lastThinking
-        allThoughtsRef.current = sentences
-        setAllThoughts(sentences)
-        setCurrentThought(last)
+
+      allThoughtsRef.current = allSentences
+      setAllThoughts(allSentences)
+
+      // Determine if thinking is still active from snapshot status
+      const isComplete = data.status === 'completed' || data.status === 'cancelled' || data.status === 'failed' || data.status === 'timeout'
+      const hasActiveThinking = !!data.thinking && !isComplete
+      thinkingDone.current = !hasActiveThinking
+
+      if (allSentences.length > 0) {
+        // Display the last thought without animation
+        setCurrentThought(allSentences[allSentences.length - 1])
+        setIsDraining(!thinkingDone.current)
+      } else {
+        setCurrentThought(null)
+        setIsDraining(false)
       }
+      startTimeRef.current = Date.now()
     }
 
     emitter.on('thinking_chunk', onThinkingChunk)

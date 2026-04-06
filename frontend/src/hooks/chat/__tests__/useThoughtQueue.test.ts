@@ -52,4 +52,87 @@ describe('useThoughtQueue', () => {
     act(() => { vi.advanceTimersByTime(10000) })
     expect(onDrainComplete).toHaveBeenCalled()
   })
+
+  describe('snapshot recovery', () => {
+    it('restores allThoughts and currentThought from snapshot timeline', () => {
+      const { result } = renderHook(() => useThoughtQueue(emitter))
+      act(() => {
+        emitter.emit('snapshot', {
+          content: '',
+          thinking: '',
+          timeline: [
+            { type: 'thinking', content: 'First thought. Second thought.' },
+            { type: 'tool_call', tool_name: 'search', call_id: 'c1' },
+            { type: 'thinking', content: 'Third thought.' },
+          ],
+          status: 'completed',
+        })
+      })
+      expect(result.current.allThoughts).toEqual(['First thought.', 'Second thought.', 'Third thought.'])
+      expect(result.current.currentThought).toBe('Third thought.')
+    })
+
+    it('falls back to thinking field when timeline has no thinking entries', () => {
+      const { result } = renderHook(() => useThoughtQueue(emitter))
+      act(() => {
+        emitter.emit('snapshot', {
+          content: '',
+          thinking: 'Fallback thought. Another one.',
+          timeline: [],
+          status: 'running',
+        })
+      })
+      expect(result.current.allThoughts).toEqual(['Fallback thought.', 'Another one.'])
+      expect(result.current.currentThought).toBe('Another one.')
+    })
+
+    it('sets isDraining false when snapshot status is completed', () => {
+      const { result } = renderHook(() => useThoughtQueue(emitter))
+      act(() => {
+        emitter.emit('snapshot', {
+          content: 'response',
+          thinking: '',
+          timeline: [{ type: 'thinking', content: 'Done thinking.' }],
+          status: 'completed',
+        })
+      })
+      expect(result.current.isDraining).toBe(false)
+    })
+
+    it('clears previous drain timer on snapshot', () => {
+      const { result } = renderHook(() => useThoughtQueue(emitter))
+      // Start a thinking flow to create a drain timer
+      act(() => {
+        emitter.emit('thinking_chunk', 'Active thought. Another. ')
+      })
+      expect(result.current.isDraining).toBe(true)
+      // Snapshot should reset everything cleanly
+      act(() => {
+        emitter.emit('snapshot', {
+          content: '',
+          thinking: '',
+          timeline: [{ type: 'thinking', content: 'Restored thought.' }],
+          status: 'completed',
+        })
+      })
+      expect(result.current.allThoughts).toEqual(['Restored thought.'])
+      expect(result.current.currentThought).toBe('Restored thought.')
+      expect(result.current.isDraining).toBe(false)
+    })
+
+    it('sets null currentThought when snapshot has no thinking content', () => {
+      const { result } = renderHook(() => useThoughtQueue(emitter))
+      act(() => {
+        emitter.emit('snapshot', {
+          content: 'some response',
+          thinking: '',
+          timeline: [],
+          status: 'completed',
+        })
+      })
+      expect(result.current.currentThought).toBeNull()
+      expect(result.current.allThoughts).toEqual([])
+      expect(result.current.isDraining).toBe(false)
+    })
+  })
 })

@@ -43,9 +43,8 @@ export function useStreamRenderer(emitter: AgentEmitter) {
       const content = data.content ?? ''
       if (content) {
         renderer.reset()
-        renderer.ingest(content)
-        setDisplayText(content)
-        setIsStreaming(true)
+        renderer.setImmediate(content)
+        setIsStreaming(false)
       }
     }
 

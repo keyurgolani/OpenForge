@@ -37,6 +37,13 @@ export class StreamRenderer {
     }
   }
 
+  /** Set content instantly without animation (for snapshot restoration). */
+  setImmediate(content: string) {
+    this.buffer = content
+    this.rendered = content
+    this.emit('render', this.rendered)
+  }
+
   reset() {
     this.buffer = ''
     this.rendered = ''
@@ -69,7 +76,12 @@ export class StreamRenderer {
     }
 
     if (this.draining) {
-      this.charsPerFrame *= 0.8
+      this.rendered = this.buffer
+      this.emit('render', this.rendered)
+      this.rafId = null
+      this.emit('complete')
+      this.draining = false
+      return
     }
 
     const pressure = pending / 50

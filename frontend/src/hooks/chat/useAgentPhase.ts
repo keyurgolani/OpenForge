@@ -141,9 +141,14 @@ export function useAgentPhase(emitter: AgentEmitter) {
     }
 
     const onToolCallStart = (data: { call_id: string; tool_name: string; arguments: Record<string, unknown> }) => {
+      // Handle transition from draining_thoughts: thinking ended, tokens were buffered,
+      // but a tool call arrived instead of more response — discard buffered tokens
+      if (phaseRef.current === 'draining_thoughts') {
+        tokenBufferRef.current = []
+      }
       // Finalize any active thinking block
       finalizeActiveThinking()
-      if (thinkingStartRef.current && phaseRef.current === 'thinking') {
+      if (thinkingStartRef.current && (phaseRef.current === 'thinking' || phaseRef.current === 'draining_thoughts')) {
         setThinkingDuration(Date.now() - thinkingStartRef.current)
       }
       thinkingStartRef.current = 0
@@ -224,7 +229,7 @@ export function useAgentPhase(emitter: AgentEmitter) {
       thinkingTextRef.current = ''
     }
 
-    const onSnapshot = (data: { content: string; thinking: string; timeline: unknown[] }) => {
+    const onSnapshot = (data: { content: string; thinking: string; timeline: unknown[]; status?: string }) => {
       // Reconstruct timeline from snapshot data
       const snapshotTimeline = Array.isArray(data.timeline) ? data.timeline : []
       const reconstructed: TimelineItem[] = []
@@ -269,37 +274,66 @@ export function useAgentPhase(emitter: AgentEmitter) {
             duration_ms: (entry.duration_ms as number | null) ?? null,
             nested_timeline: (entry.nested_timeline as TimelineItem[] | null) ?? null,
           })
+        } else if (entry.type === 'intermediate_response') {
+          reconstructed.push({
+            type: 'intermediate_response' as const,
+            id: `snap-ir-${reconstructed.length}`,
+            content: (entry.content as string) ?? '',
+          })
         }
       }
 
       setTimeline(reconstructed)
 
-      // Determine phase from snapshot state
+      // Reset refs for clean snapshot recovery
+      thinkingStartRef.current = 0
+      tokenBufferRef.current = []
+      thinkingTextRef.current = ''
+
+      // Determine phase from the backend execution status field first,
+      // then fall back to inferring from timeline/content state
+      const status = data.status
+      if (status === 'completed' || status === 'cancelled') {
+        setPhase('complete')
+        return
+      }
+      if (status === 'failed' || status === 'timeout') {
+        setPhase('error')
+        return
+      }
+
+      // Status is "running" / "waiting_approval" / "pending" / "queued" — infer from timeline
       const hasContent = !!data.content
       const hasRunningTool = reconstructed.some(t => t.type === 'tool_call' && t.status === 'running')
       const hasAwaitingApproval = reconstructed.some(t => t.type === 'tool_call' && t.status === 'awaiting_approval')
+      const hasActiveThinking = !!data.thinking
 
-      if (hasAwaitingApproval) {
+      if (hasAwaitingApproval || status === 'waiting_approval') {
         setPhase('awaiting_approval')
       } else if (hasContent) {
         setPhase('responding')
       } else if (hasRunningTool) {
         setPhase('tool_calling')
-      } else if (reconstructed.length > 0) {
+      } else if (hasActiveThinking) {
+        // Active thinking text present — add a running thinking entry
         setPhase('thinking')
-      } else if (data.thinking) {
-        setPhase('thinking')
-        // Add a running thinking entry for the active thinking block
         thinkingStartRef.current = Date.now()
         thinkingIdCounter.current++
-        setTimeline([{
-          type: 'thinking' as const,
-          id: `snap-active-${thinkingIdCounter.current}`,
-          status: 'running' as const,
-          duration_ms: null,
-          sentences: [],
-        }])
+        setTimeline((prev) => [
+          ...prev,
+          {
+            type: 'thinking' as const,
+            id: `snap-active-${thinkingIdCounter.current}`,
+            status: 'running' as const,
+            duration_ms: null,
+            sentences: [],
+          },
+        ])
+      } else if (reconstructed.length > 0) {
+        // Timeline has entries but no content/running tools — likely between iterations
+        setPhase('thinking')
       } else {
+        // Empty state, execution just started
         setPhase('thinking')
       }
     }

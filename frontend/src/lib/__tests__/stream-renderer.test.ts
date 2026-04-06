@@ -91,4 +91,81 @@ describe('StreamRenderer', () => {
 
     expect(firstChunk).toBeGreaterThan(secondChunk)
   })
+
+  describe('drain behavior', () => {
+    it('flushes all remaining content in one frame when draining', () => {
+      const content = 'Hello world, this is a longer sentence to test drain behavior.'
+      renderer.ingest(content)
+      // Render one frame so partial content is rendered
+      flushFrames(1)
+      const partialRender = onRender.mock.calls[onRender.mock.calls.length - 1][0] as string
+      expect(partialRender.length).toBeLessThan(content.length)
+
+      // Now trigger drain
+      renderer.complete()
+      onRender.mockClear()
+      onComplete.mockClear()
+
+      // One tick should flush everything
+      flushFrames(1)
+      expect(onRender).toHaveBeenCalledWith(content)
+      expect(onComplete).toHaveBeenCalledTimes(1)
+    })
+
+    it('emits complete immediately when buffer is already fully rendered', () => {
+      renderer.ingest('Hi')
+      // Flush enough frames to render everything
+      for (let i = 0; i < 20; i++) flushFrames(1)
+      onComplete.mockClear()
+
+      // Now complete — no pending content, no active RAF loop
+      renderer.complete()
+      expect(onComplete).toHaveBeenCalledTimes(1)
+    })
+
+    it('emits complete immediately when no RAF loop is running', () => {
+      // Never ingested anything, so rafId is null
+      renderer.complete()
+      expect(onComplete).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('setImmediate', () => {
+    it('sets content and emits render with full content', () => {
+      const content = 'Snapshot restored content here.'
+      renderer.setImmediate(content)
+      expect(onRender).toHaveBeenCalledWith(content)
+    })
+
+    it('does not start RAF loop', () => {
+      renderer.setImmediate('Some content')
+      expect(rafCallbacks).toHaveLength(0)
+    })
+
+    it('overwrites previously ingested content', () => {
+      renderer.ingest('old partial')
+      onRender.mockClear()
+      renderer.setImmediate('new full content')
+      expect(onRender).toHaveBeenCalledWith('new full content')
+    })
+  })
+
+  describe('destroy', () => {
+    it('clears state and removes all listeners', () => {
+      renderer.ingest('Some content')
+      renderer.destroy()
+
+      // After destroy, listeners should be gone — no events emitted
+      onRender.mockClear()
+      onComplete.mockClear()
+
+      // Re-ingest to trigger events — but listeners are cleared
+      renderer.ingest('More content')
+      flushFrames(5)
+      expect(onRender).not.toHaveBeenCalled()
+
+      renderer.complete()
+      expect(onComplete).not.toHaveBeenCalled()
+    })
+  })
 })
