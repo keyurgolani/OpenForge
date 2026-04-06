@@ -154,6 +154,7 @@ async def execute_tool_loop(
     *,
     llm_kwargs: dict[str, Any],
     max_iterations: int = 20,
+    max_consecutive_failures: int = 3,
     llm_gateway: LLMGateway | None = None,
     tool_dispatcher: ToolDispatcher | None = None,
     result: ToolLoopResult | None = None,
@@ -168,6 +169,8 @@ async def execute_tool_loop(
         callbacks: Optional streaming callbacks for interactive mode.
         llm_kwargs: Dict with provider_name, api_key, model, base_url.
         max_iterations: Maximum tool loop iterations.
+        max_consecutive_failures: Number of consecutive failures of the same
+            tool before it is blocked for the remainder of this invocation.
         llm_gateway: LLM gateway instance.
         tool_dispatcher: Tool dispatcher instance.
         result: Optional pre-created result object. When provided, callbacks can
@@ -186,6 +189,10 @@ async def execute_tool_loop(
     # Use result.tool_calls directly so callers can observe live state
     all_tool_calls = result.tool_calls
     tool_calls_count = 0
+
+    # Track consecutive failures per tool to cap runaway retries
+    consecutive_failures: dict[str, int] = {}
+    blocked_tools: set[str] = set()
 
     for iteration_index in range(max_iterations):
         if ctx.cancel_event.is_set():
@@ -399,6 +406,16 @@ async def execute_tool_loop(
                         tool_results_for_messages.append({"tool_call_id": call_id, "content": denied_msg})
                         continue
 
+            # Consecutive-failure block: skip tools that have exceeded the failure cap
+            if tool_id in blocked_tools:
+                blocked_msg = f"Tool '{tool_id}' is blocked after {max_consecutive_failures} consecutive failures. Use an alternative approach."
+                result.timeline[entry_idx]["success"] = False
+                result.timeline[entry_idx]["error"] = blocked_msg
+                if callbacks.on_tool_result:
+                    await callbacks.on_tool_result(call_id, tool_id, False, blocked_msg)
+                tool_results_for_messages.append({"tool_call_id": call_id, "content": f"Tool error: {blocked_msg}"})
+                continue
+
             # Execute tool
             if ctx.rate_limiter:
                 ctx.rate_limiter.record()
@@ -497,6 +514,18 @@ async def execute_tool_loop(
             result.timeline[entry_idx]["output"] = _prepare_timeline_output(output_for_timeline)
             result.timeline[entry_idx]["error"] = tool_result.get("error")
             result.timeline[entry_idx]["duration_ms"] = duration_ms
+
+            # Track consecutive failures per tool
+            if tool_result.get("success"):
+                consecutive_failures[tool_id] = 0
+            else:
+                consecutive_failures[tool_id] = consecutive_failures.get(tool_id, 0) + 1
+                if consecutive_failures[tool_id] >= max_consecutive_failures:
+                    blocked_tools.add(tool_id)
+                    messages.append({
+                        "role": "system",
+                        "content": f"Tool '{tool_id}' has failed {consecutive_failures[tool_id]} consecutive times. Do not retry it. Use an alternative approach.",
+                    })
 
             # Handle platform.agent.invoke special case
             if tool_id in ("platform.agent.invoke", "agent.invoke") and tool_result.get("success"):
