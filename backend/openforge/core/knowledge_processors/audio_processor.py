@@ -53,28 +53,23 @@ def _get_whisper_download_root() -> str:
 
 
 def _get_whisper_model(model_size: str = "base", download_root: Optional[str] = None):
-    """Lazy-load Whisper model (cached per model size)."""
+    """Lazy-load faster-whisper model (cached per model size)."""
     global _whisper_models
     cache_key = f"{model_size}:{download_root or 'default'}"
     if cache_key not in _whisper_models:
-        import whisper
+        from faster_whisper import WhisperModel
 
         if download_root is None:
             download_root = _get_whisper_download_root()
 
-        # Check if model file exists before loading
-        model_path = Path(download_root) / f"{model_size}.pt"
-        if not model_path.exists():
-            raise RuntimeError(
-                f"Whisper model '{model_size}' is not downloaded. "
-                f"Download it from Settings > Audio before processing audio files."
-            )
-
-        logger.info("Loading Whisper model: %s from %s", model_size, download_root)
-        _whisper_models[cache_key] = whisper.load_model(
-            model_size, download_root=download_root
+        logger.info("Loading faster-whisper model: %s", model_size)
+        _whisper_models[cache_key] = WhisperModel(
+            model_size,
+            device="cpu",
+            compute_type="int8",
+            download_root=download_root,
         )
-        logger.info("Whisper model '%s' loaded.", model_size)
+        logger.info("faster-whisper model '%s' loaded.", model_size)
     return _whisper_models[cache_key]
 
 
@@ -311,27 +306,23 @@ class AudioProcessor:
         }
 
     def _transcribe(self, file_path: str, model_size: str = "base") -> dict:
-        """Transcribe audio using Whisper."""
+        """Transcribe audio using faster-whisper."""
         download_root = _get_whisper_download_root()
         model = _get_whisper_model(model_size, download_root=download_root)
 
-        # Transcribe with timestamps
-        result = model.transcribe(
-            file_path,
-            fp16=False,  # Use fp32 for CPU compatibility; fp16 requires CUDA
-            verbose=False,
-        )
-
+        segments_iter, info = model.transcribe(file_path, beam_size=5)
+        segments = []
+        full_text_parts = []
+        for seg in segments_iter:
+            segments.append({
+                "start": seg.start,
+                "end": seg.end,
+                "text": seg.text.strip(),
+            })
+            full_text_parts.append(seg.text.strip())
         return {
-            "text": result.get("text", "").strip(),
-            "segments": [
-                {
-                    "start": seg.get("start"),
-                    "end": seg.get("end"),
-                    "text": seg.get("text", "").strip(),
-                }
-                for seg in result.get("segments", [])
-            ],
+            "text": " ".join(full_text_parts),
+            "segments": segments,
         }
 
     async def _get_whisper_model_size(self, db_session) -> str:

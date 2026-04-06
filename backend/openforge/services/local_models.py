@@ -121,7 +121,10 @@ def get_download_status(model_id: str) -> bool:
         # Whisper models: id is "openai/whisper-<size>", file is "<size>.pt"
         whisper_name = model.id.split("/")[-1].replace("whisper-", "")
         whisper_dir = root / "whisper"
-        return (whisper_dir / f"{whisper_name}.pt").exists()
+        # faster-whisper: check for CTranslate2 model directory
+        ct2_dir = whisper_dir / f"faster-whisper-{whisper_name}"
+        pt_file = whisper_dir / f"{whisper_name}.pt"
+        return ct2_dir.exists() or pt_file.exists()
 
     if model.capability_type == "tts":
         if model.engine == "piper":
