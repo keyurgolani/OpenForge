@@ -96,18 +96,19 @@ docker compose logs tool-server
 2. **Network instability** — The frontend auto-reconnects with exponential backoff. Wait a moment.
 3. **Backend restart** — If the backend restarts, WebSocket connections are dropped. Refresh the page.
 
-### Strategy execution errors
+### Agent execution errors
 
-**Symptom:** Strategy-based runs (researcher, builder, etc.) fail.
+**Symptom:** Agent runs fail or produce errors.
 
 **Common causes:**
-1. **Strategy not registered** — Ensure the strategy name in the blueprint matches a registered strategy. Available: chat, researcher, reviewer, builder, watcher, coordinator.
-2. **Missing provider config** — Strategy runs need a valid LLM provider resolved for the workspace.
+1. **Missing provider config** — Agent runs need a valid LLM provider resolved. Check that the agent's LLM config points to an active provider.
+2. **Tool failures** — A tool the agent depends on may be failing. Check the run detail page for tool call errors.
+3. **Token limit exceeded** — The conversation may have exceeded the model's context window. Check max_tokens settings.
 
 **Check:**
 ```bash
-docker compose logs openforge | grep "strategy"
-docker compose logs celery-worker | grep "strategy"
+docker compose logs openforge | grep "agent_executor"
+docker compose logs celery-worker | grep "tool_loop"
 ```
 
 ---
@@ -183,8 +184,8 @@ docker compose logs openforge | grep -i "upload\|error"
 **Symptom:** Runs complete but no outputs appear.
 
 **Common causes:**
-1. **Strategy doesn't emit outputs** — Not all strategies produce outputs. The builder strategy is designed for output creation.
-2. **Output routing not configured** — Check the automation's output routing config.
+1. **Agent has no output definitions** — Only agents with configured output definitions emit outputs. Check the agent's output definitions in the agent detail page.
+2. **Sink not configured** — Check the automation's sink nodes and wiring. Outputs require a configured sink destination.
 
 ### Output versioning issues
 

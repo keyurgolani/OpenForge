@@ -11,6 +11,9 @@ A complete step-by-step walkthrough of every feature in OpenForge. Whether you'r
 - [Search](#search)
 - [Agents](#agents)
 - [Automations](#automations)
+- [Deployments](#deployments)
+- [Missions](#missions)
+- [Sinks](#sinks)
 - [Runs](#runs)
 - [Outputs](#outputs)
 - [Tools and Skills](#tools-and-skills)
@@ -324,7 +327,7 @@ Every save creates an immutable version snapshot. View previous versions from th
 
 ### Agent Templates
 
-OpenForge ships with 6 built-in agent templates (Chat Assistant, Deep Researcher, Code Reviewer, Content Builder, Change Watcher, Team Coordinator). Each workspace also gets a dedicated workspace agent seeded at creation.
+OpenForge ships with 6 built-in agent templates: Chat Assistant, Deep Researcher, Code Reviewer, Content Builder, Change Watcher, and Team Coordinator. Each workspace also gets a dedicated workspace agent seeded at creation.
 
 ### Managing Agents
 
@@ -394,9 +397,98 @@ A deployment is a live instance of an automation, created when you deploy it wit
 
 ---
 
+## Missions
+
+Missions enable autonomous, long-running goal pursuit. Instead of a single execution, a mission runs an agent over multiple OODA cycles until the goal is achieved or budget is exhausted.
+
+### How Missions Work
+
+A mission defines:
+- **Goal** — What the agent should achieve
+- **Directives** — Instructions for how to approach the goal
+- **Constraints** — Operational boundaries the agent must respect
+- **Rubric** — Evaluation criteria with target scores and ratchet modes
+- **Autonomous Agent** — The agent assigned to pursue the goal
+- **Budget** — Max cost, max tokens, and max cycles
+- **Cadence** — How often to run cycles (interval in seconds)
+
+Each cycle follows the OODA model:
+1. **Perceive** — Observe the current state
+2. **Plan** — Decide what to do next
+3. **Act** — Execute actions using the agent's tools
+4. **Evaluate** — Score results against the rubric
+5. **Reflect** — Capture lessons and decide on next steps
+
+### Creating a Mission
+
+1. Navigate to **Missions** (top-level)
+2. Click **Create Mission**
+3. Define the goal, directives, and constraints
+4. Configure the evaluation rubric with criteria, target scores, and ratchet modes
+5. Select an autonomous agent
+6. Set budget limits and execution cadence
+7. Click **Create** (creates in draft status)
+
+### Mission Lifecycle
+
+| Status | Description |
+|--------|-------------|
+| **Draft** | Created but not running. Can be edited. |
+| **Active** | Running cycles on the configured cadence. |
+| **Paused** | Temporarily stopped. Can be reactivated. |
+| **Terminated** | Manually stopped. Final state. |
+| **Completed** | All rubric targets met. Final state. |
+
+- **Activate** a draft or paused mission to start running cycles
+- **Pause** to temporarily stop without losing state
+- **Terminate** to permanently stop the mission
+
+### Mission Workspaces
+
+Each mission gets a dedicated owned workspace for its knowledge and artifacts. This workspace can be promoted to a regular user workspace if you want to keep the mission's accumulated knowledge after it ends.
+
+### Ratchet Evaluation
+
+Each rubric criterion has a ratchet mode:
+- **Strict** — Scores must not decrease between cycles (prevents quality regression)
+- **Relaxed** — Scores are allowed to vary between cycles
+
+The mission completes when all criteria meet their target scores.
+
+---
+
+## Sinks
+
+Sinks define what happens with agent output values. They are reusable output destinations that can be wired into automations.
+
+### Sink Types
+
+| Type | Description | Key Inputs |
+|------|-------------|------------|
+| **Log** | Records to run history | data, log_level |
+| **Knowledge Create** | Creates a knowledge item in a workspace | content, title, workspace_id, knowledge_type |
+| **Knowledge Update** | Updates an existing knowledge item | content, knowledge_id, workspace_id |
+| **Article** | Writes a document to the filesystem | content, title, output_format, file_path |
+| **REST API** | Calls an external HTTP endpoint | url, body, method, headers |
+| **Notification** | Sends a notification via webhook | message, channel (webhook URL), template |
+
+### Creating a Sink
+
+1. Navigate to **Sinks** (top-level)
+2. Click **Create Sink**
+3. Select a sink type
+4. Configure the sink's inputs (some can have default values)
+5. Click **Create**
+
+### Using Sinks in Automations
+
+Sinks appear as nodes on the automation canvas alongside agent nodes. Wire agent output variables to sink inputs to route results to their destination. Inputs with configured default values become fixed; unfilled inputs become wirable ports on the canvas.
+
+---
+
 ## Runs
 
-A run is a single execution instance — whether from an interactive chat session, a strategy execution, or an automation trigger.
+A run is a single execution instance — whether from an interactive chat session, a mission cycle, or an automation trigger.
 
 ### Viewing Runs
 
@@ -443,7 +535,7 @@ An output is any meaningful result — a document, analysis, report, code, or da
 4. Set status and visibility
 5. Click **Create**
 
-Outputs are also automatically created by automation runs and strategy executions that emit artifacts.
+Outputs are also automatically created by automation runs that route results through sink nodes.
 
 ### Viewing Output History
 
@@ -631,7 +723,7 @@ Press **Cmd/Ctrl + K** to open the command palette, which lets you:
 
 4. **Try different models** — Use the model override feature in chat to compare responses from different LLMs.
 
-5. **Explore agent strategies** — Different strategies (researcher, builder, reviewer) produce very different behaviors. Match the strategy to your task.
+5. **Use agent templates as starting points** — The built-in templates (researcher, builder, reviewer, etc.) provide good defaults for common tasks. Customize them for your specific needs.
 
 6. **Set up automations for repetitive work** — If you find yourself doing the same research or analysis regularly, create an automation with appropriate triggers and budgets.
 

@@ -31,7 +31,7 @@ OpenForge brings together a personal knowledge base, semantic search, RAG-powere
 - **Version snapshots** — Every save creates an immutable version snapshot for audit and rollback
 - **Workspace-agnostic** — Agents exist globally and can access knowledge across all workspaces
 - **Per-tool access control** — Each tool can be set to allowed, HITL (human-in-the-loop approval), or disabled per agent
-- **6 built-in strategies** — chat, researcher, reviewer, builder, watcher, coordinator
+- **6 built-in agent templates** — Chat Assistant, Deep Researcher, Code Reviewer, Content Builder, Change Watcher, Team Coordinator
 
 ### Automations
 - **DAG workflows** — Build multi-agent workflows on a drag-and-drop canvas by wiring agent nodes and sink nodes together
@@ -45,6 +45,19 @@ OpenForge brings together a personal knowledge base, semantic search, RAG-powere
 - **Lifecycle management** — Pause, resume, and tear down deployments
 - **Execution tracking** — Each deployment execution creates a run with full step-by-step history
 - **Celery Beat scheduling** — Cron and interval triggers managed via the deployment scheduler
+
+### Missions
+- **Autonomous goal pursuit** — Define a goal, directives, constraints, and evaluation rubric, then let an agent work toward it over multiple cycles
+- **OODA execution model** — Each cycle runs five phases: Perceive, Plan, Act, Evaluate, Reflect
+- **Ratchet evaluation** — Rubric-based scoring with configurable ratchet modes (strict/relaxed) to prevent quality regression
+- **Budget and cadence controls** — Max cost, token limits, cycle caps, and configurable execution intervals
+- **Owned workspaces** — Each mission gets a dedicated workspace for its knowledge and artifacts
+
+### Sinks
+- **6 sink types** — Log, Knowledge Create, Knowledge Update, Article, REST API, Notification
+- **Reusable definitions** — Define sinks once, wire them into any automation as output destinations
+- **Configurable inputs** — Each sink type has typed inputs that can be wired from agent outputs or filled with static values
+- **Automation integration** — Sink nodes appear on the automation canvas alongside agent nodes
 
 ### Outputs
 - **Versioned artifacts** — Every material change creates a new version
@@ -117,8 +130,8 @@ Browser (React SPA)
 
 | Component | Role |
 |-----------|------|
-| **Backend** | REST API, WebSocket streaming, LLM integration, template engine, agent runtime, knowledge processing |
-| **PostgreSQL** | All structured data — workspaces, knowledge metadata, conversations, agents, automations, runs, outputs |
+| **Backend** | REST API, WebSocket streaming, LLM integration, template engine, agent runtime, knowledge processing, mission scheduling |
+| **PostgreSQL** | All structured data — workspaces, knowledge metadata, conversations, agents, automations, deployments, missions, runs, outputs, sinks |
 | **Qdrant** | Vector embeddings — semantic search (BGE-small 384-dim), visual search (CLIP 512-dim), agent memory |
 | **Redis** | Celery task broker, real-time event pub/sub, HITL coordination, session cache |
 | **Celery Worker** | Background agent execution, knowledge embedding, automation runs |
@@ -148,6 +161,15 @@ A DAG workflow built by wiring agent nodes and sink nodes together on a canvas. 
 
 ### Deployment
 A live instance of an automation, created when a user deploys it with concrete input values and an attached trigger (manual, cron, or interval). Deployments can be paused, resumed, and torn down.
+
+### Mission
+A long-running autonomous objective. Missions define a goal, directives, constraints, and an evaluation rubric, then assign an agent to pursue the goal over multiple OODA cycles (Perceive → Plan → Act → Evaluate → Reflect). Missions have budget controls, cadence scheduling, and ratchet-based quality evaluation.
+
+### Sink
+A reusable output destination that defines what happens with agent results. Six types are available: log, knowledge create, knowledge update, article (filesystem), REST API, and notification (webhook). Sinks are wired into automations as output nodes.
+
+### Run
+A single execution instance — from a chat session, an automation trigger, or a mission cycle. Runs track individual steps, tool calls, token usage, and emitted outputs.
 
 ### Output
 A durable result produced by a run or created manually — a document, report, analysis, code, or dataset. Outputs have versioning, lineage tracking, and a status lifecycle (draft, active, superseded, archived).

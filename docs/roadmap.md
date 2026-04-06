@@ -10,20 +10,9 @@ Priority tiers: **P0** (foundation/blocking), **P1** (high-impact), **P2** (valu
 
 ## Track 1: Execution Engine & Runtime
 
-### 1.1 Strategy System Cleanup — P0
+### 1.1 Strategy System Cleanup — P0 ✅ DONE
 
-The entire strategy system is vestigial. ~1,308 lines of dead code across 10 files. Only `ChatStrategy` ever executes, and it's a thin wrapper around `execute_tool_loop()`.
-
-**Actions:**
-- Delete `strategies/` directory (all 10 files)
-- Delete `strategy_executor.py` (210 LOC)
-- Drop `strategy_plugins` DB table
-- Remove dead template fields (`mode`, `strategy` from frontmatter)
-- Remove `AgentRuntimeConfig.strategy` field
-- Create `agent_executor.py` (~120 LOC) — single entry point for all agent invocations
-- Rewire `graph_executor`, `worker/tasks.py`, and `handoff_engine` to call `execute_agent()` directly
-
-**Net result:** -1,188 LOC, abstraction layers on automation path go from 5 to 2.
+The strategy system has been fully removed. The `strategies/` directory, `strategy_executor.py`, and `strategy_plugins` DB table (migration 015) are all gone. All execution now flows through `agent_executor.py` → `tool_loop` directly.
 
 ### 1.2 Consecutive Tool Failure Cap — P0
 
@@ -610,7 +599,7 @@ New `code.analyze_repo` tool: accepts Git URL, clones to temp, analyzes structur
 ## Implementation Phasing
 
 ### Phase 1: Foundation (Weeks 1-4)
-- **[1.1]** Strategy system cleanup (P0)
+- **[1.1]** ~~Strategy system cleanup (P0)~~ ✅ Done
 - **[1.2]** Consecutive tool failure cap (P0)
 - **[7.1]** Replace openai-whisper with faster-whisper (P0)
 - **[8.1]** Chat UI polish (P0)

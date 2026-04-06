@@ -4,7 +4,7 @@ Instructions for setting up a development environment and contributing to OpenFo
 
 ## Prerequisites
 
-- **Node.js 20+** (for frontend)
+- **Node.js 22+** (for frontend)
 - **Python 3.11+** (for backend)
 - **Docker and Docker Compose** (for databases and supporting services)
 
@@ -134,18 +134,11 @@ OpenForge/
 │       │   ├── events.py           # Runtime event types
 │       │   ├── event_publisher.py  # Event broadcasting
 │       │   ├── checkpoint_store.py # Durable state snapshots
-│       │   ├── prompt_context.py   # Context-aware preamble/postamble (CHAT vs AUTOMATION)
-│       │   ├── template_engine/    # Template engine (parser, renderer, functions, types)
-│       │   └── strategies/         # Strategy plugins
-│       │       ├── interface.py    # AgentStrategy protocol + BaseStrategy
-│       │       ├── base_loop.py    # Strategy execution loop
-│       │       ├── registry.py     # Strategy registry
-│       │       ├── chat.py         # Chat strategy
-│       │       ├── researcher.py   # Research strategy
-│       │       ├── reviewer.py     # Review strategy
-│       │       ├── builder.py      # Builder strategy
-│       │       ├── watcher.py      # Watcher strategy
-│       │       └── coordinator_strategy.py # Coordinator strategy
+│       │   ├── mission_executor.py  # Autonomous mission OODA cycle execution
+│       │   ├── mission_scheduler.py # Mission cadence scheduling
+│       │   ├── sink_handlers.py    # Sink type execution handlers
+│       │   ├── prompt_context.py   # Context-aware preamble/postamble (CHAT vs AUTOMATION vs MISSION)
+│       │   └── template_engine/    # Template engine (parser, renderer, functions, types)
 │       ├── services/              # Application services
 │       │   ├── llm_service.py      # LLM provider management
 │       │   ├── knowledge_processing_service.py  # Knowledge pipeline
@@ -183,8 +176,14 @@ OpenForge/
 │       │   ├── AutomationDetailPage.tsx # Automation detail with graph editor
 │       │   ├── DeploymentsPage.tsx  # Deployment list
 │       │   ├── DeploymentDetailPage.tsx # Deployment detail
+│       │   ├── MissionsPage.tsx     # Mission list
+│       │   ├── MissionDetailPage.tsx # Mission detail with cycle tracking
+│       │   ├── SinksPage.tsx       # Sink list
+│       │   ├── SinkDetailPage.tsx  # Sink configuration
 │       │   ├── RunsPage.tsx        # Run list
 │       │   ├── RunDetailPage.tsx   # Run detail
+│       │   ├── OutputsPage.tsx     # Output list
+│       │   ├── OutputDetailPage.tsx # Output detail with versioning
 │       │   ├── DashboardPage.tsx   # Workspace dashboard
 │       │   ├── SearchPage.tsx      # Search
 │       │   └── settings/           # Settings sub-pages
@@ -253,7 +252,6 @@ OpenForge/
 | Domain business logic | `backend/openforge/domains/{domain}/service.py` |
 | API route handlers | `backend/openforge/api/{resource}.py` (thin — delegates to services) |
 | Agent execution logic | `backend/openforge/runtime/` |
-| Strategy plugins | `backend/openforge/runtime/strategies/` |
 | External integrations | `backend/openforge/integrations/` |
 | Database models | `backend/openforge/db/models.py` |
 
@@ -282,7 +280,7 @@ OpenForge/
 - Feature modules contain domain-specific components, hooks, and types
 - Shared components are domain-agnostic
 - Layout components are presentational only (no business logic)
-- Domain routes: Agents, Chat, Automations, Deployments, Runs, Outputs are top-level (workspace-agnostic). Knowledge and Search are workspace-scoped.
+- Domain routes: Agents, Chat, Automations, Deployments, Missions, Sinks, Runs, Outputs are top-level (workspace-agnostic). Knowledge and Search are workspace-scoped.
 
 ### Tool Server
 
@@ -331,6 +329,8 @@ OpenForge/
 | **agents** | compiled_spec.py, service.py, schemas.py | Structured definitions, version snapshots, runtime config builder |
 | **automations** | compiler.py, graph_validation.py, service.py | DAG workflows with node wiring and validation |
 | **deployments** | service.py, router.py, schemas.py | Live automation instances with triggers and scheduling |
+| **missions** | service.py, router.py, schemas.py | Autonomous goal pursuit with OODA cycles and rubric evaluation |
+| **sinks** | service.py, router.py, schemas.py | Reusable output destinations (log, knowledge, article, REST API, notification) |
 | **knowledge** | (via services layer) | Knowledge types managed by knowledge_processing_service |
 | **retrieval** | service.py | Hybrid search, evidence building |
 | **runs** | service.py | Run tracking, steps, events |
@@ -448,7 +448,7 @@ Key test directories:
 - `tests/architecture/` — Schema presence, regression, release smoke tests
 - `tests/domains/agents/` — Agent blueprint, compiler, service tests
 - `tests/domains/automations/` — Automation service tests
-- `tests/runtime/` — Strategy, tool loop, chat handler, agent registry tests
+- `tests/runtime/` — Tool loop, chat handler, agent registry tests
 
 ### Frontend Tests
 

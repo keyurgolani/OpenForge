@@ -28,7 +28,8 @@ The main application server built with **FastAPI** (Python 3.11). Handles:
 - LLM provider integration (via LiteLLM for unified interface)
 - Agent definition management and runtime config building
 - Template engine for system prompt rendering (variables, loops, conditionals, functions)
-- Strategy-based execution (chat, researcher, reviewer, builder, watcher, coordinator)
+- Agent execution via ChatHandler (interactive) and agent_executor (background)
+- Mission execution via mission_executor (OODA cycles)
 - Deployment scheduling via Celery Beat
 - Knowledge processing pipeline (chunking, embedding, indexing)
 - Authentication and session management
@@ -43,7 +44,7 @@ The main application server built with **FastAPI** (Python 3.11). Handles:
 - `domains/` — Domain-driven services (agents, automations, deployments, knowledge, retrieval, runs, outputs, common)
 - `db/` — Database models, migrations, and clients (PostgreSQL, Qdrant, Redis)
 - `worker/` — Celery task definitions
-- `middleware/` — HTTP middleware (authentication)
+- `middleware/` — HTTP middleware (authentication, request logging)
 - `integrations/` — External integrations (tool dispatcher, MCP)
 
 ### Celery Worker
@@ -83,6 +84,8 @@ Primary relational database (v16) storing all structured data:
 - Agent definitions (structured configs, version snapshots)
 - Automations (DAG workflows with node wiring)
 - Deployments (live automation instances with triggers)
+- Missions and mission cycles (autonomous goal pursuit with OODA model)
+- Sinks (reusable output destination definitions)
 - Runs and run steps
 - Outputs (versioned artifacts with lineage)
 - Approval requests and audit logs
@@ -179,33 +182,44 @@ Agent Definition (structured fields)
      e. Route final outputs to sink nodes
 ```
 
-### Strategy Plugin System
+### Mission Execution
 
-Strategies define how agents execute. Each strategy implements the `AgentStrategy` protocol:
+Missions provide autonomous, multi-cycle goal pursuit using the OODA model:
 
-| Method | Purpose |
-|--------|---------|
-| `plan(ctx)` | Generate an execution plan (list of steps) |
-| `execute_step(ctx, step)` | Execute a single step |
-| `should_continue(ctx, latest)` | Decide whether to continue after a step |
-| `aggregate(ctx)` | Combine results from all steps |
+```
+Mission (goal, directives, constraints, rubric)
+    |
+    v
+1. MissionScheduler polls for missions with next_cycle_at <= now
+    |
+    v
+2. MissionExecutor runs a cycle:
+   a. Build mission context (goal, directives, constraints, rubric, history)
+   b. Render system prompt with mission-specific preamble/postamble
+   c. Execute autonomous agent via agent_executor → tool_loop
+   d. Parse structured mission output (perceive, plan, act, evaluate, reflect)
+    |
+    v
+3. Update cycle record:
+   - Phase summaries for each OODA phase
+   - Evaluation scores against rubric criteria
+   - Ratchet check (quality must not regress in strict mode)
+   - Actions log
+    |
+    v
+4. Schedule next cycle based on cadence interval
+   (or terminate if budget exhausted / termination conditions met)
+```
 
-**Built-in strategies:**
+**OODA phases per cycle:** Perceive → Plan → Act → Evaluate → Reflect
 
-| Strategy | Behavior |
-|----------|----------|
-| **chat** | Interactive conversation with tool loop. Single-step, loop-driven. |
-| **researcher** | Plan-driven research with evidence gathering and synthesis. |
-| **reviewer** | Code/document review with structured feedback. |
-| **builder** | Multi-step artifact construction (code, documents, reports). |
-| **watcher** | Monitoring loop that observes and reacts to changes. |
-| **coordinator** | Orchestrates multiple sub-agents via handoff. |
+**Budget controls:** max_cost, max_tokens, max_cycles — checked before each new cycle.
 
-Strategies are registered in a global registry. The `strategy` field in an agent blueprint selects which strategy to use.
+**Ratchet evaluation:** Each rubric criterion has a target score and ratchet mode (strict = scores must not decrease, relaxed = allowed to vary). The mission terminates when all criteria meet their targets.
 
 ### Tool Loop
 
-The tool loop (`runtime/tool_loop.py`) is the core LLM interaction cycle used by both `ChatHandler` and strategy steps:
+The tool loop (`runtime/tool_loop.py`) is the core LLM interaction cycle used by all execution paths:
 
 1. Call LLM with messages and tool definitions
 2. If LLM returns tool calls:
@@ -281,17 +295,19 @@ Search Query
 
 ## Domain Model
 
-### 8 Backend Domains
+### 10 Backend Domains
 
 | Domain | Purpose |
 |--------|---------|
 | **agents** | Structured agent definitions, version snapshots, runtime config |
 | **automations** | DAG workflow definitions with node wiring and graph validation |
 | **deployments** | Live automation instances with triggers and scheduling |
+| **missions** | Autonomous goal pursuit with OODA cycles, rubric evaluation, and budget controls |
+| **sinks** | Reusable output destination definitions (log, knowledge, article, REST API, notification) |
 | **knowledge** | Knowledge item management (via existing services) |
 | **retrieval** | Search, evidence building, retrieval tracing |
 | **runs** | Execution tracking (runs, run steps, checkpoints, events) |
-| **outputs** | Versioned output artifacts with lineage and sinks |
+| **outputs** | Versioned output artifacts with lineage and publication sinks |
 | **common** | Shared enums, utilities, and base types |
 
 ### Core Entities
@@ -325,6 +341,22 @@ Deployment (live automation instance)
  +-- Trigger (manual, cron, interval)
  +-- Lifecycle (active, paused, torn down)
 
+Mission (autonomous goal pursuit)
+ +-- Goal, Directives, Constraints
+ +-- Rubric (evaluation criteria with ratchet modes)
+ +-- Autonomous Agent reference
+ +-- Owned Workspace (dedicated knowledge container)
+ +-- Budget (max_cost, max_tokens, max_cycles)
+ +-- Cadence (execution interval)
+ +-- Mission Cycles (OODA execution records)
+    +-- Phase Summaries (perceive, plan, act, evaluate, reflect)
+    +-- Evaluation Scores
+    +-- Actions Log
+
+Sink (reusable output destination)
+ +-- Sink Type (log, knowledge_create, knowledge_update, article, rest_api, notification)
+ +-- Config (type-specific settings and input defaults)
+
 Run (execution instance)
  +-- Run Steps (individual step executions)
  +-- Checkpoints (state snapshots for durability)
@@ -334,7 +366,7 @@ Run (execution instance)
 Output (durable result)
  +-- Versions (content history)
  +-- Lineage Links (provenance to runs, automations, knowledge)
- +-- Sinks (publication destinations)
+ +-- Publication Sinks (export/sync destinations)
 ```
 
 ### Entity Relationships
@@ -345,10 +377,15 @@ Agent Definition --build at runtime--> AgentRuntimeConfig
 Automation --wires--> Agent Nodes + Sink Nodes
 Deployment --instantiates--> Automation (with input values + trigger)
 Deployment --creates--> Runs
-Run --executes via--> Strategy or GraphExecutor
+Mission --assigns--> Agent Definition (autonomous agent)
+Mission --owns--> Workspace (dedicated knowledge container)
+Mission --creates--> Mission Cycles
+Mission Cycle --creates--> Run (primary_run_id)
+Run --executes via--> ChatHandler, AgentExecutor, or GraphExecutor
 Run --owns--> Run Steps
 Run --emits--> Outputs
 Output --has--> Versions
+Sink --wired into--> Automation (as output destination nodes)
 Knowledge --embedded in--> Qdrant vectors
 ```
 
@@ -357,8 +394,8 @@ Knowledge --embedded in--> Qdrant vectors
 ### Structured Agent Definitions
 Agents are defined with explicit, typed fields (LLM config, tools config, memory config, input parameters, output definitions) rather than free-form markdown parsed into a model. The UI generates appropriate input elements for each field. System prompts use a template engine with variables, loops, conditionals, and built-in functions. Every save creates an immutable version snapshot for audit and rollback.
 
-### Strategy Plugin Architecture
-The runtime uses a strategy pattern for agent execution. Each strategy implements `plan`, `execute_step`, `should_continue`, and `aggregate`. This decouples execution behavior from the agent definition and makes it straightforward to add new execution modes without modifying the core runtime.
+### Direct Execution Model
+The runtime uses a direct execution model centered on `tool_loop` — a recursive LLM + tool dispatch cycle shared by all execution paths. `ChatHandler` handles interactive streaming chat, `agent_executor` handles background agent runs, `mission_executor` handles OODA mission cycles, and `graph_executor` handles multi-node automation DAGs. All paths converge on the same tool loop engine, ensuring consistent behavior across contexts.
 
 ### Workspace-Agnostic Agents
 Agents are not scoped to a workspace. They can access knowledge from any workspace through cross-workspace search. This enables agents that serve as domain experts across multiple knowledge bases.
