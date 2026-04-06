@@ -1,5 +1,5 @@
 from qdrant_client import QdrantClient, models
-from openforge.config import get_settings
+from openforge.common.config import get_settings
 import logging
 
 logger = logging.getLogger("openforge.qdrant")

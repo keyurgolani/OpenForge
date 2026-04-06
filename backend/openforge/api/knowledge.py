@@ -16,13 +16,12 @@ from openforge.schemas.knowledge import (
     KnowledgeCreate, KnowledgeUpdate, KnowledgeResponse, KnowledgeListItem, KnowledgeListParams, KnowledgeTagsUpdate
 )
 from openforge.utils.insights import normalize_insights_payload
-from openforge.utils.knowledge_title_generation import derive_knowledge_title
+from openforge.common.text import derive_knowledge_title, normalize_knowledge_title
 from openforge.utils.task_audit import (
     mark_task_log_done,
     mark_task_log_failed,
     start_task_log,
 )
-from openforge.utils.title import normalize_knowledge_title
 router = APIRouter()
 
 # Separate router for non-workspace-scoped endpoints

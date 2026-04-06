@@ -54,7 +54,6 @@ def _stub_runtime_modules(monkeypatch, *, chat_impl, send_impl):
     monkeypatch.setitem(sys.modules, "openforge.api.websocket", fake_ws_module)
 
 
-@pytest.mark.xfail(reason="Prompt catalogue removed; conversation_title prompt not available")
 @pytest.mark.asyncio
 async def test_refresh_conversation_title_falls_back_when_llm_errors(monkeypatch):
     conversation_id = uuid4()
@@ -71,7 +70,6 @@ async def test_refresh_conversation_title_falls_back_when_llm_errors(monkeypatch
         [
             _FakeResult(scalar=conversation),  # initial conversation lookup
             _FakeResult(scalars=[user_message, assistant_message]),  # message window
-            _FakeResult(scalar=None),  # prompt override lookup
             _FakeResult(scalar=conversation),  # lock/title re-check before write
         ]
     )
@@ -114,7 +112,6 @@ async def test_refresh_conversation_title_falls_back_when_llm_errors(monkeypatch
     ]
 
 
-@pytest.mark.xfail(reason="Prompt catalogue removed; conversation_title prompt not available")
 @pytest.mark.asyncio
 async def test_refresh_conversation_title_ignores_low_signal_generated_title(monkeypatch):
     conversation_id = uuid4()
@@ -135,7 +132,6 @@ async def test_refresh_conversation_title_ignores_low_signal_generated_title(mon
         [
             _FakeResult(scalar=conversation),  # initial conversation lookup
             _FakeResult(scalars=messages),  # message window
-            _FakeResult(scalar=None),  # prompt override lookup
             _FakeResult(scalar=conversation),  # lock/title re-check before write
         ]
     )
@@ -231,7 +227,6 @@ async def test_refresh_conversation_title_keeps_existing_title_when_model_return
     assert sent_events == []
 
 
-@pytest.mark.xfail(reason="Prompt catalogue removed; conversation_title prompt not available")
 @pytest.mark.asyncio
 async def test_refresh_conversation_title_rewrites_request_style_generated_title(monkeypatch):
     conversation_id = uuid4()
@@ -250,7 +245,6 @@ async def test_refresh_conversation_title_rewrites_request_style_generated_title
         [
             _FakeResult(scalar=conversation),  # initial conversation lookup
             _FakeResult(scalars=messages),  # message window
-            _FakeResult(scalar=None),  # prompt override lookup
             _FakeResult(scalar=conversation),  # lock/title re-check before write
         ]
     )

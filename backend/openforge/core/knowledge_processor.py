@@ -3,8 +3,8 @@ from openforge.core.embedding import embed_text, embed_texts, sparse_encode
 from openforge.core.embedding_document import build_knowledge_embedding_document
 from openforge.core.markdown_utils import chunk_markdown_with_parents
 from openforge.db.qdrant_client import get_qdrant
-from openforge.config import get_settings
-from openforge.utils.title import normalize_knowledge_title
+from openforge.common.config import get_settings
+from openforge.common.text import normalize_knowledge_title
 from qdrant_client.models import PointStruct, Filter, FieldCondition, MatchValue, SparseVector
 import logging
 from datetime import datetime, timezone

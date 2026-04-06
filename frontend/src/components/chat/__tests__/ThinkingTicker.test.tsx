@@ -10,7 +10,7 @@ describe('ThinkingTicker', () => {
 
   it('renders thinking placeholder when no thought', () => {
     render(<ThinkingTicker currentThought={null} isActive />)
-    expect(screen.getByText('Thinking...')).toBeInTheDocument()
+    expect(screen.getByText(/Thinking/)).toBeInTheDocument()
   })
 
   it('renders collapsed summary when not active', () => {

@@ -111,8 +111,8 @@ function AutomationGraphEditorInner({ automationId, graph, readOnly = false, for
   const { data: agentsData } = useAgentsQuery({ mode: 'pipeline' })
   const { data: sinksData } = useSinksQuery()
   const saveGraph = useSaveAutomationGraph()
-  const agents = agentsData?.agents ?? []
-  const dbSinks = sinksData?.sinks ?? []
+  const agents = useMemo(() => agentsData?.agents ?? [], [agentsData?.agents])
+  const dbSinks = useMemo(() => sinksData?.sinks ?? [], [sinksData?.sinks])
   const { data: workspacesData } = useWorkspaces()
   const workspaces = useMemo(() =>
     ((workspacesData as Array<{ id: string; title?: string; name?: string }>) ?? []).map(ws => ({

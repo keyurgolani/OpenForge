@@ -7,6 +7,6 @@ describe('StreamingCursor', () => {
     const { container } = render(<StreamingCursor />)
     const cursor = container.querySelector('span')
     expect(cursor).toBeTruthy()
-    expect(cursor?.className).toContain('animate-cursor-pulse')
+    expect(cursor?.className).toContain('streaming-cursor')
   })
 })

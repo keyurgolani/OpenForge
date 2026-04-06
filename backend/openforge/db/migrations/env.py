@@ -9,7 +9,7 @@ from alembic import context
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 
 from openforge.db.models import Base
-from openforge.config import get_settings
+from openforge.common.config import get_settings
 
 config = context.config
 # Skip fileConfig when running programmatically (inside uvicorn) —

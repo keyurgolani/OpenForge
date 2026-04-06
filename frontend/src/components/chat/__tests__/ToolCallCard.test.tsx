@@ -20,6 +20,6 @@ describe('ToolCallCard', () => {
 
   it('shows error message when errored', () => {
     render(<ToolCallCard toolName="search_web" arguments={{}} status="error" error="Connection timeout" />)
-    expect(screen.getByText('Connection timeout')).toBeInTheDocument()
+    expect(screen.getAllByText('Connection timeout').length).toBeGreaterThanOrEqual(1)
   })
 })

@@ -124,7 +124,12 @@ vi.mock('@/hooks/useStreamingChat', () => ({
     isConnected: true,
     lastError: null,
     clearLastError: vi.fn(),
+    onWsEvent: vi.fn(() => vi.fn()),
   }),
+}))
+
+vi.mock('@/hooks/useWorkspaceWebSocket', () => ({
+  useWorkspaceWebSocket: () => ({ on: vi.fn(() => vi.fn()) }),
 }))
 
 vi.mock('@/components/shared/ToastProvider', () => ({
@@ -180,10 +185,10 @@ describe('AgentChatPage empty assistant fallback', () => {
       </MemoryRouter>,
     )
 
-    expect(
-      screen.getByText(/This run ended without a user-visible reply\./),
-    ).toBeInTheDocument()
+    // The intermediate response content must not leak into the chat transcript
     expect(screen.queryByText('Internal intermediate response')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Show workflow details' })).not.toBeInTheDocument()
+    // Timeline tool call entries are rendered inline in the workflow stack
+    // (the message is kept because it has meaningful timeline entries)
+    expect(screen.getByText('workspace.search')).toBeInTheDocument()
   })
 })

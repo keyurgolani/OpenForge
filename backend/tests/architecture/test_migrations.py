@@ -24,6 +24,12 @@ EXPECTED_MIGRATIONS = [
     "014_create_sinks_table.py",
     "015_drop_strategy_plugins.py",
     "016_drop_dead_tables_and_columns.py",
+    "017_create_skill_templates.py",
+    "018_allow_fan_in_edges.py",
+    "019_rename_agent_mode_column.py",
+    "020_deployment_workspaces.py",
+    "021_create_missions.py",
+    "022_remove_workspace_scoping.py",
 ]
 
 

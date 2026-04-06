@@ -197,7 +197,7 @@ function ToolsTab() {
         }
     }, [qc])
 
-    const tools: ToolMeta[] = data?.tools ?? []
+    const tools = useMemo<ToolMeta[]>(() => data?.tools ?? [], [data?.tools])
     const available: boolean = data?.tool_server_available !== false
 
     // Build category counts

@@ -163,6 +163,7 @@ export function QuickKnowledgePanel({ open, defaultType = 'note', onClose }: Pro
             qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
         }
         onClose()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- buildPayload/isPayloadEmpty capture same state already in deps
     }, [knowledgeId, workspaceId, qc, onClose, title, content, url, type, tags, gistLang])
 
     // Keyboard shortcuts

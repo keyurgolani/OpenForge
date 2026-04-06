@@ -91,4 +91,5 @@ async def test_extract_parameter_values_falls_back_on_llm_error(monkeypatch):
 
     assert result["all_filled"] is False
     assert result["missing"] == ["topic", "audience"]
-    assert "provide the required inputs" in result["follow_up"].lower()
+    assert result["follow_up"] is None
+    assert result.get("extraction_failed") is True

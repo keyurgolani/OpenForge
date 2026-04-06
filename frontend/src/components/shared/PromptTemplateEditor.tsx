@@ -55,7 +55,7 @@ function extractVariables(content: string): Array<{ name: string; type: string }
   }
 
   // Match simple {{ variable }} and {{ variable::type }} expressions
-  const braceRegex = /\{\{\s*([a-zA-Z_][\w.-]*)(::([^\}]*))?\s*\}\}/g
+  const braceRegex = /\{\{\s*([a-zA-Z_][\w.-]*)(::([^}]*))?\s*\}\}/g
   let match
   while ((match = braceRegex.exec(content)) !== null) {
     addVar(match[1], match[3]?.trim())

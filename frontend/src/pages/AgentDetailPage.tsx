@@ -687,7 +687,7 @@ function PromptVariablesSidebar({
   outputDefinitions: OutputDefinition[]
 }) {
   const detectedVars = useMemo(() => extractVariables(systemPrompt), [systemPrompt])
-  const systemVars: SystemVarDef[] = (referenceData?.system_variables ?? []) as SystemVarDef[]
+  const systemVars = useMemo<SystemVarDef[]>(() => (referenceData?.system_variables ?? []) as SystemVarDef[], [referenceData?.system_variables])
 
   const categories = useMemo(() => {
     const map = new Map<string, SystemVarDef[]>()
@@ -950,6 +950,7 @@ function EnumOptionsInput({
       const joined = options.join(', ')
       if (joined !== text) setText(joined)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- sync from external options, text tracked via prevRef
   }, [options])
 
   const commit = () => {

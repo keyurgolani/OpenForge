@@ -39,61 +39,6 @@ export function useDeploymentTimelineAdapter(runId: string | null): DeploymentTi
     setTimeline(Array.from(nodesRef.current.values()))
   }, [])
 
-  const processEvent = useCallback((eventType: string, payload: Record<string, unknown>, nodeKey: string | undefined) => {
-    if (eventType === 'node_started' && nodeKey) {
-      if (nodesRef.current.has(nodeKey)) return // skip duplicates
-      const nodeType = (payload.node_type as string) ?? 'agent'
-      if (nodeType === 'sink') {
-        nodesRef.current.set(nodeKey, {
-          type: 'sink_execution',
-          id: `sink-${nodeKey}`,
-          node_key: nodeKey,
-          sink_type: (payload.sink_type as string) ?? 'unknown',
-          status: 'running',
-        } satisfies SinkExecutionTimelineItem)
-      } else {
-        nodesRef.current.set(nodeKey, {
-          type: 'node_execution',
-          id: `node-${nodeKey}`,
-          node_key: nodeKey,
-          node_type: nodeType as 'agent' | 'sink' | 'unknown',
-          agent_name: (payload.agent_slug as string) ?? undefined,
-          status: 'running',
-          children: [],
-        } satisfies NodeExecutionTimelineItem)
-      }
-      setPhase('running')
-      rebuildTimeline()
-    } else if (eventType === 'node_child_run' && nodeKey) {
-      const existing = nodesRef.current.get(nodeKey)
-      if (existing && existing.type === 'node_execution') {
-        nodesRef.current.set(nodeKey, { ...existing, child_run_id: payload.child_run_id as string })
-        // Start listening to child run events
-        connectChildRun(nodeKey, payload.child_run_id as string)
-      }
-    } else if (eventType === 'node_completed' && nodeKey) {
-      const existing = nodesRef.current.get(nodeKey)
-      if (existing) {
-        nodesRef.current.set(nodeKey, {
-          ...existing,
-          status: 'complete',
-          output_preview: payload.output_preview as string,
-        } as typeof existing)
-      }
-      rebuildTimeline()
-    } else if (eventType === 'node_failed' && nodeKey) {
-      const existing = nodesRef.current.get(nodeKey)
-      if (existing) {
-        nodesRef.current.set(nodeKey, {
-          ...existing,
-          status: 'error',
-          error: payload.error as string,
-        } as typeof existing)
-      }
-      rebuildTimeline()
-    }
-  }, [rebuildTimeline])
-
   // Connect to child run WebSocket to get agent loop events
   const connectChildRun = useCallback((nodeKey: string, childRunId: string) => {
     // Close existing child WS for this node if any
@@ -159,6 +104,60 @@ export function useDeploymentTimelineAdapter(runId: string | null): DeploymentTi
     childWsRefs.current.set(nodeKey, ws)
   }, [rebuildTimeline])
 
+  const processEvent = useCallback((eventType: string, payload: Record<string, unknown>, nodeKey: string | undefined) => {
+    if (eventType === 'node_started' && nodeKey) {
+      if (nodesRef.current.has(nodeKey)) return // skip duplicates
+      const nodeType = (payload.node_type as string) ?? 'agent'
+      if (nodeType === 'sink') {
+        nodesRef.current.set(nodeKey, {
+          type: 'sink_execution',
+          id: `sink-${nodeKey}`,
+          node_key: nodeKey,
+          sink_type: (payload.sink_type as string) ?? 'unknown',
+          status: 'running',
+        } satisfies SinkExecutionTimelineItem)
+      } else {
+        nodesRef.current.set(nodeKey, {
+          type: 'node_execution',
+          id: `node-${nodeKey}`,
+          node_key: nodeKey,
+          node_type: nodeType as 'agent' | 'sink' | 'unknown',
+          agent_name: (payload.agent_slug as string) ?? undefined,
+          status: 'running',
+          children: [],
+        } satisfies NodeExecutionTimelineItem)
+      }
+      setPhase('running')
+      rebuildTimeline()
+    } else if (eventType === 'node_child_run' && nodeKey) {
+      const existing = nodesRef.current.get(nodeKey)
+      if (existing && existing.type === 'node_execution') {
+        nodesRef.current.set(nodeKey, { ...existing, child_run_id: payload.child_run_id as string })
+        connectChildRun(nodeKey, payload.child_run_id as string)
+      }
+    } else if (eventType === 'node_completed' && nodeKey) {
+      const existing = nodesRef.current.get(nodeKey)
+      if (existing) {
+        nodesRef.current.set(nodeKey, {
+          ...existing,
+          status: 'complete',
+          output_preview: payload.output_preview as string,
+        } as typeof existing)
+      }
+      rebuildTimeline()
+    } else if (eventType === 'node_failed' && nodeKey) {
+      const existing = nodesRef.current.get(nodeKey)
+      if (existing) {
+        nodesRef.current.set(nodeKey, {
+          ...existing,
+          status: 'error',
+          error: payload.error as string,
+        } as typeof existing)
+      }
+      rebuildTimeline()
+    }
+  }, [rebuildTimeline, connectChildRun])
+
   // Main connection
   const connect = useCallback(() => {
     if (!runId || wsRef.current?.readyState === WebSocket.OPEN) return
@@ -198,12 +197,14 @@ export function useDeploymentTimelineAdapter(runId: string | null): DeploymentTi
       }
     }).catch(() => { /* ignore */ })
 
+    const childWsMap = childWsRefs.current
+    const nodesMap = nodesRef.current
     return () => {
       clearTimeout(reconnectTimer.current)
       wsRef.current?.close()
-      childWsRefs.current.forEach(ws => ws.close())
-      childWsRefs.current.clear()
-      nodesRef.current.clear()
+      childWsMap.forEach(ws => ws.close())
+      childWsMap.clear()
+      nodesMap.clear()
     }
   }, [runId, connect, processEvent])
 

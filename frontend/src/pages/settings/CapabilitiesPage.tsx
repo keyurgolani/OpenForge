@@ -249,7 +249,7 @@ export function CapabilitiesPage() {
         }
     }, [qc])
 
-    const tools: ToolMeta[] = data?.tools ?? []
+    const tools = useMemo<ToolMeta[]>(() => data?.tools ?? [], [data?.tools])
     const toolServerAvailable: boolean = data?.tool_server_available !== false
 
     // Group tools by category

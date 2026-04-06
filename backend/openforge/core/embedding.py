@@ -1,6 +1,6 @@
 from pathlib import Path
 from sentence_transformers import SentenceTransformer
-from openforge.config import get_settings
+from openforge.common.config import get_settings
 from collections import Counter
 import re
 import zlib
@@ -20,7 +20,7 @@ def _embeddings_cache_dir() -> str:
 
 def _resolve_embedding_model_id() -> str:
     """Resolve the active embedding model — DB config overrides env default."""
-    from openforge.config import get_settings
+    from openforge.common.config import get_settings
     settings = get_settings()
     try:
         from openforge.services.config_service import config_service as _cs

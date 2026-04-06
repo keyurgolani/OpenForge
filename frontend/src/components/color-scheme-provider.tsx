@@ -34,6 +34,7 @@ export function ColorSchemeProvider({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     applyScheme(scheme);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- apply once on mount
   }, []);
 
   const setScheme = useCallback((id: ColorSchemeId) => {

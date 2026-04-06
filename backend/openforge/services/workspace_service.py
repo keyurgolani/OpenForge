@@ -9,7 +9,7 @@ from openforge.db.models import Workspace, Knowledge, Conversation
 from openforge.db.qdrant_client import get_qdrant
 from openforge.schemas.workspace import WorkspaceCreate, WorkspaceUpdate, WorkspaceResponse
 from openforge.utils.insights import DEFAULT_INTELLIGENCE_CATEGORIES, get_workspace_categories
-from openforge.config import get_settings
+from openforge.common.config import get_settings
 from fastapi import HTTPException
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 

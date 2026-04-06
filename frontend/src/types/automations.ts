@@ -43,7 +43,7 @@ export interface AutomationCreate {
   tags?: string[];
 }
 
-export interface AutomationUpdate extends Partial<AutomationCreate> {}
+export type AutomationUpdate = Partial<AutomationCreate>;
 
 export interface AutomationListResponse {
   automations: Automation[];

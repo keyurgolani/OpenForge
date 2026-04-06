@@ -1,4 +1,4 @@
-from openforge.utils.chat_title import (
+from openforge.common.text import (
     build_running_title_summary,
     derive_chat_title,
     fallback_chat_title,

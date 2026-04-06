@@ -1,4 +1,4 @@
-from openforge.utils.knowledge_title_generation import derive_knowledge_title
+from openforge.common.text import derive_knowledge_title
 
 
 def test_derive_knowledge_title_prefers_valid_model_output() -> None:

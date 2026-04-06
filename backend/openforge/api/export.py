@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from openforge.db.postgres import get_db
 from openforge.db.models import Workspace, Knowledge, KnowledgeTag, Conversation, Message, MessageAttachment, Config
-from openforge.config import get_settings
+from openforge.common.config import get_settings
 from uuid import UUID
 import zipfile
 import json

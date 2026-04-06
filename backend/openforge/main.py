@@ -369,7 +369,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Auth middleware (added last = outermost; OPTIONS pass-through ensures CORS preflight works)
+# Request logging middleware (outermost — sees every request/response)
+from openforge.middleware.request_logging import RequestLoggingMiddleware
+app.add_middleware(RequestLoggingMiddleware)
+
+# Auth middleware (OPTIONS pass-through ensures CORS preflight works)
 from openforge.middleware.auth import AuthMiddleware
 app.add_middleware(AuthMiddleware)
 

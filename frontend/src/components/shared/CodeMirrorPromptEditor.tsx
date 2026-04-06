@@ -59,6 +59,7 @@ export default function CodeMirrorPromptEditor({
             view.destroy()
             viewRef.current = null
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- CodeMirror editor initialized once on mount
     }, [])
 
     useEffect(() => {

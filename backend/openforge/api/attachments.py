@@ -15,7 +15,7 @@ from typing import Optional
 
 from openforge.db.postgres import get_db
 from openforge.db.models import MessageAttachment, Message
-from openforge.config import get_settings
+from openforge.common.config import get_settings
 from openforge.schemas.knowledge import KnowledgeCreate
 from openforge.services.knowledge_service import knowledge_service
 from openforge.services.attachment_pipeline import get_extractor, resolve_attachment_pipeline

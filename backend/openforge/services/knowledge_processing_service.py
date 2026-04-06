@@ -14,12 +14,10 @@ from urllib.parse import urlparse, quote, unquote
 from openforge.db.models import Knowledge, KnowledgeTag, Workspace
 from openforge.db.qdrant_client import get_qdrant
 from openforge.schemas.knowledge import KnowledgeCreate, KnowledgeUpdate, KnowledgeResponse, KnowledgeListItem, KnowledgeListParams
-from openforge.config import get_settings
+from openforge.common.config import get_settings
 from openforge.runtime.input_preparation import build_context_block, prepare_llm_messages
 from openforge.runtime.trust_boundaries import ContentSourceType
-from openforge.utils.text import count_words, normalize_word_count, truncate_text
-from openforge.utils.knowledge_title_generation import derive_knowledge_title
-from openforge.utils.title import normalize_knowledge_title
+from openforge.common.text import count_words, normalize_word_count, truncate_text, derive_knowledge_title, normalize_knowledge_title
 from openforge.utils.insights import normalize_insights_payload, get_workspace_categories
 from openforge.utils.task_audit import start_task_log, mark_task_log_done, mark_task_log_failed
 from openforge.services.automation_config import (

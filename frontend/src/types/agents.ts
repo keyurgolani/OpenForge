@@ -76,7 +76,7 @@ export interface AgentDefinitionCreate {
   output_definitions?: OutputDefinition[];
 }
 
-export interface AgentDefinitionUpdate extends Partial<AgentDefinitionCreate> {}
+export type AgentDefinitionUpdate = Partial<AgentDefinitionCreate>;
 
 export interface AgentDefinitionListResponse {
   agents: AgentDefinition[];

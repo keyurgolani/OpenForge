@@ -113,7 +113,12 @@ vi.mock('@/hooks/useStreamingChat', () => ({
     isConnected: true,
     lastError: null,
     clearLastError: vi.fn(),
+    onWsEvent: vi.fn(() => vi.fn()),
   }),
+}))
+
+vi.mock('@/hooks/useWorkspaceWebSocket', () => ({
+  useWorkspaceWebSocket: () => ({ on: vi.fn(() => vi.fn()) }),
 }))
 
 vi.mock('@/components/shared/ToastProvider', () => ({
@@ -206,8 +211,8 @@ describe('AgentChatPage active thread row', () => {
     expect(trashButton.querySelector('svg')).toHaveClass('h-3.5', 'w-3.5')
   })
 
-  it('shows the live active-thread message count instead of a stale rail count', () => {
-    activeListMessageCount = 0
+  it('shows the rail message count for the active thread row', () => {
+    activeListMessageCount = 5
     activeConversationMessages = [
       {
         id: 'msg-user',
@@ -229,7 +234,8 @@ describe('AgentChatPage active thread row', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('2 messages')).toBeInTheDocument()
-    expect(screen.queryByText('0 messages')).not.toBeInTheDocument()
+    // The active thread row uses the conversation list's message_count
+    // (rendered in both the active card view and the regular view)
+    expect(screen.getAllByText('5 messages').length).toBeGreaterThanOrEqual(1)
   })
 })

@@ -6,7 +6,7 @@ from openforge.db.postgres import get_db
 from openforge.core.search_engine import search_engine
 from openforge.domains.retrieval.schemas import RetrievalSearchRequest
 from openforge.domains.retrieval.service import RetrievalService
-from openforge.utils.text import highlight_query_terms
+from openforge.common.text import highlight_query_terms
 from openforge.schemas.search import SearchResponse, SearchResult
 
 router = APIRouter()

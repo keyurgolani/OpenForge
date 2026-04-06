@@ -1,0 +1,24 @@
+version: "3.8"
+
+# Lightweight compose file for running tests in containers.
+# Usage: docker compose -f docker-compose.test.yml run --rm backend-test
+
+services:
+  backend-test:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.test.backend
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///test.db
+      - QDRANT_URL=http://localhost:6333
+      - REDIS_URL=redis://localhost:6379/0
+      - LOG_LEVEL=warning
+    volumes:
+      - ./backend:/app/backend:ro
+
+  frontend-test:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.test.frontend
+    volumes:
+      - ./frontend/src:/app/src:ro

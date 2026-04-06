@@ -209,7 +209,7 @@ class TestFrontendFileOrganization:
         """AppShell should use the final IA labels rather than the legacy agent/execution framing."""
         app_shell = (FRONTEND_ROOT / "pages" / "AppShell.tsx").read_text(encoding="utf-8")
 
-        for label in ["Knowledge", "Chat", "Agents", "Automations", "Runs", "Outputs", "Settings"]:
+        for label in ["Knowledge", "Chat", "Agents", "Automations", "Runs", "Settings"]:
             assert label in app_shell, f"Expected navigation label missing from AppShell: {label}"
 
         assert "Legacy Executions" not in app_shell

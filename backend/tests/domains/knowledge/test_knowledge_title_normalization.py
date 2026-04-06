@@ -1,5 +1,4 @@
-from openforge.utils.title import normalize_knowledge_title
-from openforge.utils.title_generation import normalize_generated_title
+from openforge.common.text import normalize_knowledge_title, normalize_generated_title
 
 
 def test_normalize_knowledge_title_rejects_placeholder_untitled() -> None:

@@ -59,7 +59,7 @@ export default function OutputDetailPage() {
   const { data: lineage } = useOutputLineageQuery(outputId)
   const { data: sinksData } = useOutputSinksQuery(outputId)
 
-  const versions = versionsData?.versions ?? []
+  const versions = useMemo(() => versionsData?.versions ?? [], [versionsData?.versions])
   const sinks = sinksData?.sinks ?? []
 
   const [metadataDraft, setMetadataDraft] = useState<MetadataDraft>({

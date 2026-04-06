@@ -56,6 +56,7 @@ function WorkspaceDetail({
         setVisionProviderId(ws.vision_provider_id ?? '')
         setVisionModel(ws.vision_model ?? '')
         setSaved(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset form fields when workspace selection changes
     }, [ws.id])
 
     const { data: settings = [] } = useQuery({ queryKey: ['settings'], queryFn: listSettings })

@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from openforge.config import get_settings
+from openforge.common.config import get_settings
 from openforge.db.postgres import get_db
 from openforge.services.config_service import config_service
 
@@ -614,7 +614,7 @@ async def delete_clip_model(model_id: str):
 
     # Invalidate cached model if the active model was deleted
     try:
-        from openforge.config import get_settings
+        from openforge.common.config import get_settings
         if get_settings().clip_model == model_id:
             from openforge.core.knowledge_processors.image_processor import ImageProcessor
             ImageProcessor._clip_model = None

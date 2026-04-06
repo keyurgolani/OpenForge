@@ -1,6 +1,6 @@
 import unittest
 
-from openforge.utils.text import count_words, normalize_word_count
+from openforge.common.text import count_words, normalize_word_count
 
 
 class CountWordsTests(unittest.TestCase):

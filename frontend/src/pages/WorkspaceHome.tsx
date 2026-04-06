@@ -264,8 +264,8 @@ export default function WorkspaceHome() {
         )
     }, [data, filterText])
 
-    const selectAll = () => setSelected(new Set(knowledgeItems.map(n => n.id)))
-    const clearSelection = () => setSelected(new Set())
+    const selectAll = useCallback(() => setSelected(new Set(knowledgeItems.map(n => n.id))), [knowledgeItems])
+    const clearSelection = useCallback(() => setSelected(new Set()), [])
 
     // Archive (Cmd+Shift+A) and Delete (Cmd+Backspace) keyboard shortcuts
     useEffect(() => {
@@ -309,7 +309,7 @@ export default function WorkspaceHome() {
         }
         window.addEventListener('keydown', handler)
         return () => window.removeEventListener('keydown', handler)
-    }, [selected, activeKnowledgeId, knowledgeItems, handleArchive, handleDelete, handleBulkArchive, handleBulkDelete])
+    }, [selected, activeKnowledgeId, knowledgeItems, handleArchive, handleDelete, handleBulkArchive, handleBulkDelete, isReadOnly, selectAll, clearSelection])
 
     const closeAllMenus = () => { setShowTypeMenu(false); setShowSortMenu(false) }
 

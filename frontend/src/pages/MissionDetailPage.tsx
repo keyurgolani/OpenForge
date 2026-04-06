@@ -84,7 +84,7 @@ export default function MissionDetailPage() {
     setSiderailSection(prev => (prev === key ? null : key))
 
   // These must be above early returns to avoid breaking React hooks ordering
-  const cycles = cyclesData?.cycles ?? []
+  const cycles = useMemo(() => cyclesData?.cycles ?? [], [cyclesData?.cycles])
   const isActive = mission?.status === 'active'
   const { timeline: missionTimeline, phase: missionPhase, connected: missionConnected } = useMissionTimelineAdapter(
     isActive ? missionId ?? null : null,

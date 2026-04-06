@@ -10,7 +10,7 @@ export class StreamRenderer {
   private rafId: number | null = null
   private draining = false
   private charsPerFrame = 2
-  private listeners = new Map<EventName, Set<Function>>()
+  private listeners = new Map<EventName, Set<(...args: unknown[]) => void>>()
 
   on<E extends EventName>(event: E, cb: (...args: EventMap[E]) => void) {
     if (!this.listeners.has(event)) this.listeners.set(event, new Set())

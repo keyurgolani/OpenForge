@@ -25,7 +25,7 @@ type AgentEventMap = {
 export type AgentEmitterEvent = keyof AgentEventMap
 
 export class AgentEmitter {
-  private listeners = new Map<string, Set<Function>>()
+  private listeners = new Map<string, Set<(...args: unknown[]) => void>>()
 
   on<E extends AgentEmitterEvent>(event: E, cb: (...args: AgentEventMap[E]) => void) {
     if (!this.listeners.has(event)) this.listeners.set(event, new Set())
@@ -85,7 +85,8 @@ export function useAgentStream() {
   }, [])
 
   useEffect(() => {
-    return () => { emitterRef.current.clear() }
+    const emitter = emitterRef.current
+    return () => { emitter.clear() }
   }, [])
 
   return {

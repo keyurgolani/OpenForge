@@ -324,7 +324,7 @@ export default function AppShell() {
       title: 'Dashboard',
       description: 'Your workspace at a glance.',
     }
-  }, [location.pathname, activeChatConversation])
+  }, [location.pathname, activeChatConversation, chatHeaderOverride])
 
   const routes = useMemo(() => ({
     workspace: dashboardRoute(workspaceId),
@@ -423,7 +423,7 @@ export default function AppShell() {
             {currentSectionMeta.description && (
               <p className="hidden truncate text-xs text-muted-foreground/90 sm:block">
                 {currentSectionMeta.description
-                  .replace(/[#*_~`|>\[\](){}!]/g, '')
+                  .replace(/[#*_~`|>[\](){}!]/g, '')
                   .replace(/\n+/g, ' ')
                   .trim()}
               </p>

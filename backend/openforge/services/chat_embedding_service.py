@@ -6,7 +6,7 @@ from qdrant_client.models import PointStruct, SparseVector
 
 from openforge.core.embedding import embed_text, sparse_encode
 from openforge.db.qdrant_client import get_qdrant
-from openforge.config import get_settings
+from openforge.common.config import get_settings
 
 logger = logging.getLogger("openforge.chat_embedding")
 

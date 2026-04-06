@@ -5,7 +5,10 @@ from uuid import uuid4
 
 import pytest
 
-from openforge.domains.automations.blueprint import AutomationBlueprint
+from openforge.domains.automations.blueprint import (
+    AutomationBlueprint,
+    AutomationNodeBlueprint,
+)
 from openforge.domains.automations.compiler import AutomationBlueprintCompiler
 
 
@@ -56,6 +59,7 @@ def sample_agent_spec():
     spec = MagicMock()
     spec.id = uuid4()
     spec.version = 1
+    spec.snapshot = {"parameters": [], "output_definitions": [{"key": "output", "type": "text"}]}
     return spec
 
 
@@ -65,32 +69,58 @@ def sample_blueprint():
         name="Test Automation",
         slug="test-automation",
         agent_slug="test-agent",
+        nodes=[
+            AutomationNodeBlueprint(
+                node_key="step1",
+                node_type="agent",
+                agent_slug="test-agent",
+            ),
+        ],
     )
 
 
 class TestAutomationBlueprintCompiler:
     @pytest.mark.asyncio
-    async def test_compile_fails_if_agent_has_no_spec(self, mock_db, sample_automation, sample_blueprint):
+    async def test_compile_fails_if_agent_has_no_spec(self, mock_db, sample_automation):
         agent = MagicMock()
         agent.slug = "no-spec-agent"
         agent.active_version_id = None
 
+        # Blueprint has one node referencing the agent with no spec
+        blueprint = AutomationBlueprint(
+            name="Test Automation",
+            slug="test-automation",
+            nodes=[
+                AutomationNodeBlueprint(
+                    node_key="step1",
+                    node_type="agent",
+                    agent_slug="no-spec-agent",
+                ),
+            ],
+        )
+
+        # DB returns agent when queried by slug
+        mock_db.scalar.return_value = agent
+
         compiler = AutomationBlueprintCompiler(mock_db)
-        with pytest.raises(ValueError, match="no active compiled spec"):
-            await compiler.compile(sample_automation, sample_blueprint, agent)
+        with pytest.raises(ValueError, match="has no compiled spec"):
+            await compiler.compile(sample_automation, blueprint)
 
         assert sample_automation.compilation_status == "failed"
 
     @pytest.mark.asyncio
     async def test_compile_creates_spec(self, mock_db, sample_automation, sample_blueprint, sample_agent, sample_agent_spec):
-        # Setup: agent has active_spec_id, get returns spec
+        # scalar() is called multiple times: first for agent lookup, then for trigger lookup
+        # We need it to return the agent for the first call, then None for subsequent calls
+        mock_db.scalar.side_effect = [sample_agent, None, None]
         mock_db.get.return_value = sample_agent_spec
-        mock_db.scalar.return_value = None
 
         compiler = AutomationBlueprintCompiler(mock_db)
-        spec = await compiler.compile(sample_automation, sample_blueprint, sample_agent)
+        spec = await compiler.compile(sample_automation, sample_blueprint)
 
         assert spec.automation_id == sample_automation.id
-        assert spec.agent_id == sample_agent.id
-        assert spec.agent_spec_id == sample_agent_spec.id
+        assert spec.is_multi_node is True
+        assert len(spec.nodes) == 1
+        assert spec.nodes[0].agent_id == sample_agent.id
+        assert spec.nodes[0].agent_spec_id == sample_agent_spec.id
         assert sample_automation.compilation_status == "success"

@@ -275,6 +275,7 @@ export function AgentChatView({
         resetRenderer()
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- messages tracked via messages.length
   }, [messages.length, phase, resetPhase, resetRenderer])
 
   // Stale-stream fallback: if phase is 'running' but no timeline updates arrive

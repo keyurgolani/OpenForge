@@ -531,7 +531,7 @@ export default function AgentChatPage() {
         shouldRestoreTextareaFocusRef.current = true
         setActiveCid(mostRecentConversationId)
         navigate(chatApi.routeFor(mostRecentConversationId), { replace: true })
-    }, [activeCid, conversationId, mostRecentConversationId, navigate, workspaceId])
+    }, [activeCid, conversationId, mostRecentConversationId, navigate, workspaceId, chatApi])
 
     useEffect(() => {
         if (!lastError) {

@@ -15,7 +15,7 @@ from typing import Optional
 
 from openforge.db.postgres import get_db
 from openforge.db.models import Knowledge
-from openforge.config import get_settings
+from openforge.common.config import get_settings
 from openforge.schemas.knowledge import KnowledgeResponse
 
 router = APIRouter()

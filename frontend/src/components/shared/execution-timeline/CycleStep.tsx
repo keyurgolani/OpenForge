@@ -50,7 +50,7 @@ export function CycleStep({ item, depth, onHITLAction }: CycleStepProps) {
   const durationStr = item.duration_ms != null ? `${(item.duration_ms / 1000).toFixed(1)}s` : null
 
   // Phase summaries
-  const phases = item.phase_summaries ?? {}
+  const phases = useMemo(() => item.phase_summaries ?? {}, [item.phase_summaries])
   const hasStructuredPhases = Object.keys(phases).length > 0
 
   const activePhaseText = useMemo(() => {

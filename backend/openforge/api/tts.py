@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from openforge.config import get_settings
+from openforge.common.config import get_settings
 from openforge.db.postgres import get_db
 from openforge.services.config_service import config_service
 from openforge.services.local_models import get_local_models_with_status

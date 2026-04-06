@@ -1,4 +1,4 @@
-from openforge.utils.text import (
+from openforge.common.text import (
     count_words,
     normalize_word_count,
     truncate_text,

@@ -10,7 +10,7 @@ import logging
 
 from openforge.db.postgres import get_db
 from openforge.db.models import Knowledge
-from openforge.config import get_settings
+from openforge.common.config import get_settings
 
 router = APIRouter()
 logger = logging.getLogger("openforge.visual_search")

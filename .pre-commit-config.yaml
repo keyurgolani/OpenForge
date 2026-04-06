@@ -1,0 +1,26 @@
+repos:
+  - repo: local
+    hooks:
+      - id: backend-tests
+        name: Backend Tests
+        entry: bash -c 'cd backend && python -m pytest tests/ --tb=short -q --no-header'
+        language: system
+        pass_filenames: false
+        files: ^backend/
+        types: [python]
+
+      - id: frontend-tests
+        name: Frontend Tests
+        entry: bash -c 'cd frontend && npx vitest run --reporter=dot'
+        language: system
+        pass_filenames: false
+        files: ^frontend/src/
+        types_or: [ts, tsx, javascript, jsx]
+
+      - id: frontend-typecheck
+        name: Frontend Type Check
+        entry: bash -c 'cd frontend && npx tsc --noEmit'
+        language: system
+        pass_filenames: false
+        files: ^frontend/src/
+        types_or: [ts, tsx]

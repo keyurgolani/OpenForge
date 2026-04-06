@@ -1,7 +1,7 @@
 from openforge.core.embedding import embed_text, sparse_encode
 from openforge.db.qdrant_client import get_qdrant
-from openforge.config import get_settings
-from openforge.utils.title import normalize_knowledge_title
+from openforge.common.config import get_settings
+from openforge.common.text import normalize_knowledge_title
 from pathlib import Path
 from qdrant_client.models import (
     Filter,
