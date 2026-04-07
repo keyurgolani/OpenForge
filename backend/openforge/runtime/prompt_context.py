@@ -37,6 +37,30 @@ def build_preamble(
         "Do not fabricate authorship lines, team names, or dates in your responses.",
     ]
 
+    # ── Web Tools Guidance (all modes) ──
+    lines.extend([
+        "",
+        "# Web Tools",
+        "",
+        "You have four categories of web-related tools, each for a different purpose:",
+        "",
+        "- **`search.*`** — Find information on the internet. "
+        "`search.web` for general queries, `search.news` for recent articles, "
+        "`search.images` for image results. Start here when you need to discover URLs or facts.",
+        "- **`web.*`** — Read content from web pages. "
+        "`web.read_page` extracts page content as markdown (handles JavaScript-rendered pages). "
+        "`web.read_pages` reads multiple pages concurrently. "
+        "`web.screenshot` captures a visual snapshot of a page.",
+        "- **`browser.*`** — Drive an interactive browser session. "
+        "Use `browser.open` to load a page and get element references, then "
+        "`browser.click`, `browser.type`, `browser.fill_form` to interact. "
+        "Only use browser tools when you need to click, type, or navigate dynamically.",
+        "- **`http.*`** — Make raw HTTP API calls (`http.get`, `http.post`). "
+        "Use these for REST APIs, webhooks, and machine-to-machine endpoints — not for reading web pages.",
+        "",
+        "**Typical workflow:** `search.web` → `web.read_page` → (if interactive needed) `browser.open`.",
+    ])
+
     if agent_mode == "autonomous":
         # Autonomous / mission mode — agent runs independently without human interaction
         lines.extend([

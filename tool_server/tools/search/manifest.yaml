@@ -1,0 +1,15 @@
+category: search
+description: "Search the web for information"
+tools:
+  - name: search.web
+    description: "Search the web via SearXNG"
+    risk_category: safe
+    confirm_by_default: false
+  - name: search.news
+    description: "Search news articles via SearXNG"
+    risk_category: safe
+    confirm_by_default: false
+  - name: search.images
+    description: "Search for images via SearXNG"
+    risk_category: safe
+    confirm_by_default: false

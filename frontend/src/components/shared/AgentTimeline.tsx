@@ -242,6 +242,7 @@ export function TimelineRenderer({ timeline, isLive = false }: { timeline: Timel
                                 success: e.success,
                                 output: e.output,
                                 error: e.error ?? undefined,
+                                images: e.images ?? undefined,
                             }
                             : undefined
                         return (

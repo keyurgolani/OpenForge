@@ -1,0 +1,15 @@
+category: web
+description: "Read content from the web"
+tools:
+  - name: web.read_page
+    description: "Read a web page as LLM-optimized markdown"
+    risk_category: safe
+    confirm_by_default: false
+  - name: web.read_pages
+    description: "Read multiple web pages concurrently"
+    risk_category: safe
+    confirm_by_default: false
+  - name: web.screenshot
+    description: "Take a screenshot of a web page"
+    risk_category: safe
+    confirm_by_default: false

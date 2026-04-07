@@ -13,6 +13,7 @@ interface ToolResult {
     success: boolean
     output: unknown
     error?: string
+    images?: Array<{ data: string; media_type: string }>
 }
 
 interface HITLInfo {
@@ -792,6 +793,18 @@ export function ToolCallCard({ callId: _callId, toolName, arguments: args, resul
                         ? <SmartOutput toolName={toolName} output={result.output} />
                         : <span className="break-words text-[11px] text-red-400">{result.error ?? 'Unknown error'}</span>
                     }
+                    {result.images && result.images.length > 0 && (
+                        <div className="flex flex-col gap-2 mt-2">
+                            {result.images.map((img, i) => (
+                                <img
+                                    key={i}
+                                    src={`data:${img.media_type};base64,${img.data}`}
+                                    alt={`Screenshot ${i + 1} from ${toolName}`}
+                                    className="rounded border border-border/40 max-w-full"
+                                />
+                            ))}
+                        </div>
+                    )}
                 </div>
             )}
         </TimelineBadge>

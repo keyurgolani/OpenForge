@@ -13,6 +13,7 @@ class ToolResult:
     truncated: bool = False
     original_length: Optional[int] = None
     recovery_hints: Optional[list[str]] = None
+    images: Optional[list[dict]] = None
 
     def to_dict(self) -> dict:
         d: dict[str, Any] = {"success": self.success}
@@ -25,6 +26,8 @@ class ToolResult:
             d["original_length"] = self.original_length
         if self.recovery_hints:
             d["recovery_hints"] = self.recovery_hints
+        if self.images is not None:
+            d["images"] = self.images
         return d
 
 

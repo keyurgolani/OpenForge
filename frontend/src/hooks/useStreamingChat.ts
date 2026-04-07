@@ -49,6 +49,7 @@ export interface TimelineToolCall {
     output?: unknown
     error?: string | null
     duration_ms?: number | null
+    images?: Array<{ data: string; media_type: string }> | null
     nested_timeline?: TimelineEntry[] | null
     delegated_conversation_id?: string | null
 }

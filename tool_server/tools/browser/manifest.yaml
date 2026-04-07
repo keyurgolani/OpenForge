@@ -1,0 +1,35 @@
+category: browser
+description: "Interactive web browser sessions via PinchTab"
+tools:
+  - name: browser.open
+    description: "Open a URL in the browser and return a page snapshot"
+    risk_category: moderate
+    confirm_by_default: false
+  - name: browser.snapshot
+    description: "Get current page structure with element refs"
+    risk_category: safe
+    confirm_by_default: false
+  - name: browser.click
+    description: "Click an element by ref"
+    risk_category: moderate
+    confirm_by_default: false
+  - name: browser.type
+    description: "Type text into an element by ref"
+    risk_category: moderate
+    confirm_by_default: false
+  - name: browser.fill_form
+    description: "Fill multiple form fields at once"
+    risk_category: moderate
+    confirm_by_default: false
+  - name: browser.evaluate
+    description: "Execute JavaScript in the browser (requires user approval)"
+    risk_category: high
+    confirm_by_default: true
+  - name: browser.list_tabs
+    description: "List open browser tabs"
+    risk_category: safe
+    confirm_by_default: false
+  - name: browser.close_tab
+    description: "Close a browser tab"
+    risk_category: moderate
+    confirm_by_default: false

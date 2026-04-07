@@ -185,14 +185,55 @@ TOOL_ALIASES: dict[str, str] = {
     "memory.delete":                "memory.forget",
     "memory.remove":                "memory.forget",
 
-    # ── New tool aliases ──
-    "http.news_search":             "http.search_news",
-    "search_news":                  "http.search_news",
-    "news_search":                  "http.search_news",
-    "http.fetch_pages":             "http.fetch_multiple",
-    "http.fetch_urls":              "http.fetch_multiple",
-    "fetch_multiple":               "http.fetch_multiple",
-    "fetch_pages":                  "http.fetch_multiple",
+    # ── Legacy http.* → new category mappings (Requirement 14.1, 14.3, 14.5) ──
+    "http.fetch_page":              "web.read_page",
+    "http.fetch_multiple":          "web.read_pages",
+    "http.search_web":              "search.web",
+    "http.search_news":             "search.news",
+    "http.search_images":           "search.images",
+
+    # Legacy http.* aliases that previously chained through old IDs (Requirement 14.5)
+    "http.news_search":             "search.news",
+    "http.fetch_pages":             "web.read_pages",
+    "http.fetch_urls":              "web.read_pages",
+
+    # Common model-guessed aliases (Requirement 14.2)
+    "http.browse":                  "browser.open",
+    "http.navigate":                "browser.open",
+    "http.open":                    "browser.open",
+    "http.screenshot":              "web.screenshot",
+    "http.read_page":               "web.read_page",
+    "http.read_pages":              "web.read_pages",
+    "web.navigate":                 "browser.open",
+    "web.browse":                   "browser.open",
+    "web.open":                     "browser.open",
+    "web.fetch_page":               "web.read_page",
+    "web.fetch":                    "web.read_page",
+    "web.search":                   "search.web",
+    "browser.navigate":             "browser.open",
+    "browser.screenshot":           "web.screenshot",
+    "search.search_web":            "search.web",
+    "search.search_news":           "search.news",
+    "search.search_images":         "search.images",
+
+    # Unprefixed shorthands (Requirement 14.4)
+    "browse":                       "browser.open",
+    "screenshot":                   "web.screenshot",
+    "fetch_page":                   "web.read_page",
+    "fetch_multiple":               "web.read_pages",
+    "fetch_pages":                  "web.read_pages",
+    "read_page":                    "web.read_page",
+    "read_pages":                   "web.read_pages",
+    "search_web":                   "search.web",
+    "search_news":                  "search.news",
+    "news_search":                  "search.news",
+    "search_images":                "search.images",
+    "open_browser":                 "browser.open",
+    "take_screenshot":              "web.screenshot",
+    "web_search":                   "search.web",
+    "navigate":                     "browser.open",
+
+    # ── Workspace knowledge aliases ──
     "workspace.update_knowledge":   "platform.workspace.update_knowledge",
     "workspace.edit_knowledge":     "platform.workspace.update_knowledge",
     "workspace.modify_knowledge":   "platform.workspace.update_knowledge",

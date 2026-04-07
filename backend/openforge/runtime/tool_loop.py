@@ -514,6 +514,7 @@ async def execute_tool_loop(
             result.timeline[entry_idx]["output"] = _prepare_timeline_output(output_for_timeline)
             result.timeline[entry_idx]["error"] = tool_result.get("error")
             result.timeline[entry_idx]["duration_ms"] = duration_ms
+            result.timeline[entry_idx]["images"] = tool_result.get("images")
 
             # Track consecutive failures per tool
             if tool_result.get("success"):
@@ -541,7 +542,11 @@ async def execute_tool_loop(
                 _te = result.timeline[entry_idx]
                 await callbacks.on_tool_result(call_id, tool_id, tool_result.get("success", False), tool_result.get("error"), _te.get("output"), _te.get("duration_ms"), _te.get("nested_timeline"), _te.get("delegated_conversation_id"))
 
-            tool_results_for_messages.append({"tool_call_id": call_id, "content": result_content})
+            entry = {"tool_call_id": call_id, "content": result_content}
+            images = tool_result.get("images")
+            if images:
+                entry["images"] = images
+            tool_results_for_messages.append(entry)
 
         if result.was_cancelled:
             break
@@ -566,6 +571,24 @@ async def execute_tool_loop(
                 "tool_call_id": tool_msg["tool_call_id"],
                 "content": tool_msg["content"],
             })
+
+            # Inject screenshot images as a multimodal user message
+            if tool_msg.get("images"):
+                image_blocks = []
+                for img in tool_msg["images"]:
+                    media_type = img.get("media_type", "image/jpeg")
+                    image_blocks.append({
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{media_type};base64,{img['data']}"},
+                    })
+                if image_blocks:
+                    messages.append({
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "[Screenshot from tool result above]"},
+                            *image_blocks,
+                        ],
+                    })
 
     result.tool_calls = all_tool_calls
 

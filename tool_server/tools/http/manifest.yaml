@@ -1,5 +1,5 @@
 category: http
-description: "Make HTTP requests and search the web"
+description: "Make raw HTTP API requests"
 tools:
   - name: http.get
     description: "Make an HTTP GET request"
@@ -9,11 +9,3 @@ tools:
     description: "Make an HTTP POST request"
     risk_category: moderate
     confirm_by_default: true
-  - name: http.fetch_page
-    description: "Fetch and extract readable content from a web page"
-    risk_category: moderate
-    confirm_by_default: false
-  - name: http.search_web
-    description: "Search the web via SearXNG"
-    risk_category: safe
-    confirm_by_default: false

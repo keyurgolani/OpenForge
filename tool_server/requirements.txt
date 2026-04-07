@@ -4,3 +4,4 @@ httpx>=0.27
 redis[hiredis]>=5.0
 pydantic-settings>=2.0
 trafilatura>=1.12
+Pillow>=10.0.0

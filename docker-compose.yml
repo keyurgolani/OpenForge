@@ -127,6 +127,8 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-warning}
       - SEARXNG_URL=http://searxng:8080
       - TARGETS_ROOT=/targets
+      - PINCHTAB_URL=http://pinchtab:3000
+      - CRAWL4AI_URL=http://crawl4ai:11235
     volumes:
       - ${WORKSPACE_HOST_PATH:-./data/workspace}:/workspace
       - ${SKILLS_HOST_PATH:-./data/skills}:/skills
@@ -134,6 +136,8 @@ services:
     depends_on:
       - redis
       - searxng
+      - pinchtab
+      - crawl4ai
     restart: unless-stopped
     deploy:
       resources:
@@ -152,3 +156,20 @@ services:
       resources:
         limits:
           memory: 512M
+
+  pinchtab:
+    image: pinchtab/pinchtab
+    shm_size: 2g
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  crawl4ai:
+    image: unclecode/crawl4ai:latest
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G

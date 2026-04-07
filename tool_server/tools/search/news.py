@@ -1,3 +1,5 @@
+"""News search tool using SearXNG news category."""
+
 import json
 from urllib.parse import urlparse
 
@@ -10,11 +12,11 @@ from content_boundary import wrap_untrusted
 class SearchNewsTool(BaseTool):
     @property
     def id(self):
-        return "http.search_news"
+        return "search.news"
 
     @property
     def category(self):
-        return "http"
+        return "search"
 
     @property
     def display_name(self):
@@ -88,11 +90,29 @@ class SearchNewsTool(BaseTool):
             return ToolResult(
                 success=False,
                 error="Search service (SearXNG) is unavailable. It may not be running.",
+                recovery_hints=[
+                    "Try again in 30 seconds",
+                    "Use web.read_page on a known URL as an alternative",
+                ],
             )
         except httpx.TimeoutException:
-            return ToolResult(success=False, error="News search request timed out.")
+            return ToolResult(
+                success=False,
+                error="News search request timed out.",
+                recovery_hints=[
+                    "Try a simpler or shorter query",
+                    "Try again — the search service may be temporarily slow",
+                ],
+            )
         except Exception as exc:
-            return ToolResult(success=False, error=f"News search failed: {exc}")
+            return ToolResult(
+                success=False,
+                error=f"News search failed: {exc}",
+                recovery_hints=[
+                    "Try again in 30 seconds",
+                    "Use web.read_page on a known URL as an alternative",
+                ],
+            )
 
         results = []
         for r in data.get("results", [])[:max_results]:

@@ -20,6 +20,8 @@ class ToolServerSettings(BaseSettings):
     skills_dir: str = "/skills"
     skills_root: str = "/skills"
     searxng_url: str = "http://searxng:8080"
+    pinchtab_url: str = "http://pinchtab:3000"
+    crawl4ai_url: str = "http://crawl4ai:11235"
 
 
 @lru_cache()

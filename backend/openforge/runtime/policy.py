@@ -307,8 +307,10 @@ def _coerce_runtime_risk(value: str) -> ToolRiskCategory:
         return ToolRiskCategory.DESTRUCTIVE
     if normalized in {"high", "external_mutation"}:
         return ToolRiskCategory.EXTERNAL_MUTATION
-    if normalized in {"medium", "local_mutation"}:
+    if normalized in {"medium", "moderate", "local_mutation"}:
         return ToolRiskCategory.LOCAL_MUTATION
+    if normalized in {"low", "safe", "read_only"}:
+        return ToolRiskCategory.READ_ONLY
     return ToolRiskCategory.READ_ONLY
 
 
