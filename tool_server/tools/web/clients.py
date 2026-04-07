@@ -69,10 +69,24 @@ class Crawl4AIClient:
             resp.raise_for_status()
             data = resp.json()
 
+        # Crawl4AI returns results as a list (one entry per URL).
+        # Handle both the list format and a legacy singular "result" dict.
+        results_list = data.get("results", [])
+        if results_list and isinstance(results_list, list):
+            first = results_list[0]
+        else:
+            first = data.get("result", {})
+
+        # The "markdown" field may be a dict (Crawl4AI v2 format with
+        # raw_markdown / fit_markdown keys) or a plain string.
+        raw_md = first.get("markdown", "")
+        if isinstance(raw_md, dict):
+            raw_md = raw_md.get("raw_markdown", "")
+
         result: dict[str, Any] = {
-            "success": data.get("success", False),
-            "markdown": data.get("result", {}).get("markdown", ""),
-            "metadata": data.get("result", {}).get("metadata", {}),
+            "success": first.get("success", data.get("success", False)),
+            "markdown": raw_md or "",
+            "metadata": first.get("metadata", {}),
         }
 
         # Truncate if content exceeds configured limit

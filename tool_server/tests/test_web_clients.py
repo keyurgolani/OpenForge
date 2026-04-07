@@ -85,13 +85,15 @@ async def test_crawl4ai_health_check_fail():
 
 @pytest.mark.asyncio
 async def test_crawl4ai_crawl_success():
+    """Crawl4AI returns results as a list — verify we parse the first entry."""
     def handler(request):
         return httpx.Response(200, json={
             "success": True,
-            "result": {
+            "results": [{
+                "success": True,
                 "markdown": "# Hello World",
                 "metadata": {"title": "Test"},
-            },
+            }],
         })
 
     client = _make_crawl4ai(handler)
@@ -102,12 +104,48 @@ async def test_crawl4ai_crawl_success():
 
 
 @pytest.mark.asyncio
+async def test_crawl4ai_crawl_v2_dict_markdown():
+    """Crawl4AI v2 returns markdown as a dict with raw_markdown/fit_markdown keys."""
+    def handler(request):
+        return httpx.Response(200, json={
+            "success": True,
+            "results": [{
+                "success": True,
+                "markdown": {"raw_markdown": "# Dict Format", "fit_markdown": "# Fit"},
+                "metadata": {},
+            }],
+        })
+
+    client = _make_crawl4ai(handler)
+    result = await client.crawl("https://example.com")
+    assert result["markdown"] == "# Dict Format"
+
+
+@pytest.mark.asyncio
+async def test_crawl4ai_crawl_legacy_singular_result():
+    """Backwards compatibility: handle legacy singular 'result' key."""
+    def handler(request):
+        return httpx.Response(200, json={
+            "success": True,
+            "result": {
+                "markdown": "# Legacy Format",
+                "metadata": {"title": "Legacy"},
+            },
+        })
+
+    client = _make_crawl4ai(handler)
+    result = await client.crawl("https://example.com")
+    assert result["success"] is True
+    assert result["markdown"] == "# Legacy Format"
+
+
+@pytest.mark.asyncio
 async def test_crawl4ai_crawl_truncates_content():
     long_content = "x" * 100
     def handler(request):
         return httpx.Response(200, json={
             "success": True,
-            "result": {"markdown": long_content, "metadata": {}},
+            "results": [{"success": True, "markdown": long_content, "metadata": {}}],
         })
 
     client = _make_crawl4ai(handler, max_content_chars=50)

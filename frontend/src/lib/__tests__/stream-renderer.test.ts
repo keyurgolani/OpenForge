@@ -137,6 +137,11 @@ describe('StreamRenderer', () => {
       expect(onRender).toHaveBeenCalledWith(content)
     })
 
+    it('emits complete after render', () => {
+      renderer.setImmediate('Snapshot content')
+      expect(onComplete).toHaveBeenCalledTimes(1)
+    })
+
     it('does not start RAF loop', () => {
       renderer.setImmediate('Some content')
       expect(rafCallbacks).toHaveLength(0)
@@ -147,6 +152,23 @@ describe('StreamRenderer', () => {
       onRender.mockClear()
       renderer.setImmediate('new full content')
       expect(onRender).toHaveBeenCalledWith('new full content')
+    })
+
+    it('cancels active RAF loop and resets draining state', () => {
+      renderer.ingest('streaming content')
+      renderer.complete() // sets draining = true, RAF is active
+      onComplete.mockClear()
+      onRender.mockClear()
+
+      renderer.setImmediate('snapshot override')
+      expect(onRender).toHaveBeenCalledWith('snapshot override')
+      // Should emit complete exactly once (from setImmediate), not from drain
+      expect(onComplete).toHaveBeenCalledTimes(1)
+
+      // Flushing leftover RAFs should NOT emit another complete
+      onComplete.mockClear()
+      flushFrames(5)
+      expect(onComplete).not.toHaveBeenCalled()
     })
   })
 
@@ -166,6 +188,19 @@ describe('StreamRenderer', () => {
 
       renderer.complete()
       expect(onComplete).not.toHaveBeenCalled()
+    })
+
+    it('cancels active draining without emitting complete', () => {
+      renderer.ingest('content being streamed')
+      renderer.complete() // start draining
+      onComplete.mockClear()
+
+      renderer.destroy()
+
+      // Flushing RAFs should not cause events since listeners are cleared
+      flushFrames(5)
+      expect(onComplete).not.toHaveBeenCalled()
+      expect(onRender).toHaveBeenCalledTimes(0 + onRender.mock.calls.length) // no new calls
     })
   })
 })

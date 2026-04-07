@@ -52,6 +52,21 @@ def _get_whisper_download_root() -> str:
     return str(Path(get_settings().models_root) / "whisper")
 
 
+def _detect_device() -> tuple[str, str]:
+    """Detect the best available device and matching compute type.
+
+    Returns ``(device, compute_type)`` — ``("cuda", "float16")`` when a CUDA
+    GPU is available, otherwise ``("cpu", "int8")``.
+    """
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return "cuda", "float16"
+    except ImportError:
+        pass
+    return "cpu", "int8"
+
+
 def _get_whisper_model(model_size: str = "base", download_root: Optional[str] = None):
     """Lazy-load faster-whisper model (cached per model size)."""
     global _whisper_models
@@ -62,11 +77,12 @@ def _get_whisper_model(model_size: str = "base", download_root: Optional[str] = 
         if download_root is None:
             download_root = _get_whisper_download_root()
 
-        logger.info("Loading faster-whisper model: %s", model_size)
+        device, compute_type = _detect_device()
+        logger.info("Loading faster-whisper model: %s (device=%s, compute_type=%s)", model_size, device, compute_type)
         _whisper_models[cache_key] = WhisperModel(
             model_size,
-            device="cpu",
-            compute_type="int8",
+            device=device,
+            compute_type=compute_type,
             download_root=download_root,
         )
         logger.info("faster-whisper model '%s' loaded.", model_size)

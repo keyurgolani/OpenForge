@@ -13,6 +13,7 @@ from tools.browser.fill_form import BrowserFillFormTool
 from tools.browser.evaluate import BrowserEvaluateTool
 from tools.browser.list_tabs import BrowserListTabsTool
 from tools.browser.close_tab import BrowserCloseTabTool
+from tools.browser.extract_text import BrowserExtractTextTool
 
 _pt_client = PinchTabClient(
     PinchTabConfig(
@@ -26,6 +27,7 @@ TOOLS = [
     BrowserClickTool(_pt_client),
     BrowserTypeTool(_pt_client),
     BrowserFillFormTool(_pt_client),
+    BrowserExtractTextTool(_pt_client),
     BrowserEvaluateTool(_pt_client),
     BrowserListTabsTool(_pt_client),
     BrowserCloseTabTool(_pt_client),

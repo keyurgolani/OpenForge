@@ -21,6 +21,10 @@ tools:
     description: "Fill multiple form fields at once"
     risk_category: moderate
     confirm_by_default: false
+  - name: browser.extract_text
+    description: "Extract clean text content from the current page"
+    risk_category: safe
+    confirm_by_default: false
   - name: browser.evaluate
     description: "Execute JavaScript in the browser (requires user approval)"
     risk_category: high

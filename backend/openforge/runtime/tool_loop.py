@@ -208,6 +208,8 @@ async def execute_tool_loop(
         thinking_started_at: float | None = None
         tool_calls_this_turn: list[dict[str, Any]] = []
         finish_reason = "stop"
+        # Buffer tokens to intercept leaked <tool_call> XML before streaming
+        _token_buf = ""
 
         async for event in llm_gateway.stream_with_tools(
             messages=messages,
@@ -234,12 +236,37 @@ async def execute_tool_loop(
                 if token:
                     result.full_response += token
                     response_this_turn += token
-                    if callbacks.on_token:
-                        await callbacks.on_token(token)
+                    # Buffer tokens to catch <tool_call> XML before streaming
+                    _token_buf += token
+                    if "<tool_call>" in _token_buf:
+                        # Discard everything from the tag start onward
+                        idx = _token_buf.index("<tool_call>")
+                        safe = _token_buf[:idx]
+                        if safe and callbacks.on_token:
+                            await callbacks.on_token(safe)
+                        _token_buf = ""
+                    elif "<" in _token_buf:
+                        # Might be a partial tag — flush only up to the '<'
+                        idx = _token_buf.rindex("<")
+                        safe = _token_buf[:idx]
+                        if safe and callbacks.on_token:
+                            await callbacks.on_token(safe)
+                        _token_buf = _token_buf[idx:]
+                    else:
+                        if callbacks.on_token:
+                            await callbacks.on_token(_token_buf)
+                        _token_buf = ""
             elif event_type == "tool_calls":
                 tool_calls_this_turn = event.get("calls", [])
             elif event_type == "done":
                 finish_reason = event.get("finish_reason", "stop")
+
+        # Flush remaining token buffer (skip if it's a partial tool_call tag)
+        if _token_buf and "<tool_call>" not in _token_buf:
+            # Only flush if it doesn't look like a partial XML tag
+            if not _token_buf.lstrip().startswith("<"):
+                if callbacks.on_token:
+                    await callbacks.on_token(_token_buf)
 
         def _thinking_entry() -> dict[str, Any]:
             entry: dict[str, Any] = {"type": "thinking", "content": thinking_this_turn.strip()}

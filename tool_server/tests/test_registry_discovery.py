@@ -1,4 +1,4 @@
-"""Verify all 16 web-related tools are registered and discoverable.
+"""Verify all 17 web-related tools are registered and discoverable.
 
 Validates Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6
 """
@@ -45,14 +45,15 @@ class TestToolRegistryDiscovery:
             "search.web",
         ]
 
-    def test_browser_category_has_8_tools(self):
-        """Requirement 1.4: browser category registers exactly 8 tools."""
+    def test_browser_category_has_9_tools(self):
+        """Requirement 1.4: browser category registers exactly 9 tools."""
         by_cat = _tools_by_category(_build_registry())
         assert "browser" in by_cat, "browser category not discovered"
         assert sorted(by_cat["browser"]) == [
             "browser.click",
             "browser.close_tab",
             "browser.evaluate",
+            "browser.extract_text",
             "browser.fill_form",
             "browser.list_tabs",
             "browser.open",
@@ -72,12 +73,12 @@ class TestToolRegistryDiscovery:
         for cat in ("web", "search", "browser", "http"):
             assert cat in by_cat, f"category '{cat}' not discovered"
 
-    def test_total_16_web_related_tools(self):
-        """Requirements 1.2-1.5: total of 16 web-related tools across 4 categories."""
+    def test_total_17_web_related_tools(self):
+        """Requirements 1.2-1.5: total of 17 web-related tools across 4 categories."""
         by_cat = _tools_by_category(_build_registry())
         web_cats = ("web", "search", "browser", "http")
         total = sum(len(by_cat.get(c, [])) for c in web_cats)
-        assert total == 16, f"Expected 16 web-related tools, got {total}"
+        assert total == 17, f"Expected 17 web-related tools, got {total}"
 
     def test_manifests_loaded_for_all_web_tools(self):
         """Requirement 1.7: manifest.yaml loaded for each web-related category."""
@@ -86,8 +87,8 @@ class TestToolRegistryDiscovery:
             "web.read_page", "web.read_pages", "web.screenshot",
             "search.web", "search.news", "search.images",
             "browser.open", "browser.snapshot", "browser.click",
-            "browser.type", "browser.fill_form", "browser.evaluate",
-            "browser.list_tabs", "browser.close_tab",
+            "browser.type", "browser.fill_form", "browser.extract_text",
+            "browser.evaluate", "browser.list_tabs", "browser.close_tab",
             "http.get", "http.post",
         ]
         for tool_id in expected_tools:

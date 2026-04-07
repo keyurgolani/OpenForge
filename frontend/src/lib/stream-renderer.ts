@@ -39,9 +39,15 @@ export class StreamRenderer {
 
   /** Set content instantly without animation (for snapshot restoration). */
   setImmediate(content: string) {
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId)
+      this.rafId = null
+    }
+    this.draining = false
     this.buffer = content
     this.rendered = content
     this.emit('render', this.rendered)
+    this.emit('complete')
   }
 
   reset() {
@@ -56,7 +62,14 @@ export class StreamRenderer {
   }
 
   destroy() {
-    this.reset()
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId)
+      this.rafId = null
+    }
+    this.buffer = ''
+    this.rendered = ''
+    this.draining = false
+    this.charsPerFrame = 2
     this.listeners.clear()
   }
 

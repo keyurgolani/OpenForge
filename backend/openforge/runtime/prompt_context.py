@@ -54,6 +54,7 @@ def build_preamble(
         "- **`browser.*`** — Drive an interactive browser session. "
         "Use `browser.open` to load a page and get element references, then "
         "`browser.click`, `browser.type`, `browser.fill_form` to interact. "
+        "`browser.extract_text` returns clean text (~800 tokens) from the open page. "
         "Only use browser tools when you need to click, type, or navigate dynamically.",
         "- **`http.*`** — Make raw HTTP API calls (`http.get`, `http.post`). "
         "Use these for REST APIs, webhooks, and machine-to-machine endpoints — not for reading web pages.",

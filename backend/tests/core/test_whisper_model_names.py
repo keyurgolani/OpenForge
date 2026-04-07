@@ -1,9 +1,10 @@
-"""Verify _parse_whisper_model_name() and _HF_TO_WHISPER mapping work with faster-whisper."""
+"""Verify _parse_whisper_model_name(), _HF_TO_WHISPER mapping, and _detect_device() work with faster-whisper."""
 
 import pytest
 
 from openforge.core.knowledge_processors.audio_processor import (
     _HF_TO_WHISPER,
+    _detect_device,
     _parse_whisper_model_name,
 )
 
@@ -130,3 +131,41 @@ class TestDownloadStatusWhisperNames:
         (tmp_path / "whisper").mkdir(parents=True)
 
         assert local_models.get_download_status("openai/whisper-base") is False
+
+
+class TestDetectDevice:
+    """Verify _detect_device() returns correct device and compute_type."""
+
+    def test_returns_cuda_when_available(self, monkeypatch):
+        """When torch.cuda.is_available() returns True, use CUDA with float16."""
+        import types
+        mock_torch = types.ModuleType("torch")
+        mock_cuda = types.ModuleType("torch.cuda")
+        mock_cuda.is_available = lambda: True
+        mock_torch.cuda = mock_cuda
+        monkeypatch.setitem(__import__("sys").modules, "torch", mock_torch)
+
+        device, compute_type = _detect_device()
+        assert device == "cuda"
+        assert compute_type == "float16"
+
+    def test_returns_cpu_when_no_cuda(self, monkeypatch):
+        """When torch.cuda.is_available() returns False, fall back to CPU with int8."""
+        import types
+        mock_torch = types.ModuleType("torch")
+        mock_cuda = types.ModuleType("torch.cuda")
+        mock_cuda.is_available = lambda: False
+        mock_torch.cuda = mock_cuda
+        monkeypatch.setitem(__import__("sys").modules, "torch", mock_torch)
+
+        device, compute_type = _detect_device()
+        assert device == "cpu"
+        assert compute_type == "int8"
+
+    def test_returns_cpu_when_torch_not_installed(self, monkeypatch):
+        """When torch is not importable, fall back to CPU with int8."""
+        monkeypatch.setitem(__import__("sys").modules, "torch", None)
+
+        device, compute_type = _detect_device()
+        assert device == "cpu"
+        assert compute_type == "int8"
