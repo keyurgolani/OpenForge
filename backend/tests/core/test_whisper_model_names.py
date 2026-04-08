@@ -25,7 +25,12 @@ class TestHFToWhisperMapping:
         """Every openai/whisper-* model in LOCAL_MODELS must appear in _HF_TO_WHISPER."""
         from openforge.services.local_models import LOCAL_MODELS
 
-        stt_ids = [m.id for m in LOCAL_MODELS if m.capability_type == "stt"]
+        # Only whisper-based STT models need a _HF_TO_WHISPER entry;
+        # liquid-audio models (lfm2.5-*) route through a separate engine.
+        stt_ids = [
+            m.id for m in LOCAL_MODELS
+            if m.capability_type == "stt" and m.id.startswith("openai/whisper-")
+        ]
         for model_id in stt_ids:
             assert model_id in _HF_TO_WHISPER, (
                 f"STT model '{model_id}' from LOCAL_MODELS is missing in _HF_TO_WHISPER"

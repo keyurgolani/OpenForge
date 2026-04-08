@@ -599,7 +599,7 @@ async def execute_tool_loop(
                 "content": tool_msg["content"],
             })
 
-            # Inject screenshot images as a multimodal user message
+            # Inject screenshot images as a multimodal user message (below)
             if tool_msg.get("images"):
                 image_blocks = []
                 for img in tool_msg["images"]:
@@ -616,6 +616,7 @@ async def execute_tool_loop(
                             *image_blocks,
                         ],
                     })
+
 
     result.tool_calls = all_tool_calls
 

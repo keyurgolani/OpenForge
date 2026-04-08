@@ -9,7 +9,7 @@ COPY frontend/ ./
 RUN npx vite build
 
 # ── Stage 2: Production image ──
-FROM python:3.11-slim
+FROM python:3.12-slim
 WORKDIR /app
 
 # Install system dependencies

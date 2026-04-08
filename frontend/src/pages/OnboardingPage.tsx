@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom'
 import {
     getOnboarding, advanceOnboarding, createProvider,
     testConnection, createWorkspace, listProviders, deleteProvider,
+    getSystemHardware, getOllamaStatus, getOllamaModels,
+    getRecommendedOllamaModels, pullOllamaModel, downloadAudioModel,
 } from '@/lib/api'
 import { Eye, EyeOff, FileText, Loader2, Search, CheckCircle2, XCircle, Sliders, Sparkles, ArrowLeft, ArrowRight, Plus, Trash2, MessageSquare, Lock, Brain, Folder, Briefcase, Microscope, BookOpen, Target, Globe, Lightbulb, Wrench, Palette, BarChart3, Rocket, Shield, FlaskConical, Leaf, Key, Settings2, PenLine, Database, Sprout } from 'lucide-react'
 import { ProviderIcon } from '@/components/shared/ProviderIcon'
@@ -26,7 +28,7 @@ const PROVIDERS = [
     { id: 'custom-anthropic', name: 'Custom Anthropic-compat.', color: 'from-rose-500/20 border-rose-500/30', needsKey: false, needsUrl: true },
 ]
 
-const STEPS = ['welcome', 'providers_setup', 'workspace_create']
+const STEPS = ['welcome', 'providers_setup', 'local_setup', 'workspace_create']
 
 export default function OnboardingPage() {
     const navigate = useNavigate()
@@ -105,7 +107,10 @@ export default function OnboardingPage() {
                     <WelcomeStep onNext={() => advance.mutate('providers_setup')} loading={advance.isPending} />
                 )}
                 {step === 'providers_setup' && (
-                    <ProvidersSetupStep onNext={() => advance.mutate('workspace_create')} onBack={() => advance.mutate('welcome')} loading={advance.isPending} />
+                    <ProvidersSetupStep onNext={() => advance.mutate('local_setup')} onBack={() => advance.mutate('welcome')} loading={advance.isPending} />
+                )}
+                {step === 'local_setup' && (
+                    <LocalSetupStep onNext={() => advance.mutate('workspace_create')} onBack={() => advance.mutate('providers_setup')} loading={advance.isPending} />
                 )}
                 {step === 'workspace_create' && (
                     <WorkspaceCreateStep onNext={async () => {
@@ -337,6 +342,146 @@ function ProvidersSetupStep({ onNext, onBack, loading }: { onNext: () => void; o
                     {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                     {configured.length === 0 ? 'Skip — use local models' : `Continue with ${configured.length} provider${configured.length > 1 ? 's' : ''}`}
                     <ArrowRight className="w-4 h-4" />
+                </button>
+            </div>
+        </div>
+    )
+}
+
+function LocalSetupStep({ onNext, onBack, loading }: { onNext: () => void; onBack: () => void; loading: boolean }) {
+    const { data: hardware } = useQuery({ queryKey: ['system-hardware'], queryFn: getSystemHardware })
+    const { data: ollamaStatus } = useQuery({ queryKey: ['ollama-status'], queryFn: getOllamaStatus })
+    const { data: recommended = [] } = useQuery({ queryKey: ['ollama-recommended'], queryFn: () => getRecommendedOllamaModels() })
+    const { data: installed = [] } = useQuery({ queryKey: ['ollama-models'], queryFn: getOllamaModels })
+
+    const [pulling, setPulling] = useState<Record<string, number | 'done' | 'error'>>({})
+
+    const installedNames = new Set(installed.map(m => m.name))
+    const ramBudget = hardware?.ram_total_gb ?? 0
+    const filtered = recommended.filter(m => m.min_ram_gb <= ramBudget)
+    const capabilities = ['chat', 'vision', 'code', 'embedding'] as const
+    const capLabels: Record<string, string> = { chat: 'Chat', vision: 'Vision', code: 'Code', embedding: 'Embedding' }
+
+    const handlePull = async (modelName: string) => {
+        setPulling(p => ({ ...p, [modelName]: 0 }))
+        try {
+            const resp = await pullOllamaModel(modelName)
+            const reader = resp.body?.getReader()
+            if (!reader) return
+            const decoder = new TextDecoder()
+            while (true) {
+                const { done, value } = await reader.read()
+                if (done) break
+                const text = decoder.decode(value)
+                for (const line of text.split('\n')) {
+                    if (!line.startsWith('data: ')) continue
+                    const raw = line.slice(6).trim()
+                    if (raw === '[DONE]') {
+                        setPulling(p => ({ ...p, [modelName]: 'done' }))
+                        break
+                    }
+                    try {
+                        const ev = JSON.parse(raw)
+                        if (ev.total && ev.completed) {
+                            setPulling(p => ({ ...p, [modelName]: Math.round((ev.completed / ev.total) * 100) }))
+                        }
+                    } catch { /* ignore parse errors */ }
+                }
+            }
+            setPulling(p => ({ ...p, [modelName]: 'done' }))
+        } catch {
+            setPulling(p => ({ ...p, [modelName]: 'error' }))
+        }
+    }
+
+    const ollamaConnected = ollamaStatus?.connected ?? false
+
+    return (
+        <div className="glass-card shadow-glass-lg p-6 flex flex-col space-y-5 animate-slide-up border border-accent/20">
+            <div>
+                <h2 className="text-xl font-bold mb-1">Set Up Local Models</h2>
+                <p className="text-muted-foreground text-sm">
+                    OpenForge detected your system resources and recommends models that fit.
+                </p>
+            </div>
+
+            {hardware && (
+                <div className="flex items-center gap-3 text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2 border border-border/20">
+                    <span>{hardware.ram_total_gb} GB RAM</span>
+                    <span className="text-border/50">|</span>
+                    {hardware.has_gpu ? (
+                        <span>{hardware.gpu_name} ({hardware.gpu_vram_gb} GB)</span>
+                    ) : (
+                        <span>No GPU detected</span>
+                    )}
+                    <span className="text-border/50">|</span>
+                    <span>{hardware.disk_free_gb} GB free disk</span>
+                </div>
+            )}
+
+            {!ollamaConnected ? (
+                <div className="text-sm text-muted-foreground bg-muted/20 rounded-lg p-4 border border-border/20">
+                    Local model provider is not connected. You can configure it later in Settings.
+                </div>
+            ) : filtered.length === 0 ? (
+                <div className="text-sm text-muted-foreground bg-muted/20 rounded-lg p-4 border border-border/20">
+                    No models fit your current resource budget. You can pull models manually in Settings.
+                </div>
+            ) : (
+                <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
+                    {capabilities.map(cap => {
+                        const models = filtered.filter(m => m.capability === cap)
+                        if (models.length === 0) return null
+                        return (
+                            <div key={cap}>
+                                <p className="text-xs font-medium text-muted-foreground mb-2">{capLabels[cap]}</p>
+                                <div className="space-y-1.5">
+                                    {models.map(m => {
+                                        const isInstalled = installedNames.has(m.name) || pulling[m.name] === 'done'
+                                        const progress = pulling[m.name]
+                                        const isPulling = typeof progress === 'number'
+                                        return (
+                                            <div key={m.name} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border/20 bg-muted/10">
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="text-sm font-medium truncate">{m.name}</div>
+                                                    <div className="text-[10px] text-muted-foreground">{m.size_label} — {m.description}</div>
+                                                </div>
+                                                {isInstalled ? (
+                                                    <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                                                ) : isPulling ? (
+                                                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-shrink-0">
+                                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                        {progress}%
+                                                    </div>
+                                                ) : progress === 'error' ? (
+                                                    <button className="text-xs text-red-400 hover:text-red-300" onClick={() => handlePull(m.name)}>
+                                                        Retry
+                                                    </button>
+                                                ) : (
+                                                    <button
+                                                        className="text-xs text-accent hover:text-accent/80 font-medium flex-shrink-0"
+                                                        onClick={() => handlePull(m.name)}
+                                                    >
+                                                        Pull
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
+            )}
+
+            <div className="flex gap-3">
+                <button className="btn-ghost justify-center py-3 px-4" onClick={onBack} disabled={loading}>
+                    <ArrowLeft className="w-4 h-4" /> Back
+                </button>
+                <button className="btn-primary flex-1 justify-center py-3" onClick={onNext} disabled={loading}>
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    Continue <ArrowRight className="w-4 h-4" />
                 </button>
             </div>
         </div>

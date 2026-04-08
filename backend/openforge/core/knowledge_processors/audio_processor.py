@@ -322,7 +322,13 @@ class AudioProcessor:
         }
 
     def _transcribe(self, file_path: str, model_size: str = "base") -> dict:
-        """Transcribe audio using faster-whisper."""
+        """Transcribe audio using the configured STT engine."""
+        if model_size in ("lfm2.5-audio-1.5b-stt", "lfm2.5-audio-1.5b"):
+            from openforge.core.liquid_audio_engine import transcribe as liquid_transcribe
+            from openforge.common.config import get_settings
+            return liquid_transcribe(file_path, get_settings().models_root)
+
+        model_size = _parse_whisper_model_name(model_size)
         download_root = _get_whisper_download_root()
         model = _get_whisper_model(model_size, download_root=download_root)
 

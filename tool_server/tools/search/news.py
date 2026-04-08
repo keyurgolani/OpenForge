@@ -63,12 +63,23 @@ class SearchNewsTool(BaseTool):
             "required": ["query"],
         }
 
+    _VALID_TIME_RANGES = {"day", "week", "month", "year"}
+    _TIME_RANGE_ALIASES = {
+        "24h": "day", "1d": "day", "today": "day",
+        "7d": "week", "1w": "week",
+        "30d": "month", "1m": "month",
+        "1y": "year", "365d": "year",
+    }
+
     async def execute(self, params: dict, context: ToolContext) -> ToolResult:
         query = (params.get("query") or "").strip()
         if not query:
             return ToolResult(success=True, output={"results": [], "message": "No query provided."})
         max_results = params.get("max_results", 10)
-        time_range = params.get("time_range", "week")
+        raw_range = (params.get("time_range") or "week").strip().lower()
+        time_range = self._TIME_RANGE_ALIASES.get(raw_range, raw_range)
+        if time_range not in self._VALID_TIME_RANGES:
+            time_range = "week"
         language = params.get("language", "en")
         searxng_url = get_settings().searxng_url
 
@@ -104,10 +115,19 @@ class SearchNewsTool(BaseTool):
                     "Try again — the search service may be temporarily slow",
                 ],
             )
+        except httpx.HTTPStatusError as exc:
+            return ToolResult(
+                success=False,
+                error=f"News search returned HTTP {exc.response.status_code}. The search backend rejected the request.",
+                recovery_hints=[
+                    "Simplify your query and try again",
+                    "Use search.web as an alternative",
+                ],
+            )
         except Exception as exc:
             return ToolResult(
                 success=False,
-                error=f"News search failed: {exc}",
+                error=f"News search failed: {type(exc).__name__}",
                 recovery_hints=[
                     "Try again in 30 seconds",
                     "Use web.read_page on a known URL as an alternative",

@@ -168,6 +168,29 @@ async def download_tts_model(body: TTSDownloadRequest):
 
         return {"status": "complete", "model_id": body.model_id, "downloaded": _coqui_is_downloaded(body.model_id)}
 
+    elif model.engine == "liquid-audio":
+        liquid_dir = Path(get_settings().models_root) / "liquid-audio"
+        if liquid_dir.exists() and (any(liquid_dir.rglob("*.safetensors")) or any(liquid_dir.rglob("*.bin"))):
+            return {"status": "complete", "model_id": body.model_id, "downloaded": True}
+
+        liquid_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            def _do_download():
+                from huggingface_hub import snapshot_download
+                snapshot_download(
+                    "LiquidAI/LFM2.5-Audio-1.5B",
+                    local_dir=str(liquid_dir),
+                    local_dir_use_symlinks=False,
+                )
+
+            await asyncio.to_thread(_do_download)
+        except Exception as e:
+            logger.error("Failed to download liquid-audio model: %s", e)
+            raise HTTPException(status_code=500, detail=f"Download failed: {e}")
+
+        return {"status": "complete", "model_id": body.model_id, "downloaded": True}
+
     raise HTTPException(status_code=400, detail=f"Unsupported TTS engine: {model.engine}")
 
 
@@ -201,6 +224,13 @@ async def delete_tts_model(model_id: str):
             shutil.rmtree(model_dir)
             deleted = True
 
+    elif model.engine == "liquid-audio":
+        liquid_dir = Path(get_settings().models_root) / "liquid-audio"
+        if liquid_dir.exists():
+            shutil.rmtree(liquid_dir)
+            deleted = True
+            logger.info("Deleted liquid-audio model dir: %s", liquid_dir)
+
     if deleted:
         logger.info("Deleted TTS model: %s", model_id)
 
@@ -229,3 +259,43 @@ async def set_default_tts_model(
 
     await config_service.set_config(db, TTS_DEFAULT_CONFIG_KEY, body.model_id, "llm")
     return TTSDefaultResponse(model_id=body.model_id)
+
+
+class TTSSynthesizeRequest(BaseModel):
+    text: str
+    model_id: str = ""
+
+
+@router.post("/synthesize")
+async def synthesize_speech(
+    body: TTSSynthesizeRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Synthesize speech from text using the configured TTS engine."""
+    from openforge.services.local_models import _MODEL_BY_ID
+    from openforge.services.config_service import config_service
+
+    model_id = body.model_id
+    if not model_id:
+        config = await config_service.get_config(db, "local_tts_model")
+        model_id = (config.value if config else "") or ""
+
+    model = _MODEL_BY_ID.get(model_id)
+    if not model or model.capability_type != "tts":
+        raise HTTPException(status_code=400, detail=f"Unknown TTS model: {model_id}")
+
+    if model.engine == "liquid-audio":
+        from openforge.core.liquid_audio_engine import synthesize as liquid_synthesize
+        try:
+            wav_bytes = await asyncio.to_thread(
+                liquid_synthesize, body.text, get_settings().models_root
+            )
+            from fastapi.responses import Response
+            return Response(content=wav_bytes, media_type="audio/wav")
+        except RuntimeError as e:
+            raise HTTPException(status_code=500, detail=str(e))
+        except Exception as e:
+            logger.error("Liquid-audio TTS failed: %s", e)
+            raise HTTPException(status_code=500, detail=f"TTS synthesis failed: {e}")
+
+    raise HTTPException(status_code=400, detail=f"TTS synthesis not supported for engine: {model.engine}")

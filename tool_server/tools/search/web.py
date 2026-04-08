@@ -85,10 +85,19 @@ class SearchWebTool(BaseTool):
                     "Try again — the search service may be temporarily slow",
                 ],
             )
+        except httpx.HTTPStatusError as exc:
+            return ToolResult(
+                success=False,
+                error=f"Web search returned HTTP {exc.response.status_code}. The search backend rejected the request.",
+                recovery_hints=[
+                    "Simplify your query and try again",
+                    "Use web.read_page on a known URL as an alternative",
+                ],
+            )
         except Exception as exc:
             return ToolResult(
                 success=False,
-                error=f"Search failed: {exc}",
+                error=f"Search failed: {type(exc).__name__}",
                 recovery_hints=[
                     "Try again in 30 seconds",
                     "Use web.read_page on a known URL as an alternative",

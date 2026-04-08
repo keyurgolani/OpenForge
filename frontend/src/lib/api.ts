@@ -546,7 +546,7 @@ export const getOllamaStatus = (): Promise<{ connected: boolean; model_count: nu
     api.get('/ollama/status').then(r => r.data)
 export const getOllamaModels = (): Promise<Array<{ name: string; size: number; modified_at: string; parameter_size?: string; quantization?: string }>> =>
     api.get('/ollama/models').then(r => r.data)
-export const getRecommendedOllamaModels = (capability?: string): Promise<Array<{ name: string; capability: string; size_label: string; description: string }>> =>
+export const getRecommendedOllamaModels = (capability?: string): Promise<Array<{ name: string; capability: string; size_label: string; description: string; min_ram_gb: number }>> =>
     api.get('/ollama/models/recommended', { params: capability ? { capability } : undefined }).then(r => r.data)
 export const pullOllamaModel = (name: string): Promise<Response> =>
     fetch('/api/v1/ollama/pull', {
@@ -556,5 +556,22 @@ export const pullOllamaModel = (name: string): Promise<Response> =>
     })
 export const deleteOllamaModel = (name: string): Promise<void> =>
     api.delete(`/ollama/models/${name}`).then(() => undefined)
+
+// ── System hardware ────────────────────────────────────────────────────
+export interface SystemHardware {
+    ram_total_gb: number
+    ram_available_gb: number
+    has_gpu: boolean
+    gpu_name: string | null
+    gpu_vram_gb: number | null
+    disk_free_gb: number
+}
+
+export const getSystemHardware = (): Promise<SystemHardware> =>
+    api.get('/system/hardware').then(r => r.data)
+
+// ── Audio model download ───────────────────────────────────────────────
+export const downloadAudioModel = (modelId: string): Promise<{ status: string; model_id: string; downloaded: boolean }> =>
+    api.post('/models/tts/download', { model_id: modelId }).then(r => r.data)
 
 export default api

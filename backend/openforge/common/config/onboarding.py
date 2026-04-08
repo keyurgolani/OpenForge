@@ -14,6 +14,7 @@ from openforge.schemas.settings import OnboardingState
 _STEP_ORDER = (
     "welcome",
     "providers_setup",
+    "local_setup",
     "workspace_create",
     "complete",
 )

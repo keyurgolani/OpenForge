@@ -50,6 +50,10 @@ LOCAL_MODELS: list[LocalModel] = [
     # ── TTS / Coqui ──
     LocalModel(id="xtts-v2", name="XTTS v2", capability_type="tts", engine="coqui", size_mb=1800, requires_gpu=True),
 
+    # ── STT+TTS / Liquid AI ──
+    LocalModel(id="lfm2.5-audio-1.5b-stt", name="LFM2.5 Audio 1.5B", capability_type="stt", engine="liquid-audio", size_mb=6000),
+    LocalModel(id="lfm2.5-audio-1.5b-tts", name="LFM2.5 Audio 1.5B", capability_type="tts", engine="liquid-audio", size_mb=6000),
+
     # ── Embedding ──
     LocalModel(id="all-MiniLM-L6-v2", name="all-MiniLM-L6-v2", capability_type="embedding", size_mb=80),
     LocalModel(id="all-MiniLM-L12-v2", name="all-MiniLM-L12-v2", capability_type="embedding", size_mb=120),
@@ -179,6 +183,12 @@ def get_download_status(model_id: str) -> bool:
                 if p.name != "training_args.bin":
                     return True
         return False
+
+    if model.engine == "liquid-audio":
+        liquid_dir = root / "liquid-audio"
+        if not liquid_dir.exists():
+            return False
+        return any(liquid_dir.rglob("*.safetensors")) or any(liquid_dir.rglob("*.bin"))
 
     return False
 

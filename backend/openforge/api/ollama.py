@@ -26,82 +26,109 @@ router = APIRouter()
 # Curated April 2026.  Every entry must exist in the official Ollama library.
 # Organised by capability, then roughly by resource tier (light → heavy).
 RECOMMENDED_MODELS: list[dict] = [
-    # ── Chat (8 GB RAM tier) ─────────────────────────────────────────────
-    {
-        "name": "qwen3.5:4b",
-        "capability": "chat",
-        "size_label": "~3.4 GB",
-        "description": "Qwen 3.5 4B — multimodal, thinking, 256K context, great on 8 GB RAM",
-    },
+    # ── Chat (4 GB tier) ────────────────────────────────────────────
     {
         "name": "lfm2.5-thinking:1.2b",
         "capability": "chat",
         "size_label": "~731 MB",
         "description": "Liquid AI 1.2B — ultra-fast hybrid model with thinking, ideal for edge",
+        "min_ram_gb": 2,
+    },
+    {
+        "name": "cogito:3b",
+        "capability": "chat",
+        "size_label": "~2.2 GB",
+        "description": "Deep Cogito 3B — hybrid reasoning with deep thinking, strong tool calling",
+        "min_ram_gb": 4,
+    },
+    # ── Chat (8 GB tier) ────────────────────────────────────────────
+    {
+        "name": "qwen3.5:4b",
+        "capability": "chat",
+        "size_label": "~3.4 GB",
+        "description": "Qwen 3.5 4B — multimodal with thinking, 256K context, great 8 GB default",
+        "min_ram_gb": 6,
+    },
+    {
+        "name": "cogito:8b",
+        "capability": "chat",
+        "size_label": "~4.9 GB",
+        "description": "Deep Cogito 8B — hybrid reasoning, 128K context, excellent tool calling",
+        "min_ram_gb": 8,
+    },
+    # ── Chat (16 GB tier) ───────────────────────────────────────────
+    {
+        "name": "qwen3.5:9b",
+        "capability": "chat",
+        "size_label": "~6.6 GB",
+        "description": "Qwen 3.5 9B — best quality at this tier, multimodal + thinking",
+        "min_ram_gb": 12,
     },
     {
         "name": "gemma4:e4b",
         "capability": "chat",
         "size_label": "~9.6 GB",
-        "description": "Google Gemma 4 E4B — frontier multimodal, vision + audio, 128K context",
-    },
-    # ── Chat (16 GB RAM tier) ────────────────────────────────────────────
-    {
-        "name": "qwen3.5:9b",
-        "capability": "chat",
-        "size_label": "~6.6 GB",
-        "description": "Qwen 3.5 9B — best quality at this size, multimodal + thinking",
-    },
-    {
-        "name": "llama3.2:3b",
-        "capability": "chat",
-        "size_label": "~2 GB",
-        "description": "Meta Llama 3.2 3B — fast, reliable general-purpose chat",
+        "description": "Google Gemma 4 E4B — frontier multimodal (vision+audio), 128K context",
+        "min_ram_gb": 12,
     },
     # ── Code ─────────────────────────────────────────────────────────────
+    {
+        "name": "qwen2.5-coder:3b",
+        "capability": "code",
+        "size_label": "~1.9 GB",
+        "description": "Qwen 2.5 Coder 3B — lightweight code assistant, 40+ languages",
+        "min_ram_gb": 4,
+    },
     {
         "name": "qwen2.5-coder:7b",
         "capability": "code",
         "size_label": "~4.7 GB",
         "description": "Qwen 2.5 Coder 7B — top coding model for Python, JS, Go, Rust, SQL",
+        "min_ram_gb": 8,
     },
     {
-        "name": "qwen2.5-coder:3b",
+        "name": "qwen2.5-coder:14b",
         "capability": "code",
-        "size_label": "~2 GB",
-        "description": "Qwen 2.5 Coder 3B — lightweight code assistant for 8 GB machines",
+        "size_label": "~9.0 GB",
+        "description": "Qwen 2.5 Coder 14B — near-GPT-4o coding quality, 40+ languages",
+        "min_ram_gb": 16,
     },
     # ── Vision ───────────────────────────────────────────────────────────
     {
+        "name": "moondream:1.8b",
+        "capability": "vision",
+        "size_label": "~1.7 GB",
+        "description": "Moondream 1.8B — tiny vision-language model, runs on edge devices",
+        "min_ram_gb": 4,
+    },
+    {
         "name": "qwen3-vl:2b",
         "capability": "vision",
-        "size_label": "~2.2 GB",
-        "description": "Qwen3-VL 2B — lightweight vision-language model with thinking",
+        "size_label": "~1.9 GB",
+        "description": "Qwen3-VL 2B — lightweight vision-language with thinking, 256K context",
+        "min_ram_gb": 4,
     },
     {
         "name": "qwen3-vl:8b",
         "capability": "vision",
-        "size_label": "~5.5 GB",
-        "description": "Qwen3-VL 8B — strong vision understanding, tool use, 3M+ pulls",
-    },
-    {
-        "name": "gemma4:e4b",
-        "capability": "vision",
-        "size_label": "~9.6 GB",
-        "description": "Google Gemma 4 E4B — frontier vision + audio, 128K context",
+        "size_label": "~6.1 GB",
+        "description": "Qwen3-VL 8B — strong vision understanding, tool use, 256K context",
+        "min_ram_gb": 10,
     },
     # ── Embedding ────────────────────────────────────────────────────────
     {
         "name": "nomic-embed-text",
         "capability": "embedding",
-        "size_label": "~275 MB",
+        "size_label": "~274 MB",
         "description": "Nomic Embed Text — 8K context, best balance of speed and accuracy",
+        "min_ram_gb": 1,
     },
     {
         "name": "snowflake-arctic-embed2",
         "capability": "embedding",
-        "size_label": "~353 MB",
-        "description": "Snowflake Arctic Embed 2 — multilingual, strong retrieval performance",
+        "size_label": "~1.2 GB",
+        "description": "Snowflake Arctic Embed 2 — multilingual, 8K context, strong retrieval",
+        "min_ram_gb": 2,
     },
 ]
 

@@ -28,3 +28,4 @@ class RecommendedOllamaModel(BaseModel):
     capability: Literal["chat", "vision", "embedding", "code"]
     size_label: str
     description: str
+    min_ram_gb: int = 2
