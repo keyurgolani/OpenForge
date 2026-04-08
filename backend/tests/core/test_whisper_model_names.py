@@ -169,3 +169,127 @@ class TestDetectDevice:
         device, compute_type = _detect_device()
         assert device == "cpu"
         assert compute_type == "int8"
+
+
+class TestApiModelsDownloadDetection:
+    """Validate _model_is_downloaded() in api/models.py checks CTranslate2 format correctly.
+
+    The api/models.py detection is stricter than local_models: it requires both the
+    directory (faster-whisper-{size}/) AND model.bin inside it.
+    """
+
+    def _patch_whisper_dir(self, monkeypatch, tmp_path):
+        """Patch _whisper_dir() to return a temp directory."""
+        from openforge.api import models as api_models
+        whisper_dir = tmp_path / "whisper"
+        whisper_dir.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(api_models, "_whisper_dir", lambda: whisper_dir)
+        return whisper_dir
+
+    @pytest.mark.parametrize("model_name", ["tiny", "base", "small", "medium", "large-v2", "large-v3"])
+    def test_detected_when_ct2_dir_and_model_bin_exist(self, model_name, tmp_path, monkeypatch):
+        """Returns True when faster-whisper-{size}/ directory contains model.bin."""
+        from openforge.api.models import _model_is_downloaded
+
+        whisper_dir = self._patch_whisper_dir(monkeypatch, tmp_path)
+        ct2_dir = whisper_dir / f"faster-whisper-{model_name}"
+        ct2_dir.mkdir(parents=True)
+        (ct2_dir / "model.bin").write_bytes(b"fake-model-data")
+
+        assert _model_is_downloaded(model_name) is True
+
+    @pytest.mark.parametrize("model_name", ["tiny", "base", "large-v3"])
+    def test_not_detected_when_dir_exists_but_no_model_bin(self, model_name, tmp_path, monkeypatch):
+        """Returns False when directory exists but model.bin is missing (incomplete download)."""
+        from openforge.api.models import _model_is_downloaded
+
+        whisper_dir = self._patch_whisper_dir(monkeypatch, tmp_path)
+        ct2_dir = whisper_dir / f"faster-whisper-{model_name}"
+        ct2_dir.mkdir(parents=True)
+        # Directory exists but no model.bin — incomplete download
+
+        assert _model_is_downloaded(model_name) is False
+
+    def test_not_detected_when_no_directory(self, tmp_path, monkeypatch):
+        """Returns False when the CTranslate2 directory doesn't exist at all."""
+        from openforge.api.models import _model_is_downloaded
+
+        self._patch_whisper_dir(monkeypatch, tmp_path)
+
+        assert _model_is_downloaded("base") is False
+
+    def test_not_detected_for_old_pt_file(self, tmp_path, monkeypatch):
+        """Returns False for legacy .pt files — only CTranslate2 format is accepted."""
+        from openforge.api.models import _model_is_downloaded
+
+        whisper_dir = self._patch_whisper_dir(monkeypatch, tmp_path)
+        # Create a legacy .pt file (old openai-whisper format)
+        (whisper_dir / "base.pt").write_bytes(b"fake-pt-data")
+
+        assert _model_is_downloaded("base") is False
+
+    def test_whisper_model_map_consistent_with_audio_processor(self):
+        """WHISPER_MODEL_MAP in api/models.py matches _HF_TO_WHISPER in audio_processor."""
+        from openforge.api.models import WHISPER_MODEL_MAP
+
+        for hf_id, size in WHISPER_MODEL_MAP.items():
+            assert hf_id in _HF_TO_WHISPER, (
+                f"WHISPER_MODEL_MAP key '{hf_id}' missing from audio_processor._HF_TO_WHISPER"
+            )
+            assert _HF_TO_WHISPER[hf_id] == size, (
+                f"Mismatch for '{hf_id}': api/models.py has '{size}', "
+                f"audio_processor has '{_HF_TO_WHISPER[hf_id]}'"
+            )
+
+
+class TestApiModelsWhisperDeletion:
+    """Validate delete_whisper_model removes CTranslate2 directories."""
+
+    def _patch_whisper_dir(self, monkeypatch, tmp_path):
+        from openforge.api import models as api_models
+        whisper_dir = tmp_path / "whisper"
+        whisper_dir.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(api_models, "_whisper_dir", lambda: whisper_dir)
+        return whisper_dir
+
+    @pytest.mark.asyncio
+    async def test_deletes_ct2_directory(self, tmp_path, monkeypatch):
+        """delete_whisper_model removes the faster-whisper-{size}/ directory."""
+        from openforge.api.models import delete_whisper_model
+
+        whisper_dir = self._patch_whisper_dir(monkeypatch, tmp_path)
+        ct2_dir = whisper_dir / "faster-whisper-base"
+        ct2_dir.mkdir(parents=True)
+        (ct2_dir / "model.bin").write_bytes(b"fake")
+        (ct2_dir / "config.json").write_bytes(b"{}")
+
+        result = await delete_whisper_model("openai/whisper-base")
+
+        assert result["deleted"] is True
+        assert not ct2_dir.exists()
+
+    @pytest.mark.asyncio
+    async def test_delete_succeeds_when_no_directory(self, tmp_path, monkeypatch):
+        """delete_whisper_model succeeds even if the model was never downloaded."""
+        from openforge.api.models import delete_whisper_model
+
+        self._patch_whisper_dir(monkeypatch, tmp_path)
+
+        result = await delete_whisper_model("openai/whisper-base")
+        assert result["deleted"] is True
+
+    @pytest.mark.asyncio
+    async def test_delete_accepts_raw_model_name(self, tmp_path, monkeypatch):
+        """delete_whisper_model accepts raw size names like 'base' in addition to HF IDs."""
+        from openforge.api.models import delete_whisper_model
+
+        whisper_dir = self._patch_whisper_dir(monkeypatch, tmp_path)
+        ct2_dir = whisper_dir / "faster-whisper-small"
+        ct2_dir.mkdir(parents=True)
+        (ct2_dir / "model.bin").write_bytes(b"fake")
+
+        result = await delete_whisper_model("small")
+
+        assert result["deleted"] is True
+        assert result["name"] == "small"
+        assert not ct2_dir.exists()

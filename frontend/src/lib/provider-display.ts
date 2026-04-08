@@ -6,5 +6,5 @@ export function sanitizeProviderDisplayName(name: string | null | undefined): st
 }
 
 export function isLocalProvider(providerName: string | null | undefined): boolean {
-    return (providerName ?? '').trim().toLowerCase() === 'ollama'
+    return (providerName ?? '').trim().toLowerCase() === 'openforge-local'
 }

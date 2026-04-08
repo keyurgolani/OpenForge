@@ -127,7 +127,7 @@ class LLMGateway:
                 "stream": False,
                 "options": {"num_predict": max_tokens},
             }
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            async with httpx.AsyncClient(timeout=600.0) as client:
                 resp = await client.post(f"{base}/api/chat", json=body)
                 resp.raise_for_status()
                 data = resp.json()
@@ -596,7 +596,11 @@ class LLMGateway:
 
         accumulated_tool_calls: list[dict] = []
 
-        async with httpx.AsyncClient(timeout=300.0) as client:
+        # Use a generous timeout: Ollama may need minutes to load a large
+        # model into memory before the first token arrives, but once
+        # streaming starts each chunk arrives quickly.
+        _timeout = httpx.Timeout(connect=30.0, read=600.0, write=30.0, pool=30.0)
+        async with httpx.AsyncClient(timeout=_timeout) as client:
             async with client.stream("POST", f"{base}/api/chat", json=body) as resp:
                 resp.raise_for_status()
                 async for line in resp.aiter_lines():

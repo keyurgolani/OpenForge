@@ -64,14 +64,18 @@ async def delete_provider(provider_id: UUID, db: AsyncSession = Depends(get_db))
 
 
 @router.get("/providers/{provider_id}/models", response_model=list[ModelInfo])
-async def list_provider_models(provider_id: UUID, db: AsyncSession = Depends(get_db)):
-    # For the openforge-local provider, return models from the local catalog
+async def list_provider_models(
+    provider_id: UUID,
+    capability_type: str | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    # For the openforge-local provider, return the unified catalog (Ollama + local)
     from openforge.services.local_models import LOCAL_PROVIDER_NAME
     provider_resp = await llm_service.get_provider(db, provider_id)
     if provider_resp.provider_name == LOCAL_PROVIDER_NAME:
-        from openforge.services.local_models import get_local_models_with_status
-        local_models = get_local_models_with_status()
-        return [ModelInfo(**m) for m in local_models]
+        from openforge.services.local_models import get_unified_models
+        unified = await get_unified_models(capability_type)
+        return [ModelInfo(**m) for m in unified]
     return await llm_service.list_models(db, provider_id)
 
 

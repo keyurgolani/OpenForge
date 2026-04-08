@@ -14,6 +14,7 @@ services:
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
       - TOOL_SERVER_URL=http://tool-server:8001
       - REDIS_URL=redis://redis:6379/0
+      - OLLAMA_URL=http://ollama:11434
     volumes:
       - ${WORKSPACE_HOST_PATH:-./data/workspace}:/workspace
       - ${UPLOADS_HOST_PATH:-./data/uploads}:/uploads
@@ -115,3 +116,13 @@ services:
     volumes:
       - ${QDRANT_DATA_PATH:-./data/qdrant}:/qdrant/storage
     restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ${OLLAMA_DATA_PATH:-./data/ollama}:/root/.ollama
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G

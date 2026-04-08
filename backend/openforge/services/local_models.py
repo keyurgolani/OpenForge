@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+import httpx
+
 from openforge.common.config import get_settings
 
 logger = logging.getLogger("openforge.services.local_models")
@@ -189,17 +191,116 @@ def get_local_models_with_status(capability_type: str | None = None) -> list[dic
     return models
 
 
+# ── Ollama integration ──────────────────────────────────────────────────────
+
+# Known Ollama embedding model family prefixes.
+# Models whose name starts with any of these are classified as embedding.
+OLLAMA_EMBEDDING_FAMILIES: tuple[str, ...] = (
+    "nomic-embed-text",
+    "mxbai-embed-large",
+    "all-minilm",
+    "snowflake-arctic-embed",
+    "bge-m3",
+    "bge-large",
+)
+
+
+def get_ollama_url() -> str:
+    """Return the Ollama base URL from settings, stripped of trailing slashes."""
+    return get_settings().ollama_url.rstrip("/")
+
+
+def _is_ollama_embedding_model(model_name: str) -> bool:
+    """Return True if *model_name* belongs to a known embedding family."""
+    name_lower = model_name.lower().split(":")[0]  # strip tag
+    return any(name_lower.startswith(prefix) for prefix in OLLAMA_EMBEDDING_FAMILIES)
+
+
+async def fetch_ollama_models() -> list[dict]:
+    """Fetch models from Ollama ``/api/tags`` and return them in catalog format.
+
+    Each returned dict has the same shape as ``_model_to_dict`` output:
+    ``id``, ``name``, ``capability_type``, ``engine``, ``size_mb``,
+    ``requires_gpu``, ``downloaded`` (always ``True`` for installed Ollama
+    models), and ``source`` (``"ollama"``).
+
+    ``capability_type`` is inferred: embedding models are detected via
+    ``OLLAMA_EMBEDDING_FAMILIES``; everything else is classified as ``chat``.
+    """
+    base_url = get_ollama_url()
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{base_url}/api/tags")
+            resp.raise_for_status()
+    except Exception:
+        logger.warning("Could not reach Ollama at %s — returning empty model list", base_url)
+        return []
+
+    models: list[dict] = []
+    for m in resp.json().get("models", []):
+        name: str = m.get("name", "")
+        size_bytes: int = m.get("size", 0)
+        size_mb = round(size_bytes / (1024 * 1024))
+
+        cap = "embedding" if _is_ollama_embedding_model(name) else "chat"
+
+        models.append({
+            "id": name,
+            "name": name,
+            "capability_type": cap,
+            "engine": "ollama",
+            "size_mb": size_mb,
+            "requires_gpu": False,
+            "downloaded": True,
+            "source": "ollama",
+        })
+
+    return models
+
+
+def is_ollama_model(model_id: str) -> bool:
+    """Return ``True`` if *model_id* is **not** in the local catalog.
+
+    Any model that isn't part of ``LOCAL_MODELS`` is assumed to be served
+    by Ollama (chat, vision, or Ollama-native embedding).
+    """
+    return model_id not in _MODEL_BY_ID
+
+
+async def get_unified_models(capability_type: str | None = None) -> list[dict]:
+    """Merge Ollama models with the local catalog and return the unified list.
+
+    If *capability_type* is given, only models matching that type are returned.
+    Local catalog models include a ``downloaded`` status; Ollama models are
+    always marked ``downloaded=True`` (they are already pulled).
+    """
+    # Local catalog with download status
+    local = get_local_models_with_status(capability_type)
+    for entry in local:
+        entry.setdefault("source", "local")
+
+    # Ollama models (async fetch, gracefully empty on failure)
+    ollama = await fetch_ollama_models()
+    if capability_type:
+        ollama = [m for m in ollama if m["capability_type"] == capability_type]
+
+    return ollama + local
+
+
 # ── Seed / ensure system provider ───────────────────────────────────────────
 
 async def ensure_local_provider(db) -> None:
     """Ensure the 'openforge-local' system provider exists in the database.
 
-    Also fixes default-provider state: the local provider must never be
-    the system default for chat, and if no non-local provider holds the
-    default flag, the first available one is promoted.
+    The unified local provider now handles chat (via Ollama) as well as
+    STT/TTS/embedding/CLIP/PDF, so it *can* be the system default.
+    The provider's ``base_url`` is kept in sync with ``settings.ollama_url``
+    so that gateway routing can reach Ollama.
     """
     from sqlalchemy import select
     from openforge.db.models import LLMProvider
+
+    settings = get_settings()
 
     result = await db.execute(
         select(LLMProvider).where(LLMProvider.provider_name == LOCAL_PROVIDER_NAME)
@@ -212,6 +313,7 @@ async def ensure_local_provider(db) -> None:
             provider_name=LOCAL_PROVIDER_NAME,
             display_name="OpenForge Local",
             endpoint_id="local",
+            base_url=settings.ollama_url,
             is_system=True,
             is_system_default=False,
             enabled_models=[],
@@ -221,26 +323,10 @@ async def ensure_local_provider(db) -> None:
     else:
         if not provider.is_system:
             provider.is_system = True
-        # Local provider must never be the chat default
-        if provider.is_system_default:
-            provider.is_system_default = False
-            logger.info("Cleared is_system_default from openforge-local provider")
+        # Keep base_url in sync with the configured Ollama URL
+        if provider.base_url != settings.ollama_url:
+            provider.base_url = settings.ollama_url
+            logger.info("Updated openforge-local base_url to %s", settings.ollama_url)
 
     await db.flush()
-
-    # If no non-local provider is the system default, promote the first one
-    has_default = await db.scalar(
-        select(LLMProvider.id).where(
-            LLMProvider.is_system_default == True,
-            LLMProvider.is_system == False,
-        ).limit(1)
-    )
-    if has_default is None:
-        first_non_local = (await db.execute(
-            select(LLMProvider).where(LLMProvider.is_system == False).limit(1)
-        )).scalar_one_or_none()
-        if first_non_local is not None:
-            first_non_local.is_system_default = True
-            logger.info("Promoted '%s' as system default LLM provider", first_non_local.display_name)
-
     await db.commit()

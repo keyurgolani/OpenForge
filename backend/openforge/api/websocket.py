@@ -311,6 +311,23 @@ async def _handle_chat_message(websocket: WebSocket, workspace_id: str | None, d
 
     _use_celery = settings.use_celery_agents
     if _use_celery:
+        # Quick check: is a Celery worker actually available?
+        try:
+            import asyncio as _aio_check
+            from openforge.worker.tasks import celery_app
+
+            def _ping_workers():
+                inspector = celery_app.control.inspect(timeout=1.0)
+                return inspector.ping()
+
+            pong = await _aio_check.to_thread(_ping_workers)
+            if not pong:
+                logger.info("No Celery workers responding, falling back to inline execution")
+                _use_celery = False
+        except Exception:
+            _use_celery = False
+
+    if _use_celery:
         try:
             _exec_id = await _dispatch_celery_agent(
                 conversation_id=_cid,
@@ -330,20 +347,31 @@ async def _handle_chat_message(websocket: WebSocket, workspace_id: str | None, d
 
     if not _use_celery:
         from openforge.runtime.chat_handler import chat_handler
+        import uuid as _uuid_mod
 
-        async def _run_agent():
+        _exec_id = str(_uuid_mod.uuid4())
+
+        async def _run_inline_agent():
             async with AsyncSessionLocal() as db:
                 await chat_handler.run(
                     conversation_id=UUID(_cid),
                     user_content=_content,
                     db=db,
+                    execution_id=_exec_id,
                     attachment_ids=_att,
                     provider_id=_pid,
                     model_id=_mid,
                     mentions=_mentions,
                 )
 
-        _asyncio.create_task(_run_agent())
+        _asyncio.create_task(_run_inline_agent())
+        # Subscribe to Redis events and relay them to the WebSocket,
+        # same as the Celery path, so streaming works.
+        _relay = _asyncio.create_task(
+            _relay_agent_events(websocket, _exec_id, conversation_id=_cid)
+        )
+        _background_tasks.add(_relay)
+        _relay.add_done_callback(_background_tasks.discard)
 
 
 # ── Helper: handle chat_stream_resume ──

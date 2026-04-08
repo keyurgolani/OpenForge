@@ -258,7 +258,7 @@ function ProviderCard({ provider, expanded, onToggle, onDelete }: {
                     <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-sm">{sanitizeProviderDisplayName(provider.display_name) || provider.provider_name}</span>
                         <span className="chip-muted text-[10px]">{provider.provider_name}</span>
-                        {provider.is_system && <span className="text-[10px] px-1.5 py-0.5 rounded border font-medium bg-lime-500/15 text-lime-300 border-lime-500/30 flex items-center gap-0.5"><HardDrive className="w-2.5 h-2.5" /> Built-in</span>}
+                        {provider.is_system && <span className="text-[10px] px-1.5 py-0.5 rounded border font-medium bg-lime-500/15 text-lime-300 border-lime-500/30 flex items-center gap-0.5"><Shield className="w-2.5 h-2.5" /> System</span>}
                         {!provider.is_system && isLocalProvider(provider.provider_name) && <span className="chip-muted text-[10px]">Local</span>}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5 truncate">

@@ -10,7 +10,8 @@ import { useState, useMemo, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
     HardDrive, Download, Check, Loader2, Star, X, Plus, Cpu,
-    ChevronDown, Search, RefreshCw, AlertCircle,
+    ChevronDown, Search, RefreshCw, AlertCircle, Server,
+    Trash2, CheckCircle2,
 } from 'lucide-react'
 import { ProviderIcon } from '@/components/shared/ProviderIcon'
 import { sanitizeProviderDisplayName } from '@/lib/provider-display'
@@ -18,6 +19,8 @@ import {
     listProviders, listModels,
     downloadWhisperModel, downloadEmbeddingModel, downloadCLIPModel,
     downloadTTSModel, downloadMarkerModel,
+    getOllamaStatus, getOllamaModels, getRecommendedOllamaModels,
+    pullOllamaModel, deleteOllamaModel,
 } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
@@ -111,6 +114,13 @@ export function ModelTypeSelector({
     const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set())
     const [showSelector, setShowSelector] = useState(false)
 
+    // ── Ollama pull state ──────────────────────────────────────────────────
+    const [pullingModel, setPullingModel] = useState<string | null>(null)
+    const [pullStatus, setPullStatus] = useState<string>('')
+    const [customPullModel, setCustomPullModel] = useState('')
+    const [deletingOllamaModel, setDeletingOllamaModel] = useState<string | null>(null)
+    const [confirmOllamaDelete, setConfirmOllamaDelete] = useState<string | null>(null)
+
     // Determine which providers to show:
     // - openforge-local: always visible
     // - cloud providers: always visible (multi-purpose)
@@ -125,6 +135,119 @@ export function ModelTypeSelector({
     }, [providers, selectedProviderId])
 
     const isLocalSelected = selectedProvider ? isOpenForgeLocal(selectedProvider.provider_name) : false
+
+    // ── Ollama queries (only active when local provider is selected) ─────
+    const ollamaCapabilities = ['chat', 'vision', 'embedding'] as const
+    const isOllamaCapability = ollamaCapabilities.includes(configType as typeof ollamaCapabilities[number])
+
+    const { data: ollamaStatus } = useQuery({
+        queryKey: ['ollama-status'],
+        queryFn: getOllamaStatus,
+        refetchInterval: 30_000,
+        enabled: isOllamaCapability,
+    })
+
+    const { data: ollamaInstalledModels = [], refetch: refetchOllamaModels } = useQuery({
+        queryKey: ['ollama-models'],
+        queryFn: getOllamaModels,
+        enabled: isOllamaCapability,
+    })
+
+    const { data: ollamaRecommendedModels = [] } = useQuery({
+        queryKey: ['ollama-recommended', configType],
+        queryFn: () => getRecommendedOllamaModels(configType),
+        enabled: isOllamaCapability,
+    })
+
+    const ollamaConnected = ollamaStatus?.connected ?? false
+
+    const ollamaInstalledSet = useMemo(() => {
+        const set = new Set<string>()
+        for (const m of ollamaInstalledModels) set.add(m.name)
+        return set
+    }, [ollamaInstalledModels])
+
+    const ollamaConfiguredSet = useMemo(() => {
+        const set = new Set<string>()
+        if (!selectedProviderId) return set
+        for (const m of configuredModels) {
+            if (m.provider_id === selectedProviderId) set.add(m.model_id)
+        }
+        return set
+    }, [configuredModels, selectedProviderId])
+
+    const handleOllamaPull = async (modelName: string) => {
+        setPullingModel(modelName)
+        setPullStatus('Starting pull…')
+        try {
+            const resp = await pullOllamaModel(modelName)
+            if (!resp.ok) { setPullStatus('Pull failed'); return }
+            const reader = resp.body?.getReader()
+            if (!reader) { setPullStatus('Pull failed — no stream'); return }
+            const decoder = new TextDecoder()
+            let buf = ''
+            while (true) {
+                const { done, value } = await reader.read()
+                if (done) break
+                buf += decoder.decode(value, { stream: true })
+                const lines = buf.split('\n')
+                buf = lines.pop() ?? ''
+                for (const line of lines) {
+                    const trimmed = line.trim()
+                    if (!trimmed || trimmed === 'data: [DONE]') continue
+                    const jsonStr = trimmed.startsWith('data: ') ? trimmed.slice(6) : trimmed
+                    try {
+                        const data = JSON.parse(jsonStr)
+                        if (data.status) {
+                            const pct = data.completed && data.total
+                                ? ` (${Math.round((data.completed / data.total) * 100)}%)`
+                                : ''
+                            setPullStatus(`${data.status}${pct}`)
+                        }
+                    } catch { /* skip malformed lines */ }
+                }
+            }
+            setPullStatus('')
+            refetchOllamaModels()
+        } catch {
+            setPullStatus('Pull failed')
+        } finally {
+            setPullingModel(null)
+            setTimeout(() => setPullStatus(''), 3000)
+        }
+    }
+
+    const handleOllamaDelete = async (modelName: string) => {
+        setDeletingOllamaModel(modelName)
+        setConfirmOllamaDelete(null)
+        try {
+            await deleteOllamaModel(modelName)
+            refetchOllamaModels()
+        } finally {
+            setDeletingOllamaModel(null)
+        }
+    }
+
+    const handleOllamaAddModel = (modelName: string) => {
+        if (!selectedProviderId) return
+        const newModel: ConfiguredModel = {
+            provider_id: selectedProviderId,
+            model_id: modelName,
+            model_name: modelName,
+            is_default: configuredModels.length === 0,
+        }
+        onModelsChange([
+            ...configuredModels.filter(m => !(m.provider_id === selectedProviderId && m.model_id === modelName)),
+            newModel,
+        ])
+    }
+
+    const handlePullCustomOllama = async () => {
+        const name = customPullModel.trim()
+        if (!name) return
+        await handleOllamaPull(name)
+        setCustomPullModel('')
+    }
 
     // Filter fetched models by configType for local provider
     const filteredModels = useMemo(() => {
@@ -471,6 +594,158 @@ export function ModelTypeSelector({
                                 </div>
                             )}
                         </>
+                    )}
+
+                    {/* ── Ollama Recommended Models (when local provider selected) ── */}
+                    {isLocalSelected && isOllamaCapability && selectedProviderId && (
+                        <div className="space-y-3 border-t border-border/20 pt-3">
+                            {/* Ollama connection status */}
+                            <div className="flex items-center gap-2">
+                                <Server className="w-3.5 h-3.5 text-lime-300" />
+                                <span className={cn('text-xs font-medium', compact ? 'text-[10px]' : 'text-xs')}>
+                                    Ollama
+                                </span>
+                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${ollamaConnected ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                                <span className="text-[10px] text-muted-foreground">
+                                    {ollamaConnected ? `Connected — ${ollamaStatus?.model_count ?? 0} model(s)` : 'Disconnected'}
+                                </span>
+                            </div>
+
+                            {/* Pull progress */}
+                            {pullStatus && (
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground px-2.5 py-1.5 rounded-lg bg-muted/20 border border-border/20">
+                                    <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
+                                    <span className="truncate">{pullStatus}</span>
+                                </div>
+                            )}
+
+                            {/* Recommended models header */}
+                            <label className={cn(
+                                'text-muted-foreground font-medium block',
+                                compact ? 'text-[10px]' : 'text-xs',
+                            )}>
+                                Recommended Models
+                            </label>
+
+                            {/* Recommended model list */}
+                            <div className="grid grid-cols-1 gap-1.5 max-h-80 overflow-y-auto pr-1">
+                                {ollamaRecommendedModels.map((m: { name: string; size_label: string; description: string }) => {
+                                    const isPulled = ollamaInstalledSet.has(m.name)
+                                    const isAdded = ollamaConfiguredSet.has(m.name)
+                                    const isPulling = pullingModel === m.name
+                                    const isDeleting = deletingOllamaModel === m.name
+                                    return (
+                                        <div
+                                            key={m.name}
+                                            className={cn(
+                                                'text-left p-3 rounded-xl border transition-all duration-200',
+                                                isAdded
+                                                    ? 'border-accent/30 bg-accent/5'
+                                                    : 'border-border/20 hover:border-border hover:bg-muted/20',
+                                            )}
+                                        >
+                                            <div className="flex items-start gap-2">
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                                                        <span className="text-xs font-medium text-foreground/80">{m.name}</span>
+                                                        <span className="text-[9px] text-muted-foreground border border-border/25 px-1.5 py-0.5 rounded">{m.size_label}</span>
+                                                        {isPulled && (
+                                                            <span className="text-[9px] px-1.5 py-0.5 rounded border font-medium bg-emerald-500/15 text-emerald-300 border-emerald-500/30">Pulled</span>
+                                                        )}
+                                                        {isAdded && (
+                                                            <span className="text-[9px] px-1.5 py-0.5 rounded border font-medium bg-accent/15 text-accent border-accent/30">Added</span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-[11px] text-muted-foreground leading-relaxed">{m.description}</p>
+                                                </div>
+                                                <div className="flex items-center gap-1 flex-shrink-0">
+                                                    {isAdded ? (
+                                                        <span className="text-[10px] text-muted-foreground px-2 py-1">
+                                                            <CheckCircle2 className="w-3.5 h-3.5 text-accent/50" />
+                                                        </span>
+                                                    ) : isPulled ? (
+                                                        <>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleOllamaAddModel(m.name)}
+                                                                className="text-[10px] px-2 py-1 rounded-md bg-accent/15 text-accent hover:bg-accent/25 transition-colors font-medium"
+                                                            >
+                                                                <Plus className="w-3 h-3 inline mr-0.5" />Add
+                                                            </button>
+                                                            {confirmOllamaDelete === m.name ? (
+                                                                <div className="flex items-center gap-1">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleOllamaDelete(m.name)}
+                                                                        className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 hover:bg-red-500/30 transition-colors"
+                                                                    >
+                                                                        Confirm
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setConfirmOllamaDelete(null)}
+                                                                        className="text-[10px] px-1.5 py-0.5 rounded text-muted-foreground hover:text-foreground transition-colors"
+                                                                    >
+                                                                        Cancel
+                                                                    </button>
+                                                                </div>
+                                                            ) : (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setConfirmOllamaDelete(m.name)}
+                                                                    disabled={isDeleting}
+                                                                    className="p-1 rounded text-red-400/60 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-30"
+                                                                    title="Delete model from Ollama"
+                                                                >
+                                                                    {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                                                </button>
+                                                            )}
+                                                        </>
+                                                    ) : (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleOllamaPull(m.name)}
+                                                            disabled={!ollamaConnected || isPulling || pullingModel !== null}
+                                                            className="text-[10px] px-2 py-1 rounded-md bg-muted/30 text-foreground/70 hover:bg-muted/50 transition-colors font-medium disabled:opacity-40"
+                                                            title={!ollamaConnected ? 'Ollama is disconnected' : 'Pull model'}
+                                                        >
+                                                            {isPulling ? <Loader2 className="w-3 h-3 animate-spin inline mr-0.5" /> : <Download className="w-3 h-3 inline mr-0.5" />}
+                                                            Pull
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+
+                            {/* Free-form pull input */}
+                            <div className="pt-2 border-t border-border/20">
+                                <label className="text-xs text-muted-foreground mb-1.5 block font-medium">Pull any model from Ollama registry</label>
+                                <div className="flex gap-2">
+                                    <input
+                                        className={cn('input text-xs flex-1', compact && 'text-[11px]')}
+                                        placeholder="e.g. mistral:7b-instruct"
+                                        value={customPullModel}
+                                        onChange={e => setCustomPullModel(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') handlePullCustomOllama() }}
+                                        disabled={!ollamaConnected || pullingModel !== null}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={handlePullCustomOllama}
+                                        disabled={!ollamaConnected || !customPullModel.trim() || pullingModel !== null}
+                                        className="btn-primary text-xs py-1.5 px-3 flex-shrink-0"
+                                    >
+                                        {pullingModel && customPullModel.trim() && pullingModel === customPullModel.trim()
+                                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                            : <Download className="w-3.5 h-3.5" />}
+                                        Pull
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     )}
                 </div>
             )}

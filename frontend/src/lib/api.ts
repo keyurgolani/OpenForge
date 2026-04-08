@@ -541,4 +541,20 @@ export const promoteMissionWorkspace = (id: string): Promise<any> =>
 export const getTemplateReference = async () =>
     (await api.get('/template-engine/reference')).data
 
+// ── Ollama Native AI ────────────────────────────────────────────────────────
+export const getOllamaStatus = (): Promise<{ connected: boolean; model_count: number }> =>
+    api.get('/ollama/status').then(r => r.data)
+export const getOllamaModels = (): Promise<Array<{ name: string; size: number; modified_at: string; parameter_size?: string; quantization?: string }>> =>
+    api.get('/ollama/models').then(r => r.data)
+export const getRecommendedOllamaModels = (capability?: string): Promise<Array<{ name: string; capability: string; size_label: string; description: string }>> =>
+    api.get('/ollama/models/recommended', { params: capability ? { capability } : undefined }).then(r => r.data)
+export const pullOllamaModel = (name: string): Promise<Response> =>
+    fetch('/api/v1/ollama/pull', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: name }),
+    })
+export const deleteOllamaModel = (name: string): Promise<void> =>
+    api.delete(`/ollama/models/${name}`).then(() => undefined)
+
 export default api

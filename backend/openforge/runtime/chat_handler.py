@@ -897,6 +897,28 @@ class ChatHandler:
                 except Exception as exc:
                     logger.debug("agent_registry.resolve failed: %s", exc)
 
+        # Fallback: if conversation has no agent_id, try the first workspace's
+        # default agent so that bare conversations still work.
+        if agent is None:
+            try:
+                from openforge.db.models import Workspace as _Workspace
+                ws_result = await db.execute(
+                    select(_Workspace).where(_Workspace.default_agent_id.isnot(None)).limit(1)
+                )
+                ws = ws_result.scalar_one_or_none()
+                if ws and ws.default_agent_id:
+                    compiled_spec = await agent_registry.resolve(db, agent_id=ws.default_agent_id)
+                    if compiled_spec is not None:
+                        agent = _AgentCompat(compiled_spec)
+                        # Backfill the conversation so future messages resolve directly
+                        conv_to_fix = await db.get(Conversation, conversation_id)
+                        if conv_to_fix and not conv_to_fix.agent_id:
+                            conv_to_fix.agent_id = ws.default_agent_id
+                            await db.commit()
+                        logger.debug("Fallback: assigned workspace default agent %s", compiled_spec.agent_slug)
+            except Exception as exc:
+                logger.debug("Workspace default agent fallback failed: %s", exc)
+
         if agent is None:
             await self._publish(
                 execution_id,
@@ -941,8 +963,13 @@ class ChatHandler:
         latest_user_result = await db.execute(
             select(Message).where(Message.conversation_id == conversation_id, Message.role == "user").order_by(Message.created_at.desc()).limit(1)
         )
-        user_message = latest_user_result.scalar_one_or_none()
-        if user_message is None:
+        latest_user_msg = latest_user_result.scalar_one_or_none()
+        # Only reuse the latest user message if it matches the current content
+        # (Celery path persists the message before dispatching, so it already exists).
+        # For subsequent turns or inline execution, always create a new message.
+        if latest_user_msg is not None and latest_user_msg.content.strip() == user_content.strip():
+            user_message = latest_user_msg
+        else:
             user_message = await conversation_service.add_message(db, conversation_id, role="user", content=user_content)
 
         resolved_provider_id = provider_id or agent.provider_override_id

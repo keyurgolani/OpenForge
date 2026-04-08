@@ -2,8 +2,10 @@
  * EmbeddingPage - Embedding model configuration
  *
  * Uses ModelTypeSelector for unified provider-based model management
- * (including OpenForge Local models). Operational controls for re-indexing
- * and cross-encoder reranking are preserved below.
+ * (including OpenForge Local models). Includes OllamaNativeSection for
+ * native Ollama model management via the unified OpenForge Local provider.
+ * Operational controls for re-indexing and cross-encoder reranking are
+ * preserved below.
  */
 
 import { useState, useMemo } from 'react'

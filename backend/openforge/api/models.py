@@ -22,7 +22,7 @@ logger = logging.getLogger("openforge.api.models")
 router = APIRouter()
 
 # ── Subdirectory layout under models_root ──
-# /models/whisper/       — Whisper .pt files
+# /models/whisper/       — faster-whisper CTranslate2 model directories
 # /models/embeddings/    — sentence-transformers models (HF cache)
 # /models/clip/          — CLIP visual models (HF cache)
 # /models/marker/        — Marker PDF models (datalab cache)
@@ -99,8 +99,9 @@ def _clip_disk_size(model_id: str) -> str | None:
 
 
 def _model_is_downloaded(model_name: str) -> bool:
-    """Check if a Whisper model has been downloaded."""
-    return (_whisper_dir() / f"{model_name}.pt").exists()
+    """Check if a Whisper model has been downloaded (CTranslate2 format)."""
+    ct2_dir = _whisper_dir() / f"faster-whisper-{model_name}"
+    return ct2_dir.is_dir() and (ct2_dir / "model.bin").exists()
 
 
 def _embedding_is_downloaded(model_id: str) -> bool:
@@ -201,8 +202,10 @@ async def download_whisper_model(body: ModelDownloadRequest):
 
     try:
         def _do_download():
-            import whisper
-            whisper.load_model(model_name, download_root=str(whisper_dir))
+            from faster_whisper import WhisperModel
+            # WhisperModel constructor auto-downloads CTranslate2 models from HuggingFace
+            WhisperModel(model_name, device="cpu", compute_type="int8",
+                         download_root=str(whisper_dir))
 
         await asyncio.to_thread(_do_download)
     except Exception as e:
@@ -226,9 +229,9 @@ async def delete_whisper_model(model_id: str):
         else:
             raise HTTPException(400, f"Unknown Whisper model: {model_id}")
 
-    model_path = _whisper_dir() / f"{model_name}.pt"
-    if model_path.exists():
-        model_path.unlink()
+    ct2_dir = _whisper_dir() / f"faster-whisper-{model_name}"
+    if ct2_dir.is_dir():
+        shutil.rmtree(ct2_dir)
         logger.info("Deleted Whisper model: %s", model_name)
 
     return {"deleted": True, "model_id": model_id, "name": model_name}

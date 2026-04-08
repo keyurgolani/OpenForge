@@ -2,6 +2,8 @@
  * VisionPage - Vision model configuration
  *
  * Uses ModelTypeSelector for model management.
+ * Includes OllamaNativeSection for native Ollama model management
+ * via the unified OpenForge Local provider.
  */
 
 import { useMemo } from 'react'

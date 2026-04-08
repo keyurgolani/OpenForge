@@ -22,7 +22,6 @@ const PROVIDERS = [
     { id: 'cohere', name: 'Cohere', color: 'from-teal-500/20 border-teal-500/30', needsKey: true, needsUrl: false },
     { id: 'zhipuai', name: 'Z.AI (ZhipuAI)', color: 'from-indigo-500/20 border-indigo-500/30', needsKey: true, needsUrl: false },
     { id: 'huggingface', name: 'HuggingFace', color: 'from-orange-400/20 border-orange-400/30', needsKey: true, needsUrl: false },
-    { id: 'ollama', name: 'Ollama', color: 'from-lime-500/20 border-lime-500/30', needsKey: false, needsUrl: true },
     { id: 'custom-openai', name: 'Custom OpenAI-compatible', color: 'from-violet-500/20 border-violet-500/30', needsKey: false, needsUrl: true },
     { id: 'custom-anthropic', name: 'Custom Anthropic-compat.', color: 'from-rose-500/20 border-rose-500/30', needsKey: false, needsUrl: true },
 ]
@@ -181,7 +180,7 @@ function ProvidersSetupStep({ onNext, onBack, loading }: { onNext: () => void; o
 
     const handleSelectProvider = (id: string) => {
         setSelected(id); setApiKey(''); setShowKey(false)
-        setBaseUrl(id === 'ollama' ? 'http://localhost:11434' : '')
+        setBaseUrl('')
         setDisplayName(''); setShowAdvanced(false); setAddError(null); setTestResult(null)
     }
 
@@ -333,10 +332,10 @@ function ProvidersSetupStep({ onNext, onBack, loading }: { onNext: () => void; o
                 <button
                     className="btn-primary flex-1 justify-center py-3"
                     onClick={onNext}
-                    disabled={loading || configured.length === 0}
+                    disabled={loading}
                 >
                     {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                    {configured.length === 0 ? 'Add at least one provider to continue' : `Continue with ${configured.length} provider${configured.length > 1 ? 's' : ''}`}
+                    {configured.length === 0 ? 'Skip — use local models' : `Continue with ${configured.length} provider${configured.length > 1 ? 's' : ''}`}
                     <ArrowRight className="w-4 h-4" />
                 </button>
             </div>

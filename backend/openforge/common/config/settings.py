@@ -69,6 +69,9 @@ class Settings(BaseSettings):
     # Self-referencing URL used when the tool server needs to call back
     main_app_url: str = "http://backend:3000"
 
+    # ── Ollama ───────────────────────────────────────────────────────────────
+    ollama_url: str = "http://ollama:11434"
+
 
 @lru_cache()
 def get_settings() -> Settings:

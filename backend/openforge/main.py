@@ -256,6 +256,88 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("OpenForge Local provider seeding skipped: %s", e)
 
+    # Migrate old "ollama" system provider into the unified openforge-local provider.
+    try:
+        from openforge.db.postgres import AsyncSessionLocal
+        from openforge.db.models import LLMProvider, Config, Workspace
+        from openforge.services.local_models import LOCAL_PROVIDER_ID
+        from sqlalchemy import select, update
+        import json as _json
+
+        async with AsyncSessionLocal() as db:
+            old_ollama = (await db.execute(
+                select(LLMProvider).where(
+                    LLMProvider.is_system == True,
+                    LLMProvider.provider_name == "ollama",
+                )
+            )).scalar_one_or_none()
+
+            if old_ollama is not None:
+                old_id = old_ollama.id
+                new_id = LOCAL_PROVIDER_ID
+                old_id_str = str(old_id)
+                new_id_str = str(new_id)
+                logger.info(
+                    "Migrating old ollama system provider %s → unified openforge-local %s",
+                    old_id_str, new_id_str,
+                )
+
+                # 1. Migrate system_chat_models config entries
+                cfg_row = (await db.execute(
+                    select(Config).where(Config.key == "system_chat_models")
+                )).scalar_one_or_none()
+                if cfg_row and cfg_row.value:
+                    raw = cfg_row.value
+                    if isinstance(raw, str):
+                        try:
+                            raw = _json.loads(raw)
+                        except (ValueError, TypeError):
+                            raw = []
+                    if isinstance(raw, list):
+                        changed = False
+                        for entry in raw:
+                            if isinstance(entry, dict) and entry.get("provider_id") == old_id_str:
+                                entry["provider_id"] = new_id_str
+                                changed = True
+                        if changed:
+                            cfg_row.value = raw
+                            logger.info("Migrated system_chat_models config entries to unified provider")
+
+                # 2. Migrate system_vision_provider_id config
+                vision_cfg = (await db.execute(
+                    select(Config).where(Config.key == "system_vision_provider_id")
+                )).scalar_one_or_none()
+                if vision_cfg and vision_cfg.value:
+                    val = vision_cfg.value
+                    if isinstance(val, str):
+                        val_str = val
+                    else:
+                        val_str = str(val)
+                    if val_str == old_id_str:
+                        vision_cfg.value = new_id_str
+                        logger.info("Migrated system_vision_provider_id to unified provider")
+
+                # 3. Migrate workspace llm_provider_id references
+                await db.execute(
+                    update(Workspace)
+                    .where(Workspace.llm_provider_id == old_id)
+                    .values(llm_provider_id=new_id)
+                )
+
+                # 4. Migrate workspace vision_provider_id references
+                await db.execute(
+                    update(Workspace)
+                    .where(Workspace.vision_provider_id == old_id)
+                    .values(vision_provider_id=new_id)
+                )
+
+                # 5. Delete the old ollama system provider record
+                await db.delete(old_ollama)
+                await db.commit()
+                logger.info("Old ollama system provider migrated and deleted.")
+    except Exception as e:
+        logger.warning("Ollama→openforge-local migration skipped: %s", e)
+
     # Seed agent & automation templates
     try:
         from openforge.db.postgres import AsyncSessionLocal
@@ -335,11 +417,44 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Orphaned execution cleanup failed: %s", e)
 
+    # ── Ollama health check background task ──────────────────────────────────
+    async def _ollama_health_loop():
+        """Ping Ollama every 60s and cache status in Redis."""
+        import json
+        import httpx
+        from openforge.db.redis_client import get_redis
+
+        while True:
+            try:
+                try:
+                    async with httpx.AsyncClient(timeout=3.0) as client:
+                        resp = await client.get(f"{settings.ollama_url}/api/tags")
+                        resp.raise_for_status()
+                        status = {"connected": True, "model_count": len(resp.json().get("models", []))}
+                except Exception:
+                    status = {"connected": False, "model_count": 0}
+                try:
+                    redis = await get_redis()
+                    await redis.set("ollama:health", json.dumps(status), ex=120)
+                except Exception as redis_err:
+                    logger.debug("Ollama health cache write failed: %s", redis_err)
+                logger.debug("Ollama health check: %s", status)
+            except Exception as exc:
+                logger.debug("Ollama health loop error: %s", exc)
+            await asyncio.sleep(60)
+
+    ollama_health_task = asyncio.create_task(_ollama_health_loop())
+
     logger.info("OpenForge ready.")
     await task_scheduler.start()
     yield
 
     logger.info("OpenForge shutting down...")
+    ollama_health_task.cancel()
+    try:
+        await ollama_health_task
+    except asyncio.CancelledError:
+        pass
     await task_scheduler.stop()
     try:
         from openforge.db.redis_client import close_all_redis

@@ -133,7 +133,7 @@ class ConversationService:
     def _preferred_title_model(provider_name: str | None, fallback_model: str | None) -> str:
         provider = (provider_name or "").strip().lower()
         fallback = (fallback_model or "").strip()
-        if provider in {"ollama", "custom-openai", "custom-anthropic"}:
+        if provider in {"ollama", "openforge-local", "custom-openai", "custom-anthropic"}:
             return fallback
         model_map = {
             "openai": "gpt-4o-mini",

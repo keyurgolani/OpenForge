@@ -20,6 +20,7 @@ services:
       - SENTENCE_TRANSFORMERS_HOME=/models/embeddings
       - DATALAB_MODELS_DIR=/models/marker
       - MODELS_ROOT=/models
+      - OLLAMA_URL=http://ollama:11434
     volumes:
       - ${WORKSPACE_HOST_PATH:-./data/workspace}:/workspace
       - ${UPLOADS_HOST_PATH:-./data/uploads}:/uploads
@@ -33,6 +34,8 @@ services:
         condition: service_started
       redis:
         condition: service_healthy
+      ollama:
+        condition: service_started
     restart: unless-stopped
     deploy:
       resources:
@@ -55,6 +58,7 @@ services:
       - SENTENCE_TRANSFORMERS_HOME=/models/embeddings
       - DATALAB_MODELS_DIR=/models/marker
       - MODELS_ROOT=/models
+      - OLLAMA_URL=http://ollama:11434
     volumes:
       - ${MODELS_HOST_PATH:-./data/models}:/models
       - ${SKILLS_HOST_PATH:-./data/skills}:/skills:ro
@@ -173,3 +177,13 @@ services:
       resources:
         limits:
           memory: 1G
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ${OLLAMA_DATA_PATH:-./data/ollama}:/root/.ollama
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 16G

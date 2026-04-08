@@ -117,6 +117,8 @@ class LLMService:
         provider = result.scalar_one_or_none()
         if not provider:
             raise HTTPException(status_code=404, detail="Provider not found")
+        if provider.is_system:
+            raise HTTPException(status_code=400, detail="Cannot delete system provider")
 
         was_default = provider.is_system_default
         await db.delete(provider)
@@ -275,7 +277,17 @@ class LLMService:
                     "Set a default model in Settings > AI Providers."
                 ),
             )
-        return provider.provider_name, api_key, model, provider.base_url
+
+        # Unified local provider: route Ollama models through the Ollama gateway
+        resolved_name = provider.provider_name
+        resolved_base_url = provider.base_url
+        if resolved_name == "openforge-local":
+            from openforge.services.local_models import is_ollama_model, get_ollama_url
+            if is_ollama_model(model):
+                resolved_name = "ollama"
+                resolved_base_url = get_ollama_url()
+
+        return resolved_name, api_key, model, resolved_base_url
 
     async def get_vision_provider_for_workspace(
         self,
@@ -328,7 +340,16 @@ class LLMService:
         if not model:
             model = provider.default_model or ""
 
-        return provider.provider_name, api_key, model, provider.base_url
+        # Unified local provider: route Ollama models through the Ollama gateway
+        resolved_name = provider.provider_name
+        resolved_base_url = provider.base_url
+        if resolved_name == "openforge-local":
+            from openforge.services.local_models import is_ollama_model, get_ollama_url
+            if is_ollama_model(model):
+                resolved_name = "ollama"
+                resolved_base_url = get_ollama_url()
+
+        return resolved_name, api_key, model, resolved_base_url
 
     async def list_models(self, db: AsyncSession, provider_id: UUID) -> list[ModelInfo]:
         result = await db.execute(select(LLMProvider).where(LLMProvider.id == provider_id))

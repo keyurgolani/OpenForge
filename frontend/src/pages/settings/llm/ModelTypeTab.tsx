@@ -273,6 +273,7 @@ function ModelTypeTab({
                     <p className="text-xs mt-1 opacity-70">Click &quot;Add Model&quot; to fetch models from a configured provider.</p>
                 </div>
             )}
+
         </div>
     )
 }

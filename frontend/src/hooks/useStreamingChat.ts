@@ -308,9 +308,8 @@ export function useStreamingChat(conversationId: string | null, workspaceId?: st
         setIsInterrupted(interrupted)
         isInterruptedRef.current = interrupted
         setLastError(null)
-        setTimeline([])
-        timelineRef.current = []
-        latestThinkingRef.current = ''
+        // Don't clear timeline here — the persisted message carries it.
+        // Timeline is reset when a new stream starts (see sendMessage).
         awaitingResponseRef.current = false
         // Clear any pending cancel timeout
         if (cancelTimeoutCleanupRef.current) {
@@ -743,6 +742,10 @@ export function useStreamingChat(conversationId: string | null, workspaceId?: st
         if (options?.mentions?.length) payload.mentions = options.mentions
 
         resetStreamState(false)
+        // Clear previous turn's timeline/thinking for the new message
+        setTimeline([])
+        timelineRef.current = []
+        latestThinkingRef.current = ''
         resumePopulatedRef.current = true
         awaitingResponseRef.current = true
         setIsStreaming(true)
