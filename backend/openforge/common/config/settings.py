@@ -27,7 +27,6 @@ class Settings(BaseSettings):
     # ── Qdrant Vector Database ───────────────────────────────────────────
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = "openforge_knowledge"
-    qdrant_visual_collection: str = "openforge_visual"
 
     # ── File Storage ─────────────────────────────────────────────────
     workspace_root: str = "/workspace"

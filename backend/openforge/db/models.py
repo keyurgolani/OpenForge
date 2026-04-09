@@ -122,6 +122,7 @@ class Workspace(Base):
         Boolean, nullable=False, default=False,
         comment="If true, UI prevents user edits (knowledge CRUD disabled in frontend)",
     )
+    pipeline_config: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     auto_teardown: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True,
         comment="If true, workspace is deleted when owning deployment is torn down",

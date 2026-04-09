@@ -30,6 +30,7 @@ EXPECTED_MIGRATIONS = [
     "020_deployment_workspaces.py",
     "021_create_missions.py",
     "022_remove_workspace_scoping.py",
+    "023_add_workspace_pipeline_config.py",
 ]
 
 

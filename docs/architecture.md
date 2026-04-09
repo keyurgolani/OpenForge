@@ -95,10 +95,10 @@ Primary relational database (v16) storing all structured data:
 Vector database (v1.13.2) storing embeddings for semantic search:
 
 - **openforge_knowledge** — Knowledge chunk embeddings with named vectors:
-  - `text` vector (384-dim, BAAI/bge-small-en-v1.5) for semantic search
+  - `dense` vector (384-dim, BAAI/bge-small-en-v1.5) for semantic search
   - `summary` vector (384-dim) for document-level matching
+  - `clip` vector (512-dim, ViT-B-32) for image/video visual similarity search
   - Sparse vectors for hybrid BM25 keyword search
-- **openforge_visual** — CLIP embeddings (512-dim, ViT-B-32) for image similarity search
 - **openforge_memory** — Agent long-term memory vectors
 
 ### Redis
@@ -297,18 +297,18 @@ Search Query
 
 ### 10 Backend Domains
 
-| Domain | Purpose |
-|--------|---------|
-| **agents** | Structured agent definitions, version snapshots, runtime config |
-| **automations** | DAG workflow definitions with node wiring and graph validation |
-| **deployments** | Live automation instances with triggers and scheduling |
-| **missions** | Autonomous goal pursuit with OODA cycles, rubric evaluation, and budget controls |
-| **sinks** | Reusable output destination definitions (log, knowledge, article, REST API, notification) |
-| **knowledge** | Knowledge item management (via existing services) |
-| **retrieval** | Search, evidence building, retrieval tracing |
-| **runs** | Execution tracking (runs, run steps, checkpoints, events) |
-| **outputs** | Versioned output artifacts with lineage and publication sinks |
-| **common** | Shared enums, utilities, and base types |
+| Domain          | Purpose                                                                                   |
+| --------------- | ----------------------------------------------------------------------------------------- |
+| **agents**      | Structured agent definitions, version snapshots, runtime config                           |
+| **automations** | DAG workflow definitions with node wiring and graph validation                            |
+| **deployments** | Live automation instances with triggers and scheduling                                    |
+| **missions**    | Autonomous goal pursuit with OODA cycles, rubric evaluation, and budget controls          |
+| **sinks**       | Reusable output destination definitions (log, knowledge, article, REST API, notification) |
+| **knowledge**   | Knowledge item management (via existing services)                                         |
+| **retrieval**   | Search, evidence building, retrieval tracing                                              |
+| **runs**        | Execution tracking (runs, run steps, checkpoints, events)                                 |
+| **outputs**     | Versioned output artifacts with lineage and publication sinks                             |
+| **common**      | Shared enums, utilities, and base types                                                   |
 
 ### Core Entities
 
@@ -392,38 +392,49 @@ Knowledge --embedded in--> Qdrant vectors
 ## Key Design Decisions
 
 ### Structured Agent Definitions
+
 Agents are defined with explicit, typed fields (LLM config, tools config, memory config, input parameters, output definitions) rather than free-form markdown parsed into a model. The UI generates appropriate input elements for each field. System prompts use a template engine with variables, loops, conditionals, and built-in functions. Every save creates an immutable version snapshot for audit and rollback.
 
 ### Direct Execution Model
+
 The runtime uses a direct execution model centered on `tool_loop` — a recursive LLM + tool dispatch cycle shared by all execution paths. `ChatHandler` handles interactive streaming chat, `agent_executor` handles background agent runs, `mission_executor` handles OODA mission cycles, and `graph_executor` handles multi-node automation DAGs. All paths converge on the same tool loop engine, ensuring consistent behavior across contexts.
 
 ### Workspace-Agnostic Agents
+
 Agents are not scoped to a workspace. They can access knowledge from any workspace through cross-workspace search. This enables agents that serve as domain experts across multiple knowledge bases.
 
 ### Async-First Architecture
+
 The entire backend uses async I/O — asyncpg for PostgreSQL, async httpx for tool server calls, and async WebSocket handling. This maximizes throughput for concurrent users and long-running LLM calls.
 
 ### Hybrid Search (Dense + Sparse)
+
 Search uses four-representation retrieval combining dense semantic vectors, sparse BM25 keyword vectors, and document-level summary vectors, merged via Reciprocal Rank Fusion. This provides both semantic understanding and keyword precision.
 
 ### Tool Server Separation
+
 Tools run in a separate microservice with security boundaries (path traversal guards, command blocking, content boundary wrapping). This isolates potentially dangerous operations from the main application.
 
 ### Event-Driven Streaming
+
 Agent responses stream via Redis pub/sub bridged to WebSocket connections. This decouples the Celery worker (which runs the LLM call) from the web server (which serves the WebSocket), enabling horizontal scaling.
 
 ### Virtual LLM Providers
+
 Beyond standard providers (OpenAI, Anthropic, etc.), OpenForge supports virtual providers — router (load balancing), council (multi-model ensemble), and optimizer (prompt optimization) — that compose standard providers into higher-level abstractions.
 
 ## Security Model
 
 ### API Key Encryption
+
 All LLM provider API keys are encrypted at rest using Fernet symmetric encryption. The encryption key is configurable and must be persisted across restarts.
 
 ### Authentication
+
 Optional password-based authentication with JWT sessions. When `ADMIN_PASSWORD` is set, all API routes (except health and auth endpoints) require a valid session cookie. When unset, authentication is disabled (suitable for local/trusted networks).
 
 ### Tool Security
+
 The tool server enforces:
 
 - **Path traversal protection** — All file paths are resolved and validated to stay within workspace boundaries
@@ -432,26 +443,28 @@ The tool server enforces:
 - **Content boundary** — External HTTP responses are wrapped in `<untrusted_content>` tags to prevent prompt injection
 
 ### Tool Permissions
+
 Per-tool permission levels (allow, block, require approval) are configurable. Each tool declares a default risk level (low, medium, high, critical). The PolicyEngine evaluates permissions before every tool execution in the tool loop.
 
 ### CORS
+
 Configurable CORS origins via the `CORS_ORIGINS` setting. Defaults to allow all origins (`*`) for local development.
 
 ## Technology Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 19, TypeScript, Vite, TailwindCSS, Radix UI, TanStack Query, Zustand |
-| Backend | FastAPI, Python 3.11, SQLAlchemy (async), Alembic, Pydantic |
-| Task Queue | Celery 5.4 with Redis broker |
-| Databases | PostgreSQL 16, Qdrant 1.13.2, Redis 7 |
-| LLM Integration | LiteLLM (unified interface to 14+ providers) |
-| Embeddings | BAAI/bge-small-en-v1.5 (text), CLIP ViT-B-32 (images) |
-| Search | Hybrid dense+sparse with optional cross-encoder reranking |
-| Tool Server | FastAPI (Python 3.12), httpx, 50+ tools |
-| Web Search | SearXNG (self-hosted) |
-| Orchestration | Docker Compose |
+| Layer           | Technology                                                                 |
+| --------------- | -------------------------------------------------------------------------- |
+| Frontend        | React 19, TypeScript, Vite, TailwindCSS, Radix UI, TanStack Query, Zustand |
+| Backend         | FastAPI, Python 3.11, SQLAlchemy (async), Alembic, Pydantic                |
+| Task Queue      | Celery 5.4 with Redis broker                                               |
+| Databases       | PostgreSQL 16, Qdrant 1.13.2, Redis 7                                      |
+| LLM Integration | LiteLLM (unified interface to 14+ providers)                               |
+| Embeddings      | BAAI/bge-small-en-v1.5 (text), CLIP ViT-B-32 (images)                      |
+| Search          | Hybrid dense+sparse with optional cross-encoder reranking                  |
+| Tool Server     | FastAPI (Python 3.12), httpx, 50+ tools                                    |
+| Web Search      | SearXNG (self-hosted)                                                      |
+| Orchestration   | Docker Compose                                                             |
 
 ---
 
-*For user-facing feature documentation, see [User Guide](user-guide.md). For deployment instructions, see [Deployment](deployment.md).*
+_For user-facing feature documentation, see [User Guide](user-guide.md). For deployment instructions, see [Deployment](deployment.md)._

@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { ReactElement } from 'react'
 import { buildEvidencePacket, retrievalRead, retrievalSearch } from '@/lib/api'
 import { chatRoute, knowledgeRoute } from '@/lib/routes'
-import { Search, Loader2, FileText, Bookmark, Code2, Zap, ExternalLink, Copy, SearchX, MessageSquare, Image as ImageIcon, Music, FileType2, Table, Presentation } from 'lucide-react'
+import { Search, Loader2, FileText, Bookmark, Code2, Zap, ExternalLink, Copy, SearchX, MessageSquare, Image as ImageIcon, Music, FileType2, Table, Presentation, Video } from 'lucide-react'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem
 } from '@/components/ui/context-menu'
@@ -35,6 +35,7 @@ const TYPE_ICONS: Record<string, ReactElement> = {
     docx: <FileText className="w-3.5 h-3.5" />,
     sheet: <Table className="w-3.5 h-3.5" />,
     pptx: <Presentation className="w-3.5 h-3.5" />,
+    video: <Video className="w-3.5 h-3.5" />,
     chat: <MessageSquare className="w-3.5 h-3.5" />,
 }
 
@@ -49,10 +50,11 @@ const TYPE_META: Record<string, { label: string; color: string }> = {
     document: { label: 'Document', color: 'text-blue-300' },
     sheet: { label: 'Sheet', color: 'text-green-300' },
     slides: { label: 'Slides', color: 'text-amber-400' },
+    video: { label: 'Video', color: 'text-cyan-400' },
     chat: { label: 'Chat', color: 'text-violet-400' },
 }
 
-const KNOWLEDGE_TYPES = ['', 'note', 'fleeting', 'bookmark', 'gist', 'image', 'audio', 'pdf', 'document', 'sheet', 'slides']
+const KNOWLEDGE_TYPES = ['', 'note', 'fleeting', 'bookmark', 'gist', 'image', 'audio', 'video', 'pdf', 'document', 'sheet', 'slides']
 
 type CardItem =
     | { kind: 'chat'; key: string; chunks: RetrievalSearchResult[]; topScore: number }

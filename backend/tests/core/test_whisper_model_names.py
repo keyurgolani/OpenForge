@@ -2,7 +2,7 @@
 
 import pytest
 
-from openforge.core.knowledge_processors.audio_processor import (
+from openforge.core.pipeline.stt_providers import (
     _HF_TO_WHISPER,
     _detect_device,
     _parse_whisper_model_name,
@@ -233,17 +233,17 @@ class TestApiModelsDownloadDetection:
 
         assert _model_is_downloaded("base") is False
 
-    def test_whisper_model_map_consistent_with_audio_processor(self):
-        """WHISPER_MODEL_MAP in api/models.py matches _HF_TO_WHISPER in audio_processor."""
+    def test_whisper_model_map_consistent_with_stt_providers(self):
+        """WHISPER_MODEL_MAP in api/models.py matches _HF_TO_WHISPER in stt_providers."""
         from openforge.api.models import WHISPER_MODEL_MAP
 
         for hf_id, size in WHISPER_MODEL_MAP.items():
             assert hf_id in _HF_TO_WHISPER, (
-                f"WHISPER_MODEL_MAP key '{hf_id}' missing from audio_processor._HF_TO_WHISPER"
+                f"WHISPER_MODEL_MAP key '{hf_id}' missing from stt_providers._HF_TO_WHISPER"
             )
             assert _HF_TO_WHISPER[hf_id] == size, (
                 f"Mismatch for '{hf_id}': api/models.py has '{size}', "
-                f"audio_processor has '{_HF_TO_WHISPER[hf_id]}'"
+                f"stt_providers has '{_HF_TO_WHISPER[hf_id]}'"
             )
 
 

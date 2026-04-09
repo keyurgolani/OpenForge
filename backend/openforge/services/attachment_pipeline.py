@@ -110,7 +110,7 @@ class AudioAttachmentExtractor(AttachmentExtractor):
 
     async def extract(self, file_path: str) -> Optional[str]:
         try:
-            from openforge.core.knowledge_processors.audio_processor import (
+            from openforge.core.pipeline.stt_providers import (
                 _get_whisper_model, _get_whisper_download_root,
             )
             import asyncio

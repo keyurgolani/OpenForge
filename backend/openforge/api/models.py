@@ -527,8 +527,8 @@ async def set_default_clip_model(
 
     # Invalidate cached model so next image processing picks up the new one
     try:
-        from openforge.core.knowledge_processors.image_processor import ImageProcessor
-        ImageProcessor._clip_model = None
+        from openforge.core.pipeline.backends.clip_backend import CLIPBackend
+        CLIPBackend._clip_model = None
     except Exception:
         pass
 
@@ -619,8 +619,8 @@ async def delete_clip_model(model_id: str):
     try:
         from openforge.common.config import get_settings
         if get_settings().clip_model == model_id:
-            from openforge.core.knowledge_processors.image_processor import ImageProcessor
-            ImageProcessor._clip_model = None
+            from openforge.core.pipeline.backends.clip_backend import CLIPBackend
+            CLIPBackend._clip_model = None
     except Exception:
         pass
 

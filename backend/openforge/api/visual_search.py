@@ -51,9 +51,9 @@ async def visual_search(
 
     # Encode with CLIP
     try:
-        from openforge.core.knowledge_processors.image_processor import ImageProcessor
+        from openforge.core.pipeline.backends.clip_backend import CLIPBackend
 
-        clip_model = await ImageProcessor._get_clip_model_async()
+        clip_model = await CLIPBackend._get_clip_model()
         query_embedding = clip_model.encode(img, normalize_embeddings=True).tolist()
     except Exception as e:
         logger.error("CLIP encoding failed: %s", e)
@@ -62,24 +62,28 @@ async def visual_search(
             detail="Visual search model not available. Please ensure the CLIP model is loaded.",
         )
 
-    # Search in openforge_visual collection
+    # Search clip named vector in main openforge_knowledge collection
     settings = get_settings()
     from openforge.db.qdrant_client import get_qdrant
     from qdrant_client.models import Filter, FieldCondition, MatchValue
 
     client = get_qdrant()
-    collection = settings.qdrant_visual_collection
+    collection = settings.qdrant_collection
 
     try:
         results = client.search(
             collection_name=collection,
-            query_vector=query_embedding,
+            query_vector=("clip", query_embedding),
             query_filter=Filter(
                 must=[
                     FieldCondition(
                         key="workspace_id",
                         match=MatchValue(value=str(workspace_id)),
-                    )
+                    ),
+                    FieldCondition(
+                        key="chunk_type",
+                        match=MatchValue(value="clip"),
+                    ),
                 ]
             ),
             limit=limit,

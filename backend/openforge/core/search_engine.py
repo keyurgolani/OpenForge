@@ -12,7 +12,7 @@ from qdrant_client.models import (
     Fusion,
     SparseVector,
 )
-from typing import Optional
+from typing import Any, Optional
 import logging
 
 logger = logging.getLogger("openforge.search")
@@ -81,6 +81,72 @@ def rerank_results(query: str, candidates: list, limit: int) -> list:
 
 class SearchEngine:
     def search(
+        self,
+        query: str,
+        workspace_id: str,
+        limit: int = 20,
+        knowledge_type: Optional[str] = None,
+        tag: Optional[str] = None,
+        score_threshold: float = 0.0,
+        expand_context: bool = False,
+        search_mode: str = "text",
+        query_image: Any = None,
+    ) -> list[dict]:
+        """Search with optional visual mode using CLIP vectors.
+
+        search_mode:
+            "text"   — dense + sparse + summary → RRF → cross-encoder rerank (default)
+            "visual" — encode query_image with CLIP, search clip named vector
+            "hybrid" — fuse text results and visual results via Reciprocal Rank Fusion
+        """
+        if search_mode == "visual":
+            if query_image is None:
+                raise ValueError("query_image is required for visual search mode")
+            return self._visual_search(
+                query_image=query_image,
+                workspace_id=workspace_id,
+                limit=limit,
+                expand_context=expand_context,
+            )
+
+        if search_mode == "hybrid":
+            text_results = self._text_search(
+                query=query,
+                workspace_id=workspace_id,
+                limit=limit,
+                knowledge_type=knowledge_type,
+                tag=tag,
+                score_threshold=score_threshold,
+                expand_context=expand_context,
+            )
+            visual_results = (
+                self._visual_search(
+                    query_image=query_image,
+                    workspace_id=workspace_id,
+                    limit=limit,
+                    expand_context=expand_context,
+                )
+                if query_image is not None
+                else []
+            )
+            return _rrf_fuse(text_results, visual_results)[:limit]
+
+        # Default: text mode
+        return self._text_search(
+            query=query,
+            workspace_id=workspace_id,
+            limit=limit,
+            knowledge_type=knowledge_type,
+            tag=tag,
+            score_threshold=score_threshold,
+            expand_context=expand_context,
+        )
+
+    # ------------------------------------------------------------------
+    # Internal: text search (original 4-representation logic)
+    # ------------------------------------------------------------------
+
+    def _text_search(
         self,
         query: str,
         workspace_id: str,
@@ -190,6 +256,104 @@ class SearchEngine:
             logger.error("Qdrant search failed: %s", e)
             return []
 
+    # ------------------------------------------------------------------
+    # Internal: visual search (CLIP named vector)
+    # ------------------------------------------------------------------
+
+    def _visual_search(
+        self,
+        query_image: Any,
+        workspace_id: str,
+        limit: int = 20,
+        expand_context: bool = False,
+    ) -> list[dict]:
+        """Search the clip named vector using a CLIP-encoded query image."""
+        try:
+            import asyncio
+
+            from openforge.core.pipeline.backends.clip_backend import CLIPBackend
+
+            # CLIPBackend._get_clip_model is async — run it in the current or new loop
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            if loop and loop.is_running():
+                import concurrent.futures
+
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    clip_model = loop.run_in_executor(
+                        pool, lambda: asyncio.run(CLIPBackend._get_clip_model())
+                    )
+                    # We can't await here (sync method), so use a nested event loop via thread
+                    import threading
+
+                    result_holder: list = []
+                    exc_holder: list = []
+
+                    def _load():
+                        try:
+                            result_holder.append(asyncio.run(CLIPBackend._get_clip_model()))
+                        except Exception as e:
+                            exc_holder.append(e)
+
+                    t = threading.Thread(target=_load)
+                    t.start()
+                    t.join(timeout=60)
+                    if exc_holder:
+                        raise exc_holder[0]
+                    clip_model = result_holder[0] if result_holder else None
+            else:
+                clip_model = asyncio.run(CLIPBackend._get_clip_model())
+
+            if clip_model is None:
+                logger.error("CLIP model not available for visual search")
+                return []
+
+            from PIL import Image as PILImage
+
+            img = query_image
+            if not isinstance(img, PILImage.Image):
+                logger.error("query_image must be a PIL Image instance")
+                return []
+            if img.mode != "RGB":
+                img = img.convert("RGB")
+
+            query_embedding = clip_model.encode(img, normalize_embeddings=True).tolist()
+        except Exception as e:
+            logger.error("CLIP encoding failed for visual search: %s", e)
+            return []
+
+        settings = get_settings()
+        client = get_qdrant()
+
+        search_filter = Filter(
+            must=[
+                FieldCondition(
+                    key="workspace_id",
+                    match=MatchValue(value=workspace_id),
+                ),
+                FieldCondition(
+                    key="chunk_type",
+                    match=MatchValue(value="clip"),
+                ),
+            ]
+        )
+
+        try:
+            results = client.search(
+                collection_name=settings.qdrant_collection,
+                query_vector=("clip", query_embedding),
+                query_filter=search_filter,
+                limit=limit,
+                with_payload=True,
+            )
+            return [self._format_result(hit, include_parent=expand_context) for hit in results]
+        except Exception as e:
+            logger.error("Visual search failed: %s", e)
+            return []
+
     def _format_result(self, hit, include_parent: bool = False) -> dict:
         payload = hit.payload or {}
         result = {
@@ -220,9 +384,15 @@ class SearchEngine:
         knowledge_type: Optional[str] = None,
         tag: Optional[str] = None,
         expand_context: bool = False,
+        search_mode: str = "text",
+        query_image: Any = None,
     ) -> list[dict]:
         """Search and deduplicate: keep highest-scoring result per knowledge item or conversation."""
-        raw = self.search(query, workspace_id, limit * 3, knowledge_type, tag, expand_context=expand_context)
+        raw = self.search(
+            query, workspace_id, limit * 3, knowledge_type, tag,
+            expand_context=expand_context, search_mode=search_mode,
+            query_image=query_image,
+        )
         seen: dict[str, dict] = {}
         for r in raw:
             # Use conversation_id for chat results, knowledge_id for knowledge items
@@ -232,6 +402,38 @@ class SearchEngine:
             if key not in seen or r["score"] > seen[key]["score"]:
                 seen[key] = r
         return sorted(seen.values(), key=lambda x: x["score"], reverse=True)[:limit]
+
+
+def _rrf_fuse(
+    text_results: list[dict],
+    visual_results: list[dict],
+    k: int = 60,
+) -> list[dict]:
+    """Fuse two ranked result lists via Reciprocal Rank Fusion.
+
+    RRF score for each result = sum(1 / (k + rank_i)) across all lists
+    where rank_i is the 1-based rank in list i.
+    """
+    scores: dict[str, float] = {}
+    results_map: dict[str, dict] = {}
+
+    for rank, r in enumerate(text_results):
+        kid = r["knowledge_id"]
+        scores[kid] = scores.get(kid, 0) + 1 / (k + rank + 1)
+        results_map[kid] = r
+
+    for rank, r in enumerate(visual_results):
+        kid = r["knowledge_id"]
+        scores[kid] = scores.get(kid, 0) + 1 / (k + rank + 1)
+        if kid not in results_map:
+            results_map[kid] = r
+
+    fused = sorted(
+        results_map.values(),
+        key=lambda r: scores[r["knowledge_id"]],
+        reverse=True,
+    )
+    return fused
 
 
 search_engine = SearchEngine()

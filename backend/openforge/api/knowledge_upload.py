@@ -39,7 +39,12 @@ ALLOWED_UPLOAD_TYPES: dict[str, dict] = {
     "audio/mp4": {"knowledge_type": "audio", "extensions": [".m4a"]},
     "audio/x-m4a": {"knowledge_type": "audio", "extensions": [".m4a"]},
     "audio/webm": {"knowledge_type": "audio", "extensions": [".webm", ".weba"]},
-    "video/webm": {"knowledge_type": "audio", "extensions": [".webm"]},
+    # Video
+    "video/mp4": {"knowledge_type": "video", "extensions": [".mp4"]},
+    "video/quicktime": {"knowledge_type": "video", "extensions": [".mov"]},
+    "video/x-msvideo": {"knowledge_type": "video", "extensions": [".avi"]},
+    "video/x-matroska": {"knowledge_type": "video", "extensions": [".mkv"]},
+    "video/webm": {"knowledge_type": "video", "extensions": [".webm"]},
     # PDF
     "application/pdf": {"knowledge_type": "pdf", "extensions": [".pdf"]},
     # Word
@@ -183,7 +188,7 @@ async def _process_knowledge_file(
     knowledge_type: str,
     file_path: str,
 ):
-    """Background task: run the appropriate processor for the file type."""
+    """Background task: dispatch to the pipeline framework for all knowledge types."""
     from openforge.db.postgres import AsyncSessionLocal
     from openforge.api.websocket import ws_manager
 
@@ -202,45 +207,32 @@ async def _process_knowledge_file(
                 logger.error("Knowledge %s not found for processing", knowledge_id)
                 return
 
-            # Dispatch to the correct processor
+            # Dispatch to the pipeline framework (handles content, embedding_status,
+            # embedding pipeline, CLIP storage, ai_title, ai_summary, file_metadata,
+            # thumbnail_path updates on the Knowledge record)
             processor_result = await _run_processor(
                 knowledge_type, knowledge_id, file_path, workspace_id, db
             )
 
-            # Update knowledge record with processor results
-            if processor_result.get("content"):
-                knowledge.content = processor_result["content"]
-                knowledge.word_count = len(processor_result["content"].split())
+            # Refresh the knowledge record after dispatcher committed its updates
+            await db.refresh(knowledge)
 
-            if processor_result.get("ai_title"):
-                knowledge.ai_title = processor_result["ai_title"]
+            # Update remaining fields not handled by the dispatcher
+            content = processor_result.get("content", "")
+            if content:
+                knowledge.word_count = len(content.split())
+
+            ai_title = processor_result.get("ai_title")
+            if ai_title:
                 if not knowledge.title or knowledge.title == os.path.splitext(os.path.basename(file_path))[0]:
-                    knowledge.title = processor_result["ai_title"]
-
-            if processor_result.get("ai_summary"):
-                knowledge.ai_summary = processor_result["ai_summary"]
-
-            if processor_result.get("thumbnail_path"):
-                knowledge.thumbnail_path = processor_result["thumbnail_path"]
-
-            if processor_result.get("file_path"):
-                knowledge.file_path = processor_result["file_path"]
-            if processor_result.get("file_size"):
-                knowledge.file_size = processor_result["file_size"]
-            if processor_result.get("mime_type"):
-                knowledge.mime_type = processor_result["mime_type"]
-
-            if processor_result.get("file_metadata"):
-                knowledge.file_metadata = processor_result["file_metadata"]
+                    knowledge.title = ai_title
 
             if processor_result.get("tags"):
-                # Add AI-generated tags
                 from openforge.services.knowledge_service import knowledge_service
                 await knowledge_service.update_tags(
                     db, knowledge_id, processor_result["tags"], source="ai"
                 )
 
-            knowledge.embedding_status = "done"
             await db.commit()
             extraction_succeeded = True
 
@@ -300,28 +292,21 @@ async def _run_processor(
     workspace_id: UUID,
     db_session,
 ) -> dict:
-    """Dispatch to the correct processor."""
-    if knowledge_type == "image":
-        from openforge.core.knowledge_processors.image_processor import image_processor
-        return await image_processor.process(knowledge_id, file_path, workspace_id, db_session)
-    elif knowledge_type == "audio":
-        from openforge.core.knowledge_processors.audio_processor import audio_processor
-        return await audio_processor.process(knowledge_id, file_path, workspace_id, db_session)
-    elif knowledge_type == "pdf":
-        from openforge.core.knowledge_processors.pdf_processor import pdf_processor
-        return await pdf_processor.process(knowledge_id, file_path, workspace_id, db_session)
-    elif knowledge_type == "document":
-        from openforge.core.knowledge_processors.document_processor import document_processor
-        return await document_processor.process(knowledge_id, file_path, workspace_id, db_session)
-    elif knowledge_type == "sheet":
-        from openforge.core.knowledge_processors.sheet_processor import sheet_processor
-        return await sheet_processor.process(knowledge_id, file_path, workspace_id, db_session)
-    elif knowledge_type == "slides":
-        from openforge.core.knowledge_processors.slides_processor import slides_processor
-        return await slides_processor.process(knowledge_id, file_path, workspace_id, db_session)
-    else:
-        logger.warning("No processor for knowledge type: %s", knowledge_type)
-        return {}
+    """Dispatch to the pipeline framework for all knowledge types."""
+    from openforge.core.pipeline.dispatcher import dispatch_processing
+
+    result = await dispatch_processing(
+        knowledge_id, workspace_id, knowledge_type, file_path, db_session
+    )
+    # Convert PipelineResult to the dict format expected by _process_knowledge_file
+    return {
+        "content": result.content,
+        "ai_title": result.ai_title,
+        "ai_summary": result.ai_summary,
+        "thumbnail_path": result.thumbnail_path,
+        "file_metadata": result.metadata or None,
+        "tags": [],  # Tags are handled by intelligence job
+    }
 
 
 @router.post("/{workspace_id}/knowledge/{knowledge_id}/reprocess", status_code=202)
@@ -342,7 +327,7 @@ async def reprocess_knowledge_file(
     if not knowledge:
         raise HTTPException(status_code=404, detail="Knowledge not found")
 
-    reprocessable_types = {"image", "audio", "pdf", "document", "sheet", "slides"}
+    reprocessable_types = {"image", "audio", "pdf", "document", "sheet", "slides", "video"}
     if knowledge.type not in reprocessable_types:
         raise HTTPException(
             status_code=400,

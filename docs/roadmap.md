@@ -15,14 +15,14 @@ Items across all tracks, grouped by domain rather than implementation order.
 | Group                                    | Items                                              | Description                                                                                                                         |
 | ---------------------------------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | Tool Execution Resilience & Optimization | 1.2, 1.4, 1.6, 1.7, 1.9, 1.12, 1.14, 4.2, 4.3, 4.4 | Failure handling, caching, concurrent execution, recovery hints, narrator mode, tool fixes and macros                               |
-| Context & Token Management               | 1.3, 1.5, 1.8                                      | Compaction tiers, disk persistence for tool results, compositional prompts with cache-aware assembly and verbosity control          |
+| Context & Token Management               | 1.3, 1.5, 1.8, 1.15                                | Compaction tiers, disk persistence for tool results, compositional prompts with cache-aware assembly, small-model context budgeting |
 | Memory System                            | 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9        | Typed memories, temporal management, hybrid retrieval, auto-capture, consolidation/extraction/learning daemons, progressive loading |
-| Knowledge Ingestion & Processing         | 2.1, 2.2, 2.3, 2.4, 2.5, 7.1                       | Pipeline framework (documents, images, audio, video, bookmarks), CLIP embedding, content normalization, faster-whisper              |
+| Knowledge Ingestion & Processing         | 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 7.1             | Pipeline framework, CLIP embedding, content normalization, faster-whisper, pipeline model selection, model download management       |
 | Agent Behavior & Quality                 | 1.13, 5.1, 5.2, 5.3                                | Plan-mode default, delegation guidance with loop prevention, verification-before-done, hierarchical tool scoping                    |
 | Missions & Deployments                   | 1.10, 1.11, 6.1, 6.2, 6.3, 6.4, 6.5                | Progress persistence, sprint contracts, health monitor, agent messaging, templates, webhook and event triggers                      |
 | Browser & Web Interaction                | 4.1                                                | PinchTab for interactive browsing, Crawl4AI for content extraction                                                                  |
 | Local / Native AI                        | 7.2, 7.3                                           | Ollama in Docker stack, Liquid AI LFM2.5 integration                                                                                |
-| UI/UX                                    | 8.1, 8.2, 8.3, 8.4, 8.5, 8.6                       | Chat streaming fix, inline artifacts, Kanban view, NL scheduling, smart polling, design audit                                       |
+| UI/UX                                    | 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7                  | Chat streaming fix, inline artifacts, Kanban view, NL scheduling, smart polling, design audit, journal UI                           |
 | Developer Experience & Extensibility     | 9.1, 9.2                                           | Autoresearch optimization pattern, RepoLens codebase understanding tool                                                             |
 
 ---
@@ -149,6 +149,10 @@ New `plan_first: boolean` on agent config (default `true` for automation/mission
 
 Cache tool results per-execution with 300-second TTL in Redis. Cache key: `(run_id, tool_name, sorted(parameters))`. Identical tool calls within the same execution return cached results. Prevents redundant API calls and tool server processing.
 
+### 1.15 Tool Loop Context Budget for Small-Context Models — P0
+
+Local models with small context windows (4k-8k) are overwhelmed after a single tool call — the system prompt, tool definitions, tool result, and conversation history fill the context, evicting the user's original request. The tool loop needs context-aware budgeting: measure available context before each LLM call, truncate or summarize tool results to fit, and ensure the user's request is never evicted. This is distinct from 1.3 (compaction tiers for long conversations) — this is about surviving the very first tool turn on constrained models.
+
 ---
 
 ## Track 2: Knowledge System
@@ -247,9 +251,23 @@ Replace `openai-whisper` with a configurable STT provider system:
 
 Separate vector stored as named `clip_vector` in Qdrant alongside `text_vector`. Enables visual similarity search. Applied to images and video keyframes. `workspace.search` gets optional `search_mode` parameter: `text` (default), `visual`, `hybrid`. Uses the CLIP model configured in provider settings.
 
-### 2.5 Content Normalization — P2
+### 2.5 Content Normalization — P2 ✅ DONE
 
-A `normalize_output()` function called on each slot's output before the consolidation LLM. Standardizes markdown format regardless of which extraction tool produced it. Stateless, deterministic, no LLM calls. Improves embedding consistency.
+Implemented in `normalizer.py` — stateless, deterministic markdown normalization applied to all slot outputs. Strips tool-specific page markers, normalizes heading levels, list markers, table formatting, and collapses excessive newlines.
+
+### 2.6 Pipeline Model Selection — P1
+
+Move model selection for intelligence (title/summary/tags/insights) and vision (frame description, image captioning) from per-workspace settings into the pipeline configuration UI. Pipeline-configured models apply globally across all workspaces. When no pipeline model is configured, fall back to the default model configured in AI Models settings.
+
+Requires: update `resolve_provider()` to check pipeline config before workspace/global defaults, add model picker schemas to the pipeline backend-schemas endpoint, wire the intelligence job and vision backend to accept overrides from pipeline config.
+
+### 2.7 Pipeline Model Download Management — P1
+
+Unified model download page under AI Models settings for all locally-cached pipeline models: Marker (PDF extraction), OpenCLIP (visual search), Tesseract language packs, faster-whisper (STT), sentence-transformers (embedding/reranking). Each model shows download status, disk usage, and a download/remove button. Consolidates the previously separate PDF model page with all other pipeline model dependencies into one management surface.
+
+### 2.8 Content Normalization — P2 ✅ DONE
+
+See 2.5 above.
 
 ---
 
@@ -619,6 +637,10 @@ Six-column Kanban board (draft, active, paused, review, completed, terminated) a
 ### 8.6 Design System Audit — P3
 
 Audit against AI-app anti-patterns (default fonts, purple gradients, excessive card nesting, poor contrast). Establish documented design tokens: font families, size scale, spacing scale, semantic color palette. Surgical fixes, not a redesign.
+
+### 8.7 Journal Knowledge Type — Distinct UI & Personality — P1
+
+Journal entries currently render identically to Notes. Journals need their own visual identity and interaction patterns — date-anchored timeline view, mood/energy tagging, daily/weekly grouping, calendar heat-map navigation, and a distinct editor experience (prompts, reflection cues). Design the Journal as a first-class knowledge type with its own page layout, card style, and creation flow rather than reusing the Note editor verbatim.
 
 ---
 

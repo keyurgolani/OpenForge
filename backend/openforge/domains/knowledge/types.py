@@ -19,6 +19,14 @@ class KnowledgeType(str, Enum):
     BOOKMARK = "bookmark"
     FILE = "file"
     INSIGHT = "insight"
+    IMAGE = "image"
+    AUDIO = "audio"
+    VIDEO = "video"
+    PDF = "pdf"
+    SHEET = "sheet"
+    SLIDES = "slides"
+    GIST = "gist"
+    JOURNAL = "journal"
 
 
 class KnowledgeStatus(str, Enum):

@@ -28,6 +28,7 @@ from openforge.api import hitl as hitl_api
 from openforge.api import global_chat as global_chat_api
 from openforge.api import ollama as ollama_api
 from openforge.api import system as system_api
+from openforge.api import pipelines as pipelines_api
 
 # Domain routers (new architecture)
 api_router = APIRouter(prefix="/api/v1")
@@ -53,6 +54,7 @@ api_router.include_router(hitl_api.router, prefix="/policies", tags=["hitl"])
 api_router.include_router(global_chat_api.router, prefix="/chat", tags=["global-chat"])
 api_router.include_router(ollama_api.router, prefix="/ollama", tags=["ollama"])
 api_router.include_router(system_api.router, prefix="/system", tags=["system"])
+api_router.include_router(pipelines_api.router, prefix="/pipelines", tags=["pipelines"])
 
 
 # System-provided prompt variables — auto-populated at runtime

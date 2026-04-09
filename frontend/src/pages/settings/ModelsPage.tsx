@@ -14,11 +14,10 @@ const ReasoningPage = lazy(() => import('./models/reasoning/ReasoningPage'));
 const VisionPage = lazy(() => import('./models/vision/VisionPage'));
 const EmbeddingPage = lazy(() => import('./models/embedding/EmbeddingPage'));
 const CLIPPage = lazy(() => import('./models/clip/CLIPPage'));
-const PDFPage = lazy(() => import('./models/pdf/PDFPage'));
 const STTPage = lazy(() => import('./models/audio/STTPage'));
 const TTSPage = lazy(() => import('./models/audio/TTSPage'));
 
-type ModelSection = 'providers' | 'reasoning' | 'vision' | 'embedding' | 'clip' | 'pdf' | 'stt' | 'tts';
+type ModelSection = 'providers' | 'reasoning' | 'vision' | 'embedding' | 'clip' | 'stt' | 'tts';
 
 interface NavItem {
   id: ModelSection;
@@ -50,10 +49,6 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    category: 'Document',
-    items: [{ id: 'pdf', label: 'PDF' }],
-  },
-  {
     category: 'Audio',
     items: [
       { id: 'stt', label: 'Speech to Text' },
@@ -74,8 +69,6 @@ function renderSection(section: ModelSection) {
       return <EmbeddingPage />;
     case 'clip':
       return <CLIPPage />;
-    case 'pdf':
-      return <PDFPage />;
     case 'stt':
       return <STTPage />;
     case 'tts':

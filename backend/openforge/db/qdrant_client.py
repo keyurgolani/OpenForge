@@ -16,10 +16,10 @@ def get_qdrant() -> QdrantClient:
 
 
 async def init_qdrant_collection() -> bool:
-    """Create or migrate the knowledge collection on app startup.
+    """Create the knowledge collection on app startup.
 
-    Returns True if the collection was newly created or migrated (indicating
-    that existing knowledge items should be re-indexed in the background).
+    Pre-release: drops and recreates the collection fresh every time it exists.
+    Returns True (always needs reindex since we recreated).
     """
     settings = get_settings()
     client = get_qdrant()
@@ -28,80 +28,53 @@ async def init_qdrant_collection() -> bool:
     collections = client.get_collections().collections
     exists = any(c.name == collection_name for c in collections)
 
-    needs_reindex = False
-
     if exists:
-        # Check whether the collection already uses named vectors with sparse support.
-        # Old collections used a single unnamed VectorParams; new ones use a dict.
-        info = client.get_collection(collection_name)
-        vectors_cfg = info.config.params.vectors
-        is_named = isinstance(vectors_cfg, dict)
-        has_sparse = bool(info.config.params.sparse_vectors)
+        logger.info("Dropping existing collection '%s' for fresh creation.", collection_name)
+        client.delete_collection(collection_name)
 
-        if not is_named or not has_sparse:
-            logger.info(
-                "Migrating Qdrant collection '%s' to named vectors + sparse for hybrid search.",
-                collection_name,
-            )
-            client.delete_collection(collection_name)
-            exists = False
-            needs_reindex = True
-        elif is_named and "summary" not in vectors_cfg:
-            # Collection exists with named vectors but lacks the summary vector.
-            # Add it non-destructively and trigger re-index to backfill summary vectors.
-            logger.info(
-                "Adding 'summary' named vector to collection '%s'.",
-                collection_name,
-            )
-            client.update_collection(
-                collection_name=collection_name,
-                vectors_config={
-                    "summary": models.VectorParams(
-                        size=settings.embedding_dimension,
-                        distance=models.Distance.COSINE,
-                    ),
-                },
-            )
-            needs_reindex = True
+    logger.info("Creating Qdrant collection: %s", collection_name)
+    client.create_collection(
+        collection_name=collection_name,
+        vectors_config={
+            "dense": models.VectorParams(
+                size=settings.embedding_dimension,
+                distance=models.Distance.COSINE,
+            ),
+            "summary": models.VectorParams(
+                size=settings.embedding_dimension,
+                distance=models.Distance.COSINE,
+            ),
+            "clip": models.VectorParams(
+                size=settings.clip_dimension,
+                distance=models.Distance.COSINE,
+            ),
+        },
+        sparse_vectors_config={
+            "sparse": models.SparseVectorParams(
+                modifier=models.Modifier.IDF,
+            ),
+        },
+    )
 
-    if not exists:
-        logger.info("Creating Qdrant collection: %s", collection_name)
-        client.create_collection(
+    for field, schema in [
+        ("workspace_id", models.PayloadSchemaType.KEYWORD),
+        ("knowledge_type", models.PayloadSchemaType.KEYWORD),
+        ("tags", models.PayloadSchemaType.KEYWORD),
+        ("knowledge_id", models.PayloadSchemaType.KEYWORD),
+        ("conversation_id", models.PayloadSchemaType.KEYWORD),
+        ("chunk_type", models.PayloadSchemaType.KEYWORD),
+    ]:
+        client.create_payload_index(
             collection_name=collection_name,
-            vectors_config={
-                "dense": models.VectorParams(
-                    size=settings.embedding_dimension,
-                    distance=models.Distance.COSINE,
-                ),
-                "summary": models.VectorParams(
-                    size=settings.embedding_dimension,
-                    distance=models.Distance.COSINE,
-                ),
-            },
-            sparse_vectors_config={
-                "sparse": models.SparseVectorParams(
-                    modifier=models.Modifier.IDF,
-                ),
-            },
+            field_name=field,
+            field_schema=schema,
         )
 
-        # Payload indexes for filtering
-        for field, schema in [
-            ("workspace_id", models.PayloadSchemaType.KEYWORD),
-            ("knowledge_type", models.PayloadSchemaType.KEYWORD),
-            ("tags", models.PayloadSchemaType.KEYWORD),
-            ("knowledge_id", models.PayloadSchemaType.KEYWORD),
-            ("conversation_id", models.PayloadSchemaType.KEYWORD),
-        ]:
-            client.create_payload_index(
-                collection_name=collection_name,
-                field_name=field,
-                field_schema=schema,
-            )
-
-        logger.info("Collection '%s' created with payload indexes.", collection_name)
-
-    return needs_reindex
+    logger.info(
+        "Collection '%s' created with dense + summary + clip vectors and payload indexes.",
+        collection_name,
+    )
+    return True  # Always needs reindex since we recreated
 
 
 async def init_memory_collection() -> None:
@@ -136,35 +109,3 @@ async def init_memory_collection() -> None:
             )
 
         logger.info("Memory collection '%s' created.", collection_name)
-
-
-async def init_visual_collection() -> None:
-    """Create the CLIP visual search collection if it doesn't exist."""
-    settings = get_settings()
-    client = get_qdrant()
-    collection_name = settings.qdrant_visual_collection
-
-    collections = client.get_collections().collections
-    exists = any(c.name == collection_name for c in collections)
-
-    if not exists:
-        logger.info("Creating CLIP visual collection: %s", collection_name)
-        client.create_collection(
-            collection_name=collection_name,
-            vectors_config=models.VectorParams(
-                size=settings.clip_dimension,
-                distance=models.Distance.COSINE,
-            ),
-        )
-
-        for field, schema in [
-            ("workspace_id", models.PayloadSchemaType.KEYWORD),
-            ("knowledge_id", models.PayloadSchemaType.KEYWORD),
-        ]:
-            client.create_payload_index(
-                collection_name=collection_name,
-                field_name=field,
-                field_schema=schema,
-            )
-
-        logger.info("Visual collection '%s' created.", collection_name)

@@ -42,6 +42,14 @@ export const updateSetting = (
     data: { value: any; category?: string; sensitive?: boolean },
 ): Promise<any> => api.put(`/settings/${key}`, data).then(r => r.data)
 
+// ── Pipelines ──
+export const listPipelines = (): Promise<any> => api.get('/pipelines').then(r => r.data)
+export const getBackendSchemas = (): Promise<any> => api.get('/pipelines/backend-schemas').then(r => r.data)
+export const updatePipeline = (
+    knowledgeType: string,
+    data: { slots: Record<string, { enabled?: boolean; active_backend?: string; backend_config?: Record<string, any> }> },
+): Promise<any> => api.put(`/pipelines/${knowledgeType}`, data).then(r => r.data)
+
 // ── LLM Providers ──
 export const listProviders = (): Promise<any> => api.get('/llm/providers').then(r => r.data)
 export const createProvider = (data: object): Promise<any> => api.post('/llm/providers', data).then(r => r.data)
