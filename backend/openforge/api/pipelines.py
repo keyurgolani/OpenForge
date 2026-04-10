@@ -47,6 +47,9 @@ class PostStep(BaseModel):
     toggleable: bool = False
     enabled: bool = True
     config_key: str | None = None
+    model_configurable: bool = False
+    provider_id: str | None = None
+    model_name: str | None = None
 
 
 class PipelineResponse(BaseModel):
@@ -70,6 +73,7 @@ class PipelineUpdate(BaseModel):
 
     slots: dict[str, PipelineSlotUpdate] = {}  # slot_type -> overrides
     post_step_toggles: dict[str, bool] = {}  # config_key -> enabled
+    post_step_models: dict[str, dict] = {}  # step_key -> {provider_id, model_name}
 
 
 # ── Backend config schemas ──────────────────────────────────────────────────
@@ -79,6 +83,18 @@ class PipelineUpdate(BaseModel):
 BACKEND_CONFIG_SCHEMAS: dict[str, dict] = {
     "marker": {
         "label": "Marker",
+        "fields": {},
+    },
+    "docling": {
+        "label": "Docling (IBM)",
+        "fields": {},
+    },
+    "pymupdf": {
+        "label": "PyMuPDF",
+        "fields": {},
+    },
+    "pymupdf-meta": {
+        "label": "PyMuPDF Metadata",
         "fields": {},
     },
     "tesseract": {
@@ -120,7 +136,52 @@ BACKEND_CONFIG_SCHEMAS: dict[str, dict] = {
             },
         },
     },
+    "vision-llm": {
+        "label": "Vision LLM",
+        "fields": {
+            "provider_model": {
+                "label": "Model",
+                "type": "provider-model",
+                "description": "LLM provider and model for vision analysis",
+            },
+        },
+    },
 }
+
+
+# ── Available models ─────────────────────────────────────────────────────────
+
+
+class AvailableProvider(BaseModel):
+    id: str
+    name: str
+    display_name: str
+    models: list[dict]  # [{id: str, name: str}]
+
+
+@router.get("/available-models", response_model=list[AvailableProvider])
+async def list_available_models(db: AsyncSession = Depends(get_db)):
+    """Return configured LLM providers with their models for pipeline model pickers."""
+    from openforge.services.llm_service import llm_service
+
+    providers = await llm_service.list_providers(db)
+    result: list[AvailableProvider] = []
+    for p in providers:
+        models = []
+        try:
+            model_list = await llm_service.list_models(db, p.id)
+            models = [{"id": m.id, "name": m.name or m.id} for m in model_list]
+        except Exception:
+            # Provider might be offline — use enabled_models as fallback
+            models = [{"id": m.get("id", ""), "name": m.get("name", m.get("id", ""))} for m in (p.enabled_models or [])]
+        if models:
+            result.append(AvailableProvider(
+                id=str(p.id),
+                name=p.provider_name,
+                display_name=p.display_name,
+                models=models,
+            ))
+    return result
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
@@ -197,6 +258,16 @@ async def update_pipeline(
         if config_key in _TOGGLEABLE_POST_STEPS:
             await config_service.set_config(db, config_key, {"value": enabled}, "pipeline")
 
+    # Persist post-step model overrides
+    if body.post_step_models:
+        if "post_step_models" not in type_overrides:
+            type_overrides["post_step_models"] = {}
+        for step_key, model_cfg in body.post_step_models.items():
+            if step_key in _MODEL_CONFIGURABLE_STEPS:
+                type_overrides["post_step_models"][step_key] = model_cfg
+        all_configs[knowledge_type] = type_overrides
+        await config_service.set_config(db, "pipeline_configs", all_configs, "pipeline")
+
     # Return the freshly resolved pipeline
     defn = await _registry.get_pipeline(knowledge_type, db_session=db)
     return await _to_response(defn, db)
@@ -211,23 +282,36 @@ _TOGGLEABLE_POST_STEPS = {
     "auto_knowledge_intelligence",
 }
 
+# Step keys that support model selection
+_MODEL_CONFIGURABLE_STEPS = {
+    "intelligence",
+    "consolidation",
+}
+
 
 async def _to_response(defn: PipelineDefinition, db: AsyncSession) -> PipelineResponse:
-    # Read toggleable config values
     from openforge.services.automation_config import is_auto_knowledge_intelligence_enabled
 
     intelligence_enabled = await is_auto_knowledge_intelligence_enabled(db)
     consolidation_on = defn.consolidation_enabled
 
+    # Load post_step_models for this knowledge type
+    existing = await config_service.get_config_raw(db, "pipeline_configs")
+    all_configs: dict = existing if isinstance(existing, dict) else {}
+    type_config = all_configs.get(defn.knowledge_type, {})
+    post_step_models = type_config.get("post_step_models", {})
+
     post_steps: list[PostStep] = []
 
-    # All types get normalization and embedding (not toggleable)
     post_steps.append(PostStep(name="Normalization", description="Standardize markdown output"))
 
-    # Consolidation — toggleable
+    consolidation_model = post_step_models.get("consolidation", {})
     post_steps.append(PostStep(
         name="Consolidation", description="LLM merges slot outputs",
         toggleable=True, enabled=consolidation_on, config_key="pipeline_consolidation_enabled",
+        model_configurable=True,
+        provider_id=consolidation_model.get("provider_id"),
+        model_name=consolidation_model.get("model_name"),
     ))
 
     if defn.knowledge_type == "video":
@@ -235,10 +319,13 @@ async def _to_response(defn: PipelineDefinition, db: AsyncSession) -> PipelineRe
     else:
         post_steps.append(PostStep(name="Chunking & Embedding", description="Split content into chunks and generate vectors"))
 
-    # Intelligence group — toggleable as one unit
+    intelligence_model = post_step_models.get("intelligence", {})
     post_steps.append(PostStep(
         name="Intelligence", description="AI-generated title, summary, tags, and insights",
         toggleable=True, enabled=intelligence_enabled, config_key="auto_knowledge_intelligence",
+        model_configurable=True,
+        provider_id=intelligence_model.get("provider_id"),
+        model_name=intelligence_model.get("model_name"),
     ))
 
     return PipelineResponse(

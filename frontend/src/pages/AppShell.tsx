@@ -9,7 +9,7 @@ import { useUIStore } from '@/stores/uiStore'
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut'
 import { getShortcutDisplay } from '@/lib/keyboard'
 import { onQuickKnowledgeOpen, type QuickKnowledgeType } from '@/lib/quick-knowledge'
-import { agentsRoute, sinksRoute, automationsRoute, chatRoute, dashboardRoute, deploymentsRoute, knowledgeRoute, missionsRoute, runsRoute, searchRoute } from '@/lib/routes'
+import { agentsRoute, sinksRoute, automationsRoute, chatRoute, dashboardRoute, deploymentsRoute, journalRoute, knowledgeRoute, missionsRoute, runsRoute, searchRoute } from '@/lib/routes'
 import CommandPalette from '@/components/shared/CommandPalette'
 import CreateDispatcher from '@/components/knowledge/create/CreateDispatcher'
 import KnowledgeTypeGrid from '@/components/knowledge/KnowledgeTypeGrid'
@@ -308,6 +308,12 @@ export default function AppShell() {
         description: 'Live automation instances.',
       }
     }
+    if (location.pathname.includes('/journal')) {
+      return {
+        title: 'Journal',
+        description: 'Timeline of daily journal entries with inline editing.',
+      }
+    }
     if (location.pathname.includes('/knowledge/')) {
       return {
         title: 'Knowledge Details',
@@ -331,6 +337,7 @@ export default function AppShell() {
     knowledge: knowledgeRoute(workspaceId),
     knowledgeItem: (knowledgeId: string) => `/w/${workspaceId}/knowledge/${knowledgeId}`,
     search: searchRoute(workspaceId),
+    journal: journalRoute(workspaceId),
     chat: chatRoute(workspaceId),
     chatConversation: (conversationId: string) => chatRoute(workspaceId, conversationId),
     agents: agentsRoute(),
@@ -345,6 +352,7 @@ export default function AppShell() {
   const isDashboard = location.pathname === dashboardRoute(workspaceId)
   const isKnowledgeBoardPage = location.pathname === knowledgeRoute(workspaceId)
   const isSearchPage = location.pathname.includes('/search')
+  const isJournalPage = location.pathname.includes('/journal')
   const isSettingsPage = location.pathname.includes('/settings')
   const isAgentChatPage = location.pathname.includes('/chat')
   const isKnowledgePage = location.pathname.includes('/knowledge/')
@@ -358,6 +366,7 @@ export default function AppShell() {
     isDashboard
     || isKnowledgeBoardPage
     || isSearchPage
+    || isJournalPage
     || isSettingsPage
     || isAgentChatPage
     || isKnowledgePage

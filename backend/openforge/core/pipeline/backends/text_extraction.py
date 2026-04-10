@@ -2,6 +2,10 @@
 
 Backends:
 - MarkerBackend: PDF text extraction via Marker subprocess with PyMuPDF fallback
+- DoclingBackend: PDF text+table extraction via IBM Docling subprocess
+- DoclingTableBackend: Structured table extraction via Docling
+- EmbeddedImageBackend: Embedded image extraction from documents via PyMuPDF
+- PyMuPDFMetadataBackend: PDF metadata extraction via PyMuPDF
 - DocxBackend: DOCX text extraction with heading structure preserved
 - XlsxBackend: XLSX sheet extraction as markdown tables
 - PptxBackend: PPTX slide text extraction with slide numbers
@@ -173,6 +177,308 @@ class MarkerBackend:
 
         doc.close()
         return "\n\n".join(text_parts)[:MAX_TEXT_LENGTH]
+
+
+# ── Docling subprocess script ──
+# Runs in a separate Python process so OOM/crash can't kill the API server.
+_DOCLING_SUBPROCESS_SCRIPT = """\
+import sys
+import json
+
+file_path = sys.argv[1]
+out_path = sys.argv[2]
+
+try:
+    from docling.document_converter import DocumentConverter
+
+    converter = DocumentConverter()
+    result = converter.convert(file_path)
+    doc = result.document
+
+    # Full markdown export
+    text = doc.export_to_markdown()
+
+    # Extract tables separately as markdown
+    tables = []
+    for table in doc.tables:
+        try:
+            tables.append(table.export_to_markdown())
+        except Exception:
+            pass
+
+    with open(out_path, "w") as f:
+        json.dump({"text": text[:100000], "tables": tables}, f)
+
+except Exception as e:
+    with open(out_path, "w") as f:
+        json.dump({"text": "", "tables": [], "error": str(e)}, f)
+    sys.exit(1)
+"""
+
+
+# ---------------------------------------------------------------------------
+# DoclingBackend — PDF text+table extraction via IBM Docling
+# ---------------------------------------------------------------------------
+
+class DoclingBackend:
+    """Document text+table extraction via IBM Docling with fallback."""
+
+    slot_type = "text_extraction"
+    backend_name = "docling"
+
+    async def run(self, file_path: str, context: SlotContext) -> SlotOutput:
+        import time
+
+        start = time.monotonic()
+        try:
+            text, tables = await self._extract_docling_subprocess(file_path)
+            elapsed = int((time.monotonic() - start) * 1000)
+            metadata = {}
+            if tables:
+                metadata["tables"] = tables
+                metadata["table_count"] = len(tables)
+            return SlotOutput(
+                slot_type=self.slot_type,
+                backend_name=self.backend_name,
+                text=text,
+                metadata=metadata,
+                duration_ms=elapsed,
+            )
+        except Exception as e:
+            elapsed = int((time.monotonic() - start) * 1000)
+            logger.warning("DoclingBackend failed for %s: %s", file_path, e)
+            return SlotOutput(
+                slot_type=self.slot_type,
+                backend_name=self.backend_name,
+                success=False,
+                error=str(e),
+                duration_ms=elapsed,
+            )
+
+    async def _extract_docling_subprocess(self, file_path: str) -> tuple[str, list[str]]:
+        """Run Docling in an isolated subprocess."""
+        out_path: str | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".json", delete=False
+            ) as out_file:
+                out_path = out_file.name
+
+            env = {**os.environ}
+            try:
+                from openforge.common.config import get_settings
+                docling_dir = str(Path(get_settings().models_root) / "docling")
+                env["HF_HOME"] = docling_dir
+            except Exception:
+                pass
+
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, "-c", _DOCLING_SUBPROCESS_SCRIPT, file_path, out_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=env,
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=MARKER_SUBPROCESS_TIMEOUT
+                )
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.communicate()
+                logger.warning(
+                    "Docling subprocess timed out after %ds",
+                    MARKER_SUBPROCESS_TIMEOUT,
+                )
+                return "", []
+
+            if proc.returncode != 0:
+                stderr_text = stderr.decode(errors="replace")[-500:] if stderr else ""
+                logger.warning(
+                    "Docling subprocess failed (exit %d): %s",
+                    proc.returncode, stderr_text,
+                )
+                return "", []
+
+            if os.path.exists(out_path) and os.path.getsize(out_path) > 0:
+                with open(out_path, "r") as f:
+                    data = json.load(f)
+                text = data.get("text", "")
+                tables = data.get("tables", [])
+                if text:
+                    logger.info(
+                        "Docling extraction succeeded (%d chars, %d tables)",
+                        len(text), len(tables),
+                    )
+                return text[:MAX_TEXT_LENGTH], tables
+            return "", []
+
+        except Exception as e:
+            logger.warning("Docling subprocess error: %s", e)
+            return "", []
+        finally:
+            if out_path:
+                try:
+                    if os.path.exists(out_path):
+                        os.unlink(out_path)
+                except Exception:
+                    pass
+
+
+# ---------------------------------------------------------------------------
+# DoclingTableBackend — structured table extraction via Docling
+# ---------------------------------------------------------------------------
+
+class DoclingTableBackend:
+    """Structured table extraction via Docling — returns tables as markdown."""
+
+    slot_type = "table_extraction"
+    backend_name = "docling"
+
+    async def run(self, file_path: str, context: SlotContext) -> SlotOutput:
+        import time
+
+        start = time.monotonic()
+        try:
+            _, tables = await DoclingBackend()._extract_docling_subprocess(file_path)
+            elapsed = int((time.monotonic() - start) * 1000)
+            text = "\n\n".join(tables) if tables else ""
+            return SlotOutput(
+                slot_type=self.slot_type,
+                backend_name=self.backend_name,
+                text=text,
+                metadata={"table_count": len(tables)},
+                duration_ms=elapsed,
+            )
+        except Exception as e:
+            elapsed = int((time.monotonic() - start) * 1000)
+            return SlotOutput(
+                slot_type=self.slot_type,
+                backend_name=self.backend_name,
+                success=False,
+                error=str(e),
+                duration_ms=elapsed,
+            )
+
+
+# ---------------------------------------------------------------------------
+# EmbeddedImageBackend — extract embedded images from documents via PyMuPDF
+# ---------------------------------------------------------------------------
+
+class EmbeddedImageBackend:
+    """Extract embedded images from documents using PyMuPDF."""
+
+    slot_type = "embedded_image_extraction"
+    backend_name = "pymupdf"
+
+    async def run(self, file_path: str, context: SlotContext) -> SlotOutput:
+        import time
+
+        start = time.monotonic()
+        try:
+            result = await asyncio.to_thread(self._extract_images, file_path)
+            elapsed = int((time.monotonic() - start) * 1000)
+            return SlotOutput(
+                slot_type=self.slot_type,
+                backend_name=self.backend_name,
+                text=result["text"],
+                metadata={"image_count": result["count"], "image_paths": result["paths"]},
+                duration_ms=elapsed,
+            )
+        except Exception as e:
+            elapsed = int((time.monotonic() - start) * 1000)
+            return SlotOutput(
+                slot_type=self.slot_type,
+                backend_name=self.backend_name,
+                success=False,
+                error=str(e),
+                duration_ms=elapsed,
+            )
+
+    @staticmethod
+    def _extract_images(file_path: str) -> dict:
+        import fitz
+
+        doc = fitz.open(file_path)
+        base_dir = Path(file_path).parent / f"{Path(file_path).stem}_images"
+        base_dir.mkdir(exist_ok=True)
+
+        paths: list[str] = []
+        for page_num in range(doc.page_count):
+            for img_idx, img in enumerate(doc[page_num].get_images(full=True)):
+                xref = img[0]
+                try:
+                    pix = fitz.Pixmap(doc, xref)
+                    if pix.n > 4:  # CMYK
+                        pix = fitz.Pixmap(fitz.csRGB, pix)
+                    img_path = str(base_dir / f"page{page_num + 1}_img{img_idx + 1}.png")
+                    pix.save(img_path)
+                    paths.append(img_path)
+                except Exception:
+                    pass
+
+        doc.close()
+        text = f"Extracted {len(paths)} embedded images." if paths else "No embedded images found."
+        return {"text": text, "count": len(paths), "paths": paths}
+
+
+# ---------------------------------------------------------------------------
+# PyMuPDFMetadataBackend — PDF metadata extraction
+# ---------------------------------------------------------------------------
+
+class PyMuPDFMetadataBackend:
+    """Extract PDF metadata (title, author, dates, page count) via PyMuPDF."""
+
+    slot_type = "metadata_extraction"
+    backend_name = "pymupdf-meta"
+
+    async def run(self, file_path: str, context: SlotContext) -> SlotOutput:
+        import time
+
+        start = time.monotonic()
+        try:
+            metadata = await asyncio.to_thread(self._extract, file_path)
+            elapsed = int((time.monotonic() - start) * 1000)
+            parts = []
+            if metadata.get("title"):
+                parts.append(f"Title: {metadata['title']}")
+            if metadata.get("author"):
+                parts.append(f"Author: {metadata['author']}")
+            if metadata.get("page_count"):
+                parts.append(f"Pages: {metadata['page_count']}")
+            text = "\n".join(parts)
+            return SlotOutput(
+                slot_type=self.slot_type,
+                backend_name=self.backend_name,
+                text=text,
+                metadata=metadata,
+                duration_ms=elapsed,
+            )
+        except Exception as e:
+            elapsed = int((time.monotonic() - start) * 1000)
+            return SlotOutput(
+                slot_type=self.slot_type,
+                backend_name=self.backend_name,
+                success=False,
+                error=str(e),
+                duration_ms=elapsed,
+            )
+
+    @staticmethod
+    def _extract(file_path: str) -> dict:
+        import fitz
+
+        doc = fitz.open(file_path)
+        meta = doc.metadata or {}
+        result = {
+            "title": meta.get("title", ""),
+            "author": meta.get("author", ""),
+            "subject": meta.get("subject", ""),
+            "creator": meta.get("creator", ""),
+            "producer": meta.get("producer", ""),
+            "page_count": doc.page_count,
+        }
+        doc.close()
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -520,7 +826,11 @@ class PlainTextBackend:
 # ---------------------------------------------------------------------------
 
 register_backend("text_extraction", "marker", MarkerBackend())
+register_backend("text_extraction", "docling", DoclingBackend())
 register_backend("text_extraction", "python-docx", DocxBackend())
 register_backend("text_extraction", "openpyxl", XlsxBackend())
 register_backend("text_extraction", "python-pptx", PptxBackend())
 register_backend("text_extraction", "plaintext", PlainTextBackend())
+register_backend("table_extraction", "docling", DoclingTableBackend())
+register_backend("embedded_image_extraction", "pymupdf", EmbeddedImageBackend())
+register_backend("metadata_extraction", "pymupdf-meta", PyMuPDFMetadataBackend())

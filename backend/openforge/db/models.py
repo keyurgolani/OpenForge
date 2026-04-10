@@ -48,11 +48,6 @@ class LLMProvider(Base):
         DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc
     )
 
-    workspaces: Mapped[list["Workspace"]] = relationship(
-        back_populates="llm_provider",
-        foreign_keys="[Workspace.llm_provider_id]",
-    )
-
     __table_args__ = (
         Index(
             "idx_llm_providers_system_default",
@@ -73,31 +68,7 @@ class Workspace(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     icon: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     color: Mapped[Optional[str]] = mapped_column(String(7), nullable=True)
-    llm_provider_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("llm_providers.id", ondelete="SET NULL"), nullable=True
-    )
-    llm_model: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
-    knowledge_intelligence_provider_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("llm_providers.id", ondelete="SET NULL"), nullable=True
-    )
-    knowledge_intelligence_model: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     intelligence_categories: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
-    vision_provider_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("llm_providers.id", ondelete="SET NULL"), nullable=True
-    )
-    vision_model: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
-    agent_id: Mapped[Optional[str]] = mapped_column(
-        String(100), nullable=True, default="workspace_agent"
-    )
-    default_agent_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("agents.id", ondelete="SET NULL", use_alter=True),
-        nullable=True,
-        index=True,
-    )
-    agent_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    agent_tool_categories: Mapped[List[str]] = mapped_column(JSONB, nullable=False, default=list)
-    agent_max_tool_loops: Mapped[int] = mapped_column(Integer, nullable=False, default=20)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # Ownership model for deployment workspaces
     ownership_type: Mapped[str] = mapped_column(
@@ -134,9 +105,6 @@ class Workspace(Base):
         DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc
     )
 
-    llm_provider: Mapped[Optional["LLMProvider"]] = relationship(
-        back_populates="workspaces", foreign_keys="[Workspace.llm_provider_id]"
-    )
     knowledge: Mapped[list["Knowledge"]] = relationship(back_populates="workspace", cascade="all, delete-orphan")
 
     __table_args__ = (

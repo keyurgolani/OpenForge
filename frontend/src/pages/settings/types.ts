@@ -3,9 +3,6 @@ export type SettingsTab = 'workspaces' | 'llm' | 'jobs' | 'skills' | 'mcp' | 'au
 export type WorkspaceRow = {
     id: string; name: string; description: string | null
     icon: string | null; color: string | null
-    llm_provider_id: string | null; llm_model: string | null
-    knowledge_intelligence_provider_id: string | null; knowledge_intelligence_model: string | null
-    vision_provider_id: string | null; vision_model: string | null
     knowledge_count: number
     conversation_count: number
     ownership_type: string

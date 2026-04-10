@@ -10,7 +10,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from openforge.db.models import AgentModel, Workspace
+from openforge.db.models import AgentModel
 from openforge.domains.agents.compiled_spec import AgentRuntimeConfig, build_runtime_config
 
 logger = logging.getLogger("openforge.runtime.agent_registry")
@@ -81,21 +81,6 @@ class AgentRegistry:
         self._cache[agent.id] = spec
         self._slug_cache[agent.slug] = agent.id
         return spec
-
-    async def resolve_for_workspace(
-        self,
-        db: AsyncSession,
-        workspace_id: UUID,
-    ) -> AgentRuntimeConfig | None:
-        """Resolve the default agent for a workspace via Workspace.default_agent_id."""
-        workspace = await db.get(Workspace, workspace_id)
-        if workspace is None:
-            return None
-
-        if workspace.default_agent_id is None:
-            return None
-
-        return await self.resolve(db, agent_id=workspace.default_agent_id)
 
     async def list_available_agents(self, db: AsyncSession) -> list[dict[str, Any]]:
         """List all agents that have an active version."""

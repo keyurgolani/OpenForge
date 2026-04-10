@@ -258,9 +258,9 @@ async def lifespan(app: FastAPI):
     # Migrate old "ollama" system provider into the unified openforge-local provider.
     try:
         from openforge.db.postgres import AsyncSessionLocal
-        from openforge.db.models import LLMProvider, Config, Workspace
+        from openforge.db.models import LLMProvider, Config
         from openforge.services.local_models import LOCAL_PROVIDER_ID
-        from sqlalchemy import select, update
+        from sqlalchemy import select
         import json as _json
 
         async with AsyncSessionLocal() as db:
@@ -316,21 +316,7 @@ async def lifespan(app: FastAPI):
                         vision_cfg.value = new_id_str
                         logger.info("Migrated system_vision_provider_id to unified provider")
 
-                # 3. Migrate workspace llm_provider_id references
-                await db.execute(
-                    update(Workspace)
-                    .where(Workspace.llm_provider_id == old_id)
-                    .values(llm_provider_id=new_id)
-                )
-
-                # 4. Migrate workspace vision_provider_id references
-                await db.execute(
-                    update(Workspace)
-                    .where(Workspace.vision_provider_id == old_id)
-                    .values(vision_provider_id=new_id)
-                )
-
-                # 5. Delete the old ollama system provider record
+                # 3. Delete the old ollama system provider record
                 await db.delete(old_ollama)
                 await db.commit()
                 logger.info("Old ollama system provider migrated and deleted.")
@@ -354,44 +340,6 @@ async def lifespan(app: FastAPI):
         logger.info("Agent, automation, skill, sink, and MCP templates seeded.")
     except Exception as e:
         logger.warning("Template seeding skipped: %s", e)
-
-    # Enable agent mode on all existing workspaces (idempotent)
-    try:
-        from openforge.db.postgres import AsyncSessionLocal
-        from openforge.db.models import Workspace
-        from sqlalchemy import update
-
-        async with AsyncSessionLocal() as db:
-            await db.execute(
-                update(Workspace).where(Workspace.agent_enabled == False).values(agent_enabled=True)
-            )
-            await db.commit()
-    except Exception as e:
-        logger.debug("Workspace agent_enabled migration skipped: %s", e)
-
-    # Backfill: ensure every workspace has a default AgentModel
-    try:
-        from openforge.db.postgres import AsyncSessionLocal
-        from openforge.db.models import Workspace
-        from openforge.domains.agents.service import AgentService
-        from sqlalchemy import select as sa_select
-
-        async with AsyncSessionLocal() as db:
-            workspaces = (await db.execute(
-                sa_select(Workspace).where(Workspace.default_agent_id == None)  # noqa: E711
-            )).scalars().all()
-            if workspaces:
-                agent_service = AgentService(db)
-                for ws in workspaces:
-                    try:
-                        agent = await agent_service.ensure_default_agent(ws.name)
-                        ws.default_agent_id = agent["id"]
-                    except Exception as ws_e:
-                        logger.warning("Default agent backfill failed for workspace %s: %s", ws.id, ws_e)
-                await db.commit()
-                logger.info("Backfilled default agents for %d workspaces.", len(workspaces))
-    except Exception as e:
-        logger.warning("Workspace default agent backfill skipped: %s", e)
 
     # Clean up orphaned execution records from previous runs
     try:

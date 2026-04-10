@@ -262,8 +262,9 @@ class FrameDescriptionBackend:
             from openforge.services.llm_service import llm_service
 
             provider_name, api_key, model, base_url = (
-                await llm_service.get_vision_provider_for_workspace(
-                    db_session, workspace_id
+                await llm_service.resolve_vision_provider_for_pipeline(
+                    db_session, knowledge_type="video",
+                    slot_type="frame_description",
                 )
             )
         except Exception:

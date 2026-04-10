@@ -57,6 +57,8 @@ export interface ModelTypeSelectorProps {
     configuredModels: ConfiguredModel[]
     onModelsChange: (models: ConfiguredModel[]) => void
     compact?: boolean
+    /** Hide the OpenForge Local provider from the Add Model picker (when local models are managed separately below). */
+    excludeLocalProvider?: boolean
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -98,6 +100,7 @@ export function ModelTypeSelector({
     configuredModels,
     onModelsChange,
     compact = false,
+    excludeLocalProvider = false,
 }: ModelTypeSelectorProps) {
     // Provider list
     const { data: providers = [] } = useQuery({
@@ -122,13 +125,13 @@ export function ModelTypeSelector({
     const [confirmOllamaDelete, setConfirmOllamaDelete] = useState<string | null>(null)
 
     // Determine which providers to show:
-    // - openforge-local: always visible
-    // - cloud providers: always visible (multi-purpose)
+    // - When excludeLocalProvider is true, hide openforge-local (local models managed separately)
+    // - Otherwise show all providers
     const visibleProviders = useMemo(() => {
         return (providers as ProviderRow[]).filter(p =>
-            isOpenForgeLocal(p.provider_name) || !isOpenForgeLocal(p.provider_name),
+            excludeLocalProvider ? !isOpenForgeLocal(p.provider_name) : true,
         )
-    }, [providers])
+    }, [providers, excludeLocalProvider])
 
     const selectedProvider = useMemo(() => {
         return (providers as ProviderRow[]).find(p => p.id === selectedProviderId) ?? null

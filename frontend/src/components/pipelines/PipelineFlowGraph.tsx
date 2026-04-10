@@ -11,7 +11,7 @@
  */
 
 import { useMemo, useState, useRef, useEffect } from 'react'
-import { Settings2, Check } from 'lucide-react'
+import { Settings2, Check, Download } from 'lucide-react'
 
 // ── Layout constants ────────────────────────────────────────────────────────
 
@@ -46,11 +46,21 @@ export interface PostStep {
     toggleable?: boolean
     enabled?: boolean
     config_key?: string | null
+    model_configurable?: boolean
+    provider_id?: string | null
+    model_name?: string | null
+}
+
+export interface AvailableProvider {
+    id: string
+    name: string
+    display_name: string
+    models: { id: string; name: string }[]
 }
 
 interface SchemaField {
     label: string
-    type: 'text' | 'select' | 'toggle'
+    type: 'text' | 'select' | 'toggle' | 'provider-model'
     description?: string
     default?: any
     options?: string[]
@@ -76,6 +86,7 @@ interface LayoutNode {
     configKey?: string | null
     tooltip?: string
     slotType?: string
+    modelConfigurable?: boolean
 }
 
 interface LayoutEdge {
@@ -164,6 +175,7 @@ function computeLayout(
             x: cursorX, y: centerY - POST_H / 2, w: POST_W, h: POST_H,
             kind: 'post', tooltip: step.description,
             toggleable: step.toggleable, enabled: step.enabled ?? true, configKey: step.config_key,
+            modelConfigurable: step.model_configurable,
         })
         for (const prev of prevIds) edges.push({ from: prev, to: id, muted: true })
         cursorX += POST_W + H_GAP * 0.55
@@ -216,14 +228,86 @@ function SourceNode({ node }: { node: LayoutNode }) {
     )
 }
 
-function PostNode({ node, knowledgeType, saving, onToggle }: {
+function PostNode({ node, postStep, knowledgeType, providers, saving, openConfig, onToggle, onExpand, onUpdateModel }: {
     node: LayoutNode
+    postStep?: PostStep
     knowledgeType: string
+    providers: AvailableProvider[]
     saving: boolean
+    openConfig: string | null
     onToggle?: (kt: string, configKey: string, enabled: boolean) => Promise<void>
+    onExpand: () => void
+    onUpdateModel: (kt: string, stepKey: string, providerId: string, modelName: string) => Promise<void>
 }) {
     const enabled = node.enabled !== false
+    const expandKey = `${knowledgeType}:post:${node.label}`
+    const expanded = openConfig === expandKey
 
+    // Toggleable + model_configurable: shows toggle, gear, and expansion
+    if (node.toggleable && node.modelConfigurable && node.configKey && onToggle) {
+        return (
+            <div
+                className={`rounded-lg border transition-all duration-200 ${
+                    expanded
+                        ? 'shadow-lg border-accent/40 bg-card'
+                        : enabled
+                            ? 'border-dashed border-accent/25 bg-accent/5'
+                            : 'border-dashed border-border/20 bg-muted/5'
+                }`}
+                style={{
+                    width: expanded ? Math.max(node.w, 180) : node.w,
+                    transition: 'width 200ms ease, box-shadow 200ms ease',
+                }}
+            >
+                <div className="flex items-stretch" style={{ height: node.h }}>
+                    <button
+                        onClick={() => { void onToggle(knowledgeType, node.configKey!, enabled) }}
+                        disabled={saving}
+                        className={`flex-1 flex items-center gap-1 px-2 min-w-0 transition-colors disabled:opacity-60 ${
+                            !expanded ? 'rounded-l-lg' : 'rounded-tl-lg'
+                        } hover:bg-accent/10`}
+                        title={`${enabled ? 'Disable' : 'Enable'} ${node.label}: ${node.tooltip}`}
+                    >
+                        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                            enabled ? 'bg-accent/50' : 'bg-muted-foreground/20'
+                        }`} />
+                        <span className={`text-[9px] whitespace-nowrap ${
+                            enabled ? 'text-accent/60' : 'text-muted-foreground/30'
+                        }`}>{node.label}</span>
+                    </button>
+                    {!expanded && (
+                        <button
+                            onClick={onExpand}
+                            disabled={saving}
+                            className={`flex items-center px-1.5 border-l transition-colors rounded-r-lg disabled:opacity-60 ${
+                                enabled
+                                    ? 'border-accent/15 text-accent/60 hover:bg-accent/10 hover:text-accent'
+                                    : 'border-border/15 text-muted-foreground/40 hover:bg-muted/20'
+                            }`}
+                            title="Configure model"
+                        >
+                            <Settings2 className="w-2.5 h-2.5" />
+                        </button>
+                    )}
+                </div>
+                {expanded && (
+                    <div className="border-t border-accent/15 px-2 pb-2 pt-1.5">
+                        <ProviderModelField
+                            providers={providers}
+                            currentProviderId={postStep?.provider_id}
+                            currentModelName={postStep?.model_name}
+                            saving={saving}
+                            onSelect={(providerId, modelName) => {
+                                void onUpdateModel(knowledgeType, postStep?.config_key ?? node.label, providerId, modelName)
+                            }}
+                        />
+                    </div>
+                )}
+            </div>
+        )
+    }
+
+    // Toggleable only (no model config)
     if (node.toggleable && node.configKey && onToggle) {
         return (
             <button
@@ -245,6 +329,7 @@ function PostNode({ node, knowledgeType, saving, onToggle }: {
         )
     }
 
+    // Static label (neither toggleable nor model_configurable)
     return (
         <div
             className="flex items-center justify-center rounded-lg border border-dashed border-border/25 bg-muted/5 text-muted-foreground/50"
@@ -258,16 +343,21 @@ function PostNode({ node, knowledgeType, saving, onToggle }: {
 
 // ── Slot graph node with in-place expansion ─────────────────────────────────
 
-function SlotGraphNode({ node, slot, schema, knowledgeType, expanded, saving, onToggle, onExpand, onUpdateConfig }: {
+const DOWNLOADABLE_FIELDS = new Set(['model', 'model_size'])
+
+function SlotGraphNode({ node, slot, schema, knowledgeType, expanded, saving, providers, downloadedModels, onToggle, onExpand, onUpdateConfig, onUpdateSlotModel }: {
     node: LayoutNode
     slot: SlotData
     schema?: BackendSchema
     knowledgeType: string
     expanded: boolean
     saving: boolean
+    providers: AvailableProvider[]
+    downloadedModels?: Set<string>
     onToggle: (kt: string, st: string, enabled: boolean) => Promise<void>
     onExpand: () => void
     onUpdateConfig: (kt: string, st: string, key: string, value: any) => Promise<void>
+    onUpdateSlotModel: (kt: string, st: string, providerId: string, modelName: string) => Promise<void>
 }) {
     const enabled = node.enabled !== false
     const fields = schema ? Object.entries(schema.fields) : []
@@ -326,18 +416,36 @@ function SlotGraphNode({ node, slot, schema, knowledgeType, expanded, saving, on
             {/* Expanded config fields */}
             {expanded && hasConfig && (
                 <div className="border-t border-accent/15 px-2 pb-2 pt-1.5 space-y-1.5">
-                    {fields.map(([key, field]) => (
-                        <ConfigField
-                            key={key}
-                            fieldKey={key}
-                            field={field}
-                            currentValue={slot.backend_config?.[key] ?? field.default ?? ''}
-                            saving={saving}
-                            onSelect={(value) => {
-                                void onUpdateConfig(knowledgeType, node.slotType!, key, value)
-                            }}
-                        />
-                    ))}
+                    {fields.map(([key, field]) => {
+                        if (field.type === 'provider-model') {
+                            return (
+                                <ProviderModelField
+                                    key={key}
+                                    providers={providers}
+                                    currentProviderId={slot.backend_config?.provider_id}
+                                    currentModelName={slot.backend_config?.model_name}
+                                    saving={saving}
+                                    onSelect={(providerId, modelName) => {
+                                        void onUpdateSlotModel(knowledgeType, node.slotType!, providerId, modelName)
+                                    }}
+                                />
+                            )
+                        }
+                        return (
+                            <ConfigField
+                                key={key}
+                                fieldKey={key}
+                                field={field}
+                                currentValue={slot.backend_config?.[key] ?? field.default ?? ''}
+                                saving={saving}
+                                downloadedModels={downloadedModels}
+                                isDownloadable={DOWNLOADABLE_FIELDS.has(key)}
+                                onSelect={(value) => {
+                                    void onUpdateConfig(knowledgeType, node.slotType!, key, value)
+                                }}
+                            />
+                        )
+                    })}
                 </div>
             )}
         </div>
@@ -346,11 +454,13 @@ function SlotGraphNode({ node, slot, schema, knowledgeType, expanded, saving, on
 
 // ── Config field with spinner-picker for selects ────────────────────────────
 
-function ConfigField({ fieldKey, field, currentValue, saving, onSelect }: {
+function ConfigField({ fieldKey, field, currentValue, saving, downloadedModels, isDownloadable, onSelect }: {
     fieldKey: string
     field: SchemaField
     currentValue: any
     saving: boolean
+    downloadedModels?: Set<string>
+    isDownloadable?: boolean
     onSelect: (value: any) => void
 }) {
     const listRef = useRef<HTMLDivElement>(null)
@@ -389,7 +499,12 @@ function ConfigField({ fieldKey, field, currentValue, saving, onSelect }: {
                                 } ${opt === options[0] ? 'rounded-t-md' : ''} ${opt === options[options.length - 1] ? 'rounded-b-md' : ''}`}
                             >
                                 <span className="truncate">{opt}</span>
-                                {active && <Check className="w-2.5 h-2.5 flex-shrink-0 text-accent" />}
+                                <span className="flex items-center gap-1">
+                                    {isDownloadable && downloadedModels && !downloadedModels.has(opt) && (
+                                        <Download className="w-2.5 h-2.5 text-muted-foreground/40" />
+                                    )}
+                                    {active && <Check className="w-2.5 h-2.5 flex-shrink-0 text-accent" />}
+                                </span>
                             </button>
                         )
                     })}
@@ -416,6 +531,94 @@ function ConfigField({ fieldKey, field, currentValue, saving, onSelect }: {
     )
 }
 
+// ── Provider-model two-level picker ────────────────────────────────────────
+
+function ProviderModelField({ providers, currentProviderId, currentModelName, saving, onSelect }: {
+    providers: AvailableProvider[]
+    currentProviderId?: string | null
+    currentModelName?: string | null
+    saving: boolean
+    onSelect: (providerId: string, modelName: string) => void
+}) {
+    const [selectedProvider, setSelectedProvider] = useState<string>(currentProviderId ?? '')
+    const activeProvider = providers.find(p => p.id === selectedProvider)
+    const models = activeProvider?.models ?? []
+
+    const isSystemDefault = !currentProviderId
+
+    return (
+        <div className="space-y-1.5">
+            {/* Provider list */}
+            <div>
+                <p className="text-[8px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-0.5">Provider</p>
+                <div className="rounded-md border border-border/20 bg-card/80 max-h-[88px] overflow-y-auto">
+                    {/* System Default option */}
+                    <button
+                        disabled={saving}
+                        onClick={() => {
+                            setSelectedProvider('')
+                            onSelect('', '')
+                        }}
+                        className={`w-full flex items-center justify-between gap-1 px-2 py-[3px] text-[9px] transition-colors disabled:opacity-60 rounded-t-md ${
+                            isSystemDefault && !selectedProvider
+                                ? 'bg-accent/15 text-accent font-medium'
+                                : 'text-foreground/70 hover:bg-muted/40'
+                        }`}
+                    >
+                        <span className="truncate">System Default</span>
+                        {isSystemDefault && !selectedProvider && <Check className="w-2.5 h-2.5 flex-shrink-0 text-accent" />}
+                    </button>
+                    {providers.map((p, i) => {
+                        const active = selectedProvider === p.id
+                        return (
+                            <button
+                                key={p.id}
+                                disabled={saving}
+                                onClick={() => setSelectedProvider(p.id)}
+                                className={`w-full flex items-center justify-between gap-1 px-2 py-[3px] text-[9px] transition-colors disabled:opacity-60 ${
+                                    active
+                                        ? 'bg-accent/15 text-accent font-medium'
+                                        : 'text-foreground/70 hover:bg-muted/40'
+                                } ${i === providers.length - 1 ? 'rounded-b-md' : ''}`}
+                            >
+                                <span className="truncate">{p.display_name || p.name}</span>
+                                {active && <Check className="w-2.5 h-2.5 flex-shrink-0 text-accent" />}
+                            </button>
+                        )
+                    })}
+                </div>
+            </div>
+
+            {/* Model list — only when a provider is selected */}
+            {selectedProvider && models.length > 0 && (
+                <div>
+                    <p className="text-[8px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-0.5">Model</p>
+                    <div className="rounded-md border border-border/20 bg-card/80 max-h-[88px] overflow-y-auto">
+                        {models.map((m, i) => {
+                            const active = currentModelName === m.name && currentProviderId === selectedProvider
+                            return (
+                                <button
+                                    key={m.id}
+                                    disabled={saving}
+                                    onClick={() => { if (!active) onSelect(selectedProvider, m.name) }}
+                                    className={`w-full flex items-center justify-between gap-1 px-2 py-[3px] text-[9px] transition-colors disabled:opacity-60 ${
+                                        active
+                                            ? 'bg-accent/15 text-accent font-medium'
+                                            : 'text-foreground/70 hover:bg-muted/40'
+                                    } ${i === 0 ? 'rounded-t-md' : ''} ${i === models.length - 1 ? 'rounded-b-md' : ''}`}
+                                >
+                                    <span className="truncate">{m.name}</span>
+                                    {active && <Check className="w-2.5 h-2.5 flex-shrink-0 text-accent" />}
+                                </button>
+                            )
+                        })}
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
 // ── Main component ──────────────────────────────────────────────────────────
 
 interface PipelineFlowGraphProps {
@@ -426,15 +629,20 @@ interface PipelineFlowGraphProps {
     configurableBackends: Set<string>
     saving: boolean
     openConfig: string | null
+    providers: AvailableProvider[]
+    downloadedModels?: Set<string>
     onToggle: (kt: string, st: string, enabled: boolean) => Promise<void>
     onToggleConfig: (key: string) => void
     onUpdateConfig: (kt: string, st: string, key: string, value: any) => Promise<void>
     onTogglePostStep: (kt: string, configKey: string, enabled: boolean) => Promise<void>
+    onUpdatePostStepModel: (kt: string, stepKey: string, providerId: string, modelName: string) => Promise<void>
+    onUpdateSlotModel: (kt: string, st: string, providerId: string, modelName: string) => Promise<void>
 }
 
 export default function PipelineFlowGraph({
     slots, postSteps, knowledgeType, schemas, configurableBackends,
-    saving, openConfig, onToggle, onToggleConfig, onUpdateConfig, onTogglePostStep,
+    saving, openConfig, providers, downloadedModels, onToggle, onToggleConfig, onUpdateConfig,
+    onTogglePostStep, onUpdatePostStepModel, onUpdateSlotModel,
 }: PipelineFlowGraphProps) {
     const layout = useMemo(
         () => computeLayout(slots, postSteps, configurableBackends),
@@ -452,6 +660,12 @@ export default function PipelineFlowGraph({
         for (const s of slots) m.set(s.slot_type, s)
         return m
     }, [slots])
+
+    const postStepMap = useMemo(() => {
+        const m = new Map<string, PostStep>()
+        for (const ps of postSteps) m.set(`post:${ps.name}`, ps)
+        return m
+    }, [postSteps])
 
     // Close expanded node on outside click
     const containerRef = useRef<HTMLDivElement>(null)
@@ -478,7 +692,9 @@ export default function PipelineFlowGraph({
 
                 {/* HTML node layer — positioned at node center with translate(-50%,-50%) so expansion grows outward equally */}
                 {layout.nodes.map(node => {
-                    const isExpanded = openConfig === `${knowledgeType}:${node.slotType}`
+                    const isSlotExpanded = openConfig === `${knowledgeType}:${node.slotType}`
+                    const isPostExpanded = openConfig === `${knowledgeType}:post:${node.label}`
+                    const isExpanded = isSlotExpanded || isPostExpanded
                     return (
                         <div
                             key={node.id}
@@ -497,21 +713,29 @@ export default function PipelineFlowGraph({
                                     slot={slotMap.get(node.slotType!) ?? slots[0]}
                                     schema={schemas[slotMap.get(node.slotType!)?.active_backend ?? '']}
                                     knowledgeType={knowledgeType}
-                                    expanded={isExpanded}
+                                    expanded={isSlotExpanded}
                                     saving={saving}
+                                    providers={providers}
+                                    downloadedModels={downloadedModels}
                                     onToggle={onToggle}
                                     onExpand={() => onToggleConfig(`${knowledgeType}:${node.slotType}`)}
                                     onUpdateConfig={onUpdateConfig}
+                                    onUpdateSlotModel={onUpdateSlotModel}
                                 />
                             )}
                             {node.kind === 'post' && (
-                            <PostNode
-                                node={node}
-                                knowledgeType={knowledgeType}
-                                saving={saving}
-                                onToggle={onTogglePostStep}
-                            />
-                        )}
+                                <PostNode
+                                    node={node}
+                                    postStep={postStepMap.get(node.id)}
+                                    knowledgeType={knowledgeType}
+                                    providers={providers}
+                                    saving={saving}
+                                    openConfig={openConfig}
+                                    onToggle={onTogglePostStep}
+                                    onExpand={() => onToggleConfig(`${knowledgeType}:post:${node.label}`)}
+                                    onUpdateModel={onUpdatePostStepModel}
+                                />
+                            )}
                         </div>
                     )
                 })}

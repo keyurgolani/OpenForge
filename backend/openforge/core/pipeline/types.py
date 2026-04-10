@@ -130,3 +130,4 @@ class SlotContext:
     workspace_id: UUID
     db_session: AsyncSession
     backend_config: dict | None = None
+    knowledge_type: str = ""

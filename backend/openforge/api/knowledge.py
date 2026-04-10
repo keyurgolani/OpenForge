@@ -185,6 +185,19 @@ async def update_knowledge(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
+    from openforge.db.models import Knowledge
+
+    record = await db.get(Knowledge, knowledge_id)
+
+    # Journal immutability enforcement
+    if record is not None and record.type == "journal":
+        today = datetime.now(timezone.utc).date()
+        if record.created_at.date() != today:
+            raise HTTPException(
+                status_code=403,
+                detail="Cannot edit a journal from a previous day. Create a new journal for today.",
+            )
+
     return await knowledge_service.update_knowledge(db, workspace_id, knowledge_id, body, background_tasks)
 
 

@@ -6,17 +6,24 @@
  * via the unified OpenForge Local provider.
  */
 
-import { useMemo } from 'react'
+import { useMemo, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { MessageSquare } from 'lucide-react'
 import { ModelTypeSelector, type ConfiguredModel } from '@/components/shared/ModelTypeSelector'
-import { listSettings, updateSetting } from '@/lib/api'
+import OllamaNativeSection from '@/pages/settings/llm/OllamaNativeSection'
+import { listSettings, updateSetting, listProviders } from '@/lib/api'
 
 const CONFIG_KEY = 'system_chat_models'
 
 export function ReasoningPage() {
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: listSettings })
+  const { data: providers = [] } = useQuery({ queryKey: ['providers'], queryFn: listProviders })
   const qc = useQueryClient()
+
+  const systemProviderId = useMemo(() => {
+    const p = (providers as any[]).find(p => p.is_system)
+    return p?.id ?? ''
+  }, [providers])
 
   const configuredModels: ConfiguredModel[] = useMemo(() => {
     const raw = settings?.find((s: any) => s.key === CONFIG_KEY)?.value
@@ -29,6 +36,18 @@ export function ReasoningPage() {
     qc.invalidateQueries({ queryKey: ['settings'] })
   }
 
+  const handleAddOllamaModel = useCallback((providerId: string, modelId: string, modelName: string) => {
+    const exists = configuredModels.some(m => m.provider_id === providerId && m.model_id === modelId)
+    if (!exists) {
+      handleModelsChange([...configuredModels, {
+        provider_id: providerId,
+        model_id: modelId,
+        model_name: modelName,
+        is_default: configuredModels.length === 0,
+      }])
+    }
+  }, [configuredModels, handleModelsChange])
+
   return (
     <div className="p-6 space-y-4">
       <div>
@@ -37,7 +56,7 @@ export function ReasoningPage() {
           Reasoning Models
         </h3>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Models used for reasoning and chat conversations. Configure the models available and set the system default.
+          Add models from cloud providers above, or pull and manage local Ollama models below.
         </p>
       </div>
 
@@ -45,7 +64,17 @@ export function ReasoningPage() {
         configType="chat"
         configuredModels={configuredModels}
         onModelsChange={handleModelsChange}
+        excludeLocalProvider
       />
+
+      <div className="border-t border-border/20 pt-4">
+        <OllamaNativeSection
+          capability="chat"
+          configuredModels={configuredModels}
+          systemProviderId={systemProviderId}
+          onAddModel={handleAddOllamaModel}
+        />
+      </div>
     </div>
   )
 }

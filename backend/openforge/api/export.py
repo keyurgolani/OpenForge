@@ -96,8 +96,6 @@ async def _build_workspace_data(db: AsyncSession, ws: Workspace) -> dict:
             "description": ws.description,
             "icon": ws.icon,
             "color": ws.color,
-            "agent_enabled": ws.agent_enabled,
-            "agent_tool_categories": list(ws.agent_tool_categories or []),
         },
         "knowledge": knowledge_data,
         "conversations": conversations_data,

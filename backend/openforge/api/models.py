@@ -89,19 +89,24 @@ def _clip_disk_size(model_id: str) -> str | None:
         clip / safe_name,
     ]:
         if candidate.exists():
-            total = sum(f.stat().st_size for f in candidate.rglob("*") if f.is_file())
-            if total < 1024 * 1024:
-                return f"{total / 1024:.0f} KB"
-            if total < 1024 * 1024 * 1024:
-                return f"{total / (1024 * 1024):.0f} MB"
-            return f"{total / (1024 * 1024 * 1024):.1f} GB"
+            size = _dir_size_str(candidate)
+            if size:
+                return size
     return None
 
 
 def _model_is_downloaded(model_name: str) -> bool:
-    """Check if a Whisper model has been downloaded (CTranslate2 format)."""
-    ct2_dir = _whisper_dir() / f"faster-whisper-{model_name}"
-    return ct2_dir.is_dir() and (ct2_dir / "model.bin").exists()
+    """Check if a Whisper model has been downloaded (CTranslate2 or HF cache format)."""
+    whisper = _whisper_dir()
+    # CTranslate2 direct format
+    ct2_dir = whisper / f"faster-whisper-{model_name}"
+    if ct2_dir.is_dir() and (ct2_dir / "model.bin").exists():
+        return True
+    # HuggingFace cache format (faster-whisper downloads as models--Systran--faster-whisper-{name})
+    hf_cache = whisper / f"models--Systran--faster-whisper-{model_name}"
+    if hf_cache.is_dir() and any(hf_cache.rglob("model.bin")):
+        return True
+    return False
 
 
 def _embedding_is_downloaded(model_id: str) -> bool:
@@ -109,16 +114,43 @@ def _embedding_is_downloaded(model_id: str) -> bool:
     emb_dir = _embeddings_dir()
     if not emb_dir.exists():
         return False
-    # sentence-transformers caches under models--<org>--<name>
     safe_name = model_id.replace("/", "--")
-    model_cache = emb_dir / f"models--{safe_name}"
-    if model_cache.exists() and any(model_cache.rglob("config.json")):
-        return True
-    # Also check if it was saved directly by name
-    alt = emb_dir / safe_name
-    if alt.exists() and any(alt.rglob("config.json")):
-        return True
+    # Check multiple cache naming patterns
+    candidates = [
+        emb_dir / f"models--{safe_name}",
+        emb_dir / f"models--sentence-transformers--{safe_name}",
+        emb_dir / f"models--BAAI--{safe_name}",
+        emb_dir / f"models--intfloat--{safe_name}",
+        emb_dir / safe_name,
+    ]
+    for candidate in candidates:
+        if candidate.exists() and any(candidate.rglob("config.json")):
+            return True
     return False
+
+
+def _dir_size_bytes(path: Path) -> int:
+    """Compute directory size in bytes, skipping symlinks to avoid double-counting in HF cache."""
+    if not path.exists():
+        return 0
+    return sum(f.stat().st_size for f in path.rglob("*") if f.is_file() and not f.is_symlink())
+
+
+def _format_size(total: int) -> str | None:
+    """Format bytes to human-readable string."""
+    if total <= 0:
+        return None
+    if total < 1_000_000:
+        return f"{total / 1_000:.0f} KB"
+    elif total < 1_000_000_000:
+        return f"{total / 1_000_000:.1f} MB"
+    else:
+        return f"{total / 1_000_000_000:.2f} GB"
+
+
+def _dir_size_str(path: Path) -> str | None:
+    """Compute human-readable directory size, skipping symlinks."""
+    return _format_size(_dir_size_bytes(path))
 
 
 class WhisperModelStatus(BaseModel):
@@ -134,6 +166,46 @@ class EmbeddingModelStatus(BaseModel):
 
 class ModelDownloadRequest(BaseModel):
     model_id: str
+
+
+class ModelStatusItem(BaseModel):
+    model_id: str
+    name: str
+    downloaded: bool
+    downloading: bool = False
+    disk_size: str | None = None
+    estimated_size: str | None = None
+    is_default: bool = False
+
+
+# Estimated model sizes for display before download (approximate)
+_WHISPER_ESTIMATED_SIZES: dict[str, str] = {
+    "tiny": "~75 MB",
+    "base": "~150 MB",
+    "small": "~500 MB",
+    "medium": "~1.5 GB",
+    "large-v2": "~3.0 GB",
+    "large-v3": "~3.0 GB",
+}
+_CLIP_ESTIMATED_SIZES: dict[str, str] = {
+    "clip-ViT-B-32": "~350 MB",
+    "clip-ViT-B-16": "~600 MB",
+    "clip-ViT-L-14": "~1.7 GB",
+}
+_MARKER_ESTIMATED_SIZE = "~3.5 GB"
+_EMBEDDING_ESTIMATED_SIZE = "~90 MB"
+
+
+class ModelCategoryStatus(BaseModel):
+    category: str
+    display_name: str
+    icon: str
+    models: list[ModelStatusItem]
+    total_disk_size: str | None = None
+
+
+class UnifiedModelStatus(BaseModel):
+    categories: list[ModelCategoryStatus]
 
 
 # ─────────────────────────────────────────────
@@ -229,12 +301,18 @@ async def delete_whisper_model(model_id: str):
         else:
             raise HTTPException(400, f"Unknown Whisper model: {model_id}")
 
-    ct2_dir = _whisper_dir() / f"faster-whisper-{model_name}"
-    if ct2_dir.is_dir():
-        shutil.rmtree(ct2_dir)
-        logger.info("Deleted Whisper model: %s", model_name)
+    whisper = _whisper_dir()
+    deleted_any = False
+    for candidate in [
+        whisper / f"faster-whisper-{model_name}",
+        whisper / f"models--Systran--faster-whisper-{model_name}",
+    ]:
+        if candidate.is_dir():
+            shutil.rmtree(candidate)
+            deleted_any = True
+            logger.info("Deleted Whisper model directory: %s", candidate)
 
-    return {"deleted": True, "model_id": model_id, "name": model_name}
+    return {"deleted": deleted_any, "model_id": model_id, "name": model_name}
 
 
 # ─────────────────────────────────────────────
@@ -253,6 +331,17 @@ async def list_embedding_models(model_ids: str = ""):
     ]
 
 
+# Map short embedding model IDs to full HuggingFace IDs for download
+_EMBEDDING_HF_MAP: dict[str, str] = {
+    "all-MiniLM-L6-v2": "sentence-transformers/all-MiniLM-L6-v2",
+    "all-mpnet-base-v2": "sentence-transformers/all-mpnet-base-v2",
+    "bge-small-en-v1.5": "BAAI/bge-small-en-v1.5",
+    "bge-base-en-v1.5": "BAAI/bge-base-en-v1.5",
+    "e5-small-v2": "intfloat/e5-small-v2",
+    "e5-base-v2": "intfloat/e5-base-v2",
+}
+
+
 @router.post("/embeddings/download", response_model=EmbeddingModelStatus)
 async def download_embedding_model(body: ModelDownloadRequest):
     """Download a sentence-transformers embedding model."""
@@ -263,11 +352,14 @@ async def download_embedding_model(body: ModelDownloadRequest):
     emb_dir = _embeddings_dir()
     emb_dir.mkdir(parents=True, exist_ok=True)
 
+    # Resolve to full HF ID for download
+    hf_id = _EMBEDDING_HF_MAP.get(model_id, model_id)
+
     try:
         def _do_download():
             from sentence_transformers import SentenceTransformer
             SentenceTransformer(
-                model_id,
+                hf_id,
                 cache_folder=str(emb_dir),
             )
 
@@ -291,6 +383,9 @@ async def delete_embedding_model(model_id: str):
 
     for candidate in [
         emb_dir / f"models--{safe_name}",
+        emb_dir / f"models--sentence-transformers--{safe_name}",
+        emb_dir / f"models--BAAI--{safe_name}",
+        emb_dir / f"models--intfloat--{safe_name}",
         emb_dir / safe_name,
     ]:
         if candidate.exists():
@@ -470,6 +565,158 @@ async def delete_marker_model():
         logger.info("Deleted Marker PDF models dir: %s", marker_dir)
 
     return {"deleted": deleted, "model_id": "marker-pdf"}
+
+
+# ─────────────────────────────────────────────
+# Docling endpoints
+# ─────────────────────────────────────────────
+
+DOCLING_SUBDIR = "docling"
+
+
+def _docling_dir() -> Path:
+    return Path(get_settings().models_root) / DOCLING_SUBDIR
+
+
+_DOCLING_DOWNLOAD_SCRIPT = """\
+import sys, json, tempfile, os
+# Force HF cache into the docling subdirectory
+docling_cache = sys.argv[1]
+os.environ["HF_HOME"] = docling_cache
+
+try:
+    from docling.document_converter import DocumentConverter
+
+    # Create a minimal PDF to trigger model download
+    pdf_path = os.path.join(tempfile.gettempdir(), "_docling_warmup.pdf")
+    try:
+        import fitz
+        doc = fitz.open()
+        page = doc.new_page()
+        page.insert_text((72, 72), "Docling warmup document.")
+        doc.save(pdf_path)
+        doc.close()
+    except Exception:
+        with open(pdf_path, "wb") as f:
+            f.write(b"%PDF-1.0\\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\\n"
+                    b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\\n"
+                    b"3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj\\n"
+                    b"xref\\n0 4\\ntrailer<</Size 4/Root 1 0 R>>\\nstartxref\\n0\\n%%EOF")
+
+    converter = DocumentConverter()
+    converter.convert(pdf_path)
+    os.unlink(pdf_path)
+    print(json.dumps({"status": "complete"}))
+except Exception as e:
+    print(json.dumps({"status": "error", "error": str(e)}), file=sys.stderr)
+    sys.exit(1)
+"""
+
+
+def _docling_is_downloaded() -> bool:
+    """Check if Docling models are downloaded under {models_root}/docling."""
+    docling = _docling_dir()
+    if docling.exists():
+        # Check for HF hub model dirs
+        hub = docling / "hub"
+        if hub.exists():
+            for d in hub.iterdir():
+                name_lower = d.name.lower()
+                if ("docling" in name_lower or "ds4sd" in name_lower) and d.is_dir():
+                    return True
+        # Also check for any safetensors directly
+        if any(docling.rglob("*.safetensors")) or any(docling.rglob("*.onnx")):
+            return True
+
+    # Legacy: check HF_HOME for previously downloaded models
+    hf_home = os.environ.get("HF_HOME", "")
+    if hf_home:
+        hub_dir = Path(hf_home) / "hub"
+        if hub_dir.exists():
+            for d in hub_dir.iterdir():
+                name_lower = d.name.lower()
+                if "docling" in name_lower or "ds4sd" in name_lower:
+                    return True
+    return False
+
+
+def _docling_disk_size() -> str | None:
+    """Get disk size of downloaded Docling models."""
+    docling = _docling_dir()
+    if docling.exists() and _dir_size_bytes(docling) > 0:
+        return _dir_size_str(docling)
+
+    # Legacy: check HF_HOME
+    hf_home = os.environ.get("HF_HOME", "")
+    if hf_home:
+        hub_dir = Path(hf_home) / "hub"
+        if hub_dir.exists():
+            total = 0
+            for d in hub_dir.iterdir():
+                name_lower = d.name.lower()
+                if ("docling" in name_lower or "ds4sd" in name_lower) and d.is_dir():
+                    total += _dir_size_bytes(d)
+            return _format_size(total)
+    return None
+
+
+@router.post("/docling/download")
+async def download_docling_model():
+    """Download Docling models into {models_root}/docling."""
+    if _docling_is_downloaded():
+        return {"status": "complete", "model_id": "docling", "downloaded": True}
+
+    docling = _docling_dir()
+    docling.mkdir(parents=True, exist_ok=True)
+
+    try:
+        env = {**os.environ, "HF_HOME": str(docling)}
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable, "-c", _DOCLING_DOWNLOAD_SCRIPT, str(docling),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=600)
+
+        if proc.returncode != 0:
+            stderr_text = stderr.decode(errors="replace")[-500:] if stderr else ""
+            logger.error("Docling download failed: %s", stderr_text)
+            raise HTTPException(500, f"Docling download failed: {stderr_text}")
+
+        return {"status": "complete", "model_id": "docling", "downloaded": True}
+    except asyncio.TimeoutError:
+        raise HTTPException(500, "Docling download timed out after 10 minutes")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Docling download error: %s", e)
+        raise HTTPException(500, f"Download failed: {e}")
+
+
+@router.delete("/docling")
+async def delete_docling_model():
+    """Delete downloaded Docling models."""
+    deleted = False
+    # Remove from {models_root}/docling
+    docling = _docling_dir()
+    if docling.exists():
+        shutil.rmtree(docling)
+        deleted = True
+        logger.info("Deleted Docling models dir: %s", docling)
+
+    # Also clean legacy HF_HOME location
+    hf_home = os.environ.get("HF_HOME", "")
+    if hf_home:
+        hub_dir = Path(hf_home) / "hub"
+        if hub_dir.exists():
+            for d in list(hub_dir.iterdir()):
+                name_lower = d.name.lower()
+                if ("docling" in name_lower or "ds4sd" in name_lower) and d.is_dir():
+                    shutil.rmtree(d)
+                    deleted = True
+
+    return {"deleted": deleted, "model_id": "docling"}
 
 
 # ─────────────────────────────────────────────
@@ -692,3 +939,166 @@ async def reindex_knowledge():
 
     _asyncio.create_task(_run())
     return {"status": "started", "message": "Knowledge re-indexing started in background"}
+
+
+# ─────────────────────────────────────────────
+# Unified model status endpoint
+# ─────────────────────────────────────────────
+
+@router.get("/status", response_model=UnifiedModelStatus)
+async def get_unified_model_status(db: AsyncSession = Depends(get_db)):
+    """Return download status for all local pipeline model categories."""
+    settings = get_settings()
+    categories: list[ModelCategoryStatus] = []
+
+    # Speech-to-Text (Whisper)
+    whisper_models = []
+    default_whisper = await config_service.get_config_raw(db, "local_whisper_model") or "base"
+    for hf_id, cli_name in WHISPER_MODEL_MAP.items():
+        downloaded = _model_is_downloaded(cli_name)
+        size = None
+        if downloaded:
+            whisper = _whisper_dir()
+            for candidate in [
+                whisper / f"faster-whisper-{cli_name}",
+                whisper / f"models--Systran--faster-whisper-{cli_name}",
+            ]:
+                s = _dir_size_str(candidate)
+                if s:
+                    size = s
+                    break
+        whisper_models.append(ModelStatusItem(
+            model_id=cli_name, name=f"Whisper {cli_name}",
+            downloaded=downloaded, disk_size=size,
+            estimated_size=_WHISPER_ESTIMATED_SIZES.get(cli_name),
+            is_default=cli_name == default_whisper,
+        ))
+    categories.append(ModelCategoryStatus(
+        category="whisper", display_name="Speech-to-Text",
+        icon="mic", models=whisper_models,
+        total_disk_size=_dir_size_str(_whisper_dir()),
+    ))
+
+    # PDF Extraction (Marker)
+    marker_downloaded = _marker_is_downloaded()
+    # Detect in-progress download: marker dir exists but no model files yet
+    marker_dir = Path(settings.models_root) / MARKER_SUBDIR
+    marker_downloading = (
+        not marker_downloaded
+        and marker_dir.exists()
+        and any(marker_dir.iterdir())
+    )
+    categories.append(ModelCategoryStatus(
+        category="marker", display_name="PDF Extraction",
+        icon="file-text", models=[
+            ModelStatusItem(
+                model_id="marker", name="Marker PDF",
+                downloaded=marker_downloaded,
+                downloading=marker_downloading,
+                disk_size=_marker_disk_size() if marker_downloaded else None,
+                estimated_size=_MARKER_ESTIMATED_SIZE,
+                is_default=True,
+            )
+        ],
+        total_disk_size=_marker_disk_size() if marker_downloaded else None,
+    ))
+
+    # Document Analysis (Docling)
+    docling_downloaded = _docling_is_downloaded()
+    categories.append(ModelCategoryStatus(
+        category="docling", display_name="Document Analysis (Docling)",
+        icon="file-text", models=[
+            ModelStatusItem(
+                model_id="docling", name="Docling Models",
+                downloaded=docling_downloaded,
+                disk_size=_docling_disk_size() if docling_downloaded else None,
+                estimated_size="~1.5 GB",
+                is_default=True,
+            )
+        ],
+        total_disk_size=_docling_disk_size() if docling_downloaded else None,
+    ))
+
+    # CLIP
+    clip_models = []
+    clip_ids = ["clip-ViT-B-32", "clip-ViT-B-16", "clip-ViT-L-14"]
+    default_clip = await config_service.get_config_raw(db, "clip_model") or "clip-ViT-B-32"
+    for cid in clip_ids:
+        downloaded = _clip_is_downloaded(cid)
+        clip_models.append(ModelStatusItem(
+            model_id=cid, name=cid,
+            downloaded=downloaded,
+            disk_size=_clip_disk_size(cid) if downloaded else None,
+            estimated_size=_CLIP_ESTIMATED_SIZES.get(cid),
+            is_default=cid == default_clip,
+        ))
+    categories.append(ModelCategoryStatus(
+        category="clip", display_name="Vision / CLIP",
+        icon="image", models=clip_models,
+        total_disk_size=_dir_size_str(Path(settings.models_root) / CLIP_SUBDIR),
+    ))
+
+    # Embeddings
+    embedding_models_info = [
+        ("all-MiniLM-L6-v2", "all-MiniLM-L6-v2", "~90 MB"),
+        ("bge-small-en-v1.5", "BAAI/bge-small-en-v1.5", "~130 MB"),
+        ("bge-base-en-v1.5", "BAAI/bge-base-en-v1.5", "~440 MB"),
+        ("all-mpnet-base-v2", "all-mpnet-base-v2", "~420 MB"),
+        ("e5-small-v2", "intfloat/e5-small-v2", "~130 MB"),
+        ("e5-base-v2", "intfloat/e5-base-v2", "~440 MB"),
+    ]
+    default_emb = await config_service.get_config_raw(db, "embedding_model") or "all-MiniLM-L6-v2"
+    emb_models = []
+    for emb_id, emb_name, emb_est in embedding_models_info:
+        downloaded = _embedding_is_downloaded(emb_id)
+        size = None
+        if downloaded:
+            emb_dir = _embeddings_dir()
+            safe = emb_id.replace("/", "--")
+            for candidate in [
+                emb_dir / f"models--sentence-transformers--{safe}",
+                emb_dir / f"models--BAAI--{safe}",
+                emb_dir / f"models--intfloat--{safe}",
+                emb_dir / f"models--{safe}",
+                emb_dir / safe,
+            ]:
+                s = _dir_size_str(candidate)
+                if s:
+                    size = s
+                    break
+        emb_models.append(ModelStatusItem(
+            model_id=emb_id, name=emb_name,
+            downloaded=downloaded, disk_size=size,
+            estimated_size=emb_est,
+            is_default=emb_id == default_emb,
+        ))
+    categories.append(ModelCategoryStatus(
+        category="embeddings", display_name="Text Embeddings",
+        icon="text", models=emb_models,
+        total_disk_size=_dir_size_str(_embeddings_dir()),
+    ))
+
+    # TTS (Piper, Coqui, Liquid Audio)
+    from openforge.services.local_models import get_local_models_with_status
+    tts_catalog = get_local_models_with_status("tts")
+    default_tts = await config_service.get_config_raw(db, "system_tts_default") or ""
+    tts_models = []
+    for m in tts_catalog:
+        engine = m.get("engine", "")
+        size_mb = m.get("size_mb", 0)
+        est = f"~{size_mb} MB" if size_mb < 1000 else f"~{size_mb / 1000:.1f} GB"
+        tts_models.append(ModelStatusItem(
+            model_id=m["id"], name=m["name"],
+            downloaded=m.get("downloaded", False),
+            estimated_size=est,
+            is_default=m["id"] == default_tts,
+        ))
+    if tts_models:
+        piper_dir = Path(settings.models_root) / "piper"
+        categories.append(ModelCategoryStatus(
+            category="tts", display_name="Text-to-Speech",
+            icon="volume-2", models=tts_models,
+            total_disk_size=_dir_size_str(piper_dir),
+        ))
+
+    return UnifiedModelStatus(categories=categories)

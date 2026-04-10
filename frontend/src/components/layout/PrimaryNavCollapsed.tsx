@@ -16,6 +16,7 @@ import {
   Zap,
   Rocket,
   Search,
+  BookOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ConnectionStatus } from './ConnectionStatus';
@@ -29,6 +30,7 @@ interface PrimaryNavCollapsedProps {
     workspace: string;
     knowledge: string;
     search: string;
+    journal: string;
     chat: string;
     agents: string;
     automations: string;
@@ -103,6 +105,12 @@ export function PrimaryNavCollapsed({
                 title="Search"
                 isActive={activePath.includes('/search')}
                 icon={<Search className="w-4 h-4" />}
+              />
+              <NavIcon
+                to={routes.journal}
+                title="Journal"
+                isActive={activePath.includes('/journal')}
+                icon={<BookOpen className="w-4 h-4" />}
               />
             </nav>
           </>

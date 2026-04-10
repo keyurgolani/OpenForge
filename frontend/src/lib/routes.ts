@@ -23,6 +23,10 @@ export const ROUTES = {
   SETTINGS_MODELS_AUDIO: '/settings/models/audio',
   SETTINGS_MODELS_CLIP: '/settings/models/clip',
   SETTINGS_MODELS_PDF: '/settings/models/pdf',
+  SETTINGS_MODELS_PIPELINE_STT: '/settings/models/pipeline-stt',
+  SETTINGS_MODELS_PIPELINE_DOCUMENT: '/settings/models/pipeline-document',
+  SETTINGS_MODELS_PIPELINE_CLIP: '/settings/models/pipeline-clip',
+  SETTINGS_MODELS_PIPELINE_EMBEDDINGS: '/settings/models/pipeline-embeddings',
   SETTINGS_TOOLS: '/settings/tools',
   SETTINGS_DATA: '/settings/data',
   SETTINGS_ADVANCED: '/settings/advanced',
@@ -35,6 +39,7 @@ export const ROUTES = {
   CHAT: `${WORKSPACE_PREFIX}/chat`,
   CHAT_CONVERSATION: `${WORKSPACE_PREFIX}/chat/:conversationId`,
   SEARCH: `${WORKSPACE_PREFIX}/search`,
+  JOURNAL: `${WORKSPACE_PREFIX}/journal`,
 
   // Global chat routes
   CHAT_GLOBAL: '/chat',
@@ -101,6 +106,10 @@ export function chatRoute(workspaceId: string, conversationId?: string): string 
 
 export function searchRoute(workspaceId: string): string {
   return routeWithParams(ROUTES.SEARCH, { workspaceId });
+}
+
+export function journalRoute(workspaceId: string): string {
+  return routeWithParams(ROUTES.JOURNAL, { workspaceId });
 }
 
 export function globalChatRoute(conversationId?: string, options?: { agentId?: string }): string {

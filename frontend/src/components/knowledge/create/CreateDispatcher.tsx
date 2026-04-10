@@ -9,6 +9,7 @@ import PDFCreateModal from './PDFCreateModal'
 import DocumentCreateModal from './DocumentCreateModal'
 import SheetCreateModal from './SheetCreateModal'
 import SlidesCreateModal from './SlidesCreateModal'
+import JournalCreateModal from './JournalCreateModal'
 
 interface CreateDispatcherProps {
     type: QuickKnowledgeType
@@ -42,6 +43,8 @@ export default function CreateDispatcher({ type, isOpen, onClose, workspaceId, o
             return <SheetCreateModal {...props} />
         case 'slides':
             return <SlidesCreateModal {...props} />
+        case 'journal':
+            return <JournalCreateModal {...props} />
         default:
             return <NoteCreateModal {...props} />
     }

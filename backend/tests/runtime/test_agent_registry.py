@@ -136,18 +136,6 @@ class TestAgentRegistry:
         assert len(registry._cache) == 0
         assert len(registry._slug_cache) == 0
 
-    @pytest.mark.asyncio
-    async def test_resolve_for_workspace_no_default(self):
-        registry = AgentRegistry()
-        mock_workspace = MagicMock()
-        mock_workspace.default_agent_id = None
-
-        mock_db = MagicMock()
-        mock_db.get = AsyncMock(return_value=mock_workspace)
-
-        result = await registry.resolve_for_workspace(mock_db, uuid.uuid4())
-        assert result is None
-
     def test_module_level_singleton(self):
         from openforge.runtime.agent_registry import agent_registry
         assert isinstance(agent_registry, AgentRegistry)

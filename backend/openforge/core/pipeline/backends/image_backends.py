@@ -171,7 +171,8 @@ class VisionLLMBackend:
         start = time.monotonic()
         try:
             result = await self._vision_describe(
-                file_path, context.workspace_id, context.db_session
+                file_path, context.workspace_id, context.db_session,
+                knowledge_type=context.knowledge_type or "image",
             )
             elapsed = int((time.monotonic() - start) * 1000)
             description = result.get("description", "")
@@ -195,7 +196,8 @@ class VisionLLMBackend:
             )
 
     async def _vision_describe(
-        self, file_path: str, workspace_id: UUID, db_session
+        self, file_path: str, workspace_id: UUID, db_session,
+        knowledge_type: str = "image",
     ) -> dict:
         """Call vision LLM to describe the image."""
         if db_session is None:
@@ -207,8 +209,9 @@ class VisionLLMBackend:
             from openforge.services.llm_service import llm_service
 
             provider_name, api_key, model, base_url = (
-                await llm_service.get_vision_provider_for_workspace(
-                    db_session, workspace_id
+                await llm_service.resolve_vision_provider_for_pipeline(
+                    db_session, knowledge_type=knowledge_type,
+                    slot_type="vision_description",
                 )
             )
         except Exception:

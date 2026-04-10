@@ -26,6 +26,7 @@ import {
   Zap,
   Rocket,
   Search,
+  BookOpen,
 } from 'lucide-react';
 import {
   ContextMenu,
@@ -76,6 +77,7 @@ interface PrimaryNavExpandedProps {
     knowledge: string;
     knowledgeItem: (id: string) => string;
     search: string;
+    journal: string;
     chat: string;
     chatConversation: (id: string) => string;
     agents: string;
@@ -208,6 +210,12 @@ export function PrimaryNavExpanded({
                   icon={<Search className="w-4 h-4" />}
                   label="Search"
                   isActive={activePath.includes('/search')}
+                />
+                <NavItem
+                  to={routes.journal}
+                  icon={<BookOpen className="w-4 h-4" />}
+                  label="Journal"
+                  isActive={activePath.includes('/journal')}
                 />
 
                 {/* Spacer to push remaining workspace-scoped items up */}

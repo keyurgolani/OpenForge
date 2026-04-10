@@ -45,9 +45,14 @@ export const updateSetting = (
 // ── Pipelines ──
 export const listPipelines = (): Promise<any> => api.get('/pipelines').then(r => r.data)
 export const getBackendSchemas = (): Promise<any> => api.get('/pipelines/backend-schemas').then(r => r.data)
+export const listAvailableModels = (): Promise<any> => api.get('/pipelines/available-models').then(r => r.data)
 export const updatePipeline = (
     knowledgeType: string,
-    data: { slots: Record<string, { enabled?: boolean; active_backend?: string; backend_config?: Record<string, any> }> },
+    data: {
+        slots?: Record<string, { enabled?: boolean; active_backend?: string; backend_config?: Record<string, any> }>;
+        post_step_toggles?: Record<string, boolean>;
+        post_step_models?: Record<string, { provider_id: string; model_name: string }>;
+    },
 ): Promise<any> => api.put(`/pipelines/${knowledgeType}`, data).then(r => r.data)
 
 // ── LLM Providers ──
@@ -98,6 +103,17 @@ export const downloadMarkerModel = (): Promise<any> =>
     api.post('/models/marker/download').then(r => r.data)
 export const deleteMarkerModel = (): Promise<any> =>
     api.delete('/models/marker').then(r => r.data)
+
+export const setWhisperDefault = (modelId: string): Promise<any> =>
+    api.put('/models/whisper/default', { model_id: modelId }).then(r => r.data)
+export const downloadDoclingModel = (): Promise<any> =>
+    api.post('/models/docling/download').then(r => r.data)
+export const deleteDoclingModel = (): Promise<any> =>
+    api.delete('/models/docling').then(r => r.data)
+
+// ── Pipeline Model Status ──
+export const getUnifiedModelStatus = (): Promise<any> =>
+    api.get('/models/status').then(r => r.data)
 
 // ── TTS Models ──
 export const listTTSModels = (): Promise<any> => api.get('/models/tts').then(r => r.data)
@@ -164,6 +180,16 @@ export const visualSearch = (wid: string, file: File, limit?: number): Promise<a
         params: limit ? { limit } : undefined,
     }).then(r => r.data)
 }
+
+// ── Journal ──
+export const addJournalEntry = (workspaceId: string, body: string): Promise<any> =>
+    api.post(`/workspaces/${workspaceId}/journal/entry`, { body }).then(r => r.data)
+export const getTodaysJournal = (workspaceId: string): Promise<any> =>
+    api.get(`/workspaces/${workspaceId}/journal/today`).then(r => r.data)
+export const updateJournalEntry = (
+    workspaceId: string, knowledgeId: string, entryIndex: number, body: string,
+): Promise<any> =>
+    api.put(`/workspaces/${workspaceId}/journal/${knowledgeId}/entry/${entryIndex}`, { body }).then(r => r.data)
 
 // ── Conversations ──
 export const listConversations = (

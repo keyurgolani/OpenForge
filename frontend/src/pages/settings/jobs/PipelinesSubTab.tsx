@@ -4,7 +4,7 @@ import {
     Loader2, StickyNote, Bookmark, Image, Mic, FileText, Sheet,
     Presentation, GitBranch, Film, FileCode, BookOpen, File,
 } from 'lucide-react'
-import { listPipelines, getBackendSchemas, updatePipeline } from '@/lib/api'
+import { listPipelines, getBackendSchemas, updatePipeline, listAvailableModels, getUnifiedModelStatus } from '@/lib/api'
 import PipelineFlowGraph from '@/components/pipelines/PipelineFlowGraph'
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -81,6 +81,14 @@ export function PipelinesSubTab() {
         queryKey: ['backend-schemas'],
         queryFn: getBackendSchemas,
     })
+    const { data: availableModels = [] } = useQuery<any[]>({
+        queryKey: ['available-models'],
+        queryFn: listAvailableModels,
+    })
+    const { data: modelStatus } = useQuery({
+        queryKey: ['model-status'],
+        queryFn: getUnifiedModelStatus,
+    })
     const [saving, setSaving] = useState(false)
     const [openConfig, setOpenConfig] = useState<string | null>(null)
 
@@ -88,6 +96,16 @@ export function PipelinesSubTab() {
         () => new Set(Object.keys(schemas).filter(k => Object.keys(schemas[k]?.fields ?? {}).length > 0)),
         [schemas],
     )
+
+    const downloadedModels = useMemo(() => {
+        const set = new Set<string>()
+        for (const cat of modelStatus?.categories ?? []) {
+            for (const m of cat.models) {
+                if (m.downloaded) set.add(m.model_id)
+            }
+        }
+        return set
+    }, [modelStatus])
 
     const toggleSlot = useCallback(async (knowledgeType: string, slotType: string, currentEnabled: boolean) => {
         setSaving(true)
@@ -111,6 +129,28 @@ export function PipelinesSubTab() {
         try {
             await updatePipeline(knowledgeType, { post_step_toggles: { [configKey]: !currentEnabled } } as any)
             qc.invalidateQueries({ queryKey: ['pipelines'] })
+        } finally { setSaving(false) }
+    }, [qc])
+
+    const updatePostStepModel = useCallback(async (knowledgeType: string, stepKey: string, providerId: string, modelName: string) => {
+        setSaving(true)
+        try {
+            await updatePipeline(knowledgeType, {
+                post_step_models: { [stepKey]: { provider_id: providerId, model_name: modelName } }
+            } as any)
+            qc.invalidateQueries({ queryKey: ['pipelines'] })
+            setOpenConfig(null)
+        } finally { setSaving(false) }
+    }, [qc])
+
+    const updateSlotModel = useCallback(async (knowledgeType: string, slotType: string, providerId: string, modelName: string) => {
+        setSaving(true)
+        try {
+            await updatePipeline(knowledgeType, {
+                slots: { [slotType]: { backend_config: { provider_id: providerId, model_name: modelName } } }
+            } as any)
+            qc.invalidateQueries({ queryKey: ['pipelines'] })
+            setOpenConfig(null)
         } finally { setSaving(false) }
     }, [qc])
 
@@ -164,10 +204,14 @@ export function PipelinesSubTab() {
                             configurableBackends={configurableBackends}
                             saving={saving}
                             openConfig={openConfig}
+                            providers={availableModels}
+                            downloadedModels={downloadedModels}
                             onToggle={toggleSlot}
                             onToggleConfig={(key) => setOpenConfig(prev => prev === key ? null : key)}
                             onUpdateConfig={updateConfig}
                             onTogglePostStep={togglePostStep}
+                            onUpdatePostStepModel={updatePostStepModel}
+                            onUpdateSlotModel={updateSlotModel}
                         />
                     </div>
                 )

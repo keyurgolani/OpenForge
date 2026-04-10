@@ -289,6 +289,38 @@ class LLMService:
 
         return resolved_name, api_key, model, resolved_base_url
 
+    async def resolve_provider_for_pipeline(
+        self,
+        db: AsyncSession,
+        knowledge_type: str,
+        step_key: str,
+    ) -> tuple[str, str, str, str | None]:
+        """Resolve provider using pipeline config, falling back to system defaults.
+
+        Resolution: pipeline config → system_chat_models → is_system_default → auto-detect
+        """
+        from openforge.services.config_service import config_service
+
+        # Check pipeline config for this knowledge_type + step
+        try:
+            existing = await config_service.get_config_raw(db, "pipeline_configs")
+            all_configs: dict = existing if isinstance(existing, dict) else {}
+            type_config = all_configs.get(knowledge_type, {})
+            post_step_models = type_config.get("post_step_models", {})
+            step_model = post_step_models.get(step_key, {})
+
+            if step_model.get("provider_id") and step_model.get("model_name"):
+                return await self.resolve_provider(
+                    db,
+                    provider_id=step_model["provider_id"],
+                    model_override=step_model["model_name"],
+                )
+        except Exception:
+            pass
+
+        # Fall back to default resolution
+        return await self.resolve_provider(db)
+
     async def get_vision_provider_for_workspace(
         self,
         db: AsyncSession,
@@ -350,6 +382,34 @@ class LLMService:
                 resolved_base_url = get_ollama_url()
 
         return resolved_name, api_key, model, resolved_base_url
+
+    async def resolve_vision_provider_for_pipeline(
+        self,
+        db: AsyncSession,
+        knowledge_type: str,
+        slot_type: str = "vision_description",
+    ) -> tuple[str, str, str, str | None]:
+        """Resolve vision provider using pipeline slot config, falling back to system defaults."""
+        from openforge.services.config_service import config_service
+
+        try:
+            existing = await config_service.get_config_raw(db, "pipeline_configs")
+            all_configs: dict = existing if isinstance(existing, dict) else {}
+            type_config = all_configs.get(knowledge_type, {})
+            slot_overrides = type_config.get("slots", {})
+            slot_config = slot_overrides.get(slot_type, {})
+            backend_cfg = slot_config.get("backend_config", {})
+
+            if backend_cfg.get("provider_id") and backend_cfg.get("model_name"):
+                return await self.resolve_provider(
+                    db,
+                    provider_id=backend_cfg["provider_id"],
+                    model_override=backend_cfg["model_name"],
+                )
+        except Exception:
+            pass
+
+        return await self.resolve_vision_provider(db)
 
     async def list_models(self, db: AsyncSession, provider_id: UUID) -> list[ModelInfo]:
         result = await db.execute(select(LLMProvider).where(LLMProvider.id == provider_id))

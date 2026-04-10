@@ -492,13 +492,6 @@ export default function AgentChatPage() {
         const chatModels = Array.isArray(rawDefaultValue) ? rawDefaultValue as { provider_id: string; model_id: string; model_name: string; is_default?: boolean }[] : []
         const systemDefault = chatModels.find(m => m.is_default) ?? chatModels[0]
 
-        if (workspace.llm_provider_id) {
-            const dp = (providers as ProviderRecord[]).find(p => p.id === workspace.llm_provider_id)
-            if (dp) {
-                const modelName = workspace.llm_model || dp.default_model || systemDefault?.model_name || 'provider default'
-                return `${sanitizeProviderDisplayName(dp.display_name) || dp.provider_name} · ${modelName}`
-            }
-        }
         const sys = (providers as ProviderRecord[]).find(p => p.is_system_default)
         if (sys) {
             const sysModelName = sys.default_model || chatModels.find(m => m.provider_id === sys.id)?.model_name || 'provider default'

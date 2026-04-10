@@ -67,8 +67,6 @@ async def _import_workspace(
         description=ws_info.get("description"),
         icon=ws_info.get("icon"),
         color=ws_info.get("color"),
-        agent_enabled=ws_info.get("agent_enabled", True),
-        agent_tool_categories=ws_info.get("agent_tool_categories", []),
     )
     db.add(workspace)
     await db.flush()

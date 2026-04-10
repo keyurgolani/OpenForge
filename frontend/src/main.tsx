@@ -33,6 +33,7 @@ const SinkDetailPage = lazy(() => import('./pages/SinkDetailPage'))
 const EditorDispatcher = lazy(() => import('./components/knowledge/editors/EditorDispatcher'))
 const AgentChatPage = lazy(() => import('./pages/AgentChatPage'))
 const SearchPage = lazy(() => import('./pages/SearchPage'))
+const JournalPage = lazy(() => import('./pages/JournalPage'))
 // Settings pages
 const SettingsIndex = lazy(() => import('./pages/settings'))
 const SettingsLayout = lazy(() => import('./pages/settings/SettingsLayout'))
@@ -187,6 +188,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                         <SearchPage />
                                     </ErrorBoundary>
                                 } />
+                                <Route path="journal" element={
+                                    <ErrorBoundary>
+                                        <JournalPage />
+                                    </ErrorBoundary>
+                                } />
                             </Route>
                             <Route element={
                                 <ErrorBoundary>
@@ -218,6 +224,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                     <Route index element={<SettingsIndex />} />
                                     <Route path="workspaces" element={<ErrorBoundary><WorkspacesPage /></ErrorBoundary>} />
                                     <Route path="models" element={<ErrorBoundary><ModelsPage /></ErrorBoundary>} />
+                                    <Route path="models/:section" element={<ErrorBoundary><ModelsPage /></ErrorBoundary>} />
                                     <Route path="capabilities" element={<ErrorBoundary><CapabilitiesPage /></ErrorBoundary>} />
                                     <Route path="data" element={<ErrorBoundary><DataPage /></ErrorBoundary>} />
                                     <Route path="appearance" element={<ErrorBoundary><AppearancePage /></ErrorBoundary>} />
@@ -226,7 +233,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                                     <Route path="tools" element={<Navigate to="/settings/capabilities" replace />} />
                                     <Route path="skills" element={<Navigate to="/settings/capabilities" replace />} />
                                     <Route path="mcp" element={<Navigate to="/settings/capabilities" replace />} />
-                                    <Route path="models/*" element={<Navigate to="/settings/models" replace />} />
+                                    <Route path="models/*" element={<Navigate to="/settings/models/providers" replace />} />
                                     <Route path="pipelines" element={<Navigate to="/settings/advanced" replace />} />
                                     <Route path="audit" element={<Navigate to="/settings/advanced" replace />} />
                                     <Route path="import" element={<Navigate to="/settings/data" replace />} />

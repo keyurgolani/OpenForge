@@ -784,13 +784,13 @@ class ChatHandler:
         target_spec = None
         if agent_id:
             target_spec = await agent_registry.resolve(db, slug=agent_id)
-
         _subagent_id = str(target_spec.agent_id) if target_spec else "delegated_agent"
 
         conversation = Conversation(
             title=f"[delegated] {instruction[:80]}",
             is_subagent=True,
             subagent_agent_id=_subagent_id,
+            agent_id=target_spec.agent_id if target_spec else None,
         )
         db.add(conversation)
         await db.commit()
@@ -823,10 +823,12 @@ class ChatHandler:
         _root_conv = str(fwd_conversation_id) if fwd_conversation_id else (str(parent_conversation_id) if parent_conversation_id else None)
 
         execution_id = str(uuid.uuid4())
+        agent_compat = _AgentCompat(target_spec) if target_spec else None
         await self.run(
             conversation_id=conversation.id,
             user_content=instruction,
             db=db,
+            agent=agent_compat,
             execution_id=execution_id,
             mentions=[],
             event_forwarder=event_forwarder,
@@ -897,27 +899,31 @@ class ChatHandler:
                 except Exception as exc:
                     logger.debug("agent_registry.resolve failed: %s", exc)
 
-        # Fallback: if conversation has no agent_id, try the first workspace's
+        # Fallback: if conversation has no agent_id, find the global
         # default agent so that bare conversations still work.
         if agent is None:
             try:
-                from openforge.db.models import Workspace as _Workspace
-                ws_result = await db.execute(
-                    select(_Workspace).where(_Workspace.default_agent_id.isnot(None)).limit(1)
-                )
-                ws = ws_result.scalar_one_or_none()
-                if ws and ws.default_agent_id:
-                    compiled_spec = await agent_registry.resolve(db, agent_id=ws.default_agent_id)
-                    if compiled_spec is not None:
-                        agent = _AgentCompat(compiled_spec)
-                        # Backfill the conversation so future messages resolve directly
-                        conv_to_fix = await db.get(Conversation, conversation_id)
-                        if conv_to_fix and not conv_to_fix.agent_id:
-                            conv_to_fix.agent_id = ws.default_agent_id
-                            await db.commit()
-                        logger.debug("Fallback: assigned workspace default agent %s", compiled_spec.agent_slug)
+                from openforge.db.models import AgentDefinitionModel
+                for _fallback_slug in ("workspace-assistant", "personal-assistant"):
+                    result = await db.execute(
+                        select(AgentDefinitionModel).where(
+                            AgentDefinitionModel.slug == _fallback_slug
+                        )
+                    )
+                    agent_def = result.scalar_one_or_none()
+                    if agent_def:
+                        compiled_spec = await agent_registry.resolve(db, agent_id=agent_def.id)
+                        if compiled_spec is not None:
+                            agent = _AgentCompat(compiled_spec)
+                            # Backfill the conversation so future messages resolve directly
+                            conv_to_fix = await db.get(Conversation, conversation_id)
+                            if conv_to_fix and not conv_to_fix.agent_id:
+                                conv_to_fix.agent_id = agent_def.id
+                                await db.commit()
+                            logger.debug("Fallback: assigned %s agent %s", _fallback_slug, compiled_spec.agent_slug)
+                            break
             except Exception as exc:
-                logger.debug("Workspace default agent fallback failed: %s", exc)
+                logger.debug("Global fallback agent resolution failed: %s", exc)
 
         if agent is None:
             await self._publish(

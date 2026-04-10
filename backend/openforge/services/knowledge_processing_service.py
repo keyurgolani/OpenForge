@@ -400,51 +400,70 @@ class KnowledgeProcessingService:
                 if not (knowledge_record.content or "").strip():
                     raise RuntimeError("Knowledge content is empty; intelligence generation skipped")
 
-                provider_name, api_key, model, base_url = await llm_service.get_provider_for_workspace(db, workspace_id)
+                provider_name, api_key, model, base_url = (
+                    await llm_service.resolve_provider_for_pipeline(
+                        db,
+                        knowledge_type=knowledge_record.type,
+                        step_key="intelligence",
+                    )
+                )
                 tags_str = ", ".join([t.tag for t in knowledge_record.tags])
+
+                is_journal = knowledge_record.type == "journal"
 
                 workspace = await db.get(Workspace, workspace_id)
                 workspace_name = workspace.name if workspace else ""
                 workspace_description = workspace.description if workspace else ""
                 categories = get_workspace_categories(workspace.intelligence_categories if workspace else None)
 
-                # ── Title generation ──
-                title_system = (
-                    "You are an expert title writer. Generate a concise, descriptive title "
-                    "for the given content. Return ONLY the title text, nothing else."
-                )
-                title_user = (
-                    f"Generate a short, descriptive title for this content."
-                    f"\nWorkspace: {workspace_name}"
-                    + (f" — {workspace_description}" if workspace_description else "")
-                )
-                title_response = await llm_gateway.chat(
-                    messages=self._prepare_knowledge_messages(
-                        system_instruction=title_system,
-                        knowledge_record=knowledge_record,
-                        content=(knowledge_record.content or "")[:2000],
-                        conversation_messages=[{"role": "user", "content": title_user}],
-                    ),
-                    provider_name=provider_name,
-                    api_key=api_key,
-                    model=model,
-                    base_url=base_url,
-                    max_tokens=30,
-                )
-                normalized_title = derive_knowledge_title(title_response, knowledge_record.content or "")
-                FILE_BASED_TYPES = {"pdf", "document", "sheet", "slides", "audio", "image"}
-                title_was_empty = False
-                if normalized_title:
-                    knowledge_record.ai_title = normalized_title
-                    title_was_empty = not normalize_knowledge_title(knowledge_record.title)
-                    if title_was_empty or knowledge_record.type in FILE_BASED_TYPES:
-                        knowledge_record.title = normalized_title
+                if not is_journal:
+                    # ── Title generation ──
+                    title_system = (
+                        "You are an expert title writer. Generate a concise, descriptive title "
+                        "for the given content. Return ONLY the title text, nothing else."
+                    )
+                    title_user = (
+                        f"Generate a short, descriptive title for this content."
+                        f"\nWorkspace: {workspace_name}"
+                        + (f" — {workspace_description}" if workspace_description else "")
+                    )
+                    title_response = await llm_gateway.chat(
+                        messages=self._prepare_knowledge_messages(
+                            system_instruction=title_system,
+                            knowledge_record=knowledge_record,
+                            content=(knowledge_record.content or "")[:2000],
+                            conversation_messages=[{"role": "user", "content": title_user}],
+                        ),
+                        provider_name=provider_name,
+                        api_key=api_key,
+                        model=model,
+                        base_url=base_url,
+                        max_tokens=30,
+                    )
+                    normalized_title = derive_knowledge_title(title_response, knowledge_record.content or "")
+                    FILE_BASED_TYPES = {"pdf", "document", "sheet", "slides", "audio", "image"}
+                    title_was_empty = False
+                    if normalized_title:
+                        knowledge_record.ai_title = normalized_title
+                        title_was_empty = not normalize_knowledge_title(knowledge_record.title)
+                        if title_was_empty or knowledge_record.type in FILE_BASED_TYPES:
+                            knowledge_record.title = normalized_title
 
                 # ── Insights extraction (dynamic categories) ──
                 non_summary_cats = [c for c in categories if c.get("type") != "summary"]
                 summary_cat = next((c for c in categories if c.get("type") == "summary"), None)
 
-                if non_summary_cats:
+                if is_journal and non_summary_cats:
+                    insights_prompt = (
+                        "You are a reflective journal analyst. Analyze the following journal entries "
+                        "and extract themes, emotions, and activities. Focus on the emotional arc and "
+                        "patterns across entries rather than factual bullet points.\n\n"
+                        "Return a valid JSON object with these keys:\n"
+                        '"mood": array of 1-3 mood tags (e.g., "reflective", "anxious", "energized")\n'
+                        '"themes": array of 1-3 theme tags (e.g., "work", "relationships", "health")\n'
+                        '"tags": array of 2-5 descriptive tags combining moods and activities\n'
+                    )
+                elif non_summary_cats:
                     insights_prompt = self._build_extraction_prompt(
                         categories=categories,
                         workspace_name=workspace_name,
@@ -452,6 +471,8 @@ class KnowledgeProcessingService:
                         knowledge_title=normalize_knowledge_title(knowledge_record.title) or "Untitled",
                         tags=tags_str,
                     )
+
+                if non_summary_cats:
                     insights_response = await llm_gateway.chat(
                         messages=self._prepare_knowledge_messages(
                             system_instruction=insights_prompt,
@@ -474,7 +495,27 @@ class KnowledgeProcessingService:
                 insights_payload = normalize_insights_payload(parsed, knowledge_record.content or "", categories)
 
                 # ── Summary (if summary category is configured) ──
-                if summary_cat:
+                if is_journal and summary_cat:
+                    summary_prompt = (
+                        f"You are a reflective journal companion for the workspace '{workspace_name}'. "
+                        "Summarize the following journal entries for the day. Capture the emotional arc, "
+                        "key themes, and overall tone. Write in second person ('you') as a gentle reflection "
+                        "of the writer's day. Keep it to 2-3 sentences."
+                    )
+                    summary = await llm_gateway.chat(
+                        messages=self._prepare_knowledge_messages(
+                            system_instruction=summary_prompt,
+                            knowledge_record=knowledge_record,
+                            content=(knowledge_record.content or "")[:8000],
+                        ),
+                        provider_name=provider_name,
+                        api_key=api_key,
+                        model=model,
+                        base_url=base_url,
+                    )
+                    knowledge_record.ai_summary = summary
+                    insights_payload[summary_cat["key"]] = summary
+                elif summary_cat:
                     summary_prompt = self._build_summary_prompt(
                         workspace_name=workspace_name,
                         workspace_description=workspace_description,
@@ -657,8 +698,7 @@ class KnowledgeProcessingService:
             )
 
         # Schedule intelligence generation for newly created knowledge with initial content.
-        # Journal items are already structured — skip AI intelligence generation.
-        if has_initial_content and auto_intelligence_enabled and data.type != "journal":
+        if has_initial_content and auto_intelligence_enabled:
             background_tasks.add_task(
                 self.run_knowledge_intelligence_job,
                 knowledge_id=knowledge_record.id,

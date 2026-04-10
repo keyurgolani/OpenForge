@@ -6,6 +6,7 @@ import { GistCard } from './GistCard'
 import { ImageCard } from './ImageCard'
 import { AudioCard } from './AudioCard'
 import { FileCard } from './FileCard'
+import { JournalCard } from './JournalCard'
 
 interface KnowledgeCardProps {
     item: KnowledgeListItem
@@ -38,6 +39,8 @@ export function KnowledgeCard({ item, workspaceId, slim }: KnowledgeCardProps) {
         case 'sheet':
         case 'slides':
             return <FileCard item={item} workspaceId={workspaceId} slim={slim} isProcessing={processing} />
+        case 'journal':
+            return <JournalCard item={item} slim={slim} />
         default:
             return <NoteCard item={item} slim={slim} isProcessing={processing} />
     }

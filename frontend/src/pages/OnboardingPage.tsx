@@ -543,8 +543,6 @@ function WorkspaceCreateStep({ onNext, onBack, loading }: { onNext: () => void; 
         await Promise.all(valid.map(w => createWorkspace({
             name: w.name.trim(),
             icon: w.icon,
-            llm_provider_id: w.providerId || undefined,
-            llm_model: w.modelOverride || undefined,
         })))
         onNext()
     }

@@ -12,13 +12,7 @@ class WorkspaceCreate(BaseModel):
     description: Optional[str] = None
     icon: Optional[str] = None
     color: Optional[str] = None
-    llm_provider_id: Optional[UUID] = None
-    llm_model: Optional[str] = None
-    knowledge_intelligence_provider_id: Optional[UUID] = None
-    knowledge_intelligence_model: Optional[str] = None
     intelligence_categories: Optional[list[dict[str, Any]]] = None
-    vision_provider_id: Optional[UUID] = None
-    vision_model: Optional[str] = None
 
     @field_validator("name")
     @classmethod
@@ -42,17 +36,8 @@ class WorkspaceUpdate(BaseModel):
     description: Optional[str] = None
     icon: Optional[str] = None
     color: Optional[str] = None
-    llm_provider_id: Optional[UUID] = None
-    llm_model: Optional[str] = None
-    knowledge_intelligence_provider_id: Optional[UUID] = None
-    knowledge_intelligence_model: Optional[str] = None
     intelligence_categories: Optional[list[dict[str, Any]]] = None
-    vision_provider_id: Optional[UUID] = None
-    vision_model: Optional[str] = None
     sort_order: Optional[int] = None
-    agent_enabled: Optional[bool] = None
-    agent_tool_categories: Optional[list] = None
-    agent_max_tool_loops: Optional[int] = None
 
 
 class WorkspaceResponse(BaseModel):
@@ -61,18 +46,8 @@ class WorkspaceResponse(BaseModel):
     description: Optional[str] = None
     icon: Optional[str] = None
     color: Optional[str] = None
-    llm_provider_id: Optional[UUID] = None
-    llm_model: Optional[str] = None
-    knowledge_intelligence_provider_id: Optional[UUID] = None
-    knowledge_intelligence_model: Optional[str] = None
     intelligence_categories: Optional[list[dict[str, Any]]] = None
-    vision_provider_id: Optional[UUID] = None
-    vision_model: Optional[str] = None
-    default_agent_id: Optional[UUID] = None
     sort_order: int
-    agent_enabled: bool = True
-    agent_tool_categories: list = []
-    agent_max_tool_loops: int = 20
     knowledge_count: int = 0
     conversation_count: int = 0
     ownership_type: str = "user"

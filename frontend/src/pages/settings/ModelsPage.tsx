@@ -1,26 +1,33 @@
 /**
  * ModelsPage - List-detail layout for AI Models settings
  *
- * Left panel shows grouped navigation items (Providers, Reasoning, Image,
- * Embedding, Document, Audio). Right panel renders the selected model tab.
+ * Left panel shows grouped navigation items. Right panel renders the selected tab.
+ * Section selection is URL-driven so refresh preserves the active tab.
  */
 
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const ProvidersTab = lazy(() => import('./llm/ProvidersTab'));
 const ReasoningPage = lazy(() => import('./models/reasoning/ReasoningPage'));
 const VisionPage = lazy(() => import('./models/vision/VisionPage'));
-const EmbeddingPage = lazy(() => import('./models/embedding/EmbeddingPage'));
-const CLIPPage = lazy(() => import('./models/clip/CLIPPage'));
-const STTPage = lazy(() => import('./models/audio/STTPage'));
 const TTSPage = lazy(() => import('./models/audio/TTSPage'));
+const PipelineSTTPage = lazy(() => import('./models/pipeline/PipelineSTTPage'));
+const PipelineDocumentPage = lazy(() => import('./models/pipeline/PipelineDocumentPage'));
+const PipelineCLIPPage = lazy(() => import('./models/pipeline/PipelineCLIPPage'));
+const PipelineEmbeddingsPage = lazy(() => import('./models/pipeline/PipelineEmbeddingsPage'));
 
-type ModelSection = 'providers' | 'reasoning' | 'vision' | 'embedding' | 'clip' | 'stt' | 'tts';
+const VALID_SECTIONS = new Set([
+  'providers', 'reasoning', 'vision', 'tts',
+  'pipeline-stt', 'pipeline-document', 'pipeline-clip', 'pipeline-embeddings',
+]);
+
+type ModelSection = typeof VALID_SECTIONS extends Set<infer T> ? T : string;
 
 interface NavItem {
-  id: ModelSection;
+  id: string;
   label: string;
 }
 
@@ -42,22 +49,23 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    category: 'Embedding',
+    category: 'Audio',
     items: [
-      { id: 'embedding', label: 'Text Embedding' },
-      { id: 'clip', label: 'CLIP' },
+      { id: 'tts', label: 'Text to Speech' },
     ],
   },
   {
-    category: 'Audio',
+    category: 'Content Extraction',
     items: [
-      { id: 'stt', label: 'Speech to Text' },
-      { id: 'tts', label: 'Text to Speech' },
+      { id: 'pipeline-stt', label: 'Speech-to-Text' },
+      { id: 'pipeline-document', label: 'Document Models' },
+      { id: 'pipeline-clip', label: 'Vision / CLIP' },
+      { id: 'pipeline-embeddings', label: 'Text Embeddings' },
     ],
   },
 ];
 
-function renderSection(section: ModelSection) {
+function renderSection(section: string) {
   switch (section) {
     case 'providers':
       return <ProvidersTab />;
@@ -65,19 +73,25 @@ function renderSection(section: ModelSection) {
       return <ReasoningPage />;
     case 'vision':
       return <VisionPage />;
-    case 'embedding':
-      return <EmbeddingPage />;
-    case 'clip':
-      return <CLIPPage />;
-    case 'stt':
-      return <STTPage />;
     case 'tts':
       return <TTSPage />;
+    case 'pipeline-stt':
+      return <PipelineSTTPage />;
+    case 'pipeline-document':
+      return <PipelineDocumentPage />;
+    case 'pipeline-clip':
+      return <PipelineCLIPPage />;
+    case 'pipeline-embeddings':
+      return <PipelineEmbeddingsPage />;
+    default:
+      return <ProvidersTab />;
   }
 }
 
 export function ModelsPage() {
-  const [selected, setSelected] = useState<ModelSection>('providers');
+  const { section } = useParams<{ section?: string }>();
+  const navigate = useNavigate();
+  const selected = section && VALID_SECTIONS.has(section) ? section : 'providers';
 
   return (
     <div className="flex h-full">
@@ -97,7 +111,7 @@ export function ModelsPage() {
                   {group.items.map((item) => (
                     <button
                       key={item.id}
-                      onClick={() => setSelected(item.id)}
+                      onClick={() => navigate(`/settings/models/${item.id}`, { replace: true })}
                       className={cn(
                         'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-sm transition-colors',
                         selected === item.id

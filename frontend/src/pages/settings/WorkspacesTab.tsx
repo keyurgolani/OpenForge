@@ -1,22 +1,19 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-    listWorkspaces, listProviders, createWorkspace, updateWorkspace, deleteWorkspace,
-    mergeWorkspaces, listSettings,
+    listWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace,
+    mergeWorkspaces,
 } from '@/lib/api'
 import {
     Loader2, Trash2, CheckCircle2, Plus, Merge,
-    ChevronDown, ChevronUp, Eye, Save,
-    Bot, Brain, AlertCircle,
+    ChevronDown, ChevronUp, Save, AlertCircle,
 } from 'lucide-react'
 import { ConfirmModal } from '@/components/ui/confirm-modal'
-import { sanitizeProviderDisplayName } from '@/lib/provider-display'
-import type { WorkspaceRow, ProviderRow } from './types'
+import type { WorkspaceRow } from './types'
 import { WORKSPACE_ICONS, WORKSPACE_ICON_NAMES, getWorkspaceIcon } from './constants'
 
-function WorkspaceCard({ workspace: ws, providers, onDeleted, onSaved }: {
+function WorkspaceCard({ workspace: ws, onDeleted, onSaved }: {
     workspace: WorkspaceRow
-    providers: ProviderRow[]
     onDeleted: () => void
     onSaved: () => void
 }) {
@@ -25,83 +22,11 @@ function WorkspaceCard({ workspace: ws, providers, onDeleted, onSaved }: {
     const [description, setDescription] = useState(ws.description ?? '')
     const [icon, setIcon] = useState(ws.icon ?? 'folder')
     const [showIcons, setShowIcons] = useState(false)
-    const [providerId, setProviderId] = useState(ws.llm_provider_id ?? '')
-    const [model, setModel] = useState(ws.llm_model ?? '')
-    const [kiProviderId, setKiProviderId] = useState(ws.knowledge_intelligence_provider_id ?? '')
-    const [kiModel, setKiModel] = useState(ws.knowledge_intelligence_model ?? '')
-    const [visionProviderId, setVisionProviderId] = useState(ws.vision_provider_id ?? '')
-    const [visionModel, setVisionModel] = useState(ws.vision_model ?? '')
     const [saving, setSaving] = useState(false)
-
-    const { data: settings = [] } = useQuery({ queryKey: ['settings'], queryFn: listSettings })
-
-    // Build model lists from provider enabled_models, enriched by system configs
-    const chatModels = useMemo(() => {
-        // Try system config first
-        const raw = (settings as { key: string; value: unknown }[]).find(s => s.key === 'system_chat_models')?.value
-        if (Array.isArray(raw) && raw.length > 0) {
-            return (raw as { provider_id: string; model_id: string; model_name: string }[]).map(m => {
-                const p = providers.find(pr => pr.id === m.provider_id)
-                return { value: `${m.provider_id}:${m.model_id}`, label: `${p ? sanitizeProviderDisplayName(p.display_name) : 'Unknown'} / ${m.model_name}`, provider_id: m.provider_id, model_id: m.model_id }
-            })
-        }
-        // Fall back to all enabled_models from all providers
-        return providers.flatMap(p =>
-            (p.enabled_models ?? []).map(m => ({
-                value: `${p.id}:${m.id}`,
-                label: `${sanitizeProviderDisplayName(p.display_name)} / ${m.name}`,
-                provider_id: p.id,
-                model_id: m.id,
-            }))
-        )
-    }, [settings, providers])
-
-    const visionModels = useMemo(() => {
-        // Try system config first
-        const raw = (settings as { key: string; value: unknown }[]).find(s => s.key === 'system_vision_models')?.value
-        if (Array.isArray(raw) && raw.length > 0) {
-            return (raw as { provider_id: string; model_id: string; model_name: string }[]).map(m => {
-                const p = providers.find(pr => pr.id === m.provider_id)
-                return { value: `${m.provider_id}:${m.model_id}`, label: `${p ? sanitizeProviderDisplayName(p.display_name) : 'Unknown'} / ${m.model_name}`, provider_id: m.provider_id, model_id: m.model_id }
-            })
-        }
-        // Fall back to all enabled_models from all providers
-        return providers.flatMap(p =>
-            (p.enabled_models ?? []).map(m => ({
-                value: `${p.id}:${m.id}`,
-                label: `${sanitizeProviderDisplayName(p.display_name)} / ${m.name}`,
-                provider_id: p.id,
-                model_id: m.id,
-            }))
-        )
-    }, [settings, providers])
-
-    // Combined chat value for select
-    const chatSelectValue = providerId && model ? `${providerId}:${model}` : ''
-    const kiSelectValue = kiProviderId && kiModel ? `${kiProviderId}:${kiModel}` : ''
-    const visionSelectValue = visionProviderId && visionModel ? `${visionProviderId}:${visionModel}` : ''
-
-    const handleChatModelSelect = (val: string) => {
-        if (!val) { setProviderId(''); setModel(''); return }
-        const [pid, ...rest] = val.split(':')
-        setProviderId(pid); setModel(rest.join(':'))
-    }
-    const handleKiModelSelect = (val: string) => {
-        if (!val) { setKiProviderId(''); setKiModel(''); return }
-        const [pid, ...rest] = val.split(':')
-        setKiProviderId(pid); setKiModel(rest.join(':'))
-    }
-    const handleVisionModelSelect = (val: string) => {
-        if (!val) { setVisionProviderId(''); setVisionModel(''); return }
-        const [pid, ...rest] = val.split(':')
-        setVisionProviderId(pid); setVisionModel(rest.join(':'))
-    }
 
     const [saved, setSaved] = useState(false)
     const [deleting, setDeleting] = useState(false)
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
-
-    // (provider lookups now happen via per-type model config in chatModels/visionModels)
 
     const handleSave = async () => {
         setSaving(true)
@@ -109,12 +34,6 @@ function WorkspaceCard({ workspace: ws, providers, onDeleted, onSaved }: {
             name: name.trim(),
             description: description || null,
             icon: icon || null,
-            llm_provider_id: providerId || null,
-            llm_model: model || null,
-            knowledge_intelligence_provider_id: kiProviderId || null,
-            knowledge_intelligence_model: kiModel || null,
-            vision_provider_id: visionProviderId || null,
-            vision_model: visionModel || null,
         })
         setSaving(false); setSaved(true)
         setTimeout(() => setSaved(false), 2000)
@@ -153,7 +72,7 @@ function WorkspaceCard({ workspace: ws, providers, onDeleted, onSaved }: {
                         <span className="text-xs text-muted-foreground">{ws.knowledge_count} knowledge · {ws.conversation_count} chats</span>
                     </div>
                     <p className="text-xs text-muted-foreground truncate mt-0.5">
-                        {ws.description || (ws.llm_provider_id ? `Provider override set` : 'Using global default provider')}
+                        {ws.description || 'No description'}
                     </p>
                 </div>
                 <div className="flex gap-1 flex-shrink-0">
@@ -223,56 +142,6 @@ function WorkspaceCard({ workspace: ws, providers, onDeleted, onSaved }: {
                         <textarea className="input text-sm resize-none" rows={2} value={description} onChange={e => setDescription(e.target.value)} />
                     </div>
 
-                    <div className="border-t border-border/25 pt-3 space-y-3">
-                        <p className="text-xs font-medium text-muted-foreground">AI Models <span className="text-xs font-normal opacity-60">(override global defaults per category for this workspace)</span></p>
-
-                        {chatModels.length === 0 && visionModels.length === 0 && (
-                            <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
-                                <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
-                                <span>No models configured yet. Go to <strong>AI Models</strong> → <strong>Chat</strong> / <strong>Vision</strong> tabs to add models first.</span>
-                            </div>
-                        )}
-
-                        {/* Workspace Agent */}
-                        <div className="space-y-1.5">
-                            <div className="flex items-center gap-1.5">
-                                <Bot className="w-3 h-3 text-accent" />
-                                <p className="text-xs font-medium">Chat Model</p>
-                                <span className="text-[10px] text-muted-foreground opacity-70">Used for chat and agent tool calls</span>
-                            </div>
-                            <select className="input text-sm" value={chatSelectValue} onChange={e => handleChatModelSelect(e.target.value)}>
-                                <option value="">Use system default</option>
-                                {chatModels.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-                            </select>
-                        </div>
-
-                        {/* Knowledge Intelligence */}
-                        <div className="space-y-1.5">
-                            <div className="flex items-center gap-1.5">
-                                <Brain className="w-3 h-3 text-violet-400" />
-                                <p className="text-xs font-medium">Knowledge Intelligence</p>
-                                <span className="text-[10px] text-muted-foreground opacity-70">Used for knowledge extraction and processing</span>
-                            </div>
-                            <select className="input text-sm" value={kiSelectValue} onChange={e => handleKiModelSelect(e.target.value)}>
-                                <option value="">Use system default</option>
-                                {chatModels.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-                            </select>
-                        </div>
-
-                        {/* Visual Model */}
-                        <div className="space-y-1.5">
-                            <div className="flex items-center gap-1.5">
-                                <Eye className="w-3 h-3 text-sky-400" />
-                                <p className="text-xs font-medium">Vision Model</p>
-                                <span className="text-[10px] text-muted-foreground opacity-70">Used for image and visual content extraction</span>
-                            </div>
-                            <select className="input text-sm" value={visionSelectValue} onChange={e => handleVisionModelSelect(e.target.value)}>
-                                <option value="">Use system default</option>
-                                {visionModels.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-                            </select>
-                        </div>
-                    </div>
-
                     <button className="btn-primary text-xs py-1.5 px-3" onClick={handleSave} disabled={saving}>
                         {saved
                             ? <><CheckCircle2 className="w-3.5 h-3.5" /> Saved</>
@@ -305,7 +174,6 @@ function WorkspacesSettings({
 }) {
     const qc = useQueryClient()
     const { data: workspaces = [] } = useQuery({ queryKey: ['workspaces'], queryFn: listWorkspaces })
-    const { data: providers = [] } = useQuery({ queryKey: ['providers'], queryFn: listProviders })
 
     const [showAdd, setShowAdd] = useState(false)
     const [newName, setNewName] = useState('')
@@ -332,7 +200,7 @@ function WorkspacesSettings({
                 <div>
                     <h3 className="font-semibold text-sm">Workspaces</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                        Configure each workspace's details, AI provider override, and model.
+                        Configure each workspace's name, description, and icon.
                     </p>
                 </div>
                 <button className="btn-primary text-xs py-1.5 px-3" onClick={() => setShowAdd(p => !p)}>
@@ -359,7 +227,6 @@ function WorkspacesSettings({
                 <WorkspaceCard
                     key={ws.id}
                     workspace={ws}
-                    providers={providers as ProviderRow[]}
                     onDeleted={() => qc.invalidateQueries({ queryKey: ['workspaces'] })}
                     onSaved={() => qc.invalidateQueries({ queryKey: ['workspaces'] })}
                 />

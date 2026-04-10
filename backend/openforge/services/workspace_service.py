@@ -23,18 +23,8 @@ def _to_response(workspace: Workspace, knowledge_count: int = 0, conv_count: int
         description=workspace.description,
         icon=workspace.icon,
         color=workspace.color,
-        llm_provider_id=workspace.llm_provider_id,
-        llm_model=workspace.llm_model,
-        knowledge_intelligence_provider_id=workspace.knowledge_intelligence_provider_id,
-        knowledge_intelligence_model=workspace.knowledge_intelligence_model,
         intelligence_categories=get_workspace_categories(workspace.intelligence_categories),
-        vision_provider_id=workspace.vision_provider_id,
-        vision_model=workspace.vision_model,
-        default_agent_id=workspace.default_agent_id,
         sort_order=workspace.sort_order,
-        agent_enabled=workspace.agent_enabled,
-        agent_tool_categories=list(workspace.agent_tool_categories or []),
-        agent_max_tool_loops=workspace.agent_max_tool_loops,
         knowledge_count=knowledge_count,
         conversation_count=conv_count,
         ownership_type=workspace.ownership_type,
@@ -60,25 +50,12 @@ class WorkspaceService:
             description=data.description,
             icon=data.icon,
             color=data.color,
-            llm_provider_id=data.llm_provider_id,
-            llm_model=data.llm_model,
             intelligence_categories=data.intelligence_categories or copy.deepcopy(DEFAULT_INTELLIGENCE_CATEGORIES),
             sort_order=max_order + 1,
         )
         db.add(workspace)
         await db.commit()
         await db.refresh(workspace)
-
-        # Create default agent for this workspace
-        try:
-            from openforge.domains.agents.service import AgentService
-            agent_service = AgentService(db)
-            agent = await agent_service.ensure_default_agent(data.name)
-            workspace.default_agent_id = agent["id"]
-            await db.commit()
-            await db.refresh(workspace)
-        except Exception as e:
-            logger.warning("Default agent creation failed for workspace %s: %s", workspace.id, e)
 
         # Create workspace directory
         ws_dir = os.path.join(settings.workspace_root, str(workspace.id))
@@ -132,14 +109,6 @@ class WorkspaceService:
             ws.icon = data.icon
         if data.color is not None:
             ws.color = data.color
-        if data.llm_provider_id is not None:
-            ws.llm_provider_id = data.llm_provider_id
-        if data.llm_model is not None:
-            ws.llm_model = data.llm_model
-        if data.knowledge_intelligence_provider_id is not None:
-            ws.knowledge_intelligence_provider_id = data.knowledge_intelligence_provider_id
-        if data.knowledge_intelligence_model is not None:
-            ws.knowledge_intelligence_model = data.knowledge_intelligence_model
         if data.intelligence_categories is not None:
             old_cats = get_workspace_categories(ws.intelligence_categories)
             old_keys = {c["key"] for c in old_cats}
@@ -151,18 +120,8 @@ class WorkspaceService:
             if old_keys != new_keys or old_descs != new_descs or old_types != new_types:
                 categories_changed = True
             ws.intelligence_categories = data.intelligence_categories
-        if data.vision_provider_id is not None:
-            ws.vision_provider_id = data.vision_provider_id
-        if data.vision_model is not None:
-            ws.vision_model = data.vision_model
         if data.sort_order is not None:
             ws.sort_order = data.sort_order
-        if data.agent_enabled is not None:
-            ws.agent_enabled = data.agent_enabled
-        if data.agent_tool_categories is not None:
-            ws.agent_tool_categories = data.agent_tool_categories
-        if data.agent_max_tool_loops is not None:
-            ws.agent_max_tool_loops = data.agent_max_tool_loops
 
         await db.commit()
         await db.refresh(ws)

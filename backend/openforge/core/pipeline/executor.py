@@ -47,6 +47,7 @@ class PipelineExecutor:
                 workspace_id=workspace_id,
                 db_session=db_session,
                 backend_config=slot.backend_config or None,
+                knowledge_type=pipeline.knowledge_type,
             )
 
         # --- parallel execution ---
@@ -114,6 +115,7 @@ class PipelineExecutor:
             pipeline=pipeline,
             workspace_id=workspace_id,
             db_session=db_session,
+            knowledge_type=pipeline.knowledge_type,
         )
 
         return PipelineResult(
@@ -172,6 +174,7 @@ async def _consolidate(
     pipeline: PipelineDefinition,
     workspace_id: UUID,
     db_session: AsyncSession,
+    knowledge_type: str = "",
 ) -> str:
     """Produce final consolidated content from normalized text outputs."""
     if not normalized:
@@ -189,6 +192,7 @@ async def _consolidate(
                 workspace_id=workspace_id,
                 db_session=db_session,
                 model=pipeline.consolidation_model,
+                knowledge_type=knowledge_type,
             )
         except Exception:
             logger.warning(
@@ -207,6 +211,7 @@ async def _consolidate_via_llm(
     workspace_id: UUID,
     db_session: AsyncSession,
     model: str | None,
+    knowledge_type: str = "",
 ) -> str:
     """Call the LLM to merge multiple extraction outputs into one document.
 
@@ -216,7 +221,11 @@ async def _consolidate_via_llm(
     from openforge.services.llm_service import llm_service
 
     provider_name, api_key, resolved_model, base_url = (
-        await llm_service.resolve_provider(db_session, model_override=model)
+        await llm_service.resolve_provider_for_pipeline(
+            db_session,
+            knowledge_type=knowledge_type,
+            step_key="consolidation",
+        )
     )
 
     sections = "\n\n---\n\n".join(
