@@ -110,7 +110,7 @@ async def upload_knowledge_file(
         raise HTTPException(
             status_code=400,
             detail=f"File type '{content_type}' ({ext}) is not supported. "
-            f"Supported: images, audio, PDF, DOCX, XLSX/XLS, PPTX.",
+            f"Supported: images, audio, video, PDF, DOCX, XLSX/XLS, PPTX.",
         )
 
     # Read file content

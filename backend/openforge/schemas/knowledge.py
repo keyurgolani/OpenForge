@@ -7,7 +7,7 @@ from datetime import datetime
 class KnowledgeCreate(BaseModel):
     type: Literal[
         "note", "standard", "fleeting", "bookmark", "gist",
-        "image", "audio", "pdf", "document", "sheet", "slides",
+        "image", "audio", "video", "pdf", "document", "sheet", "slides",
         "journal",
     ] = "note"
 

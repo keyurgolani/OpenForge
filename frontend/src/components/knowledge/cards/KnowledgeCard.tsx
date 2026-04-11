@@ -34,6 +34,7 @@ export function KnowledgeCard({ item, workspaceId, slim }: KnowledgeCardProps) {
             return <ImageCard item={item} workspaceId={workspaceId} slim={slim} isProcessing={processing} />
         case 'audio':
             return <AudioCard item={item} workspaceId={workspaceId} slim={slim} isProcessing={processing} />
+        case 'video':
         case 'pdf':
         case 'document':
         case 'sheet':

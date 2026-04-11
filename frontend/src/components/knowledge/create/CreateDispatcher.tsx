@@ -5,6 +5,7 @@ import BookmarkCreateModal from './BookmarkCreateModal'
 import GistCreateModal from './GistCreateModal'
 import ImageCreateModal from './ImageCreateModal'
 import AudioCreateModal from './AudioCreateModal'
+import VideoCreateModal from './VideoCreateModal'
 import PDFCreateModal from './PDFCreateModal'
 import DocumentCreateModal from './DocumentCreateModal'
 import SheetCreateModal from './SheetCreateModal'
@@ -35,6 +36,8 @@ export default function CreateDispatcher({ type, isOpen, onClose, workspaceId, o
             return <ImageCreateModal {...props} />
         case 'audio':
             return <AudioCreateModal {...props} />
+        case 'video':
+            return <VideoCreateModal {...props} />
         case 'pdf':
             return <PDFCreateModal {...props} />
         case 'document':

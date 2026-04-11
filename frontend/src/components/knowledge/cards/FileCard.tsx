@@ -1,10 +1,10 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
-import { FileType2, FileText, Table, Presentation, Music, Play, Pause } from 'lucide-react'
+import { FileType2, FileText, Table, Presentation, Music, Video, Play, Pause } from 'lucide-react'
 import { getKnowledgeThumbnailUrl, getKnowledgeFileUrl } from '@/lib/api'
 import type { KnowledgeListItem } from './types'
 import { TagRow, PinIndicator, formatTimestamp, formatFileSize, ThumbnailSkeleton, ProcessingSkeleton } from './shared'
 
-type FileType = 'pdf' | 'document' | 'sheet' | 'slides' | 'audio'
+type FileType = 'pdf' | 'document' | 'sheet' | 'slides' | 'audio' | 'video'
 
 interface FileTypeMeta {
     Icon: React.ComponentType<{ className?: string }>
@@ -20,6 +20,7 @@ const FILE_META: Record<FileType, FileTypeMeta> = {
     sheet: { Icon: Table, label: 'Sheet', color: 'text-emerald-400', bgColor: 'bg-emerald-400/10', accentBorder: 'border-emerald-500/20' },
     slides: { Icon: Presentation, label: 'Slides', color: 'text-amber-400', bgColor: 'bg-amber-400/10', accentBorder: 'border-amber-500/20' },
     audio: { Icon: Music, label: 'Audio', color: 'text-violet-400', bgColor: 'bg-violet-400/10', accentBorder: 'border-violet-500/20' },
+    video: { Icon: Video, label: 'Video', color: 'text-violet-400', bgColor: 'bg-violet-400/10', accentBorder: 'border-violet-500/20' },
 }
 
 function getPageOrSlideCount(item: KnowledgeListItem): string | null {

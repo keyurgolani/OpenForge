@@ -1,6 +1,6 @@
 import {
     FileText, Zap, Bookmark, Code2, BookOpen,
-    Image as ImageIcon, Mic, FileType2, Table, Presentation,
+    Image as ImageIcon, Mic, Video, FileType2, Table, Presentation,
 } from 'lucide-react'
 import type { QuickKnowledgeType } from '@/lib/quick-knowledge'
 
@@ -20,6 +20,7 @@ const TYPE_CELLS: TypeCell[] = [
     { type: 'journal',   label: 'Journal',       Icon: BookOpen,      iconColor: 'text-cyan-400',    iconBg: 'bg-cyan-400/10' },
     { type: 'image',     label: 'Image',         Icon: ImageIcon,     iconColor: 'text-pink-400',    iconBg: 'bg-pink-400/10' },
     { type: 'audio',     label: 'Audio',         Icon: Mic,           iconColor: 'text-orange-400',  iconBg: 'bg-orange-400/10' },
+    { type: 'video',     label: 'Video',         Icon: Video,         iconColor: 'text-violet-400',  iconBg: 'bg-violet-400/10' },
     { type: 'pdf',       label: 'PDF',           Icon: FileType2,     iconColor: 'text-red-400',     iconBg: 'bg-red-400/10' },
     { type: 'document',  label: 'Document',      Icon: FileText,      iconColor: 'text-blue-300',    iconBg: 'bg-blue-300/10' },
     { type: 'sheet',     label: 'Sheet',          Icon: Table,         iconColor: 'text-emerald-400', iconBg: 'bg-emerald-400/10' },

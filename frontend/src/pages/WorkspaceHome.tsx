@@ -16,7 +16,7 @@ import {
     Trash2, PinOff, ArchiveX, Loader2, Sparkles,
     Inbox, CheckSquare, Square, ExternalLink, Copy, SortAsc,
     ChevronDown, Tag, RefreshCw, Download, Lock,
-    Image as ImageIcon, Music, FileType2, Table, Presentation, BookOpen,
+    Image as ImageIcon, Music, Video, FileType2, Table, Presentation, BookOpen,
 } from 'lucide-react'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem,
@@ -57,6 +57,7 @@ const TYPE_OPTS = [
     { id: 'journal', label: 'Journals', icon: BookOpen },
     { id: 'image', label: 'Images', icon: ImageIcon },
     { id: 'audio', label: 'Audio', icon: Music },
+    { id: 'video', label: 'Videos', icon: Video },
     { id: 'pdf', label: 'PDFs', icon: FileType2 },
     { id: 'document', label: 'Documents', icon: FileText },
     { id: 'sheet', label: 'Sheets', icon: Table },
@@ -775,7 +776,7 @@ function KnowledgeCard({
                 >
                     {/* Floating action toolbar — top-right, visible on hover or when selected */}
                     <div className={`absolute top-2 right-2 z-20 flex items-center gap-1 transition-opacity ${isSelected || anySelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                        {(knowledgeRecord.type === 'bookmark' || ['image', 'audio', 'pdf', 'document', 'sheet', 'slides'].includes(knowledgeRecord.type)) && (knowledgeRecord.type !== 'bookmark' || !!knowledgeRecord.url) && (
+                        {(knowledgeRecord.type === 'bookmark' || ['image', 'audio', 'video', 'pdf', 'document', 'sheet', 'slides'].includes(knowledgeRecord.type)) && (knowledgeRecord.type !== 'bookmark' || !!knowledgeRecord.url) && (
                             <button
                                 className={floatingBtnClass}
                                 onClick={e => runAction(e, knowledgeRecord.type === 'bookmark' ? onExtractBookmarkContent : onReprocess)}
@@ -786,7 +787,7 @@ function KnowledgeCard({
                                 <RefreshCw className={`w-3 h-3${isExtracting ? ' animate-spin' : ''}`} />
                             </button>
                         )}
-                        {['image', 'audio', 'pdf', 'document', 'sheet', 'slides'].includes(knowledgeRecord.type) && (
+                        {['image', 'audio', 'video', 'pdf', 'document', 'sheet', 'slides'].includes(knowledgeRecord.type) && (
                             <button
                                 className={floatingBtnClass}
                                 onClick={handleDownload}

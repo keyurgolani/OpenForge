@@ -1,4 +1,4 @@
-export type QuickKnowledgeType = 'note' | 'fleeting' | 'bookmark' | 'gist' | 'journal' | 'image' | 'audio' | 'pdf' | 'document' | 'sheet' | 'slides'
+export type QuickKnowledgeType = 'note' | 'fleeting' | 'bookmark' | 'gist' | 'journal' | 'image' | 'audio' | 'video' | 'pdf' | 'document' | 'sheet' | 'slides'
 
 const QUICK_KNOWLEDGE_EVENT = 'openforge:quick-knowledge:open'
 
@@ -31,6 +31,7 @@ export const KNOWLEDGE_TYPE_LABELS: Record<QuickKnowledgeType, string> = {
     journal: 'Journal',
     image: 'Image',
     audio: 'Audio',
+    video: 'Video',
     pdf: 'PDF Document',
     document: 'Document',
     sheet: 'Sheet',
@@ -39,7 +40,7 @@ export const KNOWLEDGE_TYPE_LABELS: Record<QuickKnowledgeType, string> = {
 
 /** Whether a knowledge type requires file upload (vs text input) */
 export const FILE_BASED_TYPES: Set<QuickKnowledgeType> = new Set([
-    'image', 'audio', 'pdf', 'document', 'sheet', 'slides',
+    'image', 'audio', 'video', 'pdf', 'document', 'sheet', 'slides',
 ])
 
 /** MIME accept strings for each file-based knowledge type */
@@ -50,4 +51,5 @@ export const ACCEPTED_MIMES: Record<string, string> = {
     document: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword',
     sheet: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel',
     slides: 'application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint',
+    video: 'video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/webm',
 }
