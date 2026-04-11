@@ -4,6 +4,7 @@ from tools.platform.chat import TOOLS as CHAT_TOOLS
 from tools.platform.automation import TOOLS as AUTOMATION_TOOLS
 from tools.platform.deployment import TOOLS as DEPLOYMENT_TOOLS
 from tools.platform.sink import TOOLS as SINK_TOOLS
+from tools.platform.mission import TOOLS as MISSION_TOOLS
 
 TOOLS = (
     WORKSPACE_TOOLS
@@ -12,4 +13,5 @@ TOOLS = (
     + AUTOMATION_TOOLS
     + DEPLOYMENT_TOOLS
     + SINK_TOOLS
+    + MISSION_TOOLS
 )

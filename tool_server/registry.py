@@ -178,6 +178,18 @@ TOOL_ALIASES: dict[str, str] = {
     "update_sink":                  "platform.sink.update",
     "delete_sink":                  "platform.sink.delete",
 
+    # ── Mission aliases ──
+    "mission.create":               "platform.mission.create",
+    "mission.status":               "platform.mission.status",
+    "mission.list":                 "platform.mission.list",
+    "mission.activate":             "platform.mission.activate",
+    "mission.pause":                "platform.mission.pause",
+    "create_mission":               "platform.mission.create",
+    "get_mission_status":           "platform.mission.status",
+    "list_missions":                "platform.mission.list",
+    "activate_mission":             "platform.mission.activate",
+    "pause_mission":                "platform.mission.pause",
+
     # memory tools — common mistakes
     "memory.save":                  "memory.store",
     "memory.get":                   "memory.recall",
