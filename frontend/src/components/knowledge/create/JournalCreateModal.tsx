@@ -26,6 +26,7 @@ export default function JournalCreateModal({ isOpen, onClose, workspaceId, onCre
         try {
             const result = await addJournalEntry(workspaceId, content.trim())
             qc.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
+            qc.invalidateQueries({ queryKey: ['journals', workspaceId] })
             onCreated?.(result)
             reset(); onClose()
         } catch (err: any) {

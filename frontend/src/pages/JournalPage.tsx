@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { BookOpen, Calendar, Clock, Edit3, Loader2, Send, Lock, X, Check } from 'lucide-react'
-import { listKnowledge, addJournalEntry, updateJournalEntry } from '@/lib/api'
+import { listJournals, addJournalEntry, updateJournalEntry } from '@/lib/api'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -12,40 +12,16 @@ interface JournalEntry {
   editable: boolean
 }
 
-interface JournalRecord {
+interface JournalResponse {
   id: string
-  title: string
-  ai_title: string
-  type: string
-  content: string | null
+  date: string
+  entries: JournalEntry[]
+  readonly: boolean
   created_at: string
   updated_at: string
 }
 
-interface ParsedJournal {
-  id: string
-  date: string
-  createdAt: string
-  entries: JournalEntry[]
-  readonly: boolean
-}
-
 // ── Helpers ────────────────────────────────────────────────────────────────────
-
-const EDIT_WINDOW_MS = 5 * 60 * 1000
-
-function parseJournalContent(content: string | null): { timestamp: string; body: string }[] {
-  if (!content) return []
-  try {
-    const parsed = JSON.parse(content)
-    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.entries)) {
-      return parsed.entries
-    }
-    return [{ timestamp: new Date().toISOString(), body: content }]
-  } catch {
-    return [{ timestamp: new Date().toISOString(), body: content }]
-  }
-}
 
 function isToday(dateStr: string): boolean {
   const d = new Date(dateStr)
@@ -89,38 +65,6 @@ function formatTime(timestamp: string): string {
   })
 }
 
-function isEntryEditable(timestamp: string, createdAt: string): boolean {
-  if (!isToday(createdAt)) return false
-  try {
-    const ts = new Date(timestamp)
-    return Date.now() - ts.getTime() <= EDIT_WINDOW_MS
-  } catch {
-    return false
-  }
-}
-
-function parseJournals(knowledgeItems: JournalRecord[]): ParsedJournal[] {
-  return knowledgeItems
-    .filter((item) => item.type === 'journal')
-    .map((item) => {
-      const rawEntries = parseJournalContent(item.content)
-      const isTodayJournal = isToday(item.created_at)
-      const entries: JournalEntry[] = rawEntries.map((e) => ({
-        timestamp: e.timestamp,
-        body: e.body,
-        editable: isTodayJournal && isEntryEditable(e.timestamp, item.created_at),
-      }))
-      return {
-        id: item.id,
-        date: item.title || item.created_at,
-        createdAt: item.created_at,
-        entries,
-        readonly: !isTodayJournal,
-      }
-    })
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-}
-
 function formatDateForInput(d: Date): string {
   const year = d.getFullYear()
   const month = String(d.getMonth() + 1).padStart(2, '0')
@@ -148,27 +92,20 @@ export default function JournalPage() {
   const datePickerRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
-  // Fetch all journal knowledge items
-  const { data: knowledgeData, isLoading } = useQuery({
-    queryKey: ['knowledge', workspaceId, 'journal'],
-    queryFn: () =>
-      listKnowledge(workspaceId, {
-        type: 'journal',
-        sort_by: 'created_at',
-        sort_order: 'desc',
-        page_size: 50,
-      }),
+  // Fetch all journals with full entries via dedicated endpoint
+  const { data: journalsData, isLoading } = useQuery({
+    queryKey: ['journals', workspaceId],
+    queryFn: () => listJournals(workspaceId),
     enabled: !!workspaceId,
   })
 
-  const knowledgeItems = (knowledgeData?.knowledge ?? []) as JournalRecord[]
-  const journals = useMemo(() => parseJournals(knowledgeItems), [knowledgeItems])
+  const journals = (journalsData ?? []) as JournalResponse[]
 
   // Filter by selected date
   const filteredJournals = useMemo(() => {
     if (!selectedDate) return journals
     return journals.filter((j) => {
-      const d = new Date(j.createdAt)
+      const d = new Date(j.created_at)
       const journalDate = formatDateForInput(d)
       return journalDate === selectedDate
     })
@@ -206,7 +143,7 @@ export default function JournalPage() {
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto'
       }
-      queryClient.invalidateQueries({ queryKey: ['knowledge', workspaceId, 'journal'] })
+      queryClient.invalidateQueries({ queryKey: ['journals', workspaceId] })
       queryClient.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
       // Scroll to top after adding
       setTimeout(() => scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 200)
@@ -244,7 +181,7 @@ export default function JournalPage() {
     setEditSaving(true)
     try {
       await updateJournalEntry(workspaceId, journalId, entryIndex, body)
-      queryClient.invalidateQueries({ queryKey: ['knowledge', workspaceId, 'journal'] })
+      queryClient.invalidateQueries({ queryKey: ['journals', workspaceId] })
       queryClient.invalidateQueries({ queryKey: ['knowledge', workspaceId] })
       cancelEdit()
     } catch (err) {
@@ -414,7 +351,7 @@ export default function JournalPage() {
                     }`}
                   >
                     {journal.readonly && <Lock className="h-3 w-3" />}
-                    {formatDateHeader(journal.createdAt)}
+                    {formatDateHeader(journal.created_at)}
                   </div>
                   <div className="h-px flex-1 bg-border/20" />
                   <span className="text-[11px] text-muted-foreground/60">

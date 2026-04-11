@@ -58,8 +58,31 @@ def _to_response(knowledge: Knowledge) -> KnowledgeResponse:
     )
 
 
+def _journal_preview(content: str | None) -> str:
+    """Build a human-readable preview for journal content (JSON entries)."""
+    if not content:
+        return ""
+    try:
+        import json
+        parsed = json.loads(content)
+        if isinstance(parsed, dict) and "entries" in parsed:
+            entries = parsed["entries"]
+            if isinstance(entries, list) and entries:
+                count = len(entries)
+                latest_body = entries[-1].get("body", "")
+                prefix = f"{count} {'entry' if count == 1 else 'entries'} | "
+                return prefix + truncate_text(latest_body, 200 - len(prefix))
+    except (json.JSONDecodeError, TypeError, KeyError):
+        pass
+    return truncate_text(content, 200)
+
+
 def _to_list_item(knowledge: Knowledge) -> KnowledgeListItem:
-    preview = truncate_text(knowledge.content, 200)
+    preview = (
+        _journal_preview(knowledge.content)
+        if knowledge.type == "journal"
+        else truncate_text(knowledge.content, 200)
+    )
     insights_count = None
     if knowledge.insights:
         count = 0

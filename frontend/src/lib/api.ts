@@ -182,6 +182,8 @@ export const visualSearch = (wid: string, file: File, limit?: number): Promise<a
 }
 
 // ── Journal ──
+export const listJournals = (workspaceId: string): Promise<any> =>
+    api.get(`/workspaces/${workspaceId}/journal`).then(r => r.data)
 export const addJournalEntry = (workspaceId: string, body: string): Promise<any> =>
     api.post(`/workspaces/${workspaceId}/journal/entry`, { body }).then(r => r.data)
 export const getTodaysJournal = (workspaceId: string): Promise<any> =>

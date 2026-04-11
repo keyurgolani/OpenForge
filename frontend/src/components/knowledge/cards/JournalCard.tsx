@@ -2,26 +2,36 @@ import { BookOpen, Clock } from 'lucide-react'
 import type { KnowledgeListItem } from './types'
 import { TagRow, PinIndicator, formatTimestamp } from './shared'
 
-function parseEntryCount(content: string | null | undefined): number {
-    if (!content) return 0
+function parseEntryCount(preview: string | null | undefined): number {
+    if (!preview) return 0
+    // New format: "N entries | Latest entry text..."
+    const match = preview.match(/^(\d+)\s+entr(?:y|ies)\s*\|/)
+    if (match) return parseInt(match[1], 10)
+    // Legacy JSON format fallback
     try {
-        const data = JSON.parse(content)
+        const data = JSON.parse(preview)
         if (data?.entries) return data.entries.length
         if (Array.isArray(data)) return data.length
     } catch { /* plain text fallback */ }
-    return content.trim() ? 1 : 0
+    return preview.trim() ? 1 : 0
 }
 
-function latestEntryPreview(content: string | null | undefined): string {
-    if (!content) return ''
+function latestEntryPreview(preview: string | null | undefined): string {
+    if (!preview) return ''
+    // New format: "N entries | Latest entry text..."
+    const pipeIdx = preview.indexOf('| ')
+    if (pipeIdx >= 0 && /^\d+\s+entr(?:y|ies)/.test(preview)) {
+        return preview.slice(pipeIdx + 2)
+    }
+    // Legacy JSON format fallback
     try {
-        const data = JSON.parse(content)
+        const data = JSON.parse(preview)
         const entries = data?.entries ?? (Array.isArray(data) ? data : [])
         if (entries.length > 0) {
             const last = entries[entries.length - 1]
             return last.body?.slice(0, 200) ?? ''
         }
-    } catch { return content.slice(0, 200) }
+    } catch { return preview.slice(0, 200) }
     return ''
 }
 

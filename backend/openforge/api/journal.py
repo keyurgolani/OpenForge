@@ -154,6 +154,27 @@ async def _get_today_journal(db: AsyncSession, workspace_id: UUID):
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
+@router.get("/{workspace_id}/journal", response_model=list[JournalResponse])
+async def list_journals(
+    workspace_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return all journal records for the workspace, newest first."""
+    from openforge.db.models import Knowledge
+
+    result = await db.execute(
+        select(Knowledge)
+        .where(
+            Knowledge.workspace_id == workspace_id,
+            Knowledge.type == "journal",
+            Knowledge.is_archived == False,  # noqa: E712
+        )
+        .order_by(Knowledge.created_at.desc())
+    )
+    records = result.scalars().all()
+    return [_to_journal_response(r) for r in records]
+
+
 @router.post("/{workspace_id}/journal/entry", response_model=JournalResponse, status_code=201)
 async def add_journal_entry(
     workspace_id: UUID,
