@@ -31,6 +31,9 @@ EXPECTED_MIGRATIONS = [
     "021_create_missions.py",
     "022_remove_workspace_scoping.py",
     "023_add_workspace_pipeline_config.py",
+    "024_remove_workspace_model_agent_columns.py",
+    "025_create_memory_table.py",
+    "026_create_memory_wal_and_daemon_state.py",
 ]
 
 

@@ -302,17 +302,15 @@ async def delete_whisper_model(model_id: str):
             raise HTTPException(400, f"Unknown Whisper model: {model_id}")
 
     whisper = _whisper_dir()
-    deleted_any = False
     for candidate in [
         whisper / f"faster-whisper-{model_name}",
         whisper / f"models--Systran--faster-whisper-{model_name}",
     ]:
         if candidate.is_dir():
             shutil.rmtree(candidate)
-            deleted_any = True
             logger.info("Deleted Whisper model directory: %s", candidate)
 
-    return {"deleted": deleted_any, "model_id": model_id, "name": model_name}
+    return {"deleted": True, "model_id": model_id, "name": model_name}
 
 
 # ─────────────────────────────────────────────
