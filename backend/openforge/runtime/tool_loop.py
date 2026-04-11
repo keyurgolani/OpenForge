@@ -28,6 +28,29 @@ logger = logging.getLogger("openforge.runtime.tool_loop")
 
 _MAX_LLM_TOOL_RESULT_CHARS = 12_000
 _COMPACT_TOOL_RESULT_CHARS = 2_000
+
+
+async def _redis_cache_get(key: str) -> dict | None:
+    """Try to read a cached tool result from Redis. Returns None on miss or error."""
+    try:
+        from openforge.db.redis_client import get_redis
+        redis = await get_redis()
+        cached = await redis.get(key)
+        if cached:
+            return json.loads(cached)
+    except Exception:
+        pass
+    return None
+
+
+async def _redis_cache_set(key: str, value: dict, ttl: int = 300) -> None:
+    """Store a tool result in Redis with TTL. Silently ignores errors."""
+    try:
+        from openforge.db.redis_client import get_redis
+        redis = await get_redis()
+        await redis.set(key, json.dumps(value, default=str), ex=ttl)
+    except Exception:
+        pass
 _COMPACT_AFTER_N_TOOL_RESULTS = 8
 _TOOL_NAME_SEP = "__"
 _TIMELINE_TEXT_OUTPUT_CHARS = 2_000
@@ -469,13 +492,12 @@ async def execute_tool_loop(
                 except (ValueError, TypeError):
                     pass
 
-            # Tool result cache: check for recent identical call
-            _cache_key = f"{tool_id}:{json.dumps(arguments, sort_keys=True, default=str)}"
+            # Tool result cache: check for recent identical call (Redis-backed)
+            _cache_key = f"tool_cache:{tool_id}:{json.dumps(arguments, sort_keys=True, default=str)}"
             _cache_ttl = 300  # seconds
-            _cached_entry = ctx._tool_cache.get(_cache_key)
-            if _cached_entry and (time.time() - _cached_entry[0]) < _cache_ttl:
-                tool_result = _cached_entry[1]
-                logger.debug("Tool cache hit: %s", tool_id)
+            tool_result = await _redis_cache_get(_cache_key)
+            if tool_result is not None:
+                logger.debug("Tool cache hit (Redis): %s", tool_id)
             else:
                 tool_result = await tool_dispatcher.execute(
                     tool_id=tool_id,
@@ -488,8 +510,8 @@ async def execute_tool_loop(
                     deployment_id=ctx.deployment_id or "",
                     deployment_workspace_id=ctx.deployment_workspace_id or "",
                 )
-                # Store in cache
-                ctx._tool_cache[_cache_key] = (time.time(), tool_result)
+                # Store in Redis cache
+                await _redis_cache_set(_cache_key, tool_result, _cache_ttl)
 
             finished_at = datetime.now(timezone.utc)
             duration_ms = max(1, int((finished_at - tool_started_at).total_seconds() * 1000))
