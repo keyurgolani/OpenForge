@@ -4,13 +4,14 @@ import { useQuery } from '@tanstack/react-query'
 import type { ReactElement } from 'react'
 import { buildEvidencePacket, retrievalRead, retrievalSearch } from '@/lib/api'
 import { chatRoute, knowledgeRoute } from '@/lib/routes'
-import { Search, Loader2, FileText, Bookmark, Code2, Zap, ExternalLink, Copy, SearchX, MessageSquare, Image as ImageIcon, Music, FileType2, Table, Presentation, Video } from 'lucide-react'
+import { Search, Loader2, FileText, Bookmark, Code2, Zap, ExternalLink, Copy, SearchX, MessageSquare, Image as ImageIcon, Music, FileType2, Table, Presentation, Video, BookOpen } from 'lucide-react'
 import {
     ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem
 } from '@/components/ui/context-menu'
 import MarkdownIt from 'markdown-it'
 import VisualSearchTab from '@/components/search/VisualSearchTab'
 import EvidencePacketPanel from '@/features/retrieval/EvidencePacketPanel'
+import PreviewDispatcher from '@/components/knowledge/preview/PreviewDispatcher'
 import Siderail from '@/components/shared/Siderail'
 import { SearchCheck } from 'lucide-react'
 import type {
@@ -29,6 +30,7 @@ const TYPE_ICONS: Record<string, ReactElement> = {
     gist: <Code2 className="w-3.5 h-3.5" />,
     fleeting: <Zap className="w-3.5 h-3.5" />,
     note: <FileText className="w-3.5 h-3.5" />,
+    journal: <BookOpen className="w-3.5 h-3.5" />,
     image: <ImageIcon className="w-3.5 h-3.5" />,
     audio: <Music className="w-3.5 h-3.5" />,
     pdf: <FileType2 className="w-3.5 h-3.5" />,
@@ -44,6 +46,7 @@ const TYPE_META: Record<string, { label: string; color: string }> = {
     fleeting: { label: 'Fleeting', color: 'text-yellow-400' },
     bookmark: { label: 'Bookmark', color: 'text-purple-400' },
     gist: { label: 'Gist', color: 'text-green-400' },
+    journal: { label: 'Journal', color: 'text-emerald-400' },
     image: { label: 'Image', color: 'text-pink-400' },
     audio: { label: 'Audio', color: 'text-orange-400' },
     pdf: { label: 'PDF', color: 'text-red-400' },
@@ -54,14 +57,28 @@ const TYPE_META: Record<string, { label: string; color: string }> = {
     chat: { label: 'Chat', color: 'text-violet-400' },
 }
 
-const KNOWLEDGE_TYPES = ['', 'note', 'fleeting', 'bookmark', 'gist', 'image', 'audio', 'video', 'pdf', 'document', 'sheet', 'slides']
+const KNOWLEDGE_TYPES = ['', 'note', 'fleeting', 'bookmark', 'gist', 'journal', 'image', 'audio', 'video', 'pdf', 'document', 'sheet', 'slides', 'chat']
 
 type CardItem =
     | { kind: 'chat'; key: string; chunks: RetrievalSearchResult[]; topScore: number }
     | { kind: 'knowledge'; key: string; chunks: RetrievalSearchResult[]; topScore: number }
 
+function formatExcerpt(text: string): string {
+    if (!text) return text
+    try {
+        const parsed = JSON.parse(text)
+        if (parsed?.entries && Array.isArray(parsed.entries)) {
+            return parsed.entries
+                .map((e: { body?: string }) => e.body || '')
+                .filter(Boolean)
+                .join('\n\n')
+        }
+    } catch { /* not JSON, return as-is */ }
+    return text
+}
+
 function renderSearchMarkdown(text: string) {
-    return { __html: mdPreview.render(text || '') }
+    return { __html: mdPreview.render(formatExcerpt(text)) }
 }
 
 export default function SearchPage() {
@@ -78,6 +95,7 @@ export default function SearchPage() {
     const [buildingEvidence, setBuildingEvidence] = useState(false)
     const searchLayoutRef = useRef<HTMLDivElement | null>(null)
     const [traceOpen, setTraceOpen] = useState(false)
+    const [previewKnowledgeId, setPreviewKnowledgeId] = useState<string | null>(null)
 
     const [debouncedQuery, setDebouncedQuery] = useState(query)
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -224,7 +242,7 @@ export default function SearchPage() {
 
                 {searchTab === 'visual' ? (
                     <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-                        <VisualSearchTab />
+                        <VisualSearchTab onSelect={(id) => setPreviewKnowledgeId(id)} />
                     </div>
                 ) : (<>
 
@@ -353,7 +371,7 @@ export default function SearchPage() {
                                                 <div className="break-inside-avoid mb-4">
                                                     <div
                                                         className="glass-card-hover rounded-2xl p-4 cursor-pointer animate-fade-in space-y-3"
-                                                        onClick={() => navigate(`${knowledgeRoute(workspaceId)}?k=${card.key}`)}
+                                                        onClick={() => setPreviewKnowledgeId(card.key)}
                                                     >
                                                         {(() => {
                                                             const first = card.chunks[0]
@@ -473,6 +491,12 @@ export default function SearchPage() {
             </>)}
             </div>
 
+            <PreviewDispatcher
+                knowledgeId={previewKnowledgeId}
+                workspaceId={workspaceId}
+                isOpen={!!previewKnowledgeId}
+                onClose={() => setPreviewKnowledgeId(null)}
+            />
         </div>
     )
 }

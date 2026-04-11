@@ -17,6 +17,20 @@ import { getWorkspaceIcon } from '@/pages/settings/constants'
 
 const SIMILARITY_THRESHOLD = 0.35
 
+function formatExcerpt(text: string): string {
+    if (!text) return text
+    try {
+        const parsed = JSON.parse(text)
+        if (parsed?.entries && Array.isArray(parsed.entries)) {
+            return parsed.entries
+                .map((e: { body?: string }) => e.body || '')
+                .filter(Boolean)
+                .join('\n\n')
+        }
+    } catch { /* not JSON, return as-is */ }
+    return text
+}
+
 const mdPreview = new MarkdownIt({ html: false, linkify: false, typographer: true, breaks: true })
 mdPreview.renderer.rules.link_open = () => ''
 mdPreview.renderer.rules.link_close = () => ''
@@ -73,12 +87,14 @@ export default function CommandPalette() {
         .filter((r: any) => r.score >= SIMILARITY_THRESHOLD)
         .sort((a: any, b: any) => b.score - a.score)
         .map((r: any) => ({
-            id: r.metadata?.knowledge_id ?? r.id,
+            id: r.metadata?.knowledge_id ?? r.source_id ?? r.id,
             title: r.title ?? r.metadata?.title ?? '',
             ai_title: r.metadata?.ai_title ?? '',
             type: r.knowledge_type ?? r.metadata?.knowledge_type ?? 'note',
+            sourceType: r.source_type ?? 'knowledge',
+            conversationId: r.metadata?.conversation_id ?? null,
             score: r.score,
-            excerpt: r.excerpt ?? r.content?.substring(0, 120) ?? '',
+            excerpt: formatExcerpt(r.excerpt ?? r.content?.substring(0, 120) ?? ''),
         }))
 
     // Cmd+K / Ctrl+K to open
@@ -216,11 +232,17 @@ export default function CommandPalette() {
                             )}
                             {knowledgeItems.length > 0 && (
                                 <Command.Group heading={`Knowledge — ${knowledgeItems.length} results`} className={`mt-2 pt-2 border-t border-border/25 ${GROUP_CLASS}`}>
-                                    {knowledgeItems.map((n: { id: string; title: string; ai_title: string; type: string; excerpt?: string }) => (
+                                    {knowledgeItems.map((n: { id: string; title: string; ai_title: string; type: string; sourceType: string; conversationId: string | null; excerpt?: string }) => (
                                         <PaletteItem
                                             key={n.id}
                                             icon={<FileText className="w-4 h-4" />}
-                                            onSelect={() => run(() => navigate(`${knowledgeRoute(workspaceId)}?k=${n.id}`))}
+                                            onSelect={() => run(() => {
+                                                if (n.sourceType === 'conversation' || n.type === 'chat') {
+                                                    navigate(chatRoute(workspaceId, n.conversationId ?? n.id))
+                                                } else {
+                                                    navigate(`${knowledgeRoute(workspaceId)}?k=${n.id}`)
+                                                }
+                                            })}
                                             hint={n.type}
                                         >
                                             <span className="flex flex-col gap-0.5">

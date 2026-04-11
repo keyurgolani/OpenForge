@@ -12,7 +12,11 @@ interface VisualSearchResult {
     thumbnail_path: string | null
 }
 
-export default function VisualSearchTab() {
+interface VisualSearchTabProps {
+    onSelect?: (knowledgeId: string) => void
+}
+
+export default function VisualSearchTab({ onSelect }: VisualSearchTabProps) {
     const { workspaceId = '' } = useParams<{ workspaceId: string }>()
     const navigate = useNavigate()
     const [queryFile, setQueryFile] = useState<File | null>(null)
@@ -158,7 +162,7 @@ export default function VisualSearchTab() {
                                 <div
                                     key={r.knowledge_id}
                                     className="glass-card-hover rounded-xl overflow-hidden cursor-pointer group animate-fade-in"
-                                    onClick={() => navigate(`${knowledgeRoute(workspaceId)}?k=${r.knowledge_id}`)}
+                                    onClick={() => onSelect ? onSelect(r.knowledge_id) : navigate(`${knowledgeRoute(workspaceId)}?k=${r.knowledge_id}`)}
                                 >
                                     <div className="aspect-square bg-muted/30 overflow-hidden">
                                         {r.thumbnail_path ? (
