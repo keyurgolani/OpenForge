@@ -15,6 +15,9 @@ from openforge.runtime.chat_handler import chat_handler
 router = APIRouter()
 
 
+MAX_DELEGATION_DEPTH = 5
+
+
 class DelegationRequest(BaseModel):
     instruction: str
     agent_id: Optional[str] = None
@@ -48,6 +51,17 @@ class TransferResponse(BaseModel):
 
 @router.post("/delegations/invoke", response_model=DelegationResponse)
 async def invoke_delegation(req: DelegationRequest, db: AsyncSession = Depends(get_db)):
+    current_depth = len(req.call_id_path) if req.call_id_path else 0
+    if current_depth >= MAX_DELEGATION_DEPTH:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Delegation depth limit reached ({MAX_DELEGATION_DEPTH}). "
+                f"Agents cannot delegate beyond {MAX_DELEGATION_DEPTH} levels deep. "
+                f"Simplify the task or handle it directly."
+            ),
+        )
+
     parent_conversation_id: UUID | None = None
     root_conversation_id: UUID | None = None
     if req.parent_conversation_id:
