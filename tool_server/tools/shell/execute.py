@@ -43,7 +43,10 @@ class ShellExecuteTool(BaseTool):
         command = params["command"]
         allowed, reason = security.is_command_allowed(command)
         if not allowed:
-            return ToolResult(success=False, error=f"Command blocked: {reason}")
+            return ToolResult(
+                success=False, error=f"Command blocked: {reason}",
+                recovery_hints=["Review the security policy for allowed commands", "Try an alternative command that achieves the same goal"],
+            )
 
         workspace_dir = security.get_workspace_dir(context.workspace_id)
         timeout = min(params.get("timeout", 30), get_settings().shell_timeout_seconds)
@@ -55,7 +58,10 @@ class ShellExecuteTool(BaseTool):
             try:
                 cwd = security.resolve_path(context.workspace_id, working_directory)
             except ValueError as e:
-                return ToolResult(success=False, error=f"Invalid working_directory: {e}")
+                return ToolResult(
+                    success=False, error=f"Invalid working_directory: {e}",
+                    recovery_hints=["Check the working_directory path", "Use filesystem.list_directory to verify the directory exists"],
+                )
 
         try:
             proc = await asyncio.create_subprocess_shell(
@@ -69,7 +75,10 @@ class ShellExecuteTool(BaseTool):
             except asyncio.TimeoutError:
                 proc.kill()
                 await proc.communicate()
-                return ToolResult(success=False, error=f"Command timed out after {timeout}s")
+                return ToolResult(
+                    success=False, error=f"Command timed out after {timeout}s",
+                    recovery_hints=["Increase the timeout parameter", "Check if the command is hanging or waiting for input", "Break the command into smaller steps"],
+                )
 
             out = stdout.decode("utf-8", errors="replace")
             err = stderr.decode("utf-8", errors="replace")
@@ -79,4 +88,10 @@ class ShellExecuteTool(BaseTool):
 
             return self._maybe_truncate("", combined.strip())
         except Exception as exc:
-            return ToolResult(success=False, error=str(exc))
+            error = str(exc)
+            hints = ["Verify the command exists and is in the PATH"]
+            if "not found" in error.lower():
+                hints.append("The command may not be installed in this environment")
+            if "permission" in error.lower():
+                hints.append("Check execution permissions")
+            return ToolResult(success=False, error=error, recovery_hints=hints)

@@ -53,6 +53,8 @@ class ExecuteResponse(BaseModel):
     error: str | None = None
     truncated: bool = False
     original_length: int | None = None
+    recovery_hints: list[str] | None = None
+    images: list[dict] | None = None
 
 
 @app.post("/tools/execute", response_model=ExecuteResponse)

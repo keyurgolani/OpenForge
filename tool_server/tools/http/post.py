@@ -42,7 +42,10 @@ class HttpPostTool(BaseTool):
         try:
             security.validate_url(url)
         except ValueError as exc:
-            return ToolResult(success=False, error=str(exc))
+            return ToolResult(
+                success=False, error=str(exc),
+                recovery_hints=["Verify the URL format (must include scheme, e.g. https://)", "Check that the domain is not blocked by security policy"],
+            )
 
         headers = params.get("headers", {})
         body = params.get("body")
@@ -62,4 +65,10 @@ class HttpPostTool(BaseTool):
                 )
             return ToolResult(success=True, output=output)
         except Exception as exc:
-            return ToolResult(success=False, error=str(exc))
+            error = str(exc)
+            hints = ["Verify the URL is accessible and the server is running"]
+            if "timeout" in error.lower():
+                hints.append("Increase the timeout parameter for slow endpoints")
+            if "ssl" in error.lower() or "certificate" in error.lower():
+                hints.append("The server may have an invalid SSL certificate")
+            return ToolResult(success=False, error=error, recovery_hints=hints)

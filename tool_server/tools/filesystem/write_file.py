@@ -45,4 +45,10 @@ class WriteFileTool(BaseTool):
                 f.write(content)
             return ToolResult(success=True, output=f"Written {len(content)} chars to {params['path']}")
         except Exception as exc:
-            return ToolResult(success=False, error=str(exc))
+            error = str(exc)
+            hints = ["Check that the file path is valid"]
+            if "permission" in error.lower():
+                hints.append("The destination may have restrictive permissions")
+            if "no space" in error.lower() or "disk" in error.lower():
+                hints.append("The disk may be full — check available space")
+            return ToolResult(success=False, error=error, recovery_hints=hints)

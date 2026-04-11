@@ -34,7 +34,10 @@ class DeleteFileTool(BaseTool):
     async def execute(self, params: dict, context: ToolContext) -> ToolResult:
         path = security.resolve_path(context.workspace_id, params["path"])
         if not path.exists():
-            return ToolResult(success=False, error=f"Path not found: {params['path']}")
+            return ToolResult(
+                success=False, error=f"Path not found: {params['path']}",
+                recovery_hints=["Check the path for typos", "Use filesystem.list_directory to verify existence"],
+            )
 
         try:
             if path.is_dir():
@@ -46,4 +49,10 @@ class DeleteFileTool(BaseTool):
                 path.unlink()
             return ToolResult(success=True, output=f"Deleted '{params['path']}'")
         except Exception as exc:
-            return ToolResult(success=False, error=str(exc))
+            error = str(exc)
+            hints = []
+            if "not empty" in error.lower() or "directory not empty" in error.lower():
+                hints.append("Use recursive=true to delete non-empty directories")
+            if "permission" in error.lower():
+                hints.append("Check file/directory permissions")
+            return ToolResult(success=False, error=error, recovery_hints=hints or ["Verify the file is not in use by another process"])

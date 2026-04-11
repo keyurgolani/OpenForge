@@ -113,9 +113,15 @@ class ReadFileTool(BaseTool):
     async def execute(self, params: dict, context: ToolContext) -> ToolResult:
         path = security.resolve_path(context.workspace_id, params["path"])
         if not path.exists():
-            return ToolResult(success=False, error=f"File not found: {params['path']}")
+            return ToolResult(
+                success=False, error=f"File not found: {params['path']}",
+                recovery_hints=["Check the file path for typos", "Use filesystem.list_directory or filesystem.search_files to explore"],
+            )
         if not path.is_file():
-            return ToolResult(success=False, error=f"Not a file: {params['path']}")
+            return ToolResult(
+                success=False, error=f"Not a file: {params['path']}",
+                recovery_hints=["Use filesystem.list_directory to list directory contents"],
+            )
 
         # Detect binary files before reading
         is_binary, mime_type = _is_binary_file(path)
@@ -152,4 +158,10 @@ class ReadFileTool(BaseTool):
             content = "".join(lines)
             return self._maybe_truncate("", content)
         except Exception as exc:
-            return ToolResult(success=False, error=str(exc))
+            error = str(exc)
+            hints = []
+            if "codec" in error.lower() or "encode" in error.lower() or "decode" in error.lower():
+                hints.append("Try a different encoding parameter (e.g. 'latin-1', 'cp1252')")
+            if "permission" in error.lower():
+                hints.append("The file may have restrictive permissions")
+            return ToolResult(success=False, error=error, recovery_hints=hints or None)

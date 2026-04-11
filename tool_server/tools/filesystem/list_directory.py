@@ -30,9 +30,15 @@ class ListDirectoryTool(BaseTool):
     async def execute(self, params: dict, context: ToolContext) -> ToolResult:
         path = security.resolve_path(context.workspace_id, params["path"])
         if not path.exists():
-            return ToolResult(success=False, error=f"Path not found: {params['path']}")
+            return ToolResult(
+                success=False, error=f"Path not found: {params['path']}",
+                recovery_hints=["Check the path for typos", "Use '.' to list the workspace root"],
+            )
         if not path.is_dir():
-            return ToolResult(success=False, error=f"Not a directory: {params['path']}")
+            return ToolResult(
+                success=False, error=f"Not a directory: {params['path']}",
+                recovery_hints=["Use filesystem.read_file to read file contents instead"],
+            )
 
         try:
             entries = []
@@ -46,4 +52,7 @@ class ListDirectoryTool(BaseTool):
                 })
             return ToolResult(success=True, output=entries)
         except Exception as exc:
-            return ToolResult(success=False, error=str(exc))
+            return ToolResult(
+                success=False, error=str(exc),
+                recovery_hints=["Check directory permissions", "Verify the path exists within the workspace"],
+            )

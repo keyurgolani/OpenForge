@@ -30,11 +30,17 @@ class SearchFilesTool(BaseTool):
     async def execute(self, params: dict, context: ToolContext) -> ToolResult:
         base = security.resolve_path(context.workspace_id, params.get("base_path", "."))
         if not base.exists():
-            return ToolResult(success=False, error=f"Base path not found: {params.get('base_path', '.')}")
+            return ToolResult(
+                success=False, error=f"Base path not found: {params.get('base_path', '.')}",
+                recovery_hints=["Check the base_path parameter", "Use filesystem.list_directory to explore available directories"],
+            )
 
         try:
             matches = [str(p.relative_to(base)) for p in base.rglob(params["pattern"])]
             matches.sort()
             return ToolResult(success=True, output=matches)
         except Exception as exc:
-            return ToolResult(success=False, error=str(exc))
+            return ToolResult(
+                success=False, error=str(exc),
+                recovery_hints=["Check glob pattern syntax (e.g. '**/*.py', '*.txt')", "Verify the base_path exists"],
+            )

@@ -30,7 +30,10 @@ class FileInfoTool(BaseTool):
     async def execute(self, params: dict, context: ToolContext) -> ToolResult:
         path = security.resolve_path(context.workspace_id, params["path"])
         if not path.exists():
-            return ToolResult(success=False, error=f"Path not found: {params['path']}")
+            return ToolResult(
+                success=False, error=f"Path not found: {params['path']}",
+                recovery_hints=["Check the path for typos", "Use filesystem.search_files to locate the file"],
+            )
 
         try:
             stat = path.stat()
@@ -43,4 +46,7 @@ class FileInfoTool(BaseTool):
                 "permissions": oct(stat.st_mode)[-3:],
             })
         except Exception as exc:
-            return ToolResult(success=False, error=str(exc))
+            return ToolResult(
+                success=False, error=str(exc),
+                recovery_hints=["Check file permissions", "Verify the path exists within the workspace"],
+            )

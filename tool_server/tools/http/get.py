@@ -40,7 +40,10 @@ class HttpGetTool(BaseTool):
         try:
             security.validate_url(url)
         except ValueError as exc:
-            return ToolResult(success=False, error=str(exc))
+            return ToolResult(
+                success=False, error=str(exc),
+                recovery_hints=["Verify the URL format (must include scheme, e.g. https://)", "Check that the domain is not blocked by security policy"],
+            )
 
         headers = params.get("headers", {})
         timeout = params.get("timeout", 30)
@@ -60,4 +63,12 @@ class HttpGetTool(BaseTool):
                 )
             return ToolResult(success=True, output=output)
         except Exception as exc:
-            return ToolResult(success=False, error=str(exc))
+            error = str(exc)
+            hints = ["Verify the URL is accessible and the server is running"]
+            if "timeout" in error.lower():
+                hints.append("Increase the timeout parameter for slow endpoints")
+            if "ssl" in error.lower() or "certificate" in error.lower():
+                hints.append("The server may have an invalid SSL certificate")
+            if "connect" in error.lower() or "dns" in error.lower():
+                hints.append("Check that the hostname resolves and the port is open")
+            return ToolResult(success=False, error=error, recovery_hints=hints)

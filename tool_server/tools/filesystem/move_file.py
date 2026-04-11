@@ -36,11 +36,18 @@ class MoveFileTool(BaseTool):
         dst = security.resolve_path(context.workspace_id, params["destination"])
 
         if not src.exists():
-            return ToolResult(success=False, error=f"Source not found: {params['source']}")
+            return ToolResult(
+                success=False, error=f"Source not found: {params['source']}",
+                recovery_hints=["Check the source path for typos", "Use filesystem.search_files to locate the file"],
+            )
 
         try:
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(src), str(dst))
             return ToolResult(success=True, output=f"Moved '{params['source']}' to '{params['destination']}'")
         except Exception as exc:
-            return ToolResult(success=False, error=str(exc))
+            error = str(exc)
+            hints = ["Check that both source and destination paths are valid"]
+            if "permission" in error.lower():
+                hints.append("Check file/directory permissions")
+            return ToolResult(success=False, error=error, recovery_hints=hints)

@@ -53,7 +53,10 @@ class ExecutePythonTool(BaseTool):
             except asyncio.TimeoutError:
                 proc.kill()
                 await proc.communicate()
-                return ToolResult(success=False, error=f"Script timed out after {timeout}s")
+                return ToolResult(
+                    success=False, error=f"Script timed out after {timeout}s",
+                    recovery_hints=["Increase the timeout parameter", "Check for infinite loops or blocking I/O", "Break the script into smaller steps"],
+                )
 
             out = stdout.decode("utf-8", errors="replace")
             err = stderr.decode("utf-8", errors="replace")
@@ -63,4 +66,8 @@ class ExecutePythonTool(BaseTool):
 
             return self._maybe_truncate("", combined.strip())
         except Exception as exc:
-            return ToolResult(success=False, error=str(exc))
+            error = str(exc)
+            hints = ["Check Python syntax and verify required modules are installed"]
+            if "module" in error.lower() or "import" in error.lower():
+                hints.append("Install missing packages with shell.execute: pip install <package>")
+            return ToolResult(success=False, error=error, recovery_hints=hints)
