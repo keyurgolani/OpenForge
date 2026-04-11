@@ -148,8 +148,10 @@ Each knowledge type has a dedicated editor:
 - **Gists** — Code editor with syntax highlighting for multiple languages
 - **Bookmarks** — URL display with extracted content view and re-extraction option
 - **PDFs/Documents/Sheets/Slides** — File preview with extracted text display
-- **Images** — Image viewer with metadata
-- **Audio** — Audio player with transcription display
+- **Images** — Image viewer with metadata and optional CLIP visual embedding
+- **Audio** — Audio player with transcription display (faster-whisper STT)
+- **Video** — Video player with timestamped transcript, scene keyframes, and deep-link segments
+- **Journals** — Date-anchored journal entries with dedicated creation flow and amber-themed cards
 
 ### Knowledge Intelligence
 
@@ -554,7 +556,7 @@ Outputs track their provenance:
 
 ### Built-in Tools
 
-OpenForge comes with 50+ built-in tools organized into 10 categories:
+OpenForge comes with 79 built-in tools organized into 12 categories:
 
 | Category | Tools | Purpose |
 |----------|-------|---------|
@@ -562,10 +564,12 @@ OpenForge comes with 50+ built-in tools organized into 10 categories:
 | **shell** | execute, execute_python | Run shell commands and Python scripts |
 | **git** | status, log, diff, add, commit, init | Version control operations |
 | **language** | parse_ast, find_definition, find_references, apply_diff | Code analysis and modification |
-| **workspace** | search, save_knowledge, list_knowledge, delete_knowledge | Access workspace knowledge |
-| **memory** | store, recall, forget | Ephemeral and persistent memory for agents |
-| **http** | get, post, fetch_page, search_web | Web access and search (via SearXNG) |
-| **agent** | invoke, list_chats, read_chat | Delegate tasks to other agents and access chat history |
+| **memory** | store, recall, forget | Typed memory (fact, preference, lesson, context, decision, experience) |
+| **http** | get, post | Low-level HTTP requests |
+| **web** | read_page, read_pages, screenshot | Web content extraction (Crawl4AI) and screenshots |
+| **search** | web, news, images | Web search, news search, image search (via SearXNG) |
+| **browser** | open, snapshot, click, type, fill_form, extract_text, evaluate, list_tabs, close_tab | Interactive browser automation (PinchTab) |
+| **platform** | agent.*, automation.*, deployment.*, sink.*, workspace.*, chat.* | Manage OpenForge entities programmatically |
 | **task** | create_plan, get_plan, update_step | Task and plan management |
 | **skills** | install, list_installed, read, remove, search | Manage custom skills |
 

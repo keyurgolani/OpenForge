@@ -97,12 +97,16 @@ curl http://localhost:3100/api/health
 | Service | Port | Description |
 |---------|------|-------------|
 | `openforge` | 3100 (host) -> 3000 (container) | Main backend + frontend |
-| `celery-worker` | -- | Background task worker (agent execution, knowledge processing, automations) |
-| `tool-server` | 8001 (internal) | Tool execution microservice (50+ tools) |
+| `celery-worker` | -- | Background task worker (agent execution, knowledge processing, automations, memory daemons) |
+| `tool-server` | 8001 (internal) | Tool execution microservice (79 tools across 12 categories) |
 | `postgres` | 5432 (internal) | PostgreSQL database |
-| `qdrant` | 6333 (internal) | Qdrant vector database |
-| `redis` | 6379 (internal) | Redis message broker and cache |
+| `qdrant` | 6333-6334 (internal) | Qdrant vector database (knowledge + memory vectors) |
+| `redis` | 6379 (internal) | Redis message broker, cache, and pub/sub |
+| `neo4j` | 7474, 7687 (host) | Neo4j graph database (memory entity relationships) |
 | `searxng` | 8080 (internal) | Web search engine |
+| `pinchtab` | 9867 (internal) | Headless browser for interactive web automation |
+| `crawl4ai` | 11235 (internal) | Web content extraction service |
+| `ollama` | 11434 (internal, optional) | Local LLM inference (requires `local-ollama` Docker Compose profile) |
 
 ## Reverse Proxy (HTTPS)
 

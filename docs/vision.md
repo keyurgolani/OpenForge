@@ -62,7 +62,7 @@ Agents see all workspace names/descriptions in their system prompt and choose wh
 
 ## Knowledge
 
-Knowledge items are workspace-scoped. Types: note, fleeting note, bookmark, gist, image, audio, video, pdf, document, sheet, slides, journal.
+Knowledge items are workspace-scoped. Types: note, fleeting note, bookmark, gist, image, audio, video, pdf, document, sheet, slides, journal. Each type has a configurable extraction pipeline with toggleable capability slots and swappable backends.
 
 Knowledge is processed through a **configurable extraction pipeline** — a DAG of capability slots (text extraction, table extraction, OCR, scene description, visual embedding, etc.) running in parallel, with a consolidation LLM merging outputs. Users configure which backends power each slot. See [roadmap.md](roadmap.md) Track 2 for pipeline architecture.
 
@@ -80,7 +80,7 @@ Structured entity with typed fields: name, slug, description, icon, tags, system
 
 ### System Prompt Architecture
 
-Three sections: **preamble** (read-only, context-aware) → **user-editable section** → **postamble** (read-only, context-aware). Built from compositional prompt fragments — tagged, conditionally-loaded, cache-aware. Different content for chat vs automation vs mission contexts.
+Three sections: **preamble** (read-only, context-aware) → **user-editable section** → **postamble** (read-only, context-aware). Built from modular prompt functions with conditional content for chat vs automation vs mission contexts. *(Full compositional fragment system with cache-aware assembly, system reminder injection, and per-agent verbosity settings planned but not yet implemented.)*
 
 Template engine supports variables, loops, conditionals, 40+ built-in functions, output references.
 
@@ -98,7 +98,7 @@ Direct agent invocation. Agent selection → input extraction from message → a
 
 Automations are DAG workflows with agent nodes and sink nodes. Deployments are live instances with triggers. Graph execution: topological sort → parallel level execution → output routing to sinks. All agent invocations flow through a single `execute_agent()` path.
 
-Triggers: manual, cron, interval, webhook (external POSTs), event (internal OpenForge events).
+Triggers: manual, cron, interval. *(Webhook and event-driven triggers have enum values defined but handlers are not yet implemented.)*
 
 ---
 
@@ -113,9 +113,9 @@ Goal-directed autonomous agents. OODA cycles (perceive → plan → act → eval
 Global, multi-tier memory accessible to all agents. Agents are encouraged via system prompt harness to write memories actively. Types: fact, preference, lesson, context, decision, experience.
 
 Three background daemons maintain the memory system:
-- **Consolidation daemon** — promotes short-term to long-term via deduplication, conflict resolution, distillation, garbage collection
-- **Knowledge extraction daemon** — bridges workspace knowledge into memory fragments (reactive on ingestion + proactive sweeps)
-- **Learning extraction daemon** — extracts patterns from execution outcomes into lessons
+- **Consolidation daemon** — promotes short-term to long-term based on recall frequency and type, garbage collects invalidated/expired memories, rebuilds L1 manifest *(semantic clustering, deduplication, and LLM distillation planned but not yet implemented)*
+- **Knowledge extraction daemon** — bridges workspace knowledge into memory fragments on ingestion *(proactive periodic sweeps and per-workspace manifests planned but not yet implemented)*
+- **Learning extraction daemon** — extracts patterns from tool execution outcomes into lessons (daily aggregation of tool call stats)
 
 Temporal management: `observed_at` timestamps, default time-window filtering, soft-delete with `invalidated_at`, configurable retention-based garbage collection.
 
@@ -131,7 +131,7 @@ Browser automation via PinchTab (interactive, ~800 tokens/page) and Crawl4AI (we
 
 Skills: installable extensions with `SKILL.md` descriptors. Native skills + external skills installed at first boot.
 
-MCP integration for external tool providers. HITL for sensitive tools. Tool result caching (300s TTL). Tool error recovery hints. Tool chains (YAML-defined sequences as single callable units).
+MCP integration for external tool providers. HITL for sensitive tools. Tool result caching (300s TTL, in-memory per-execution). Tool error recovery hints (browser and web tools; HTTP/filesystem/shell planned). Consecutive tool failure blocking (3 failures → blocked with system message). *(Tool chains/macros not yet implemented.)*
 
 ---
 
@@ -141,7 +141,7 @@ Standard providers: OpenAI, Anthropic, Google Gemini, Groq, DeepSeek, Mistral, O
 
 Virtual providers: Router (load balancing), Council (multi-model consensus), Optimizer (prompt optimization).
 
-**OpenForge Native** — Built-in Ollama instance in the Docker stack. Zero-config local AI. Guided first-run setup with hardware-aware model recommendations.
+**OpenForge Native** — Built-in Ollama instance in the Docker stack (optional `local-ollama` profile). Model management via settings UI (pull/remove/list with curated catalog). *(Guided first-run setup with hardware-aware model recommendations planned but not yet implemented.)*
 
 Per-capability model assignment: chat, vision, embedding, speech-to-text, text-to-speech, CLIP.
 

@@ -4,7 +4,7 @@ This document describes the technical architecture of OpenForge, covering the sy
 
 ## System Overview
 
-OpenForge is a distributed application composed of seven services that communicate over HTTP, WebSocket, and Redis pub/sub:
+OpenForge is a distributed application composed of eleven services that communicate over HTTP, WebSocket, and Redis pub/sub:
 
 - **Backend (openforge)** — FastAPI application serving the REST API, WebSocket connections, and coordinating all business logic
 - **Frontend** — React 19 SPA served by the backend in production, or via Vite dev server in development
@@ -12,7 +12,10 @@ OpenForge is a distributed application composed of seven services that communica
 - **PostgreSQL** — Primary relational database for all structured data
 - **Qdrant** — Vector database for semantic search, visual search, and agent memory
 - **Redis** — Message broker (Celery), real-time event pub/sub, HITL coordination, session cache
+- **Neo4j** — Graph database for entity-memory relationships (MENTIONS, RELATED_TO, SAME_AS edges) used by hybrid memory retrieval
 - **SearXNG** — Self-hosted meta-search engine for web search capabilities
+- **PinchTab** — Headless browser sidecar for interactive web automation (~800 tokens/page)
+- **Crawl4AI** — Web content extraction sidecar for LLM-optimized markdown
 - **Celery Worker** — Background task processor sharing the backend codebase, with logarithmic autoscaling
 
 ## Services
@@ -62,14 +65,14 @@ The worker shares the same codebase as the backend but runs tasks asynchronously
 
 A lightweight **FastAPI** microservice (Python 3.12) that provides sandboxed tool execution. Features:
 
-- 50+ built-in tools across 10 categories
+- 79 built-in tools across 12 categories
 - Auto-discovery of tool categories on startup
 - Security layer (path traversal guards, command blocking, URL validation)
 - Untrusted content boundary for external HTTP responses
 - Tool aliasing to handle common naming mistakes
 - Skill management (install/remove/search via skills CLI)
 
-**Tool categories:** filesystem, shell, git, language (code analysis), workspace (knowledge/chat access), memory, http, agent (delegation), task, skills
+**Tool categories:** filesystem, shell, git, language (code analysis), workspace (knowledge/chat access), memory, http, web (page reading/screenshots), browser (PinchTab interactive automation), search (web/news/images), platform (agents, automations, deployments, sinks, workspaces, chat), task, skills
 
 **Protocol:** Every tool implements a `BaseTool` abstract class with a standard interface: `id`, `category`, `display_name`, `description`, `input_schema`, `risk_level`, and `execute(params, context)`.
 
@@ -89,6 +92,9 @@ Primary relational database (v16) storing all structured data:
 - Runs and run steps
 - Outputs (versioned artifacts with lineage)
 - Approval requests and audit logs
+- Agent memory (typed memories with temporal management, WAL, daemon state)
+- Tool call logs (execution analytics)
+- Failure events (structured failure recording with correlation)
 
 ### Qdrant
 
@@ -99,7 +105,16 @@ Vector database (v1.13.2) storing embeddings for semantic search:
   - `summary` vector (384-dim) for document-level matching
   - `clip` vector (512-dim, ViT-B-32) for image/video visual similarity search
   - Sparse vectors for hybrid BM25 keyword search
-- **openforge_memory** — Agent long-term memory vectors
+- **openforge_memory** — Agent memory vectors with payload filters for type, tier, workspace, invalidation
+
+### Neo4j
+
+Graph database storing entity-memory relationships for hybrid memory retrieval:
+
+- **Entity nodes** — Entities extracted from memory content
+- **Memory nodes** — References to PostgreSQL memory records
+- **Relationships** — MENTIONS (memory→entity), RELATED_TO (entity→entity), SAME_AS (entity deduplication)
+- Used by `search_graph()` in hybrid memory retrieval (BFS traversal, scored by graph proximity)
 
 ### Redis
 
@@ -114,7 +129,24 @@ In-memory data store (v7) used for:
 
 ### SearXNG
 
-Self-hosted meta-search engine providing web search capabilities to the `http.search_web` tool. Runs internally with no external tracking.
+Self-hosted meta-search engine providing web search capabilities to the `search.web` and `search.news` tools. Runs internally with no external tracking.
+
+### PinchTab
+
+Headless browser sidecar providing interactive web automation for agents:
+
+- HTTP API at port 9867 (internal network only)
+- ~800 tokens per page snapshot (vs 114K for Playwright MCP)
+- Tools: browser.open, browser.snapshot, browser.click, browser.type, browser.fill_form, browser.extract_text, browser.evaluate, browser.list_tabs, browser.close_tab
+- 2GB shared memory allocation for browser rendering
+
+### Crawl4AI
+
+Web content extraction sidecar for knowledge pipeline and agent web reading:
+
+- LLM-optimized markdown output with anti-bot handling
+- Used by `web.read_page` tool (primary extraction) with trafilatura fallback
+- Also serves as backend option in knowledge pipeline bookmark/URL extraction slot
 
 ## Agent Execution Pipeline
 
@@ -225,45 +257,87 @@ The tool loop (`runtime/tool_loop.py`) is the core LLM interaction cycle used by
 2. If LLM returns tool calls:
    a. Check tool permissions via PolicyEngine
    b. If approval required, create HITL request and wait
-   c. Execute tool via Tool Server or MCP
-   d. Feed tool result back to LLM
-   e. Repeat
+   c. Check in-memory cache (300s TTL) for identical prior calls
+   d. Execute tool via Tool Server or MCP
+   e. Track consecutive failures per tool (block after 3 consecutive failures)
+   f. Append recovery hints from tool errors to LLM context
+   g. Feed tool result back to LLM
+   h. Repeat
 3. If LLM returns text, return the response
-4. Enforce rate limits and iteration caps
+4. Enforce rate limits and iteration caps (default max_iterations=20)
+5. Log tool execution analytics to Redis (tool_id, duration_ms, success, sizes)
 
 ## Knowledge Pipeline
+
+Knowledge processing uses a configurable DAG-based pipeline framework (`core/pipeline/`). Each knowledge type has a pipeline definition with ordered capability slots. Users can toggle slots on/off and swap backends per slot.
 
 ```
 Upload/Create Knowledge
     |
     v
 1. Store metadata in PostgreSQL
-2. Extract text content:
-   - PDFs -> PDF processor
-   - DOCX -> Document processor
-   - XLSX -> Sheet processor
-   - PPTX -> Slides processor
-   - Images -> CLIP embeddings + optional OCR
-   - Audio -> Whisper transcription
-   - Bookmarks -> Web content extraction
     |
     v
-3. Chunk text into ~512-token segments
+2. Resolve pipeline for knowledge type (pipeline_registry.py)
+   - 12 pipeline configs: note, bookmark, file, document, sheet, slides,
+     pdf, image, audio, gist, journal, video
+   - Global + workspace-level overrides
     |
     v
-4. Generate embeddings for each chunk:
+3. Execute pipeline (executor.py):
+   - Run enabled slots (parallel slots concurrently, sequential in order)
+   - Each slot has active_backend + available_backends
+   - Slot types: text extraction, table extraction, OCR, scene description,
+     CLIP embedding, metadata extraction, transcription, etc.
+    |
+    v
+4. Normalize slot outputs (normalizer.py):
+   - Strip tool-specific markers, normalize headings/lists/tables
+   - Collapse excessive newlines, strip trailing whitespace
+    |
+    v
+5. Consolidate (LLM merges multi-slot outputs when needed)
+    |
+    v
+6. Chunk text into ~512-token segments
+   - Video: ~30s timestamp-aligned chunks (video_chunker.py)
+    |
+    v
+7. Generate embeddings for each chunk:
    - Dense vector (384-dim BGE-small)
    - Sparse BM25 vector (for keyword matching)
    - Summary vector (for document-level matching)
+   - CLIP vector (512-dim, for images/video keyframes)
     |
     v
-5. Index in Qdrant with metadata payload
+8. Index in Qdrant with metadata payload
     |
     v
-6. (Optional) Generate AI intelligence:
+9. (Optional) Generate AI intelligence:
    - Summary, tags, key insights
    - Store back in PostgreSQL
+   - Bridge to memory system (knowledge_bridge.py)
 ```
+
+## Memory System
+
+Global, multi-tier memory accessible to all agents. Stored in PostgreSQL + Qdrant + Neo4j.
+
+**Schema:** `memory` table with: `memory_type` (fact/preference/lesson/context/decision/experience), `tier` (short_term/long_term), `observed_at`, `invalidated_at`, `promoted_at`, `last_recalled_at`, `recall_count`, `confidence`, `tags`, `content_hash`, source references (agent_id, run_id, conversation_id, workspace_id, knowledge_id).
+
+**Retrieval:** Hybrid three-backend fusion via Reciprocal Rank Fusion (RRF, K=60):
+1. Vector similarity — Qdrant `openforge_memory` collection
+2. Keyword matching — PostgreSQL full-text search (GIN index on `to_tsvector('english', content)`)
+3. Relationship traversal — Neo4j entity graph (BFS through MENTIONS/RELATED_TO edges)
+
+Post-RRF: recency boost (30-day half-life exponential decay) + relevance cliff detection.
+
+**Background daemons (Celery Beat):**
+- Consolidation (every 15 min): promotes short_term→long_term based on recall count and type, garbage collects invalidated/expired memories, rebuilds L1 manifest
+- Learning extraction (daily 3am UTC): aggregates tool call stats, detects patterns (high failure rate → lesson, high reliability → experience)
+- Knowledge bridge (reactive): creates fact/synthesis memories after knowledge pipeline completes
+
+**Agent harness:** Preamble fragment encourages typed memory use. L1 manifest (top 10 most-recalled memories) injected into system prompt from Redis cache.
 
 ### Search Pipeline
 
@@ -457,13 +531,15 @@ Configurable CORS origins via the `CORS_ORIGINS` setting. Defaults to allow all 
 | Frontend        | React 19, TypeScript, Vite, TailwindCSS, Radix UI, TanStack Query, Zustand |
 | Backend         | FastAPI, Python 3.11, SQLAlchemy (async), Alembic, Pydantic                |
 | Task Queue      | Celery 5.4 with Redis broker                                               |
-| Databases       | PostgreSQL 16, Qdrant 1.13.2, Redis 7                                      |
+| Databases       | PostgreSQL 16, Qdrant 1.13.2, Redis 7, Neo4j (memory graph)               |
 | LLM Integration | LiteLLM (unified interface to 14+ providers)                               |
-| Embeddings      | BAAI/bge-small-en-v1.5 (text), CLIP ViT-B-32 (images)                      |
-| Search          | Hybrid dense+sparse with optional cross-encoder reranking                  |
-| Tool Server     | FastAPI (Python 3.12), httpx, 50+ tools                                    |
+| Local AI        | Ollama (Docker sidecar), faster-whisper (STT), Liquid AI LFM2.5 (audio)   |
+| Embeddings      | BAAI/bge-small-en-v1.5 (text), OpenCLIP ViT-B-32 (images/video)           |
+| Search          | Hybrid dense+sparse+CLIP with RRF fusion and cross-encoder reranking      |
+| Tool Server     | FastAPI (Python 3.12), httpx, 79 tools across 12 categories               |
+| Browser         | PinchTab (interactive), Crawl4AI (content extraction)                      |
 | Web Search      | SearXNG (self-hosted)                                                      |
-| Orchestration   | Docker Compose                                                             |
+| Orchestration   | Docker Compose (11 services)                                               |
 
 ---
 
