@@ -151,10 +151,9 @@ async def create_global_conversation(
     if data.agent_id is not None:
         agent = await _require_global_chat_agent(db, data.agent_id)
 
-    title = data.title or ""
     conversation = Conversation(
         agent_id=data.agent_id,
-        title=title,
+        title=data.title or None,
     )
     db.add(conversation)
     await db.commit()
@@ -224,8 +223,55 @@ async def list_global_conversations(
     total = await db.scalar(count_query) or 0
     rows = (await db.execute(query.offset(skip).limit(limit))).scalars().all()
 
+    # Fetch last assistant message preview and last user message for each conversation
+    previews: dict[UUID, str] = {}
+    user_msgs: dict[UUID, str] = {}
+    if rows:
+        from sqlalchemy import func as _func
+        conv_ids = [c.id for c in rows]
+        # Get the latest assistant message content per conversation (truncated)
+        latest_msg_subq = (
+            select(
+                Message.conversation_id,
+                _func.left(Message.content, 200).label("preview"),
+            )
+            .where(
+                Message.conversation_id.in_(conv_ids),
+                Message.role == "assistant",
+                Message.content.isnot(None),
+                Message.content != "",
+            )
+            .distinct(Message.conversation_id)
+            .order_by(Message.conversation_id, Message.created_at.desc())
+        )
+        preview_result = await db.execute(latest_msg_subq)
+        for row in preview_result:
+            previews[row.conversation_id] = row.preview or ""
+
+        # Get the latest user message per conversation (for title fallback)
+        user_msg_subq = (
+            select(
+                Message.conversation_id,
+                _func.left(Message.content, 200).label("user_msg"),
+            )
+            .where(
+                Message.conversation_id.in_(conv_ids),
+                Message.role == "user",
+                Message.content.isnot(None),
+                Message.content != "",
+            )
+            .distinct(Message.conversation_id)
+            .order_by(Message.conversation_id, Message.created_at.desc())
+        )
+        user_msg_result = await db.execute(user_msg_subq)
+        for row in user_msg_result:
+            user_msgs[row.conversation_id] = row.user_msg or ""
+
     return {
-        "conversations": [_serialize_conversation(c) for c in rows],
+        "conversations": [
+            _serialize_conversation(c, last_message_preview=previews.get(c.id), last_user_message=user_msgs.get(c.id))
+            for c in rows
+        ],
         "total": total,
     }
 

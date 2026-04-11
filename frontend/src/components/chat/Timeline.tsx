@@ -25,7 +25,7 @@ export function Timeline({ items, onApproveHITL, onDenyHITL, depth = 0, currentT
     <div className={depth === 0 ? 'chat-workflow-stack' : 'chat-workflow-stack pl-4'}>
       {items.map((item, i) => (
         <TimelineStep
-          key={item.type === 'thinking' ? item.id : 'call_id' in item ? item.call_id : `item-${i}`}
+          key={'call_id' in item ? item.call_id : 'id' in item ? (item as any).id : `item-${i}`}
           item={item}
           isLast={i === items.length - 1}
           depth={depth}

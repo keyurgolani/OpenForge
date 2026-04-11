@@ -50,13 +50,7 @@ export function ToolCallCard({ toolName, arguments: args, status, success, outpu
     }
   }, [isRunning]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-collapse 1s after completion (skip if user manually expanded)
-  useEffect(() => {
-    if ((isComplete || isError) && isOpen && !userPinnedRef.current) {
-      const timer = setTimeout(() => setIsOpen(false), 1500)
-      return () => clearTimeout(timer)
-    }
-  }, [isComplete, isError, isOpen])
+  // Keep expanded after completion — don't auto-collapse
 
   const handleToggle = () => {
     const willOpen = !isOpen

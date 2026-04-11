@@ -121,6 +121,8 @@ interface Conversation {
     agent_name?: string | null
     message_count: number
     last_message_at: string | null
+    last_user_message?: string | null
+    last_message_preview?: string | null
 }
 
 interface ProviderRecord {
@@ -482,8 +484,6 @@ export default function AgentChatPage() {
 
     // Determine the default model label
     const defaultLabel = useMemo(() => {
-        if (!workspace) return 'Default model'
-
         const chatModelsSetting = appSettings.find(s => s.key === 'system_chat_models')
         let rawDefaultValue = chatModelsSetting?.value
         if (typeof rawDefaultValue === 'string') {
@@ -503,7 +503,7 @@ export default function AgentChatPage() {
             return `${provLabel} · ${systemDefault.model_name}`
         }
         return 'Default model'
-    }, [workspace, providers, appSettings])
+    }, [providers, appSettings])
 
     useEffect(() => {
         if (conversationId !== activeCid) {
@@ -1114,7 +1114,7 @@ export default function AgentChatPage() {
                         {/* AgentChatView replaces the inline message thread + composer */}
                         <AgentChatView
                             conversationId={activeCid}
-                            agent={{ id: workspaceId, name: conversationData?.agent_name ?? activeConversationRecord?.agent_name ?? workspace?.name ?? 'Agent' }}
+                            agent={{ id: conversationData?.agent_id ?? activeConversationRecord?.agent_id ?? workspaceId, name: conversationData?.agent_name ?? activeConversationRecord?.agent_name ?? workspace?.name ?? 'Agent' }}
                             messages={messages as any}
                             isLoadingMessages={!conversationData}
                             onSendMessage={handleSendMessage}
@@ -1534,7 +1534,7 @@ function ConversationRow({ conv, active, onSelect, onDelete, onDownload, onCopy,
                             />
                         ) : (
                             <p className={`${showActiveCard ? 'text-sm font-semibold leading-tight text-foreground' : 'text-[11px] font-medium leading-tight'} truncate`}>
-                                {conv.title ?? 'New Chat'}
+                                {conv.title || conv.last_user_message || conv.agent_name || 'New Chat'}
                             </p>
                         )}
                         {showActiveCard && activePreview ? (
@@ -1676,7 +1676,7 @@ function TrashedConversationRow({
                 >
                     <Trash2 className="w-3 h-3 flex-shrink-0 text-amber-300" />
                     <div className="flex-1 min-w-0">
-                        <p className="text-[11px] font-medium truncate leading-tight">{conv.title ?? 'Untitled Chat'}</p>
+                        <p className="text-[11px] font-medium truncate leading-tight">{conv.title || conv.last_user_message || conv.agent_name || 'Untitled Chat'}</p>
                         <p className="text-[10px] text-muted-foreground/85 leading-tight">{conv.message_count} message{conv.message_count === 1 ? '' : 's'}</p>
                     </div>
                     <div className="relative flex items-center gap-0.5">
@@ -1753,7 +1753,7 @@ function TrashedConversationRow({
             <ConfirmModal
                 open={showDeleteModal}
                 title="Delete Permanently"
-                message={`This will permanently delete "${conv.title ?? 'Untitled Chat'}". This action cannot be undone.`}
+                message={`This will permanently delete "${conv.title || 'Untitled Chat'}". This action cannot be undone.`}
                 confirmLabel="Delete"
                 cancelLabel="Cancel"
                 variant="danger"

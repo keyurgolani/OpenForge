@@ -1,8 +1,58 @@
+import { useState, useEffect, useRef } from 'react'
 import { Bot, Cpu } from 'lucide-react'
 import { ExecutionTimeline } from '@/components/shared/execution-timeline'
 import { StreamedResponse } from './StreamedResponse'
 import { CopyButton } from '@/components/shared/CopyButton'
 import type { TimelineItem, ExecutionPhase } from '@/types/timeline'
+
+const RESPONDING_MESSAGES = [
+  'Thinking…',
+  'Reasoning…',
+  'Working on it…',
+  'Processing…',
+  'Analyzing…',
+  'Considering approaches…',
+  'Crafting response…',
+  'Connecting the dots…',
+  'Putting it together…',
+  'Almost there…',
+  'Digging deeper…',
+  'Exploring options…',
+]
+
+function RotatingMessage({ active }: { active: boolean }) {
+  const [index, setIndex] = useState(() => Math.floor(Math.random() * RESPONDING_MESSAGES.length))
+  const [fading, setFading] = useState(false)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    if (!active) {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+      return
+    }
+    intervalRef.current = setInterval(() => {
+      setFading(true)
+      setTimeout(() => {
+        setIndex(prev => {
+          let next: number
+          do { next = Math.floor(Math.random() * RESPONDING_MESSAGES.length) } while (next === prev && RESPONDING_MESSAGES.length > 1)
+          return next
+        })
+        setFading(false)
+      }, 300)
+    }, 3000)
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
+  }, [active])
+
+  return (
+    <span
+      className="inline-block transition-opacity duration-300 ease-in-out"
+      style={{ opacity: fading ? 0 : 1 }}
+    >
+      {RESPONDING_MESSAGES[index]}
+    </span>
+  )
+}
 
 interface ModelInfo {
   providerName: string
@@ -58,7 +108,7 @@ export function AgentResponseBlock({
             {isActive && (
               <div className="agent-generation-pill">
                 <span className="agent-generation-orb" />
-                <span>Responding…</span>
+                <RotatingMessage active={isActive} />
               </div>
             )}
           </div>

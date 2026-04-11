@@ -16,12 +16,11 @@ class InvokeAgentTool(BaseTool):
     def description(self):
         return (
             "Invoke an AI agent to perform a task and return its response. "
-            "Use this to delegate sub-tasks to specialist agents — for example, "
-            "invoke a researcher for deep research, a code-engineer for technical work, "
-            "or a geopolitical-monitor for situation analysis. "
+            "Use this to delegate sub-tasks to specialist agents. "
+            "You MUST specify agent_id with a valid agent slug — "
+            "use platform.agent.list_agents to discover available agents and their slugs. "
+            "Common slugs: knowledge-retriever, web-searcher, knowledge-curator, code-engineer, page-reader. "
             "Provide a clear, specific, self-contained instruction. "
-            "Optionally specify agent_id to target a specific agent; "
-            "if omitted, the default agent handles the task. "
             "Returns the agent's full text response and execution timeline."
         )
 
@@ -40,8 +39,9 @@ class InvokeAgentTool(BaseTool):
                 "agent_id": {
                     "type": "string",
                     "description": (
-                        "Slug or ID of a specific agent to invoke (e.g. 'researcher', 'geopolitical-monitor'). "
-                        "If omitted, the default agent handles the task."
+                        "Slug of the agent to invoke. Required. "
+                        "Use platform.agent.list_agents to get available slugs. "
+                        "Examples: 'knowledge-retriever', 'web-searcher', 'code-engineer', 'knowledge-curator'."
                     ),
                 },
                 "transfer": {
@@ -54,7 +54,7 @@ class InvokeAgentTool(BaseTool):
                     "default": False,
                 },
             },
-            "required": ["instruction"],
+            "required": ["instruction", "agent_id"],
         }
 
     @property

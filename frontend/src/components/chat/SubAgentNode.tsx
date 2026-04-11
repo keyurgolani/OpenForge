@@ -33,13 +33,7 @@ export function SubAgentNode({ item, depth, onApproveHITL, onDenyHITL, renderTim
     }
   }, [isRunning]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-collapse 1s after completion (skip if user manually expanded)
-  useEffect(() => {
-    if ((isComplete || isError) && expanded && !userPinnedRef.current) {
-      const timer = setTimeout(() => setExpanded(false), 1500)
-      return () => clearTimeout(timer)
-    }
-  }, [isComplete, isError, expanded])
+  // Keep expanded after completion — don't auto-collapse
 
   const handleToggle = () => {
     const willOpen = !expanded

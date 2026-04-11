@@ -103,6 +103,12 @@ function parseMessageTimeline(rawTimeline: unknown[]): {
         duration_ms: dur,
         sentences: content ? content.split(/(?<=[.!?])\s+/).filter(Boolean) : [],
       })
+    } else if (item.type === 'intermediate_response') {
+      items.push({
+        type: 'intermediate_response' as const,
+        id: `msg-ir-${items.length}`,
+        content: (item.content as string) ?? '',
+      })
     }
   }
 

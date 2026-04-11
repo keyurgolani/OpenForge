@@ -782,9 +782,33 @@ class ChatHandler:
 
         # Resolve target agent via agent_registry
         target_spec = None
+        from openforge.db.models import AgentDefinitionModel
         if agent_id:
             target_spec = await agent_registry.resolve(db, slug=agent_id)
-        _subagent_id = str(target_spec.agent_id) if target_spec else "delegated_agent"
+        if target_spec is None:
+            # Agent not found or not specified — return error with available slugs
+            result = await db.execute(
+                select(AgentDefinitionModel.slug)
+                .where(AgentDefinitionModel.active_version_id.isnot(None))
+                .order_by(AgentDefinitionModel.slug)
+            )
+            available = [row[0] for row in result.all()]
+            avail_str = ", ".join(available[:20]) if available else "(none)"
+            if agent_id:
+                msg = f"Error: No agent found with slug '{agent_id}'. You must specify a valid agent_id. Available agent slugs: {avail_str}"
+                logger.warning("Subagent slug %r not found. Available: %s", agent_id, avail_str)
+            else:
+                msg = f"Error: agent_id is required for platform.agent.invoke. You must specify which agent to delegate to. Available agent slugs: {avail_str}"
+                logger.warning("Subagent invoked without agent_id. Available: %s", avail_str)
+            return {
+                "response": msg,
+                "timeline": [],
+                "conversation_id": "",
+                "agent_name": agent_id or "unknown",
+                "output_definitions": [],
+                "error": msg,
+            }
+        _subagent_id = str(target_spec.agent_id)
 
         conversation = Conversation(
             title=f"[delegated] {instruction[:80]}",
