@@ -10,6 +10,12 @@ from security import security
 from content_boundary import wrap_untrusted
 from tools.web.clients import Crawl4AIClient
 
+# Web page reads go through the tool-server container which may lack system
+# CA certificates. Since Crawl4AI (the primary path) uses its own browser
+# for SSL, this only affects the httpx fallback for text/html extraction.
+# Content reads are non-sensitive, so we allow unverified connections here.
+_SSL_CONTEXT = False
+
 try:
     import trafilatura
 
@@ -25,6 +31,28 @@ _SCRIPT_RE = re.compile(r"<script[^>]*>.*?</script>", re.DOTALL | re.IGNORECASE)
 _STYLE_RE = re.compile(r"<style[^>]*>.*?</style>", re.DOTALL | re.IGNORECASE)
 _TAG_RE = re.compile(r"<[^>]+>")
 _BLANK_RE = re.compile(r"\n{3,}")
+
+
+_MD_LINK_RE = re.compile(r"\[([^\]]+)\]\([^)]+\)")
+_MD_IMG_RE = re.compile(r"!\[([^\]]*)\]\([^)]+\)")
+_MD_HEADER_RE = re.compile(r"^#{1,6}\s+", re.MULTILINE)
+_MD_BOLD_RE = re.compile(r"\*\*([^*]+)\*\*")
+_MD_ITALIC_RE = re.compile(r"\*([^*]+)\*")
+_MD_CODE_RE = re.compile(r"`([^`]+)`")
+_MD_BULLET_RE = re.compile(r"^[\s]*[-*+]\s+", re.MULTILINE)
+
+
+def _strip_markdown(md: str) -> str:
+    """Convert markdown to plain text by removing formatting."""
+    text = _MD_IMG_RE.sub(r"\1", md)
+    text = _MD_LINK_RE.sub(r"\1", text)
+    text = _MD_HEADER_RE.sub("", text)
+    text = _MD_BOLD_RE.sub(r"\1", text)
+    text = _MD_ITALIC_RE.sub(r"\1", text)
+    text = _MD_CODE_RE.sub(r"\1", text)
+    text = _MD_BULLET_RE.sub("", text)
+    text = _BLANK_RE.sub("\n\n", text)
+    return text.strip()
 
 
 def _strip_html(html: str) -> str:
@@ -88,8 +116,10 @@ class ReadPageTool(BaseTool):
     @property
     def description(self) -> str:
         return (
-            "Read a web page and return its content as LLM-optimized markdown. "
+            "Read a web page and return its content. "
             "Handles JavaScript-rendered pages and anti-bot protection automatically. "
+            "Supports extraction modes: 'markdown' (default, LLM-optimized), "
+            "'text' (plain text, no formatting), or 'html' (raw HTML for structured parsing). "
             "For interactive pages (clicking, typing), use browser.open instead."
         )
 
@@ -103,6 +133,17 @@ class ReadPageTool(BaseTool):
             "type": "object",
             "properties": {
                 "url": {"type": "string", "description": "URL to read"},
+                "extraction_mode": {
+                    "type": "string",
+                    "enum": ["markdown", "text", "html"],
+                    "default": "markdown",
+                    "description": (
+                        "Content extraction mode: "
+                        "'markdown' for LLM-optimized markdown (default), "
+                        "'text' for plain text stripped of all formatting, "
+                        "'html' for raw HTML (useful for structured data extraction)"
+                    ),
+                },
                 "max_chars": {
                     "type": "integer",
                     "default": 80000,
@@ -126,12 +167,19 @@ class ReadPageTool(BaseTool):
             return ToolResult(success=False, error=str(exc))
 
         max_chars = min(params.get("max_chars", 80000), _MAX_CHARS)
+        mode = params.get("extraction_mode", "markdown")
 
-        # 1. Try Crawl4AI first
+        # For HTML mode, fetch raw HTML directly (Crawl4AI only returns markdown)
+        if mode == "html":
+            return await self._fetch_html(url, max_chars)
+
+        # 1. Try Crawl4AI first (returns markdown)
         try:
             result = await self._crawl4ai.crawl(url)
             if result["success"]:
                 content = result["markdown"]
+                if mode == "text":
+                    content = _strip_markdown(content)
                 if len(content) > max_chars:
                     content = content[:max_chars] + "\n\n[... truncated]"
                 wrapped = wrap_untrusted(content, url)
@@ -145,6 +193,7 @@ class ReadPageTool(BaseTool):
                 timeout=30,
                 follow_redirects=True,
                 headers=_BROWSER_HEADERS,
+                verify=_SSL_CONTEXT,
             ) as client:
                 resp = await client.get(url)
 
@@ -160,10 +209,37 @@ class ReadPageTool(BaseTool):
                     recovery_hints=["Use browser.open for interactive pages"],
                 )
 
+            if mode == "text":
+                text = _strip_markdown(text)
+
             if len(text) > max_chars:
                 text = text[:max_chars] + "\n\n[... truncated]"
 
             wrapped = wrap_untrusted(text, url)
+            return self._maybe_truncate("", wrapped)
+        except Exception as exc:
+            return ToolResult(
+                success=False,
+                error=str(exc),
+                recovery_hints=["Use browser.open for interactive pages"],
+            )
+
+    async def _fetch_html(self, url: str, max_chars: int) -> ToolResult:
+        """Fetch raw HTML for structured extraction."""
+        try:
+            async with httpx.AsyncClient(
+                timeout=30,
+                follow_redirects=True,
+                headers=_BROWSER_HEADERS,
+                verify=_SSL_CONTEXT,
+            ) as client:
+                resp = await client.get(url)
+
+            html = resp.text
+            if len(html) > max_chars:
+                html = html[:max_chars] + "\n\n<!-- truncated -->"
+
+            wrapped = wrap_untrusted(html, url)
             return self._maybe_truncate("", wrapped)
         except Exception as exc:
             return ToolResult(
