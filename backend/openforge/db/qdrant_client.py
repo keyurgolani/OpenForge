@@ -78,7 +78,7 @@ async def init_qdrant_collection() -> bool:
 
 
 async def init_memory_collection() -> None:
-    """Create the agent memory collection if it doesn't exist."""
+    """Create or update the agent memory collection with payload indexes."""
     settings = get_settings()
     client = get_qdrant()
     collection_name = "openforge_memory"
@@ -96,16 +96,20 @@ async def init_memory_collection() -> None:
             ),
         )
 
-        for field, schema in [
-            ("workspace_id", models.PayloadSchemaType.KEYWORD),
-            ("agent_id", models.PayloadSchemaType.KEYWORD),
-            ("memory_id", models.PayloadSchemaType.KEYWORD),
-            ("memory_type", models.PayloadSchemaType.KEYWORD),
-        ]:
+    for field, schema in [
+        ("memory_id", models.PayloadSchemaType.KEYWORD),
+        ("memory_type", models.PayloadSchemaType.KEYWORD),
+        ("tier", models.PayloadSchemaType.KEYWORD),
+        ("workspace_id", models.PayloadSchemaType.KEYWORD),
+        ("agent_id", models.PayloadSchemaType.KEYWORD),
+        ("tags", models.PayloadSchemaType.KEYWORD),
+        ("invalidated", models.PayloadSchemaType.BOOL),
+    ]:
+        try:
             client.create_payload_index(
                 collection_name=collection_name,
                 field_name=field,
                 field_schema=schema,
             )
-
-        logger.info("Memory collection '%s' created.", collection_name)
+        except Exception:
+            pass  # Index already exists

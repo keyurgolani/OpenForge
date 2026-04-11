@@ -2,14 +2,14 @@ category: memory
 description: "Agent memory and workspace knowledge access"
 tools:
   - name: memory.store
-    description: "Store a memory for later recall"
+    description: "Store a persistent memory. Use type: fact for verified info, preference for user style, lesson for corrections (both successes and failures), decision for choices with rationale, experience for tool outcomes."
     risk_category: safe
     confirm_by_default: false
   - name: memory.recall
-    description: "Recall stored memories by query"
+    description: "Search persistent memories by natural language query. Use memory_type filter for specific kinds. Set deep=true for multi-hop cross-workspace search."
     risk_category: safe
     confirm_by_default: false
   - name: memory.forget
-    description: "Delete a stored memory"
+    description: "Soft-delete a stored memory by ID"
     risk_category: moderate
     confirm_by_default: false

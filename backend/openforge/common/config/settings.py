@@ -71,6 +71,23 @@ class Settings(BaseSettings):
     # ── Ollama ───────────────────────────────────────────────────────────────
     ollama_url: str = "http://ollama:11434"
 
+    # ── Neo4j Graph Database ─────────────────────────────────────
+    neo4j_url: str = "bolt://neo4j:7687"
+    neo4j_user: str = "neo4j"
+    neo4j_password: str = "openforge"
+    memory_enabled: bool = True
+    memory_consolidation_interval: int = 900
+    memory_knowledge_sweep_interval: int = 7200
+    memory_learning_schedule: str = "0 3 * * *"
+    memory_lint_schedule: str = "0 2 * * 0"
+    memory_mirror_enabled: bool = True
+    memory_mirror_path: str = "/data/memory-vault"
+    memory_mirror_sync_interval: int = 3600
+    memory_short_term_retention_days: int = 30
+    memory_invalidated_retention_days: int = 90
+    memory_recall_promotion_threshold: int = 3
+    memory_entity_extraction_llm_fallback: bool = True
+
 
 @lru_cache()
 def get_settings() -> Settings:

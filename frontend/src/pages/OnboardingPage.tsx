@@ -122,7 +122,7 @@ export default function OnboardingPage() {
                         }).then((ws: { id: string }[]) => {
                             if (ws.length > 0) navigate(`/w/${ws[0].id}`)
                         })
-                    }} onBack={() => advance.mutate('providers_setup')} loading={advance.isPending} />
+                    }} onBack={() => advance.mutate('local_setup')} loading={advance.isPending} />
                 )}
             </div>
         </div>

@@ -44,6 +44,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Qdrant initialization failed (continuing): {e}")
 
+    # Initialize Neo4j graph schema
+    try:
+        from openforge.db.neo4j_client import init_neo4j_schema
+        await init_neo4j_schema()
+    except Exception as e:
+        logger.warning(f"Neo4j initialization failed (continuing): {e}")
+
     # Pre-load embedding model
     try:
         from openforge.core.embedding import get_embedding_model
@@ -403,6 +410,11 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
     await task_scheduler.stop()
+    try:
+        from openforge.db.neo4j_client import close_neo4j_driver
+        await close_neo4j_driver()
+    except Exception:
+        pass
     try:
         from openforge.db.redis_client import close_all_redis
         await close_all_redis()

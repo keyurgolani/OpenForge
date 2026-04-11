@@ -27,12 +27,15 @@ services:
       - ${MODELS_HOST_PATH:-./data/models}:/models
       - ${SKILLS_HOST_PATH:-./data/skills}:/skills:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${MEMORY_VAULT_PATH:-./data/memory-vault}:/data/memory-vault
     depends_on:
       postgres:
         condition: service_healthy
       qdrant:
         condition: service_started
       redis:
+        condition: service_healthy
+      neo4j:
         condition: service_healthy
     restart: unless-stopped
     deploy:
@@ -60,6 +63,7 @@ services:
     volumes:
       - ${MODELS_HOST_PATH:-./data/models}:/models
       - ${SKILLS_HOST_PATH:-./data/skills}:/skills:ro
+      - ${MEMORY_VAULT_PATH:-./data/memory-vault}:/data/memory-vault
     depends_on:
       redis:
         condition: service_healthy
@@ -67,6 +71,8 @@ services:
         condition: service_healthy
       tool-server:
         condition: service_started
+      neo4j:
+        condition: service_healthy
     restart: unless-stopped
     deploy:
       resources:
@@ -101,6 +107,23 @@ services:
       resources:
         limits:
           memory: 1G
+
+  neo4j:
+    image: neo4j:5-community
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-openforge}
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_server_memory_heap_max__size: 1G
+    volumes:
+      - neo4j-data:/data
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "${NEO4J_PASSWORD:-openforge}", "RETURN 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
@@ -186,3 +209,7 @@ services:
       resources:
         limits:
           memory: 16G
+
+volumes:
+  neo4j-data:
+

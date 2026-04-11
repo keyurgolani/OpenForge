@@ -10,15 +10,14 @@ class ForgetMemoryTool(BaseTool):
     def category(self): return "memory"
 
     @property
-    def display_name(self): return "Forget Working Memory"
+    def display_name(self): return "Forget Memory"
 
     @property
     def description(self):
         return (
-            "Remove a specific entry from your working scratchpad. "
-            "Use this to discard a value you stored with memory.store when it is no longer needed, "
-            "keeping your scratchpad clean during long multi-step tasks. "
-            "Set persistent=true with a memory_id to forget a persistent memory entry."
+            "Soft-delete a stored memory by ID. "
+            "For persistent memories, provide the memory_id (UUID) returned by memory.store or memory.recall. "
+            "Set persistent=false with a key to remove an ephemeral scratchpad entry."
         )
 
     @property
@@ -26,22 +25,24 @@ class ForgetMemoryTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "key": {"type": "string", "description": "The key to remove from working memory"},
-                "persistent": {
-                    "type": "boolean",
-                    "default": False,
-                    "description": "If true, forget a persistent memory entry by memory_id",
-                },
                 "memory_id": {
                     "type": "string",
-                    "description": "UUID of the persistent memory to forget (required when persistent=true)",
+                    "description": "UUID of the persistent memory to forget",
+                },
+                "key": {
+                    "type": "string",
+                    "description": "Key to remove from ephemeral working memory (used when persistent=false)",
+                },
+                "persistent": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "If true (default), forget a persistent memory by memory_id. Set false for ephemeral Redis.",
                 },
             },
-            "required": ["key"],
         }
 
     async def execute(self, params: dict, context: ToolContext) -> ToolResult:
-        persistent = params.get("persistent", False)
+        persistent = params.get("persistent", True)
 
         if persistent:
             return await self._forget_persistent(params, context)
@@ -68,12 +69,16 @@ class ForgetMemoryTool(BaseTool):
             import redis.asyncio as aioredis
             from config import get_settings
 
+            key = params.get("key")
+            if not key:
+                return ToolResult(success=False, error="'key' is required for ephemeral memory forget")
+
             redis = aioredis.from_url(get_settings().redis_url)
-            redis_key = f"agent_memory:{context.execution_id}:{params['key']}"
+            redis_key = f"agent_memory:{context.execution_id}:{key}"
             deleted = await redis.delete(redis_key)
             await redis.aclose()
             if deleted:
-                return ToolResult(success=True, output=f"Removed '{params['key']}' from working memory")
-            return ToolResult(success=False, error=f"Key '{params['key']}' not found in working memory")
+                return ToolResult(success=True, output=f"Removed '{key}' from working memory")
+            return ToolResult(success=False, error=f"Key '{key}' not found in working memory")
         except Exception as exc:
             return ToolResult(success=False, error=str(exc))

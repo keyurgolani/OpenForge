@@ -17,6 +17,8 @@ from .knowledge.router import router as knowledge_router
 from .retrieval.router import router as retrieval_router
 from .deployments.router import deploy_router, listing_router as deployments_listing_router
 from .missions.router import mission_router
+from .memory.router import router as memory_router
+from .memory.settings_router import router as memory_settings_router
 from .runs.router import router as runs_router
 
 
@@ -86,4 +88,16 @@ def register_domain_routers(app: FastAPI) -> None:
         retrieval_router,
         prefix="/api/v1/retrieval",
         tags=["retrieval"],
+    )
+
+    app.include_router(
+        memory_router,
+        prefix="/api/v1/agents/memory",
+        tags=["memory"],
+    )
+
+    app.include_router(
+        memory_settings_router,
+        prefix="/api/v1/memory",
+        tags=["memory-settings"],
     )

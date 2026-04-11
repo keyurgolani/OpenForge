@@ -11,17 +11,15 @@ class RecallMemoryTool(BaseTool):
     def category(self): return "memory"
 
     @property
-    def display_name(self): return "Recall Working Memory"
+    def display_name(self): return "Recall Memory"
 
     @property
     def description(self):
         return (
-            "Recall values you previously stored in your working scratchpad during this task session. "
-            "Pass a key to retrieve a specific value, or omit the key to list all stored entries. "
-            "Working memory is private to this execution and expires when the task ends — "
-            "it does not persist across conversations. "
-            "Set persistent=true with a query to search long-term persistent memories across sessions. "
-            "NOT for reading the user's knowledge base — use workspace.search or workspace.list_knowledge for that."
+            "Search persistent memories by natural language query. "
+            "Use memory_type filter for specific kinds (fact, preference, lesson, context, decision, experience). "
+            "Set deep=true for multi-hop cross-workspace search. "
+            "Set persistent=false to recall ephemeral scratchpad entries from this execution session."
         )
 
     @property
@@ -29,100 +27,109 @@ class RecallMemoryTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "key": {"type": "string", "description": "Key to retrieve (omit to return all stored entries)"},
-                "persistent": {
-                    "type": "boolean",
-                    "default": False,
-                    "description": "If true, search long-term persistent memory instead of ephemeral Redis",
-                },
                 "query": {
                     "type": "string",
-                    "description": "Search query for persistent memory recall (required when persistent=true)",
+                    "description": "Natural language search query for memory recall",
+                },
+                "key": {
+                    "type": "string",
+                    "description": "Key to retrieve from ephemeral memory (omit to return all stored entries)",
+                },
+                "persistent": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "If true (default), search persistent memory. Set false for ephemeral Redis recall.",
+                },
+                "memory_type": {
+                    "type": "string",
+                    "enum": ["fact", "preference", "lesson", "context", "decision", "experience"],
+                    "description": "Filter results to a specific memory type",
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Filter results by tags",
                 },
                 "workspace_id": {
                     "type": "string",
-                    "description": "Workspace to search (persistent mode). Omit to search ALL user workspaces.",
+                    "description": "Workspace to search. Omit to search across all accessible workspaces.",
+                },
+                "deep": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "If true, perform multi-hop cross-workspace search for richer results",
                 },
                 "limit": {
                     "type": "integer",
-                    "default": 5,
-                    "description": "Max results to return (only used when persistent=true)",
+                    "default": 10,
+                    "description": "Maximum number of results to return",
                 },
             },
         }
 
     async def execute(self, params: dict, context: ToolContext) -> ToolResult:
-        persistent = params.get("persistent", False)
+        persistent = params.get("persistent", True)
 
         if persistent:
             return await self._recall_persistent(params, context)
         return await self._recall_redis(params, context)
 
     async def _recall_persistent(self, params: dict, context: ToolContext) -> ToolResult:
-        """Recall from workspace knowledge via semantic search.
-
-        When workspace_id is provided, searches that single workspace.
-        When omitted, searches ALL user workspaces and tags results by workspace name.
-        """
+        """Recall from persistent memory via the main app API."""
         try:
             query = params.get("query", params.get("key", ""))
             if not query:
                 return ToolResult(success=False, error="A query is required for persistent memory recall")
 
-            limit = params.get("limit", 5)
-            workspace_id = params.get("workspace_id")
+            body = {
+                "query": query,
+                "limit": params.get("limit", 10),
+                "deep": params.get("deep", False),
+            }
 
+            memory_type = params.get("memory_type")
+            if memory_type:
+                body["memory_type"] = memory_type
+
+            tags = params.get("tags")
+            if tags:
+                body["tags"] = tags
+
+            workspace_id = params.get("workspace_id") or context.workspace_id or None
+            if workspace_id:
+                body["workspace_id"] = workspace_id
+
+            url = f"{context.main_app_url}/api/v1/agents/memory/recall"
             async with httpx.AsyncClient(timeout=15.0) as client:
-                if workspace_id:
-                    # Single workspace search
-                    results = await self._search_workspace(client, context.main_app_url, workspace_id, query, limit)
-                    if not results:
-                        return ToolResult(success=True, output="No persistent memories found matching the query.")
-                    return ToolResult(success=True, output=results)
+                resp = await client.post(url, json=body)
+                resp.raise_for_status()
+                data = resp.json()
 
-                # Cross-workspace: fetch all user workspaces, search each
-                ws_resp = await client.get(
-                    f"{context.main_app_url}/api/v1/workspaces",
-                    params={"ownership_type": "user"},
-                )
-                ws_resp.raise_for_status()
-                workspaces = ws_resp.json()
+            memories = data if isinstance(data, list) else data.get("memories", data.get("results", []))
 
-                all_results = []
-                per_ws_limit = max(2, limit // max(1, len(workspaces)))
-                for ws in workspaces:
-                    ws_results = await self._search_workspace(
-                        client, context.main_app_url, ws["id"], query, per_ws_limit,
-                    )
-                    for r in ws_results:
-                        r["workspace_name"] = ws.get("name", "")
-                        r["workspace_id"] = ws["id"]
-                    all_results.extend(ws_results)
+            if not memories:
+                return ToolResult(success=True, output="No memories found matching the query.")
 
-                # Sort by score descending and truncate
-                all_results.sort(key=lambda r: r.get("score", 0), reverse=True)
-                all_results = all_results[:limit]
+            # Format results as readable text
+            lines = []
+            for i, mem in enumerate(memories, 1):
+                content = mem.get("content", "")
+                mtype = mem.get("memory_type", "unknown")
+                confidence = mem.get("confidence", "?")
+                observed = mem.get("observed_at", mem.get("created_at", ""))
+                mem_id = mem.get("id", "")
+                line = f"{i}. [{mtype}] {content}"
+                if confidence != "?":
+                    line += f" (confidence: {confidence})"
+                if observed:
+                    line += f" — {observed}"
+                if mem_id:
+                    line += f" [id: {mem_id}]"
+                lines.append(line)
 
-                if not all_results:
-                    return ToolResult(success=True, output="No persistent memories found matching the query across any workspace.")
-                return ToolResult(success=True, output=all_results)
+            return ToolResult(success=True, output="\n".join(lines))
         except Exception as exc:
             return ToolResult(success=False, error=str(exc))
-
-    async def _search_workspace(
-        self, client: httpx.AsyncClient, base_url: str, workspace_id: str, query: str, limit: int,
-    ) -> list:
-        """Search a single workspace and return results."""
-        try:
-            resp = await client.get(
-                f"{base_url}/api/v1/workspaces/{workspace_id}/search",
-                params={"q": query, "limit": limit, "mode": "chat"},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            return data.get("results", data) if isinstance(data, dict) else data if isinstance(data, list) else []
-        except Exception:
-            return []
 
     async def _recall_redis(self, params: dict, context: ToolContext) -> ToolResult:
         """Recall from ephemeral Redis memory."""

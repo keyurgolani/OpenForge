@@ -62,6 +62,35 @@ def build_preamble(
         "**Typical workflow:** `search.web` → `web.read_page` → (if interactive needed) `browser.open`.",
     ])
 
+    # ── Memory Context ──
+    from openforge.common.config import get_settings
+    settings = get_settings()
+    if settings.memory_enabled:
+        lines.extend([
+            "",
+            "# Memory",
+            "",
+            "You have persistent memory. Use `memory.store` to save important findings,",
+            "preferences, lessons, and decisions. Use `memory.recall` when you need past context.",
+            "",
+            "**Storing:** fact (verified info), preference (user style), lesson (corrections —",
+            "record successes too), decision (choices with rationale), experience (tool outcomes).",
+            "",
+            "**Recalling:** When you encounter an unfamiliar topic, reference past work, or start",
+            "a new task in a familiar workspace — recall first. Use specific queries.",
+        ])
+        try:
+            import redis as _redis_sync
+            redis_conn = _redis_sync.from_url(settings.redis_url, decode_responses=True)
+            cached = redis_conn.get("memory:l1_manifest")
+            redis_conn.close()
+            if cached:
+                manifest_text = cached if isinstance(cached, str) else cached.decode("utf-8")
+                if manifest_text.strip():
+                    lines.extend(["", "**Your current essential context:**", manifest_text])
+        except Exception:
+            pass
+
     if agent_mode == "autonomous":
         # Autonomous / mission mode — agent runs independently without human interaction
         lines.extend([

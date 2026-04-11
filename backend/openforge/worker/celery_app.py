@@ -2,6 +2,7 @@
 
 import logging
 from celery import Celery, signals
+from celery.schedules import crontab
 from openforge.common.config import get_settings
 
 logger = logging.getLogger("openforge.worker")
@@ -41,10 +42,26 @@ celery_app.conf.beat_schedule = {
         "task": "scheduler.poll_reminders",
         "schedule": 15.0,
     },
+    "memory-consolidation": {
+        "task": "memory.consolidate",
+        "schedule": 900,  # 15 minutes
+    },
+    "memory-learning-extraction": {
+        "task": "memory.learning_extraction",
+        "schedule": crontab(hour=3, minute=0),
+    },
+    "memory-lint": {
+        "task": "memory.lint",
+        "schedule": crontab(hour=2, minute=0, day_of_week=0),
+    },
+    "memory-mirror-sync": {
+        "task": "memory.mirror_sync",
+        "schedule": 3600,  # 1 hour
+    },
 }
 
 # Auto-discover tasks
-celery_app.autodiscover_tasks(["openforge.worker"])
+celery_app.autodiscover_tasks(["openforge.worker", "openforge.memory"])
 
 
 @signals.worker_ready.connect

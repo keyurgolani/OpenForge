@@ -4,7 +4,7 @@ from sqlalchemy import (
     String, Text, Boolean, Integer, Float, DateTime, ForeignKey,
     Index, CheckConstraint, LargeBinary, UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 from sqlalchemy.orm import mapped_column, Mapped, relationship
 from typing import Optional, List, Dict, Any
 
@@ -1227,3 +1227,56 @@ class MissionCycleModel(Base):
         UniqueConstraint("mission_id", "cycle_number", name="uq_mission_cycles_mission_number"),
         Index("ix_mission_cycles_mission_status", "mission_id", "status"),
     )
+
+
+class MemoryModel(Base):
+    __tablename__ = "memory"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    memory_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    tier: Mapped[str] = mapped_column(String(15), nullable=False, default="short_term")
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.8)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    promoted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    invalidated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    invalidated_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("memory.id", ondelete="SET NULL"), nullable=True)
+    source_type: Mapped[str] = mapped_column(String(10), nullable=False)
+    source_agent_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    source_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    source_conversation_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    workspace_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    knowledge_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    parent_memory_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("memory.id", ondelete="SET NULL"), nullable=True)
+    tags: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
+    recall_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_recalled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+
+
+class MemoryWALModel(Base):
+    __tablename__ = "memory_wal"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    operation: Mapped[str] = mapped_column(String(20), nullable=False)
+    daemon: Mapped[str] = mapped_column(String(25), nullable=False)
+    memory_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    before_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    after_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    undone_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+
+
+class MemoryDaemonStateModel(Base):
+    __tablename__ = "memory_daemon_state"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    daemon_name: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    cursor_position: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    state_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
