@@ -126,12 +126,6 @@ export function PrimaryNavCollapsed({
               icon={<MessageSquare className="w-4 h-4" />}
             />
             <NavIcon
-              to={routes.agents}
-              title="Agents"
-              isActive={isActive('/agents')}
-              icon={<Bot className="w-4 h-4" />}
-            />
-            <NavIcon
               to={routes.automations}
               title="Automations"
               isActive={isActive('/automations')}
@@ -141,7 +135,8 @@ export function PrimaryNavCollapsed({
               to={routes.deployments}
               title="Deployments"
               isActive={isActive('/deployments')}
-              icon={<Rocket className="w-4 h-4" />}
+              icon={<Rocket className="w-3.5 h-3.5" />}
+              small
             />
             <NavIcon
               to={routes.missions}
@@ -149,14 +144,22 @@ export function PrimaryNavCollapsed({
               isActive={isActive('/missions')}
               icon={<Target className="w-4 h-4" />}
             />
+
+        <div className="flex-1" />
+
+        {/* Definition items */}
+            <NavIcon
+              to={routes.agents}
+              title="Agents"
+              isActive={isActive('/agents')}
+              icon={<Bot className="w-4 h-4" />}
+            />
             <NavIcon
               to={routes.sinks}
               title="Sinks"
               isActive={isActive('/sinks')}
               icon={<Download className="w-4 h-4" />}
             />
-
-        <div className="flex-1" />
 
         {/* Settings */}
         <NavIcon
@@ -175,15 +178,17 @@ interface NavIconProps {
   title: string;
   isActive: boolean;
   icon: React.ReactNode;
+  small?: boolean;
 }
 
-function NavIcon({ to, title, isActive, icon }: NavIconProps) {
+function NavIcon({ to, title, isActive, icon, small }: NavIconProps) {
   return (
     <Link
       to={to}
       title={title}
       className={cn(
-        'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
+        'rounded-lg flex items-center justify-center transition-colors',
+        small ? 'w-7 h-7' : 'w-9 h-9',
         isActive
           ? 'bg-accent/15 text-accent'
           : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'

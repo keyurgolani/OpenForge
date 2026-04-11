@@ -287,23 +287,17 @@ export function PrimaryNavExpanded({
                 isActive={isActive('/chat')}
               />
               <NavItem
-                to={routes.agents}
-                icon={<Bot className="w-4 h-4" />}
-                label="Agents"
-                isActive={isActive('/agents')}
-              />
-              <NavItem
                 to={routes.automations}
                 icon={<Zap className="w-4 h-4" />}
                 label="Automations"
                 isActive={isActive('/automations')}
               />
-
               <NavItem
                 to={routes.deployments}
-                icon={<Rocket className="w-4 h-4" />}
+                icon={<Rocket className="w-3.5 h-3.5" />}
                 label="Deployments"
                 isActive={isActive('/deployments')}
+                indent
               />
 
               <NavItem
@@ -313,6 +307,14 @@ export function PrimaryNavExpanded({
                 isActive={isActive('/missions')}
               />
 
+              <div className="flex-1" />
+
+              <NavItem
+                to={routes.agents}
+                icon={<Bot className="w-4 h-4" />}
+                label="Agents"
+                isActive={isActive('/agents')}
+              />
               <NavItem
                 to={routes.sinks}
                 icon={<Download className="w-4 h-4" />}
@@ -408,14 +410,16 @@ function NavItem({
   icon,
   label,
   isActive,
+  indent,
 }: {
   to: string;
   icon: React.ReactNode;
   label: string;
   isActive: boolean;
+  indent?: boolean;
 }) {
   return (
-    <Link to={to} className={cn('sidebar-item flex-shrink-0', isActive ? 'active' : '')}>
+    <Link to={to} className={cn('sidebar-item flex-shrink-0', indent && 'ml-4 text-xs', isActive ? 'active' : '')}>
       {icon} {label}
     </Link>
   );
