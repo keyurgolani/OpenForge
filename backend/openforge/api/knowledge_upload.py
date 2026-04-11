@@ -150,14 +150,25 @@ async def upload_knowledge_file(
     await db.commit()
     await db.refresh(knowledge)
 
-    # Queue background processing
-    background_tasks.add_task(
-        _process_knowledge_file,
-        knowledge_id=knowledge_id,
-        workspace_id=workspace_id,
-        knowledge_type=knowledge_type,
-        file_path=file_path,
-    )
+    # Queue background processing — heavy types (video, audio) go through
+    # Celery's q_heavy queue to avoid blocking agent execution on the main queue
+    _heavy_types = {"video", "audio"}
+    if knowledge_type in _heavy_types:
+        from openforge.worker.tasks import process_knowledge_task
+        process_knowledge_task.delay(
+            knowledge_id=str(knowledge_id),
+            workspace_id=str(workspace_id),
+            knowledge_type=knowledge_type,
+            file_path=file_path,
+        )
+    else:
+        background_tasks.add_task(
+            _process_knowledge_file,
+            knowledge_id=knowledge_id,
+            workspace_id=workspace_id,
+            knowledge_type=knowledge_type,
+            file_path=file_path,
+        )
 
     # Build response
     from openforge.schemas.knowledge import KnowledgeResponse as KResp

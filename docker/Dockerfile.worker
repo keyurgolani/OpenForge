@@ -38,4 +38,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
 
 # Use threads pool for asyncio compatibility with concurrent task support
 # -B embeds the Beat scheduler in the worker process for periodic tasks
-CMD ["celery", "-A", "openforge.worker.celery_app", "worker", "--loglevel=info", "--pool=threads", "--concurrency=8", "-B"]
+CMD ["celery", "-A", "openforge.worker.celery_app", "worker", "--loglevel=info", "--pool=threads", "--concurrency=8", "-B", "-Q", "celery,q_heavy"]

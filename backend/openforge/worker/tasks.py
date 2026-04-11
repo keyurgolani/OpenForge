@@ -357,6 +357,36 @@ async def _run_mission_cycle(
     )
 
 
+@celery_app.task(name="knowledge.process", bind=True, max_retries=1)
+def process_knowledge_task(self, knowledge_id: str, workspace_id: str, knowledge_type: str, file_path: str):
+    """Celery task for heavy knowledge processing (video, audio, large documents).
+
+    Routed to q_heavy queue to avoid blocking agent execution on the main queue.
+    """
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(
+            _run_knowledge_processing(knowledge_id, workspace_id, knowledge_type, file_path)
+        )
+    except Exception as exc:
+        logger.error("Knowledge processing task %s failed: %s", knowledge_id, exc)
+        raise
+    finally:
+        loop.close()
+
+
+async def _run_knowledge_processing(knowledge_id: str, workspace_id: str, knowledge_type: str, file_path: str):
+    """Async wrapper for knowledge processing pipeline."""
+    from openforge.api.knowledge_upload import _process_knowledge_file
+    await _process_knowledge_file(
+        knowledge_id=UUID(knowledge_id),
+        workspace_id=UUID(workspace_id),
+        knowledge_type=knowledge_type,
+        file_path=file_path,
+    )
+
+
 @celery_app.task(name="scheduler.poll_reminders")
 def poll_reminders_task():
     """Celery Beat task: poll for due reminders and publish notification events."""

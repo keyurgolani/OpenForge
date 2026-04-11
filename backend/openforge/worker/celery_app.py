@@ -23,6 +23,12 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,
     task_acks_late=True,
     worker_cancel_long_running_tasks_on_connection_loss=True,
+    # Route heavy knowledge processing to a dedicated queue
+    task_routes={
+        "knowledge.process": {"queue": "q_heavy"},
+    },
+    # Define queue defaults
+    task_default_queue="celery",
 )
 
 # Use logarithmic autoscaler when --autoscale is passed
