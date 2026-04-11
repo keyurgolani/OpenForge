@@ -9,6 +9,7 @@ import GistPreview from './GistPreview'
 import ImagePreview from './ImagePreview'
 import AudioPreview from './AudioPreview'
 import FilePreview from './FilePreview'
+import JournalPreview from './JournalPreview'
 
 interface PreviewDispatcherProps {
     knowledgeId: string | null
@@ -57,11 +58,14 @@ export default function PreviewDispatcher({
             return <ImagePreview {...commonProps} />
         case 'audio':
             return <AudioPreview {...commonProps} />
+        case 'video':
         case 'pdf':
         case 'document':
         case 'sheet':
         case 'slides':
             return <FilePreview {...commonProps} />
+        case 'journal':
+            return <JournalPreview {...commonProps} />
         default:
             return (
                 <PreviewShell isOpen={isOpen} onClose={onClose} title={knowledge.title || 'Unknown type'}>

@@ -84,15 +84,14 @@ const TYPE_META: Record<string, { icon: React.ComponentType<{ className?: string
 }
 
 const MASONRY_GAP_PX = 20
-const KNOWLEDGE_CARD_BASE_MIN_WIDTH = 400
-const KNOWLEDGE_CARD_MIN_WIDTH_MOBILE = 220
-const KNOWLEDGE_CARD_MAX_HEIGHT_PX = 350
+const KNOWLEDGE_CARD_BASE_MIN_WIDTH = 240
+const KNOWLEDGE_CARD_MIN_WIDTH_MOBILE = 180
+const KNOWLEDGE_CARD_MAX_HEIGHT_PX = 700
 const TAG_CHIP_GAP_PX = 6
 
 function getResponsiveCardMinWidth(containerWidth: number): number {
-    // Desktop baseline uses 400px. On narrower viewports, relax min width to prevent overflow.
     if (containerWidth < 520) return Math.max(KNOWLEDGE_CARD_MIN_WIDTH_MOBILE, containerWidth - 24)
-    if (containerWidth < 900) return 340
+    if (containerWidth < 640) return 200
     return KNOWLEDGE_CARD_BASE_MIN_WIDTH
 }
 
@@ -482,9 +481,9 @@ export default function WorkspaceHome() {
                 <div ref={knowledgeLayoutRef} className="w-full min-w-0 overflow-hidden">
                     {/* Loading skeletons */}
                     {isLoading && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
+                        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
                             {[...Array(10)].map((_, i) => (
-                                <div key={i} className="glass-card rounded-2xl p-4 h-56 skeleton" />
+                                <div key={i} className="glass-card rounded-2xl p-4 h-96 skeleton" />
                             ))}
                         </div>
                     )}

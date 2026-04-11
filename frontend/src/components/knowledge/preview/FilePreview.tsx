@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { Download, RefreshCw, Loader2 } from 'lucide-react'
+import MarkdownIt from 'markdown-it'
 import { getKnowledgeFileUrl, getKnowledgeThumbnailUrl, reprocessKnowledge } from '@/lib/api'
 import PreviewShell from '@/components/knowledge/shared/PreviewShell'
 import KnowledgeIntelligence, { GenerateIntelligenceButton, getIntelligenceCount } from '@/components/knowledge/shared/KnowledgeIntelligence'
@@ -7,6 +8,8 @@ import PreviewActions from './PreviewActions'
 import { CopyButton } from '@/components/shared/CopyButton'
 import KnowledgeMetadata from '@/components/knowledge/shared/KnowledgeMetadata'
 import { useWorkspace } from '@/hooks/useWorkspace'
+
+const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
 
 interface FilePreviewProps {
     knowledge: any
@@ -20,6 +23,7 @@ function getTypeLabel(type: string): string {
         case 'document': return 'Document'
         case 'sheet': return 'Sheet'
         case 'slides': return 'Slides'
+        case 'video': return 'Video'
         default: return 'File'
     }
 }
@@ -34,6 +38,7 @@ export default function FilePreview({ knowledge, workspaceId, onClose }: FilePre
         : null
 
     const type = knowledge.type as string
+    const isVideo = type === 'video'
 
     const handleDownload = () => {
         const a = document.createElement('a')
@@ -97,8 +102,22 @@ export default function FilePreview({ knowledge, workspaceId, onClose }: FilePre
             railItemCount={getIntelligenceCount(knowledge, (workspace as any)?.intelligence_categories)}
         >
             <div className="space-y-5">
-                {/* Thumbnail */}
-                {thumbnailUrl && (
+                {/* Video player */}
+                {isVideo && (
+                    <div className="rounded-lg overflow-hidden border border-border/25 bg-black/50">
+                        <video
+                            controls
+                            src={fileUrl}
+                            className="w-full max-h-[400px]"
+                            preload="metadata"
+                        >
+                            Your browser does not support the video element.
+                        </video>
+                    </div>
+                )}
+
+                {/* Thumbnail (for non-video file types) */}
+                {!isVideo && thumbnailUrl && (
                     <div className="rounded-lg overflow-hidden border border-border/25 bg-muted/10">
                         <img
                             src={thumbnailUrl}
@@ -108,7 +127,7 @@ export default function FilePreview({ knowledge, workspaceId, onClose }: FilePre
                     </div>
                 )}
 
-                {/* Content preview */}
+                {/* Content preview — rendered as markdown */}
                 {contentPreview && (
                     <div className="relative pt-4 border-t border-border/20">
                         <CopyButton
@@ -116,15 +135,10 @@ export default function FilePreview({ knowledge, workspaceId, onClose }: FilePre
                             iconOnly
                             className="absolute top-4 right-0 p-1.5 rounded-lg text-muted-foreground/70 hover:text-foreground hover:bg-muted/50 transition-colors"
                         />
-                        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                            Content Preview
-                        </h3>
-                        <p className="text-sm text-foreground/85 leading-relaxed whitespace-pre-wrap pr-8">
-                            {contentPreview}
-                            {isTruncated && (
-                                <span className="text-muted-foreground"> ...</span>
-                            )}
-                        </p>
+                        <div
+                            className="prose prose-sm dark:prose-invert max-w-none text-foreground/85 leading-relaxed pr-8"
+                            dangerouslySetInnerHTML={{ __html: md.render(contentPreview + (isTruncated ? '\n\n...' : '')) }}
+                        />
                     </div>
                 )}
 

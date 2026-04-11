@@ -1,8 +1,11 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
 import { FileType2, FileText, Table, Presentation, Music, Video, Play, Pause } from 'lucide-react'
+import MarkdownIt from 'markdown-it'
 import { getKnowledgeThumbnailUrl, getKnowledgeFileUrl } from '@/lib/api'
 import type { KnowledgeListItem } from './types'
 import { TagRow, PinIndicator, formatTimestamp, formatFileSize, ThumbnailSkeleton, ProcessingSkeleton } from './shared'
+
+const mdPreview = new MarkdownIt({ html: false, linkify: true, breaks: true })
 
 type FileType = 'pdf' | 'document' | 'sheet' | 'slides' | 'audio' | 'video'
 
@@ -300,9 +303,10 @@ export function FileCard({ item, workspaceId, slim, isProcessing }: { item: Know
             {isProcessing && !contentSnippet ? (
                 <ProcessingSkeleton lines={2} />
             ) : contentSnippet && !isAudio ? (
-                <p className="text-[11px] text-foreground/55 line-clamp-2 leading-relaxed">
-                    {contentSnippet}
-                </p>
+                <div
+                    className="text-[11px] text-foreground/55 line-clamp-3 leading-relaxed prose dark:prose-invert prose-p:my-0 prose-headings:my-0 prose-headings:text-[11px] prose-headings:font-medium prose-li:my-0 prose-ul:my-0 max-w-none"
+                    dangerouslySetInnerHTML={{ __html: mdPreview.render(contentSnippet) }}
+                />
             ) : contentSnippet && isAudio ? (
                 <p className="text-[11px] text-foreground/55 line-clamp-2 leading-relaxed italic">
                     &ldquo;{contentSnippet}&rdquo;

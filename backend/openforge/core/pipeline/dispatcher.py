@@ -45,25 +45,43 @@ async def dispatch_processing(
 
     if has_content or has_vectors:
         # Success path — update knowledge record
+        update_values: dict = dict(
+            embedding_status="done",
+            content=result.content,
+            ai_title=result.ai_title,
+            ai_summary=result.ai_summary,
+            file_metadata=result.metadata or None,
+            thumbnail_path=result.thumbnail_path,
+        )
+        # Propagate file_path / mime_type changes from pipeline slots
+        # (e.g. audio compression rewrites .wav → .ogg)
+        if result.metadata:
+            if result.metadata.get("file_path"):
+                update_values["file_path"] = result.metadata["file_path"]
+            if result.metadata.get("mime_type"):
+                update_values["mime_type"] = result.metadata["mime_type"]
         await db_session.execute(
             update(Knowledge)
             .where(Knowledge.id == knowledge_id)
-            .values(
-                embedding_status="done",
-                content=result.content,
-                ai_title=result.ai_title,
-                ai_summary=result.ai_summary,
-                file_metadata=result.metadata or None,
-                thumbnail_path=result.thumbnail_path,
-            )
+            .values(**update_values)
         )
         await db_session.commit()
     else:
-        # All text-producing slots failed — mark as failed
+        # All text-producing slots failed — mark as failed but still
+        # propagate file_path / mime_type changes from pre-processing
+        # slots (e.g. audio compression) so the file endpoint works.
+        fail_values: dict = dict(embedding_status="failed")
+        if result.metadata:
+            if result.metadata.get("file_path"):
+                fail_values["file_path"] = result.metadata["file_path"]
+            if result.metadata.get("mime_type"):
+                fail_values["mime_type"] = result.metadata["mime_type"]
+            if result.metadata.get("file_size"):
+                fail_values["file_size"] = result.metadata["file_size"]
         await db_session.execute(
             update(Knowledge)
             .where(Knowledge.id == knowledge_id)
-            .values(embedding_status="failed")
+            .values(**fail_values)
         )
         await db_session.commit()
         logger.warning(
