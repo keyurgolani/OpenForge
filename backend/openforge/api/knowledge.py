@@ -10,6 +10,7 @@ import logging
 import re
 from openforge.db.postgres import get_db
 from openforge.services.knowledge_service import knowledge_service
+from openforge.services.knowledge_processing_service import knowledge_processing_service
 from openforge.runtime.input_preparation import build_context_block, prepare_llm_messages
 from openforge.runtime.trust_boundaries import ContentSourceType
 from openforge.schemas.knowledge import (
@@ -266,7 +267,7 @@ async def summarize_knowledge(
         workspace = await db.get(Workspace, workspace_id)
         categories = get_workspace_categories(workspace.intelligence_categories if workspace else None)
         summary_cat = next((c for c in categories if c.get("type") == "summary"), None)
-        prompt = knowledge_service._build_summary_prompt(
+        prompt = knowledge_processing_service._build_summary_prompt(
             workspace_name=ws_vars["workspace_name"],
             workspace_description=ws_vars["workspace_description"],
             knowledge_title=normalize_knowledge_title(knowledge_record.title) or "Untitled",
@@ -279,6 +280,7 @@ async def summarize_knowledge(
                 system_instruction=prompt,
                 knowledge_record=knowledge_record,
                 content=(knowledge_record.content or "")[:8000],
+                conversation_messages=[{"role": "user", "content": "Summarize this content."}],
             ),
             provider_name=provider_name, api_key=api_key, model=model, base_url=base_url,
         )
@@ -341,7 +343,7 @@ async def extract_insights(
         ws_vars = await _workspace_prompt_vars(db, workspace_id)
         workspace = await db.get(Workspace, workspace_id)
         categories = get_workspace_categories(workspace.intelligence_categories if workspace else None)
-        prompt = knowledge_service._build_extraction_prompt(
+        prompt = knowledge_processing_service._build_extraction_prompt(
             categories=categories,
             workspace_name=ws_vars["workspace_name"],
             workspace_description=ws_vars["workspace_description"],
@@ -354,6 +356,7 @@ async def extract_insights(
                 system_instruction=prompt,
                 knowledge_record=knowledge_record,
                 content=(knowledge_record.content or "")[:8000],
+                conversation_messages=[{"role": "user", "content": "Extract insights from this content."}],
             ),
             provider_name=provider_name, api_key=api_key, model=model, base_url=base_url,
         )

@@ -197,6 +197,14 @@ DEFAULT_PIPELINE_CONFIGS: dict[str, dict] = {
         "knowledge_type": "audio",
         "slots": [
             {
+                "slot_type": "audio_compression",
+                "display_name": "Audio Compression",
+                "enabled": True,
+                "active_backend": "ffmpeg-opus",
+                "available_backends": ["ffmpeg-opus"],
+                "execution": "sequential",
+            },
+            {
                 "slot_type": "transcription",
                 "display_name": "Transcription",
                 "enabled": True,
@@ -213,13 +221,6 @@ DEFAULT_PIPELINE_CONFIGS: dict[str, dict] = {
                 "enabled": True,
                 "active_backend": "mutagen",
                 "available_backends": ["mutagen"],
-            },
-            {
-                "slot_type": "audio_compression",
-                "display_name": "Audio Compression",
-                "enabled": True,
-                "active_backend": "ffmpeg-opus",
-                "available_backends": ["ffmpeg-opus"],
             },
         ],
     },

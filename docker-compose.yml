@@ -53,6 +53,7 @@ services:
       - QDRANT_URL=http://qdrant:6333
       - TOOL_SERVER_URL=http://tool-server:8001
       - MAIN_APP_URL=http://openforge:3000
+      - UPLOADS_ROOT=/uploads
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
       - HF_HOME=/models/huggingface
@@ -61,6 +62,7 @@ services:
       - MODELS_ROOT=/models
       - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
     volumes:
+      - ${UPLOADS_HOST_PATH:-./data/uploads}:/uploads
       - ${MODELS_HOST_PATH:-./data/models}:/models
       - ${SKILLS_HOST_PATH:-./data/skills}:/skills:ro
       - ${MEMORY_VAULT_PATH:-./data/memory-vault}:/data/memory-vault

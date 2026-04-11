@@ -198,9 +198,18 @@ async def _process_knowledge_file(
     workspace_id: UUID,
     knowledge_type: str,
     file_path: str,
+    session_factory=None,
 ):
-    """Background task: dispatch to the pipeline framework for all knowledge types."""
-    from openforge.db.postgres import AsyncSessionLocal
+    """Background task: dispatch to the pipeline framework for all knowledge types.
+
+    Args:
+        session_factory: Optional async session factory. When called from Celery
+            workers a local engine must be passed to avoid the "Future attached
+            to a different loop" error caused by the module-level singleton.
+    """
+    if session_factory is None:
+        from openforge.db.postgres import AsyncSessionLocal
+        session_factory = AsyncSessionLocal
     from openforge.api.websocket import ws_manager
 
     logger.info("Processing %s knowledge %s", knowledge_type, knowledge_id)
@@ -208,7 +217,7 @@ async def _process_knowledge_file(
     processor_result: dict = {}
     extraction_succeeded = False
 
-    async with AsyncSessionLocal() as db:
+    async with session_factory() as db:
         try:
             result = await db.execute(
                 select(Knowledge).where(Knowledge.id == knowledge_id)
@@ -279,7 +288,7 @@ async def _process_knowledge_file(
             from openforge.services.automation_config import is_auto_knowledge_intelligence_enabled
             from openforge.services.knowledge_processing_service import knowledge_processing_service
 
-            async with AsyncSessionLocal() as intelli_db:
+            async with session_factory() as intelli_db:
                 auto_intelligence = await is_auto_knowledge_intelligence_enabled(intelli_db)
 
             if auto_intelligence:

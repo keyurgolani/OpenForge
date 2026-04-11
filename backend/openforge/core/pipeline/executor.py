@@ -40,6 +40,9 @@ class PipelineExecutor:
         sequential_slots = [s for s in enabled_slots if s.execution == SlotExecution.SEQUENTIAL]
 
         slot_outputs: list[SlotOutput] = []
+        # Mutable file_path so sequential slots (e.g. audio compression) can
+        # update it for later slots via a "file_path" key in their metadata.
+        effective_path = file_path
 
         def _make_context(slot: SlotDefinition) -> SlotContext:
             return SlotContext(
@@ -50,10 +53,29 @@ class PipelineExecutor:
                 knowledge_type=pipeline.knowledge_type,
             )
 
+        # --- sequential execution (runs first so it can update file_path) ---
+        for slot in sequential_slots:
+            try:
+                output = await _run_slot_with_timeout(slot, effective_path, _make_context(slot))
+                slot_outputs.append(output)
+                # Allow sequential slots to update the file path for
+                # subsequent slots (e.g. audio compression → transcription).
+                if output.success and output.metadata and "file_path" in output.metadata:
+                    effective_path = output.metadata["file_path"]
+            except Exception as e:
+                slot_outputs.append(
+                    SlotOutput(
+                        slot_type=slot.slot_type,
+                        backend_name=slot.active_backend,
+                        success=False,
+                        error=str(e),
+                    )
+                )
+
         # --- parallel execution ---
         if parallel_slots:
             tasks = [
-                _run_slot_with_timeout(slot, file_path, _make_context(slot))
+                _run_slot_with_timeout(slot, effective_path, _make_context(slot))
                 for slot in parallel_slots
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -69,21 +91,6 @@ class PipelineExecutor:
                     )
                 else:
                     slot_outputs.append(result)
-
-        # --- sequential execution ---
-        for slot in sequential_slots:
-            try:
-                output = await _run_slot_with_timeout(slot, file_path, _make_context(slot))
-                slot_outputs.append(output)
-            except Exception as e:
-                slot_outputs.append(
-                    SlotOutput(
-                        slot_type=slot.slot_type,
-                        backend_name=slot.active_backend,
-                        success=False,
-                        error=str(e),
-                    )
-                )
 
         # --- post-processing: separate vectors / text, merge metadata & segments ---
         # Build a lookup of slot definitions so we can check produces_vectors.

@@ -377,14 +377,33 @@ def process_knowledge_task(self, knowledge_id: str, workspace_id: str, knowledge
 
 
 async def _run_knowledge_processing(knowledge_id: str, workspace_id: str, knowledge_type: str, file_path: str):
-    """Async wrapper for knowledge processing pipeline."""
+    """Async wrapper for knowledge processing pipeline.
+
+    Creates a local async engine so the session factory is bound to the current
+    event loop rather than the module-level singleton (which may belong to a
+    different loop when running inside a Celery worker).
+    """
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+    from openforge.config import get_settings
     from openforge.api.knowledge_upload import _process_knowledge_file
-    await _process_knowledge_file(
-        knowledge_id=UUID(knowledge_id),
-        workspace_id=UUID(workspace_id),
-        knowledge_type=knowledge_type,
-        file_path=file_path,
+
+    settings = get_settings()
+    worker_engine = create_async_engine(
+        settings.database_url, echo=False, pool_size=5, max_overflow=10,
     )
+    WorkerSession = async_sessionmaker(
+        worker_engine, class_=AsyncSession, expire_on_commit=False,
+    )
+    try:
+        await _process_knowledge_file(
+            knowledge_id=UUID(knowledge_id),
+            workspace_id=UUID(workspace_id),
+            knowledge_type=knowledge_type,
+            file_path=file_path,
+            session_factory=WorkerSession,
+        )
+    finally:
+        await worker_engine.dispose()
 
 
 @celery_app.task(name="scheduler.poll_reminders")
