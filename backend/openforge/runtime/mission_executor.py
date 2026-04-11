@@ -194,6 +194,71 @@ def _evaluate_ratchet(
 # Auto-termination checks
 # ---------------------------------------------------------------------------
 
+async def _check_health(
+    mission: MissionModel,
+    cycle: MissionCycleModel,
+    db: AsyncSession,
+) -> str | None:
+    """Check mission health signals for auto-pause conditions.
+
+    Returns a reason string if the mission should be paused, None otherwise.
+    """
+    CONSECUTIVE_FAILURE_THRESHOLD = 3
+    STUCK_CYCLE_THRESHOLD = 4
+
+    # 1. Failure rate: if the last N cycles all failed, pause
+    recent_cycles_stmt = (
+        select(MissionCycleModel)
+        .where(MissionCycleModel.mission_id == mission.id)
+        .order_by(MissionCycleModel.cycle_number.desc())
+        .limit(CONSECUTIVE_FAILURE_THRESHOLD)
+    )
+    result = await db.execute(recent_cycles_stmt)
+    recent_cycles = result.scalars().all()
+
+    if len(recent_cycles) >= CONSECUTIVE_FAILURE_THRESHOLD:
+        if all(c.status == "failed" for c in recent_cycles):
+            return (
+                f"Auto-paused: last {CONSECUTIVE_FAILURE_THRESHOLD} cycles all failed. "
+                f"Latest error: {recent_cycles[0].error_message or 'unknown'}"
+            )
+
+    # 2. Stuck detection: if evaluation scores are identical across N completed cycles
+    completed_cycles_stmt = (
+        select(MissionCycleModel)
+        .where(
+            MissionCycleModel.mission_id == mission.id,
+            MissionCycleModel.status == "completed",
+            MissionCycleModel.evaluation_scores.isnot(None),
+        )
+        .order_by(MissionCycleModel.cycle_number.desc())
+        .limit(STUCK_CYCLE_THRESHOLD)
+    )
+    result = await db.execute(completed_cycles_stmt)
+    scored_cycles = result.scalars().all()
+
+    if len(scored_cycles) >= STUCK_CYCLE_THRESHOLD:
+        scores = [json.dumps(c.evaluation_scores, sort_keys=True) for c in scored_cycles]
+        if len(set(scores)) == 1:
+            return (
+                f"Auto-paused: evaluation scores unchanged across "
+                f"last {STUCK_CYCLE_THRESHOLD} cycles — mission may be stuck"
+            )
+
+    # 3. Duration anomaly: if this cycle took 5x the rolling average
+    if cycle.duration_seconds and len(scored_cycles) >= 3:
+        durations = [c.duration_seconds for c in scored_cycles if c.duration_seconds]
+        if durations:
+            avg_duration = sum(durations) / len(durations)
+            if avg_duration > 0 and cycle.duration_seconds > avg_duration * 5:
+                logger.warning(
+                    "Mission %s cycle %d took %.1fs (5x avg %.1fs) — possible anomaly",
+                    mission.id, cycle.cycle_number, cycle.duration_seconds, avg_duration,
+                )
+
+    return None
+
+
 def _check_auto_termination(mission: MissionModel) -> str | None:
     """Check if any auto-termination conditions are met.
 
@@ -671,7 +736,21 @@ async def execute_cycle(
                     seconds=300
                 )
 
-            # 14. Check auto-termination conditions
+            # 14a. Check mission health (stuck detection, failure tracking)
+            health_reason = await _check_health(mission, cycle, db)
+            if health_reason:
+                logger.warning(
+                    "Mission %s health check failed: %s", mission_id, health_reason
+                )
+                mission.status = "paused"
+                mission.next_cycle_at = None
+                await _publish_mission_event(str(mission_id), "mission_health_pause", {
+                    "mission_id": str(mission_id),
+                    "reason": health_reason,
+                    "cycle_number": cycle.cycle_number,
+                })
+
+            # 14b. Check auto-termination conditions
             termination_reason = _check_auto_termination(mission)
             if termination_reason:
                 logger.info(
