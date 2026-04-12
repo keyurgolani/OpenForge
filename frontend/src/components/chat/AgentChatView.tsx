@@ -107,6 +107,7 @@ function parseMessageTimeline(rawTimeline: unknown[]): {
       items.push({
         type: 'intermediate_response' as const,
         id: `msg-ir-${items.length}`,
+        status: 'complete',
         content: (item.content as string) ?? '',
       })
     }

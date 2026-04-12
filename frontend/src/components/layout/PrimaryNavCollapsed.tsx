@@ -126,17 +126,10 @@ export function PrimaryNavCollapsed({
               icon={<MessageSquare className="w-4 h-4" />}
             />
             <NavIcon
-              to={routes.automations}
-              title="Automations"
-              isActive={isActive('/automations')}
-              icon={<Zap className="w-4 h-4" />}
-            />
-            <NavIcon
               to={routes.deployments}
               title="Deployments"
               isActive={isActive('/deployments')}
-              icon={<Rocket className="w-3.5 h-3.5" />}
-              small
+              icon={<Rocket className="w-4 h-4" />}
             />
             <NavIcon
               to={routes.missions}
@@ -153,6 +146,12 @@ export function PrimaryNavCollapsed({
               title="Agents"
               isActive={isActive('/agents')}
               icon={<Bot className="w-4 h-4" />}
+            />
+            <NavIcon
+              to={routes.automations}
+              title="Automations"
+              isActive={isActive('/automations')}
+              icon={<Zap className="w-4 h-4" />}
             />
             <NavIcon
               to={routes.sinks}

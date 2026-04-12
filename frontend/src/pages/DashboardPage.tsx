@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import MarkdownIt from 'markdown-it'
 import {
@@ -17,6 +17,7 @@ import { useAgentsQuery } from '@/features/agents'
 import { useAutomationsQuery } from '@/features/automations'
 import { useDeploymentsQuery } from '@/features/deployments'
 import { listGlobalConversations } from '@/lib/api'
+import PreviewDispatcher from '@/components/knowledge/preview/PreviewDispatcher'
 import {
   agentsRoute,
   sinksRoute,
@@ -41,6 +42,8 @@ const TYPE_COLORS: Record<string, string> = {
   document: 'bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30',
   sheet: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
   slides: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30',
+  video: 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30',
+  journal: 'bg-amber-400/15 text-amber-700 dark:text-amber-300 border-amber-400/30',
 }
 
 /* ---------- Sub-components ---------- */
@@ -88,6 +91,7 @@ function SuggestionLink({ to, children }: { to: string; children: ReactNode }) {
 
 export default function DashboardPage() {
   const { workspaceId = '' } = useParams<{ workspaceId: string }>()
+  const [activeKnowledgeId, setActiveKnowledgeId] = useState<string | null>(null)
 
   const agentsQuery = useAgentsQuery({ limit: 6 })
   const automationsQuery = useAutomationsQuery({ limit: 6 })
@@ -197,10 +201,11 @@ export default function DashboardPage() {
             ) : (
               <div className="space-y-3">
                 {recentItems.map((item) => (
-                  <Link
+                  <button
                     key={item.id}
-                    to={knowledgeRoute(workspaceId, item.id)}
-                    className="block rounded-xl border border-border/20 bg-background/30 px-4 py-3 transition-colors hover:border-accent/30 hover:bg-background/45"
+                    type="button"
+                    onClick={() => setActiveKnowledgeId(item.id)}
+                    className="block w-full text-left rounded-xl border border-border/20 bg-background/30 px-4 py-3 transition-colors hover:border-accent/30 hover:bg-background/45"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
@@ -221,7 +226,7 @@ export default function DashboardPage() {
                       </div>
                       {item.is_archived && <StatusBadge status="archived" />}
                     </div>
-                  </Link>
+                  </button>
                 ))}
               </div>
             )}
@@ -262,6 +267,16 @@ export default function DashboardPage() {
           </section>
         </div>
       </div>
+
+      {/* Knowledge preview modal — opens when a recent-knowledge card is clicked.
+          Mirrors the WorkspaceHome pattern so all 12 knowledge types render correctly,
+          unlike the editor route which currently only handles note/gist. */}
+      <PreviewDispatcher
+        knowledgeId={activeKnowledgeId}
+        workspaceId={workspaceId}
+        isOpen={!!activeKnowledgeId}
+        onClose={() => setActiveKnowledgeId(null)}
+      />
     </div>
   )
 }

@@ -1086,6 +1086,30 @@
     background: hsl(var(--background));
   }
 
+  /* journal  — warm amber (journal entries) */
+  .chat-workflow-step--journal {
+    --toggle-border: hsla(38, 92%, 60%, 0.35);
+    --toggle-border-hover: hsla(38, 92%, 60%, 0.55);
+    --toggle-bg: hsla(38, 92%, 60%, 0.12);
+    --toggle-bg-open: hsla(38, 92%, 60%, 0.16);
+    --card-border: hsla(38, 92%, 60%, 0.18);
+    --card-border-top: hsla(38, 92%, 60%, 0.10);
+    --card-bg: hsla(38, 92%, 60%, 0.06);
+  }
+  .chat-workflow-step--journal .chat-timeline-dot {
+    border-color: hsla(38, 92%, 60%, 0.45);
+    background: hsl(var(--background));
+  }
+
+  /* one-shot flash for highlighting search-result targets in the journal */
+  @keyframes journal-flash {
+    0%   { background-color: hsla(38, 92%, 60%, 0.20); }
+    100% { background-color: transparent; }
+  }
+  .animate-flash {
+    animation: journal-flash 1.5s ease-out;
+  }
+
   .chat-source-card {
     border-radius: 0.9rem;
     border: 1px solid hsla(var(--border) / 0.3);

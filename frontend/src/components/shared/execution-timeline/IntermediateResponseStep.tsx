@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState } from 'react'
 import { MessageSquare, ChevronRight } from 'lucide-react'
 import type { IntermediateResponseTimelineItem } from '@/types/timeline'
 
@@ -7,14 +7,9 @@ interface IntermediateResponseStepProps {
 }
 
 export function IntermediateResponseStep({ item }: IntermediateResponseStepProps) {
-  const [collapsed, setCollapsed] = useState(false)
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    // Auto-collapse after 1.5 seconds
-    timerRef.current = setTimeout(() => setCollapsed(true), 1500)
-    return () => { if (timerRef.current) clearTimeout(timerRef.current) }
-  }, [])
+  // Intermediate responses are internal workflow context. Collapse by default so they
+  // never leak into the chat transcript. User can expand via the chevron toggle.
+  const [collapsed, setCollapsed] = useState(true)
 
   return (
     <div className="chat-workflow-step chat-workflow-step--iconic chat-workflow-step--response">

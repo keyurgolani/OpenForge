@@ -287,19 +287,11 @@ export function PrimaryNavExpanded({
                 isActive={isActive('/chat')}
               />
               <NavItem
-                to={routes.automations}
-                icon={<Zap className="w-4 h-4" />}
-                label="Automations"
-                isActive={isActive('/automations')}
-              />
-              <NavItem
                 to={routes.deployments}
                 icon={<Rocket className="w-3.5 h-3.5" />}
                 label="Deployments"
                 isActive={isActive('/deployments')}
-                indent
               />
-
               <NavItem
                 to={routes.missions}
                 icon={<Target className="w-4 h-4" />}
@@ -314,6 +306,12 @@ export function PrimaryNavExpanded({
                 icon={<Bot className="w-4 h-4" />}
                 label="Agents"
                 isActive={isActive('/agents')}
+              />
+              <NavItem
+                to={routes.automations}
+                icon={<Zap className="w-4 h-4" />}
+                label="Automations"
+                isActive={isActive('/automations')}
               />
               <NavItem
                 to={routes.sinks}

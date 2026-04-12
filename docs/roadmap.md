@@ -689,6 +689,16 @@ Journal entries currently render identically to Notes. Journals need their own v
 
 **Gap — P0:** No heat-map calendar navigation. No mood/energy tagging UI. No weekly grouping view. No reflection cues or structured journaling prompts (placeholder is generic "What's on your mind..."). These are core differentiators between Journal and Note that justify Journal as a first-class knowledge type.
 
+### 8.8 Per-Type Knowledge Deep-Link Routes — P2
+
+Today, the route `/w/:workspaceId/knowledge/:knowledgeId` resolves through `EditorDispatcher`, which only handles `note` and `gist` types. All other types (`bookmark`, `image`, `audio`, `video`, `pdf`, `document`, `sheet`, `slides`, `journal`, `fleeting`) fall through to a silent redirect back to the workspace home — meaning a deep link to a non-editable knowledge item produces no useful destination.
+
+The interim fix (shipped in the UX-polish branch) routes the dashboard knowledge cards through the existing `PreviewDispatcher` modal so dashboard clicks work for every type. The `WorkspaceHome` (knowledge list page) already uses the same modal. Both surfaces work, but neither produces a shareable URL for non-editor types.
+
+**Goal:** Each knowledge type gets a dedicated full-page deep-link UI tuned to its content shape — e.g., a video page with player + transcript + intelligence rail, a PDF page with a pageable viewer + extracted text + annotations, an audio page with waveform + transcript scrub, a journal-day page (which the journal route already approximates), an image lightbox page, a bookmark page with metadata + screenshot + visit history. The router should dispatch by type to a per-type route component instead of a single editor-or-bust shell.
+
+**Why P2:** The interim fix unblocks the dashboard. Deep links from external systems (chat citations, search results, agent outputs) are the next layer that benefits from per-type routes, but that work is meaningful enough to deserve its own design cycle (per-type information hierarchy, sharing controls, embed widgets, edit-vs-view modes).
+
 ---
 
 ## Track 9: Developer Experience
