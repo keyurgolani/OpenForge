@@ -45,7 +45,7 @@ async def _mark_run_failed(run_id: str, error_message: str):
     """Mark a run record as failed after a crash."""
     try:
         from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-        from openforge.config import get_settings
+        from openforge.common.config import get_settings
         from openforge.db.models import RunModel
 
         settings = get_settings()
@@ -82,7 +82,7 @@ def execute_agent_strategy(self, run_id: str):
 async def _run_strategy(run_id: str):
     """Async wrapper that resolves the agent spec and executes via agent_executor."""
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-    from openforge.config import get_settings
+    from openforge.common.config import get_settings
     from openforge.core.llm_gateway import LLMGateway
     from openforge.db.models import RunModel, AutomationModel, AgentModel, AgentDefinitionVersionModel
     from openforge.domains.agents.compiled_spec import AgentRuntimeConfig, build_runtime_config_from_snapshot
@@ -197,7 +197,7 @@ async def _run_strategy(run_id: str):
 async def _run_agent(execution_id: str, **kwargs):
     """Async wrapper that sets up DB session and runs the chat handler."""
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-    from openforge.config import get_settings
+    from openforge.common.config import get_settings
     from openforge.runtime.chat_handler import chat_handler
 
     settings = get_settings()
@@ -231,7 +231,7 @@ async def _mark_execution_failed(execution_id: str, error_message: str):
 
     try:
         from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-        from openforge.config import get_settings
+        from openforge.common.config import get_settings
         from openforge.db.models import AgentExecution
 
         settings = get_settings()
@@ -255,7 +255,7 @@ async def _mark_execution_failed(execution_id: str, error_message: str):
     try:
         import json
         import redis.asyncio as aioredis
-        from openforge.config import get_settings
+        from openforge.common.config import get_settings
 
         settings = get_settings()
         r = aioredis.from_url(settings.redis_url, decode_responses=True)
@@ -274,7 +274,7 @@ async def _mark_execution_failed(execution_id: str, error_message: str):
 def poll_deployments():
     """Celery Beat task: poll for due deployments and fire runs."""
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-    from openforge.config import get_settings
+    from openforge.common.config import get_settings
     from openforge.runtime.deployment_scheduler import poll_and_fire
 
     settings = get_settings()
@@ -301,7 +301,7 @@ def poll_deployments():
 def poll_missions_task():
     """Celery Beat task: poll for due missions and fire cycles."""
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-    from openforge.config import get_settings
+    from openforge.common.config import get_settings
     from openforge.runtime.mission_scheduler import poll_missions
 
     settings = get_settings()
@@ -384,7 +384,7 @@ async def _run_knowledge_processing(knowledge_id: str, workspace_id: str, knowle
     different loop when running inside a Celery worker).
     """
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-    from openforge.config import get_settings
+    from openforge.common.config import get_settings
     from openforge.api.knowledge_upload import _process_knowledge_file
 
     settings = get_settings()

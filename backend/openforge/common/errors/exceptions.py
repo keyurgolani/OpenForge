@@ -129,24 +129,6 @@ class RuntimeUnavailableError(OpenForgeError):
         self.resource_name = resource_name
 
 
-class LegacyModuleAccessError(OpenForgeError):
-    """Raised when attempting to access a deprecated legacy module from non-legacy code."""
-
-    def __init__(
-        self,
-        module_name: str,
-        replacement: str | None = None,
-        message: str | None = None,
-    ):
-        if message is None:
-            message = f"Legacy module '{module_name}' should not be imported from non-legacy code"
-            if replacement:
-                message += f". Use '{replacement}' instead"
-        super().__init__(message, {"module_name": module_name, "replacement": replacement})
-        self.module_name = module_name
-        self.replacement = replacement
-
-
 class ConfigurationError(OpenForgeError):
     """Raised when configuration is invalid or missing."""
 

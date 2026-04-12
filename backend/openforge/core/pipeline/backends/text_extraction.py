@@ -107,7 +107,7 @@ class MarkerBackend:
 
             env = {**os.environ}
             try:
-                from openforge.config import get_settings
+                from openforge.common.config import get_settings
                 marker_dir = str(Path(get_settings().models_root) / "marker")
                 env["DATALAB_MODELS_DIR"] = marker_dir
             except Exception:

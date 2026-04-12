@@ -226,7 +226,7 @@ class DeploymentService:
         automation_name: str,
     ) -> UUID:
         """Create a deployment-owned workspace."""
-        from openforge.config import get_settings
+        from openforge.common.config import get_settings
 
         workspace = Workspace(
             name=f"[Deploy] {automation_name}",

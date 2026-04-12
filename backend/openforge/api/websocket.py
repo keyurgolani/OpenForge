@@ -252,7 +252,7 @@ ws_router = APIRouter()
 
 async def _ws_auth_check(websocket: WebSocket) -> bool:
     """Return True if the WebSocket passes authentication, False otherwise."""
-    from openforge.config import get_settings
+    from openforge.common.config import get_settings
     settings = get_settings()
     if not settings.admin_password:
         return True
@@ -280,7 +280,7 @@ def _cleanup_log_tasks(websocket: WebSocket):
 
 async def _handle_chat_message(websocket: WebSocket, workspace_id: str | None, data: dict):
     """Process a chat_message from a workspace-scoped or per-conversation endpoint."""
-    from openforge.config import get_settings
+    from openforge.common.config import get_settings
     settings = get_settings()
 
     conversation_id = data.get("conversation_id")

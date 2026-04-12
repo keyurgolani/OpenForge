@@ -20,7 +20,7 @@ def _verify_password(plain: str, stored: str) -> bool:
 
 @router.post("/login")
 async def login(body: LoginRequest, response: Response):
-    from openforge.config import get_settings
+    from openforge.common.config import get_settings
     settings = get_settings()
 
     if not settings.admin_password:
@@ -51,7 +51,7 @@ async def logout(response: Response):
 
 @router.get("/check")
 async def check(request: Request):
-    from openforge.config import get_settings
+    from openforge.common.config import get_settings
     from openforge.db.postgres import AsyncSessionLocal
     from openforge.common.config.onboarding import onboarding_service
 

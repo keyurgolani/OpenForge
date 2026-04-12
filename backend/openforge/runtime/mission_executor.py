@@ -346,7 +346,7 @@ async def execute_cycle(
     7. Check termination conditions
     """
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession as _AsyncSession
-    from openforge.config import get_settings
+    from openforge.common.config import get_settings
     from openforge.core.llm_gateway import LLMGateway
     from openforge.integrations.tools.dispatcher import tool_dispatcher
     from openforge.runtime.agent_executor import execute_agent

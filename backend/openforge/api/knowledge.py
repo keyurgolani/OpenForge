@@ -558,7 +558,7 @@ async def import_bookmarks(
     db: AsyncSession = Depends(get_db),
 ):
     from openforge.db.models import Knowledge, KnowledgeTag, Workspace
-    from openforge.utils.text import count_words
+    from openforge.common.text import count_words
     from openforge.services.automation_config import (
         is_auto_bookmark_content_extraction_enabled,
         is_auto_knowledge_intelligence_enabled,
